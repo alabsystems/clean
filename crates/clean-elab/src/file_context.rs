@@ -5,6 +5,7 @@
 //! File-level context for tracking accumulated `variable` declarations and
 //! opened namespaces across declarations within a single file.
 
+use crate::imports::ImportPolicy;
 use crate::infer::user_term::UserTermElab;
 use crate::macro_integration::MacroCtx;
 use crate::namespace::NamespaceState;
@@ -13,6 +14,16 @@ use clean_kernel::name::Name;
 use clean_parser::SurfaceBinder;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+
+/// Is this `variable` binder Lean's binder-annotation-UPDATE form?
+///
+/// True exactly for a bare name inside a bracketed binder with no type
+/// ascription and no default value — `(P)`, `{P}`, `⦃P⦄`. An instance binder
+/// never qualifies: the parser turns `[Decidable P]` into a binder whose `ty`
+/// is the class application, so `[…]` always carries a type here.
+fn is_binder_annotation_update(binder: &SurfaceBinder) -> bool {
+    binder.ty.is_none() && binder.default.is_none() && binder.name != "_"
+}
 
 /// File-level context for tracking accumulated `variable` declarations and
 /// namespace state across declarations within a single file.
@@ -50,6 +61,29 @@ pub struct FileContext {
     universe_params: Vec<String>,
     /// Section scope stack - each entry is the index into `variables` at section start
     section_stack: Vec<usize>,
+    /// Section variables forced into every following declaration by `include`.
+    ///
+    /// Lean includes a section `variable` only in declarations that MENTION it;
+    /// `include x` overrides that for the rest of the scope and `omit x`
+    /// cancels it. Names, not binders: `include` names a variable that
+    /// `variables` already holds.
+    included_variables: Vec<String>,
+    /// Section scope stack for `included_variables` — one snapshot per
+    /// `enter_section`, restored on `exit_section`, so an `include` dies with
+    /// its section exactly as the `variable` it names does.
+    included_section_stack: Vec<Vec<String>>,
+    /// Binder annotations of the ALREADY-ACCUMULATED variables at section start,
+    /// one snapshot per open section, parallel to `section_stack`.
+    ///
+    /// A `variable (P)` inside a section may re-annotate a variable declared
+    /// OUTSIDE it (`FileContext::apply_variable_command`). That edit is scoped to
+    /// the section, exactly like a declaration is: measured with lean 4.33.1 on
+    /// 2026-08-23, `section Outer / variable {P : Prop} / section Inner /
+    /// variable (P) / … / end Inner` proves `inner_t : ∀ (P : Prop), P → P` and
+    /// `outer_t : ∀ {P : Prop}, P → P`. Truncation alone cannot undo it — the
+    /// mutated entry lives BELOW the marker — so the annotations are restored
+    /// from here on `end`.
+    section_binder_infos: Vec<Vec<clean_parser::SurfaceBinderInfo>>,
     /// Universe scope stack - each entry is the index into `universe_params` at section start
     universe_section_stack: Vec<usize>,
     /// Namespace state: tracks `open` aliases that persist across declarations
@@ -84,6 +118,16 @@ pub struct FileContext {
     /// Disable external `.olean` import search for Clean-native authority
     /// checks that must not depend on Lean/Lake/Mathlib artifacts.
     disable_external_import_search: bool,
+    /// What to do with an `import` that resolves to nothing real. Defaults to
+    /// [`ImportPolicy::FailClosed`] — see that type for the two silent-pass
+    /// reproductions this field exists to refuse.
+    import_policy: ImportPolicy,
+    /// Modules this run already satisfied by elaborating their intra-project
+    /// `.lean` SOURCE (recorded by `clean check`'s first pass). Such an import
+    /// is resolved — the declarations are in the environment — even though the
+    /// project has no compiled `.olean` for it, so the fail-closed policy must
+    /// not refuse it.
+    imports_satisfied_from_source: HashSet<String>,
     /// Modules already loaded into the environment by an earlier `import` in
     /// this file, threaded across every `import` declaration so a Mathlib
     /// file's large overlapping `.olean` closures (Lean.Elab.*, Lean.Server.*,
@@ -153,8 +197,11 @@ impl FileContext {
     /// for a Mathlib file, thousands of `String`s added precisely to make
     /// imports O(union) — and they are not lexical: a snapshot is never used to
     /// process an `import`, which the plan phase applies in authored order
-    /// against the caller's own context. `disable_external_import_search` IS
-    /// carried: it is import POLICY, not a cache.
+    /// against the caller's own context. `disable_external_import_search`,
+    /// `import_policy` and `imports_satisfied_from_source` ARE carried: they are
+    /// import POLICY and per-file resolution FACT, not caches — dropping the
+    /// last one would make a snapshot refuse an import the run demonstrably
+    /// resolved from source.
     ///
     /// COST, stated honestly: this clones the whole context and then drops the
     /// caches, so the transient allocation is the same as `clone()`. What
@@ -184,6 +231,66 @@ impl FileContext {
         self.variables.extend(binders.iter().cloned());
     }
 
+    /// Apply one source-level `variable` command, Lean-4 style.
+    ///
+    /// A bracketed binder written with NO type ascription — `variable (P Q a b)`,
+    /// `variable {P Q}` — is **not** a declaration. It is Lean 4's *binder
+    /// annotation update*: it re-binds ALREADY-DECLARED section variables at a
+    /// new annotation, keeping their declared type and their position in the
+    /// telescope (lean4 `src/Lean/Elab/Command.lean`, `replaceBinderAnnotation`).
+    /// Measured against lean 4.33.1 on 2026-08-23:
+    ///
+    /// ```text
+    /// variable {P Q R : Prop} {a b : Nat}
+    /// variable (P Q a b)
+    /// theorem t (h : P) : P ∧ a = a := ⟨h, rfl⟩
+    /// -- t : ∀ (P : Prop) (a : Nat), P → P ∧ a = a
+    /// ```
+    ///
+    /// Appending them as fresh variables instead put the SAME name in the
+    /// telescope twice and typed the survivor with a metavariable
+    /// (`infer/elab_variable.rs` mints one for a binder with no annotation), so
+    /// every declaration in the governed block met an unresolved `?m` where a
+    /// type was required. That is what the `ite`/`dite` block of
+    /// `Mathlib/Logic/Basic.lean` — governed by its lines 874 (`variable
+    /// (P Q a b)`) and 929 (`variable {P Q}`) — died on, as
+    /// `Type mismatch: expected conditional guard of type Bool or Prop, got
+    /// FVar(FVarId(9223372036854775808))` and as
+    /// `elaboration left unresolved variables`. Pinned by
+    /// `crates/clean-elab/tests/section_variable_binder_annotation_e2e.rs`.
+    ///
+    /// A name that is NOT already declared keeps the pre-existing behaviour: it
+    /// becomes a new variable whose type the elaborator infers. That matches
+    /// Lean, which accepts `variable (Zed)` for an undeclared `Zed` and gives it
+    /// `(Zed : Sort u_1)` rather than rejecting it (measured, lean 4.33.1).
+    ///
+    /// # ENSURES
+    /// - Returns the full accumulated telescope AFTER this command
+    /// - An annotation update changes only `info`: it never moves, re-types or
+    ///   duplicates the variable it targets
+    /// - Every binder that is not an annotation update is appended, exactly as
+    ///   [`Self::add_variables`] would
+    pub(crate) fn apply_variable_command(
+        &mut self,
+        binders: &[SurfaceBinder],
+    ) -> Vec<SurfaceBinder> {
+        for binder in binders {
+            if is_binder_annotation_update(binder) {
+                if let Some(declared) = self
+                    .variables
+                    .iter_mut()
+                    .rev()
+                    .find(|declared| declared.name == binder.name)
+                {
+                    declared.info = binder.info;
+                    continue;
+                }
+            }
+            self.add_variables(std::slice::from_ref(binder));
+        }
+        self.variables.clone()
+    }
+
     /// Add universe parameter names from a `universe` declaration
     ///
     /// # ENSURES
@@ -192,13 +299,44 @@ impl FileContext {
         self.universe_params.extend(names.iter().cloned());
     }
 
+    /// Apply an `include x y …` command: force these section variables into
+    /// every following declaration of the current scope.
+    ///
+    /// # ENSURES
+    /// - Each name is in `included_variables` (idempotent, order preserved)
+    pub(crate) fn include_variables(&mut self, names: &[String]) {
+        for name in names {
+            if !self.included_variables.iter().any(|n| n == name) {
+                self.included_variables.push(name.clone());
+            }
+        }
+    }
+
+    /// Apply an `omit x y …` command: cancel a preceding `include`.
+    ///
+    /// # ENSURES
+    /// - None of `names` is in `included_variables`
+    pub(crate) fn omit_variables(&mut self, names: &[String]) {
+        self.included_variables.retain(|n| !names.contains(n));
+    }
+
+    /// Section variables currently forced in by `include`.
+    pub(crate) fn included_variables(&self) -> &[String] {
+        &self.included_variables
+    }
+
     /// Enter a section (push scope marker)
     ///
     /// # ENSURES
     /// - Saves current variable count for later restoration
+    /// - Saves the outer variables' binder annotations for later restoration
     /// - Saves option scope boundary for rollback
     /// - Nested sections are supported (stack-based)
     pub fn enter_section(&mut self) {
+        self.included_section_stack
+            .push(self.included_variables.clone());
+        self.section_binder_infos
+            .push(self.variables.iter().map(|v| v.info).collect());
         self.section_stack.push(self.variables.len());
         self.universe_section_stack.push(self.universe_params.len());
         self.option_section_stack.push(Vec::new());
@@ -209,14 +347,23 @@ impl FileContext {
     ///
     /// # ENSURES
     /// - Variables added since last `enter_section()` are removed
+    /// - Binder annotations re-bound since last `enter_section()` are restored
     /// - Universe params added since last `enter_section()` are removed
     /// - Options set since last `enter_section()` are restored
     /// - `local instance`s declared in the section are retired (B99)
     /// - No-op if section stack is empty
     pub fn exit_section(&mut self) {
+        if let Some(saved) = self.included_section_stack.pop() {
+            self.included_variables = saved;
+        }
         if let Some(marker) = self.section_stack.pop() {
             self.variables.truncate(marker);
             self.variable_scope_ids.truncate(marker);
+        }
+        if let Some(infos) = self.section_binder_infos.pop() {
+            for (declared, info) in self.variables.iter_mut().zip(infos) {
+                declared.info = info;
+            }
         }
         if let Some(marker) = self.universe_section_stack.pop() {
             self.universe_params.truncate(marker);
@@ -554,5 +701,49 @@ impl FileContext {
     #[must_use]
     pub fn external_import_search_enabled(&self) -> bool {
         !self.disable_external_import_search
+    }
+
+    /// Set what this file's `import` statements do when a module resolves to
+    /// nothing real. Defaults to [`ImportPolicy::FailClosed`].
+    pub fn set_import_policy(&mut self, policy: ImportPolicy) {
+        self.import_policy = policy;
+    }
+
+    /// The unresolved-import policy in force for this file.
+    #[must_use]
+    pub fn import_policy(&self) -> ImportPolicy {
+        self.import_policy
+    }
+
+    /// Record that `module`'s declarations are already in the environment
+    /// because this run elaborated its intra-project `.lean` source.
+    ///
+    /// Without this, a perfectly ordinary multi-file project with no compiled
+    /// artifacts would fail closed on its own internal imports: `clean check`
+    /// elaborates `Foo.lean` in its first pass, and the second pass then finds
+    /// no `Foo.olean` anywhere. The import IS resolved; the missing artifact is
+    /// expected.
+    pub fn mark_import_satisfied_from_source(&mut self, module: &str) {
+        self.imports_satisfied_from_source
+            .insert(module.to_string());
+    }
+
+    /// Whether `module` was recorded by [`Self::mark_import_satisfied_from_source`].
+    #[must_use]
+    pub fn import_satisfied_from_source(&self, module: &str) -> bool {
+        self.imports_satisfied_from_source.contains(module)
+    }
+
+    /// The two per-file loader records the import path needs together: the
+    /// `visited` memo it mutates, and the read-only set of modules already
+    /// satisfied from source. Returned as a pair so callers do not have to
+    /// clone either to satisfy the borrow checker.
+    pub fn import_loader_state_mut(
+        &mut self,
+    ) -> (&mut hashbrown::HashSet<String>, &HashSet<String>) {
+        (
+            &mut self.import_visited,
+            &self.imports_satisfied_from_source,
+        )
     }
 }

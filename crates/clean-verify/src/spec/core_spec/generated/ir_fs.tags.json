@@ -1,0 +1,75 @@
+{
+ "chain": "ir_fs",
+ "body": "mode::CleanMode::from_source_system",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses -- plus, NEW ON THIS CHAIN, one interface-only row for the enum the body takes BY VALUE and never names in an instruction.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. `enum.13` (CleanMode) is what the twelve arms materialise and the join binds; it lives in the core module as canonical first-use index 0. `enum.178` (SourceSystem, fixture era) never occurs in the core module at all -- the argument arrives BY VALUE and only its discriminant is read -- so it has no first-use index to inherit; canonical 1 is ASSIGNED here so the parameter-type pin can be producer-invariant (`enum#1`) instead of the anything-matches `enum#?`. Two bodies over two different by-value enums project to ONE core module; this row is what separates them.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_fs_tmode` alias (`IRTy.enum_ ir_d13`, inside the atom pool) that the twelve constant arms name, and the `ir_fs_tsrc` alias (`IRTy.enum_ 178`, outside it) that nothing in the module names -- registered so the SourceSystem pin is an elaborated term and not only a JSON row. `ir_mint::decode` reads the table in the other direction and REFUSES an id it does not list; `Tags::canon_ty` resolves both printed tokens through it for the interface comparison.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. On this chain the sharp slot is the ENTRY PARAMETER'S TYPE: `bb0(%0: enum.178)` is a SourceSystem BY VALUE -- the first chained body whose argument is not a pointer or a float -- and the entry extractfield reads its discriminant directly off the SSA value. A twin over any other by-value enum is a different program the core module alone cannot see.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED, because it moves. Reader A's record on the laneREG wc-REG dump_O3 2026-08-21 revalidation: `param_tys_erased: [\"Enum(EnumId(176))\"]` (fixture era 178 -- the recorded whole-crate drift class, re-observed on this very slot), `block_param_tys_erased: [\"bb13:Enum(EnumId(13))\"]`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 554,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read the notes in ir_h2.tags.json. The producer A/B record has this index at 732/732/552 over its three dumps and reader A's 2026-08-21 laneREG dump says 551, all with the instruction text byte-identical. The pin compares reader B's header against the FIXTURE-ERA 554; reader A's value is RECORDED in ir_fs.mint.json, NEVER COMPARED.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "enum#1",
+    "observed_ty": "enum.178",
+    "rust_type": "env::SourceSystem",
+    "note": "The argument, BY VALUE -- no load, no pointer: the entry extractfield reads the discriminant off the SSA value itself, which is what made this chain structurally different from the first two. The canonical form resolves through this table's SourceSystem row, so the pin survives a re-interning (fixture 178, laneREG dump already 176) and still refuses a DIFFERENT enum."
+   }
+  ],
+  "block_params": [
+   {
+    "block": 13,
+    "index": 0,
+    "ssa": 1,
+    "ty": "enum#0",
+    "observed_ty": "enum.13",
+    "note": "The join binds the RESULT enum (CleanMode) by value: twelve constant arms funnel a `const enum.13 { k }` aggregate into it and the block returns its parameter."
+   }
+  ],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement rather than an omission: the body contains no memory instruction at all -- the argument arrives by value and the twelve answers are materialised constants. Reader A's `aligns_erased` is [] on the dump this migration was revalidated against.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 13,
+   "alias": "ir_fs_tmode",
+   "rust_type": "mode::CleanMode",
+   "observed_crate_id_by_producer": {
+    "wave-tr-fix-2026-08-12": 13,
+    "mfclose-2026-08-13": 13,
+    "lane2rv-2026-08-19": 13,
+    "laneREG-2026-08-21": 13
+   },
+   "note": "The RESULT enum, and the only aggregate the core module names: the twelve `const enum.13 { k }` arms and the join. Observed at 13 on all four recorded dumps -- the same id ir_h2_tmode pins, because it IS the same type. Still a pin to be re-checked, not an invariance."
+  },
+  {
+   "canonical": 1,
+   "crate_id": 178,
+   "alias": "ir_fs_tsrc",
+   "rust_type": "env::SourceSystem",
+   "observed_crate_id_by_producer": {
+    "fixture-era-b03937e74": 178,
+    "laneREG-2026-08-21": 176
+   },
+   "note": "INTERFACE-ONLY, the first such row in the tree: the ARGUMENT enum, taken by value and never named by any instruction, so it has no first-use index in the core module -- canonical 1 is assigned so `Tags::canon_ty` can resolve the parameter token to `enum#1` and the pin survives a re-interning while still refusing a different enum. It HAS ALREADY MOVED (fixture era 178, laneREG 2026-08-21 dump 176 -- reader A's `param_tys_erased`), which is exactly why the pin cannot be the verbatim token. The pin follows the COMMITTED FIXTURE (reader B compares against it); a fixture rebaseline re-pins this row in the same reviewed change."
+  }
+ ],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `from_source_system` calls NOTHING: its coverage row records calls {resolved 0, extern_decls 0, unresolved 0}, reader A's `crate_func_ids_seen` is the single entry [4177] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`; `mint::check_func_namespace` accepts it ONLY for a module with no `call`."
+}

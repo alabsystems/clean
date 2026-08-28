@@ -2659,9 +2659,73 @@ async fn test_plain_goal_bound_theorem_requires_theorem_local_context_for_post_t
         position: Position::new(1, 3),
     });
 
+    assert_eq!(
+        response.goals,
+        Some(vec!["p : Prop\n⊢ Prop".to_string()]),
+        "a bound theorem shows the binder-aware INITIAL goal; the typed post-tactic snapshot stays refused until proof_state_for_tactic_target takes the binder telescope"
+    );
+}
+
+#[tokio::test]
+async fn test_plain_goal_bound_theorem_initial_goal_renders_binders_as_hypotheses() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///plain-goal-binder-hypotheses.lean").unwrap();
+    let text = "theorem bound_live (n : Nat) (h : n = n) : n = n := by\n  sorry\n".to_string();
+
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text, "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+
+    let response = backend.plain_goal(crate::rpc::PlainGoalParams {
+        text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
+        position: Position::new(1, 2),
+    });
+
+    assert_eq!(
+        response.goals,
+        Some(vec!["n : Nat\nh : n = n\n⊢ n = n".to_string()]),
+        "each theorem binder should appear as a hypothesis line above the initial target"
+    );
+
+    let outside_snapshot = backend.plain_goal(crate::rpc::PlainGoalParams {
+        text_document: crate::rpc::TextDocumentIdentifier { uri },
+        position: Position::new(0, 0),
+    });
     assert!(
-        response.goals.is_none(),
-        "plainGoal must not expose a post-tactic snapshot for bound theorems until theorem-local binder context is available"
+        outside_snapshot.goals.is_none(),
+        "binder-aware initial snapshots stay range-local"
+    );
+}
+
+#[test]
+fn test_bound_theorem_initial_goal_renders_implicit_and_instance_binders() {
+    let uri = Url::parse("file:///binder-initial-goal-kinds.lean").unwrap();
+    let text = "theorem bound_hyp {p : Prop} (hp : p) [inst : Decidable p] : p := by\n  skip\n"
+        .to_string();
+    let doc = Document::new(uri, 1, text.clone(), "lean".to_string());
+    let decls =
+        clean_parser::parse_file_with_tactics(&text, &CleanBackend::builtin_tactic_patterns())
+            .expect("bound theorem should parse with tactic syntax");
+    let clean_parser::SurfaceDecl::Theorem {
+        binders, ty, proof, ..
+    } = &decls[0]
+    else {
+        panic!("expected theorem declaration");
+    };
+
+    let env = clean_kernel::Environment::new();
+    let snapshot =
+        CleanBackend::tactic_goal_snapshot_from_theorem(&doc, &text, &env, binders, ty, proof)
+            .expect("bound theorem should produce a binder-aware initial snapshot");
+
+    assert_eq!(
+        snapshot.goals,
+        vec!["p : Prop\nhp : p\ninst : Decidable p\n⊢ p".to_string()],
+        "implicit, explicit, and instance binders all render as hypothesis lines"
     );
 }
 
@@ -2731,33 +2795,51 @@ async fn test_live_hover_uses_checked_declaration_range() {
         .and_then(|elaborated| elaborated.declarations.first())
         .expect("live check should produce an elaborated declaration")
         .clone();
+    // The declaration's EXTENT — keyword through the last byte it occupies —
+    // not the keyword-only span the parser records as `decl.start..decl.end`.
+    // Those two coincided until the hover repair, which is why hover answered
+    // only inside `axiom`.
     let expected_range = Range {
         start: doc.offset_to_position(decl.start),
-        end: doc.offset_to_position(decl.end),
+        end: doc.offset_to_position("axiom hover_decl : Nat".len()),
     };
+    assert_eq!(
+        decl.end,
+        "axiom".len(),
+        "the parser still records the keyword-only span; if this changes, the \
+         hover extent is no longer the thing under test"
+    );
     let query_position = expected_range.start;
+    // A position PAST the keyword and outside any identifier (the `:`): the
+    // regression this test exists for — it answered `null` before the repair.
+    let colon_position = doc.offset_to_position("axiom hover_decl ".len());
     drop(doc);
 
-    let hover = backend
-        .get_hover_at(&uri, query_position)
-        .expect("hover should use live elaborated declaration state");
-    assert_eq!(
-        hover.range,
-        Some(expected_range),
-        "hover range should match the live elaborated declaration range"
-    );
-    match hover.contents {
-        HoverContents::Markup(markup) => {
-            assert!(
-                markup.value.contains("hover_decl"),
-                "hover markdown should include the declaration name"
-            );
-            assert!(
-                markup.value.contains(&decl.type_str),
-                "hover markdown should include the live checked declaration type"
-            );
+    for (label, position) in [
+        ("keyword", query_position),
+        ("type ascription", colon_position),
+    ] {
+        let hover = backend
+            .get_hover_at(&uri, position)
+            .unwrap_or_else(|| panic!("hover at the {label} should answer from live state"));
+        assert_eq!(
+            hover.range,
+            Some(expected_range),
+            "hover at the {label} should span the whole declaration"
+        );
+        match hover.contents {
+            HoverContents::Markup(markup) => {
+                assert!(
+                    markup.value.contains("hover_decl"),
+                    "hover markdown should include the declaration name"
+                );
+                assert!(
+                    markup.value.contains(&decl.type_str),
+                    "hover markdown should include the live checked declaration type"
+                );
+            }
+            other => panic!("expected markdown hover contents, got {other:?}"),
         }
-        other => panic!("expected markdown hover contents, got {other:?}"),
     }
 }
 
@@ -2766,7 +2848,7 @@ async fn test_live_hover_excludes_checked_declaration_end_boundary() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
     let uri = Url::parse("file:///live-hover-end-boundary.lean").unwrap();
-    let text = "axiom hover_end_decl : Nat\n#check True\n".to_string();
+    let text = "axiom hover_end_decl : Nat\n\n#check True\n".to_string();
 
     backend.documents.insert(
         uri.clone(),
@@ -2775,18 +2857,124 @@ async fn test_live_hover_excludes_checked_declaration_end_boundary() {
     backend.parse_document(&uri).await;
     backend.elaborate_document(&uri).await;
 
-    let end_position = backend
+    let doc = backend
         .documents
         .get(&uri)
-        .and_then(|doc| {
-            let decl = doc.elaborated.as_ref()?.declarations.first()?;
-            Some(doc.offset_to_position(decl.end))
-        })
+        .expect("live checked document should remain open");
+    doc.elaborated
+        .as_ref()
+        .and_then(|elaborated| elaborated.declarations.first())
         .expect("live check should produce an elaborated declaration");
+    // The blank line between the axiom and `#check`: inside no declaration's
+    // extent, so hover must answer nothing there.
+    let gap_position = doc.offset_to_position("axiom hover_end_decl : Nat\n".len());
+    // `#check True` parses as a command but elaborates to no declaration, so
+    // its own extent has no type to report either.
+    let command_position = doc.offset_to_position("axiom hover_end_decl : Nat\n\n#ch".len());
+    drop(doc);
 
     assert!(
-        backend.get_hover_at(&uri, end_position).is_none(),
-        "hover should treat checked declaration ranges as half-open"
+        backend.get_hover_at(&uri, gap_position).is_none(),
+        "hover should treat declaration extents as half-open: the gap between \
+         two commands belongs to neither"
+    );
+    assert!(
+        backend.get_hover_at(&uri, command_position).is_none(),
+        "a command that elaborates to no declaration has no type to hover"
+    );
+}
+
+/// A name from the document's import closure — here the prelude floor an
+/// import-free document elaborates against — hovers with its own type, not
+/// with the enclosing declaration's.
+#[tokio::test]
+async fn test_hover_resolves_a_constant_from_the_document_import_closure() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///hover-imported-constant.lean").unwrap();
+    let text = "def hover_imported : Nat := 0\n".to_string();
+
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text, "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+
+    let nat_position = backend
+        .documents
+        .get(&uri)
+        .map(|doc| doc.offset_to_position("def hover_imported : N".len()))
+        .expect("document should remain open");
+
+    let hover = backend
+        .get_hover_at(&uri, nat_position)
+        .expect("hover on `Nat` should resolve through the import closure");
+    let value = hover_markup_value(&hover);
+    assert!(
+        value.contains("Nat : "),
+        "hover should report `Nat`'s own type, got {value:?}"
+    );
+    assert!(
+        !value.contains("hover_imported"),
+        "hover on `Nat` must not fall back to the enclosing declaration, got {value:?}"
+    );
+    assert_eq!(
+        hover.range,
+        Some(Range {
+            start: Position {
+                line: 0,
+                character: 21
+            },
+            end: Position {
+                line: 0,
+                character: 24
+            },
+        }),
+        "hover on an identifier should range over the identifier"
+    );
+}
+
+/// A declaration's extent spans every line it occupies, so a cursor on a
+/// structure field — many lines below the `structure` keyword the parser
+/// records as the declaration's whole span — still hovers the structure.
+#[tokio::test]
+async fn test_hover_extent_spans_a_multiline_declaration() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///hover-multiline-extent.lean").unwrap();
+    let text = "structure HoverPoint where\n  px : Nat\n  py : Nat\n".to_string();
+
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text, "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+
+    // Column 2 of the second field line: `py`, which is neither a document
+    // declaration nor a constant, so hover falls back to the enclosing
+    // declaration — three lines below its recorded span.
+    let field_position = Position {
+        line: 2,
+        character: 3,
+    };
+
+    let hover = backend
+        .get_hover_at(&uri, field_position)
+        .expect("a structure field line lies inside the structure's extent");
+    let value = hover_markup_value(&hover);
+    assert!(
+        value.contains("HoverPoint : "),
+        "hover on a field line should report the enclosing structure, got {value:?}"
+    );
+    assert_eq!(
+        hover.range.map(|range| range.end),
+        Some(Position {
+            line: 2,
+            character: 10
+        }),
+        "the extent should end at the structure's last byte, not at its keyword"
     );
 }
 
@@ -6418,6 +6606,47 @@ async fn test_initialize_advertises_document_link_and_code_lens_providers() {
     );
 }
 
+/// `did_save` is implemented, so the sync capability must actually ASK for save
+/// notifications. The scalar `TextDocumentSyncCapability::Kind` form carries no
+/// `save` field, which tells a spec-conforming client not to send
+/// `textDocument/didSave` at all — the handler existed but could never fire.
+#[tokio::test]
+async fn test_initialize_advertises_save_notifications() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+
+    let result = LanguageServer::initialize(backend, InitializeParams::default())
+        .await
+        .expect("initialize should succeed");
+
+    let sync = result
+        .capabilities
+        .text_document_sync
+        .expect("textDocumentSync capability should be advertised");
+    let options = match sync {
+        TextDocumentSyncCapability::Options(options) => options,
+        TextDocumentSyncCapability::Kind(kind) => panic!(
+            "the scalar Kind({kind:?}) form cannot request save notifications; \
+             did_save would never fire"
+        ),
+    };
+    assert_eq!(
+        options.change,
+        Some(TextDocumentSyncKind::INCREMENTAL),
+        "incremental sync must be preserved"
+    );
+    assert_eq!(options.open_close, Some(true));
+    assert!(
+        matches!(
+            options.save,
+            Some(TextDocumentSyncSaveOptions::Supported(true))
+                | Some(TextDocumentSyncSaveOptions::SaveOptions(_))
+        ),
+        "save notifications must be requested: {:?}",
+        options.save
+    );
+}
+
 #[tokio::test]
 async fn test_initialize_advertises_signature_help_and_workspace_symbol_providers() {
     let (service, _socket) = LspService::new(CleanBackend::new);
@@ -7828,5 +8057,429 @@ fn test_refresh_infoview_goals_clears_stale_goal_state_when_snapshots_removed() 
     assert!(
         stale.is_null(),
         "removed snapshots must not leave stale interactive goals behind"
+    );
+}
+
+#[tokio::test]
+async fn test_commit_elaboration_discards_stale_version_result() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///commit-stale.lean").unwrap();
+    let text = "theorem demo : True := by\n  trivial\n";
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 2, text.to_string(), "lean".to_string()),
+    );
+
+    // A result computed against version 1 lands while the document is already
+    // at version 2: the newer didChange run owns the elaborated state.
+    let committed = backend.commit_elaboration(
+        &uri,
+        1,
+        text,
+        ElaboratedDocument {
+            errors: vec![],
+            warnings: vec![],
+            declarations: vec![],
+            holes: vec![],
+            widget_modules: vec![],
+        },
+        IncrementalState::default(),
+        &clean_kernel::Environment::new(),
+        None,
+    );
+
+    assert!(!committed, "stale-version commit must be refused");
+    let doc = backend
+        .documents
+        .get(&uri)
+        .expect("document should remain open");
+    assert!(
+        doc.elaborated.is_none(),
+        "a stale result must not be stored on the document"
+    );
+    assert!(
+        backend.tactic_goal_snapshots.get(&uri).is_none(),
+        "a stale result must not install tactic snapshots"
+    );
+}
+
+#[tokio::test]
+async fn test_commit_elaboration_stores_result_at_matching_version() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///commit-current.lean").unwrap();
+    let text = "theorem demo : True := by\n  trivial\n";
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 3, text.to_string(), "lean".to_string()),
+    );
+
+    let committed = backend.commit_elaboration(
+        &uri,
+        3,
+        text,
+        ElaboratedDocument {
+            errors: vec![],
+            warnings: vec![],
+            declarations: vec![],
+            holes: vec![],
+            widget_modules: vec![],
+        },
+        IncrementalState::default(),
+        &clean_kernel::Environment::new(),
+        None,
+    );
+
+    assert!(committed, "matching-version commit must be stored");
+    let doc = backend
+        .documents
+        .get(&uri)
+        .expect("document should remain open");
+    assert!(
+        doc.elaborated.is_some(),
+        "the committed result must be stored on the document"
+    );
+    assert!(
+        backend.tactic_goal_snapshots.get(&uri).is_some(),
+        "commit should rebuild the by-block tactic snapshot"
+    );
+}
+
+// --- Per-URI background elaboration (unfreeze plan deferred item C) ---
+//
+// The stale-version commit tests above cover mechanism 1 (version check at
+// commit); the tests below cover mechanism 2 (per-URI generation counter)
+// and mechanism 3 (task-handle tracking / abort), plus the end-to-end
+// ordering contract: parse-first inline, elaboration in the background, and
+// reads racing the background task served from the last committed snapshot.
+
+/// A guard whose drop sets a flag: the externally observable effect of
+/// `JoinHandle::abort` on a task that never completes on its own is that its
+/// future (and thus this guard) is dropped.
+struct DropFlag(Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for DropFlag {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Spawn a stand-in for an in-flight elaboration task: it never finishes on
+/// its own (`pending()`), so only an abort can end it, observed via the
+/// returned flag.
+fn spawn_pending_task() -> (
+    tokio::task::JoinHandle<()>,
+    Arc<std::sync::atomic::AtomicBool>,
+) {
+    let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let guard = DropFlag(dropped.clone());
+    let task = tokio::spawn(async move {
+        let _guard = guard;
+        std::future::pending::<()>().await;
+    });
+    (task, dropped)
+}
+
+/// Yield until `flag` is set or a generous yield budget runs out: the
+/// current-thread test runtime needs scheduler passes to drop an aborted
+/// task.
+async fn yield_until_set(flag: &std::sync::atomic::AtomicBool) {
+    for _ in 0..256 {
+        if flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
+/// Extract the markdown payload of a hover produced by `get_hover_at`.
+fn hover_markup_value(hover: &Hover) -> &str {
+    match &hover.contents {
+        HoverContents::Markup(markup) => &markup.value,
+        other => panic!("hover should carry markup contents, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_elaboration_generation_bump_supersedes_older_generation() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///generation-bump.lean").unwrap();
+
+    let first = backend.bump_elaboration_generation(&uri);
+    assert!(
+        backend.elaboration_generation_is_current(&uri, first),
+        "a freshly bumped generation must be current"
+    );
+
+    let second = backend.bump_elaboration_generation(&uri);
+    assert!(second > first, "generations must increase monotonically");
+    assert!(
+        !backend.elaboration_generation_is_current(&uri, first),
+        "an older generation must read as superseded after a newer bump"
+    );
+    assert!(
+        backend.elaboration_generation_is_current(&uri, second),
+        "the newest generation must be current"
+    );
+
+    let unseen = Url::parse("file:///generation-unseen.lean").unwrap();
+    assert!(
+        !backend.elaboration_generation_is_current(&unseen, second),
+        "a URI with no scheduled check has no current generation"
+    );
+}
+
+#[tokio::test]
+async fn test_bump_elaboration_generation_aborts_in_flight_task() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///generation-abort.lean").unwrap();
+
+    let generation = backend.bump_elaboration_generation(&uri);
+    let (task, dropped) = spawn_pending_task();
+    backend.register_elaboration_task(&uri, generation, task);
+    assert!(
+        backend
+            .elaboration_tasks
+            .get(&uri)
+            .is_some_and(|slot| slot.task.is_some()),
+        "a current-generation task must be tracked in the slot"
+    );
+
+    let newer = backend.bump_elaboration_generation(&uri);
+    yield_until_set(&dropped).await;
+    assert!(
+        dropped.load(std::sync::atomic::Ordering::SeqCst),
+        "the superseding bump must abort the tracked in-flight task"
+    );
+    assert!(
+        backend
+            .elaboration_tasks
+            .get(&uri)
+            .is_some_and(|slot| slot.task.is_none()),
+        "the aborted task's handle must be taken out of the slot"
+    );
+    assert!(
+        backend.elaboration_generation_is_current(&uri, newer),
+        "the superseding generation must remain current after the abort"
+    );
+}
+
+#[tokio::test]
+async fn test_register_elaboration_task_stale_generation_aborts_task() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///generation-stale-register.lean").unwrap();
+
+    // tower-lsp runs notification handlers concurrently: a newer didChange
+    // can bump the generation between an older handler's bump and its task
+    // registration. The late registration must abort, not store.
+    let first = backend.bump_elaboration_generation(&uri);
+    let second = backend.bump_elaboration_generation(&uri);
+    let (task, dropped) = spawn_pending_task();
+    backend.register_elaboration_task(&uri, first, task);
+
+    assert!(
+        backend
+            .elaboration_tasks
+            .get(&uri)
+            .is_some_and(|slot| slot.task.is_none()),
+        "a task registered under a superseded generation must not be stored"
+    );
+    yield_until_set(&dropped).await;
+    assert!(
+        dropped.load(std::sync::atomic::Ordering::SeqCst),
+        "a task registered under a superseded generation must be aborted"
+    );
+    assert!(
+        backend.elaboration_generation_is_current(&uri, second),
+        "the stale registration must not disturb the current generation"
+    );
+}
+
+#[tokio::test]
+async fn test_did_close_discards_in_flight_elaboration_task() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///close-discard.lean").unwrap();
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(
+            uri.clone(),
+            1,
+            "def x := 1\n".to_string(),
+            "lean".to_string(),
+        ),
+    );
+
+    let generation = backend.bump_elaboration_generation(&uri);
+    let (task, dropped) = spawn_pending_task();
+    backend.register_elaboration_task(&uri, generation, task);
+
+    backend
+        .did_close(DidCloseTextDocumentParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+        })
+        .await;
+
+    assert!(
+        backend.elaboration_tasks.get(&uri).is_none(),
+        "didClose must remove the URI's elaboration slot"
+    );
+    yield_until_set(&dropped).await;
+    assert!(
+        dropped.load(std::sync::atomic::Ordering::SeqCst),
+        "didClose must abort the in-flight background task"
+    );
+    assert!(
+        !backend.elaboration_generation_is_current(&uri, generation),
+        "no generation is current for a closed document, so a still-running task skips its publishes"
+    );
+}
+
+/// Deferred item C, end-to-end: after `didChange` returns, elaboration is a
+/// spawned background task, and a hover in that window answers from the
+/// previous version's committed snapshot instead of blocking or going dark.
+///
+/// Determinism: `#[tokio::test]` runs a current-thread runtime, so the task
+/// spawned at the end of `didChange` cannot be polled until this test next
+/// awaits — the hover below is therefore provably inside the race window.
+#[tokio::test]
+async fn test_hover_during_background_elaboration_serves_previous_snapshot() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///background-hover.lean").unwrap();
+
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "lean".to_string(),
+                version: 1,
+                text: "axiom alpha_marker : Nat\n".to_string(),
+            },
+        })
+        .await;
+    backend.wait_for_elaboration(&uri).await;
+
+    // Derive the hover position from the elaborated declaration itself (the
+    // hover-precedent idiom) — hardcoded columns silently miss when the
+    // declaration's recorded range differs from eyeballed source offsets.
+    let query_position = {
+        let doc = backend
+            .documents
+            .get(&uri)
+            .expect("document should remain open");
+        let decl = doc
+            .elaborated
+            .as_ref()
+            .and_then(|e| e.declarations.first())
+            .expect("v1 elaboration should record a declaration")
+            .clone();
+        doc.offset_to_position(decl.start)
+    };
+    let before = backend
+        .get_hover_at(&uri, query_position)
+        .expect("v1 elaboration should produce a hover for alpha_marker");
+    assert!(
+        hover_markup_value(&before).contains("alpha_marker"),
+        "v1 hover should show the elaborated declaration"
+    );
+
+    backend
+        .did_change(DidChangeTextDocumentParams {
+            text_document: VersionedTextDocumentIdentifier {
+                uri: uri.clone(),
+                version: 2,
+            },
+            content_changes: vec![TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: "axiom omega_marker : Nat\n".to_string(),
+            }],
+        })
+        .await;
+
+    // Race window: didChange has returned, the v2 elaboration task has not
+    // run. The hover must serve the last committed (v1) snapshot.
+    let racing = backend
+        .get_hover_at(&uri, query_position)
+        .expect("a hover racing the background elaboration must serve the last committed snapshot");
+    assert!(
+        hover_markup_value(&racing).contains("alpha_marker"),
+        "the racing hover must answer from the previous committed snapshot"
+    );
+
+    backend.wait_for_elaboration(&uri).await;
+    let after = backend
+        .get_hover_at(&uri, query_position)
+        .expect("the background task should commit the v2 elaboration");
+    assert!(
+        hover_markup_value(&after).contains("omega_marker"),
+        "after the background task commits, hover must serve the new snapshot"
+    );
+}
+
+/// Two rapid `didChange`s: the first spawned elaboration is superseded (and
+/// aborted before it can run on the current-thread test runtime); only the
+/// newest generation commits, and its result reflects the final text.
+#[tokio::test]
+async fn test_rapid_did_changes_only_newest_generation_commits() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///background-supersede.lean").unwrap();
+
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "lean".to_string(),
+                version: 1,
+                text: "axiom first_gen : Nat\n".to_string(),
+            },
+        })
+        .await;
+    backend.wait_for_elaboration(&uri).await;
+
+    for (version, text) in [
+        (2, "axiom second_gen : Nat\n"),
+        (3, "axiom third_gen : Nat\n"),
+    ] {
+        backend
+            .did_change(DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version,
+                },
+                content_changes: vec![TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: text.to_string(),
+                }],
+            })
+            .await;
+    }
+
+    // Joins the v3 task (v2's was aborted by v3's bump before it ever ran).
+    backend.wait_for_elaboration(&uri).await;
+
+    let doc = backend
+        .documents
+        .get(&uri)
+        .expect("document should remain open");
+    let elaborated = doc
+        .elaborated
+        .as_ref()
+        .expect("the newest generation must commit its elaboration");
+    assert_eq!(
+        elaborated.declarations.len(),
+        1,
+        "the final text declares exactly one axiom"
+    );
+    assert_eq!(
+        elaborated.declarations[0].name, "third_gen",
+        "only the newest generation's result may be committed"
     );
 }

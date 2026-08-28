@@ -20,8 +20,7 @@
 //! arguments whose hashes match previously verified pairs.
 
 use crate::expr::{Expr, ExprKind};
-use crate::inductive::RecursorArgOrder;
-use crate::name::Name;
+use crate::tc::branch_sharing_recursor_app::RecursorApp;
 use crate::tc::{TcHashMap, TypeChecker};
 use std::ops::Range;
 
@@ -99,84 +98,6 @@ impl BranchSharingCache {
             (b.clone(), a.clone())
         };
         self.verified_pairs.insert((lhs, rhs), ());
-    }
-}
-
-struct RecursorApp<'a> {
-    name: &'a Name,
-    levels: &'a [crate::level::Level],
-    arg_order: RecursorArgOrder,
-    num_params: usize,
-    num_indices: usize,
-    num_motives: usize,
-    num_minors: usize,
-    args: crate::expr::AppArgs<'a>,
-}
-
-impl<'a> RecursorApp<'a> {
-    fn args_before_major(&self) -> usize {
-        match self.arg_order {
-            RecursorArgOrder::MajorAfterMinors => {
-                self.num_params + self.num_motives + self.num_minors + self.num_indices
-            }
-            RecursorArgOrder::MajorAfterMotive => {
-                self.num_params + self.num_motives + self.num_indices
-            }
-        }
-    }
-
-    fn required_args(&self) -> usize {
-        match self.arg_order {
-            RecursorArgOrder::MajorAfterMinors => self.args_before_major() + 1,
-            RecursorArgOrder::MajorAfterMotive => self.args_before_major() + 1 + self.num_minors,
-        }
-    }
-
-    fn params_range(&self) -> Range<usize> {
-        0..self.num_params
-    }
-
-    fn motives_range(&self) -> Range<usize> {
-        let start = self.params_range().end;
-        start..start + self.num_motives
-    }
-
-    fn indices_range(&self) -> Range<usize> {
-        match self.arg_order {
-            RecursorArgOrder::MajorAfterMinors => {
-                let start = self.minors_range().end;
-                start..start + self.num_indices
-            }
-            RecursorArgOrder::MajorAfterMotive => {
-                let start = self.motives_range().end;
-                start..start + self.num_indices
-            }
-        }
-    }
-
-    fn major_idx(&self) -> usize {
-        self.args_before_major()
-    }
-
-    fn minors_range(&self) -> Range<usize> {
-        match self.arg_order {
-            RecursorArgOrder::MajorAfterMinors => {
-                let start = self.motives_range().end;
-                start..start + self.num_minors
-            }
-            RecursorArgOrder::MajorAfterMotive => {
-                let start = self.major_idx() + 1;
-                start..start + self.num_minors
-            }
-        }
-    }
-
-    fn extras_range(&self) -> Range<usize> {
-        let start = match self.arg_order {
-            RecursorArgOrder::MajorAfterMinors => self.major_idx() + 1,
-            RecursorArgOrder::MajorAfterMotive => self.minors_range().end,
-        };
-        start..self.args.len()
     }
 }
 

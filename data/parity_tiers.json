@@ -1,0 +1,342 @@
+{
+  "schema": "parity-tiers/v1",
+  "ring": "R3",
+  "design": "designs/2026-08-22-spine-and-lattice-program.md \u00a75 Ring R3, incorporated by reference as the kernel workstream of designs/2026-08-22-one-trust-backward-design.md (which cites R3's ratchet machinery at its Layer-B D1(b) obligation)",
+  "derived_by": "scripts/parity_tiers.py",
+  "rule": "Every tier is derived from a COMMITTED machine-minted artifact. Authored/prose numbers never count (the house rule proven by scripts/evalir_coverage.py). Where no such artifact exists the tier is UNKNOWN with its reason and the exact command that would mint it; UNKNOWN never satisfies and never violates the ratchet. `value` is monotone UP and each `guards` entry is monotone in its stated direction; `--check` fails a regression as `regression` and any other drift as `stale`.",
+  "outside_the_tcb": "R3 tiers are FIDELITY, not soundness. Clean's parser and elaborator sit outside the trusted computing base: everything they produce is re-checked by the kernel, so a frontend defect surfaces as a REJECTION, never as an unsound acceptance. A tier moving up means more real input gets through; it never means more is trusted.",
+  "sources_committed": true,
+  "generated_at_head": "d549a50bfd4f680ed887f6c91761f80f5726c4f5",
+  "summary": {
+    "tiers": 5,
+    "measured": 4,
+    "unknown": 1,
+    "stale_vs_generation_head": 4
+  },
+  "tiers": [
+    {
+      "name": "everyday-language",
+      "status": "measured",
+      "statement": "63/63 everyday-language snippets elaborate through Clean's own frontend and are accepted by Clean's kernel.",
+      "value": 63,
+      "denominator": 63,
+      "unit": "snippets",
+      "ratchet": "up",
+      "guards": [
+        {
+          "key": "failed_snippets",
+          "value": 0,
+          "direction": "down",
+          "note": "a snippet added to the battery that FAILS trips this even though `passed` held flat"
+        }
+      ],
+      "sources": [
+        {
+          "path": "reports/everyday-battery.json",
+          "schema": "everyday-battery-v1",
+          "sha256": "53abb40f92276d7c713933be5365abb1eaa5ee17168473fc34128e62094190dd",
+          "tracked_and_clean": true
+        }
+      ],
+      "measured_at": {
+        "commit": "410e193c1cd04d38fc44fecc3d3a4c8004980120",
+        "commit_short": "410e193c1",
+        "commit_resolved": true,
+        "date": "2026-08-24",
+        "landed_in_commit": "01f6cbb58cd0db8fb06de7079e486748e4415b28",
+        "landed_on_date": "2026-08-24"
+      },
+      "staleness": {
+        "measured_at_commit": "410e193c1cd04d38fc44fecc3d3a4c8004980120",
+        "matches_head": false,
+        "relation": "ancestor",
+        "commits_behind_head": 104,
+        "label": "STALE: measured at 410e193c1, an ANCESTOR of HEAD (104 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      },
+      "detail": {
+        "verdicts": {
+          "pass": 63
+        },
+        "snippet_provenance": {
+          "locked-2026-07-20": 38,
+          "reconstructed-2026-08-10": 25
+        },
+        "byte_comparable_to_2026_07_20": 38,
+        "reconstructed_not_byte_comparable": 25,
+        "comparison_basis": "38/63 snippets are byte-identical to the 2026-07-20 R100 battery (the passing set locked in commit f7f1c78bb, test_r100_everyday_lock). The 25 failing snippets were never committed \u2014 the R100 run banked them only to an ephemeral scratchpad (scratchpad/r100_battery.json), since lost \u2014 and are RECONSTRUCTED (2026-08-10) from the recorded per-snippet names and failure causes in commit f7f1c78bb's message and the R100 cluster map (24 of 25 names recorded; the unrecorded slot is unrecorded_r100_slot25, rebuilt from the missing-prelude-consts cluster description). Verdicts on the 38 locked snippets are directly comparable to 2026-07-20; verdicts on the 25 reconstructed snippets measure the same recorded failure surface but are not byte-comparable."
+      },
+      "does_not_claim": "Not soundness. The frontend is outside the TCB \u2014 every snippet's output is re-checked by the kernel, so a wrong elaboration shows up as a kernel rejection, not as an unsound acceptance. Not Mathlib: these are 63 hand-sized snippets, not library code. And only 38 of the 63 are byte-identical to the 2026-07-20 battery; the other 25 were RECONSTRUCTED from recorded names and failure causes (the original inputs were lost with an ephemeral scratchpad) and are not byte-comparable to that run.",
+      "mint_command": "CLEAN_EVERYDAY_UPDATE=1 cargo test --locked -p clean-elab --lib test_r100_everyday_battery_full"
+    },
+    {
+      "name": "universe-u2",
+      "status": "measured",
+      "statement": "37/45 U2 universe-level fixtures land on their pinned verdict as POSITIVE passes; the remaining 8 are MUST_FAIL fixtures pinned to refuse.",
+      "value": 37,
+      "denominator": 45,
+      "unit": "fixtures",
+      "ratchet": "up",
+      "guards": [
+        {
+          "key": "open_gaps_in_negative_split",
+          "value": 0,
+          "direction": "down",
+          "note": "must stay 0: every fail-pinned fixture is declared MUST_FAIL, i.e. a sound loud reject"
+        }
+      ],
+      "sources": [
+        {
+          "path": "reports/u2-battery.json",
+          "schema": "u2-battery-v1",
+          "sha256": "91d9b106b4bb3413517e6ab12469af1e47f3758f0b8c20c8d88062ee11fdc2d3",
+          "tracked_and_clean": true
+        }
+      ],
+      "measured_at": {
+        "commit": "1b28d2d742a122f08d2a10d5af466194c1188c2f",
+        "commit_short": "1b28d2d74",
+        "commit_resolved": true,
+        "date": "2026-08-25",
+        "landed_in_commit": "d549a50bfd4f680ed887f6c91761f80f5726c4f5",
+        "landed_on_date": "2026-08-25"
+      },
+      "staleness": {
+        "measured_at_commit": "1b28d2d742a122f08d2a10d5af466194c1188c2f",
+        "matches_head": false,
+        "relation": "ancestor",
+        "commits_behind_head": 1,
+        "label": "STALE: measured at 1b28d2d74, an ANCESTOR of HEAD (1 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      },
+      "detail": {
+        "fail_pinned": 8,
+        "fail_pinned_ids": [
+          "p06",
+          "p12",
+          "p30",
+          "p31",
+          "p39",
+          "p40",
+          "p42",
+          "p44"
+        ],
+        "fail_pinned_are_all_must_fail": true,
+        "clean_binary_sha256": "38981725bad1c9b885bb1885b004def4b8e5fd3b0d302cb064876a22ed28f614",
+        "negative_pin_semantics": "MUST_FAIL fixtures are pinned REFUSALS (rigid-refusal / ill-typed-in-Lean-too shapes). They are counted in the denominator and excluded from the numerator: a MUST_FAIL fixture that starts PASSING is a soundness event, not an improvement."
+      },
+      "does_not_claim": "Not soundness, and not universe-solver completeness. This is a 45-fixture ladder over level-inference shapes, not a corpus; passing it says those shapes elaborate and kernel-check, not that the U2 level solver is complete. The 8 fail-pinned fixtures are not counted as passes in either direction \u2014 some of them (p06, p12) are pinned to refuse FOREVER because the input is genuinely ill-typed.",
+      "mint_command": "scripts/u2_battery.sh"
+    },
+    {
+      "name": "mathlib-source-elab",
+      "status": "measured",
+      "statement": "326/784 declarations across 5 pinned real Mathlib SOURCE files elaborate through Clean's own frontend under `allow_sorry_success`.",
+      "value": 326,
+      "denominator": 784,
+      "unit": "declarations",
+      "ratchet": "up",
+      "guards": [
+        {
+          "key": "kernel_check_failures",
+          "value": 5,
+          "direction": "down",
+          "note": "declarations the frontend produced that Clean's KERNEL then rejected"
+        },
+        {
+          "key": "sorry_axioms",
+          "value": 9,
+          "direction": "down",
+          "note": "run-wide sorry counter; the basis folds sorry-tainted decls into successes"
+        },
+        {
+          "key": "success:Mathlib/Data/Subtype.lean",
+          "value": 13,
+          "direction": "up",
+          "note": "per-file floor, 13/45"
+        },
+        {
+          "key": "success:Mathlib/Logic/Basic.lean",
+          "value": 164,
+          "direction": "up",
+          "note": "per-file floor, 164/256"
+        },
+        {
+          "key": "success:Mathlib/Logic/Function/Basic.lean",
+          "value": 83,
+          "direction": "up",
+          "note": "per-file floor, 83/230"
+        },
+        {
+          "key": "success:Mathlib/Logic/Unique.lean",
+          "value": 8,
+          "direction": "up",
+          "note": "per-file floor, 8/41"
+        },
+        {
+          "key": "success:Mathlib/Order/Basic.lean",
+          "value": 58,
+          "direction": "up",
+          "note": "per-file floor, 58/212"
+        }
+      ],
+      "sources": [
+        {
+          "path": "reports/source-elab/srcelab-2026-08-25-g08b7b05d9.json",
+          "schema": "Clean-srcelab-report-v1",
+          "sha256": "9bc25c464513b49295e939d99aafdf077d9ca9b19c6a87e3504aeb9b5cd29740",
+          "tracked_and_clean": true
+        },
+        {
+          "path": "data/source_elab_ratchet.json",
+          "schema": "Clean-srcelab-ratchet-v1",
+          "sha256": "9b656b195f8cf2d16845ca5abf8d52b86986d7539e29f22d5b04cf531812107b",
+          "tracked_and_clean": true
+        }
+      ],
+      "measured_at": {
+        "commit": "08b7b05d9c52e783f666018108c218724a8e0b7b",
+        "commit_short": "08b7b05d9",
+        "commit_resolved": true,
+        "date": "2026-08-25",
+        "landed_in_commit": "74b96f9f8cc741532ac7324daf8a6644a8873cf7",
+        "landed_on_date": "2026-08-25"
+      },
+      "staleness": {
+        "measured_at_commit": "08b7b05d9c52e783f666018108c218724a8e0b7b",
+        "matches_head": false,
+        "relation": "ancestor",
+        "commits_behind_head": 58,
+        "label": "STALE: measured at 08b7b05d9, an ANCESTOR of HEAD (58 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      },
+      "detail": {
+        "per_file": {
+          "Mathlib/Data/Subtype.lean": "13/45",
+          "Mathlib/Logic/Basic.lean": "164/256",
+          "Mathlib/Logic/Function/Basic.lean": "83/230",
+          "Mathlib/Logic/Unique.lean": "8/41",
+          "Mathlib/Order/Basic.lean": "58/212"
+        },
+        "counting_basis": "allow_sorry_success",
+        "counting_basis_note": "success_count counts --allow-sorry passes: Clean-check-report-v1 has no per-decl sorry-taint field, so sorry-tainted decls are folded into success_count and taint is only visible as the run-wide trust_summary.sorry_axioms counter recorded per file below.",
+        "invocation": "clean check --imports-prefer-olean --allow-sorry --json",
+        "corpus": "mathlib4 v4.30.0-rc2 (CLEAN_MATHLIB_DIR), per the ratchet's arming record"
+      },
+      "does_not_claim": "NOT sorry-free. counting_basis=allow_sorry_success: Clean-check-report-v1 carries no per-decl sorry-taint field, so sorry-tainted declarations are folded into the 326 and taint is visible only as the run-wide sorry_axioms counter (9). Not soundness either: 5 declarations were elaborated and then REJECTED by Clean's kernel \u2014 which is the frontend being outside the TCB working as designed, not a hole. And not Mathlib coverage: five files, chosen to span failure classes, are not the library.",
+      "mint_command": "scripts/source_elab_gate.sh --jobs 2 --update"
+    },
+    {
+      "name": "mathlib-olean-recheck-milestone",
+      "status": "unknown",
+      "statement": "The 2026-07-12 Mathlib olean kernel-recheck milestone (Logic/Basic, Algebra/Group/Defs, and the 40-module cross-section) \u2014 UNKNOWN.",
+      "value": null,
+      "denominator": null,
+      "unit": null,
+      "ratchet": "up",
+      "guards": [],
+      "sources": [],
+      "measured_at": null,
+      "staleness": {
+        "measured_at_commit": null,
+        "matches_head": false,
+        "relation": "unmeasured",
+        "commits_behind_head": null,
+        "label": "UNKNOWN \u2014 nothing was measured, so there is nothing to be stale"
+      },
+      "reason": "The milestone's counts (357/357, 1123/1123, and a 40-module / 8,908-constant cross-section) exist ONLY as prose in docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md (present in this checkout). The commands that produced them wrote their JSON to a `--out-dir` that was never committed, so no machine-minted artifact backs those numbers here. Under the house rule (scripts/evalir_coverage.py: measured rows only, authored ones never), a number typed into a plan is not a measurement, and this generator will not promote one. UNKNOWN neither satisfies nor violates the R3 ratchet.",
+      "searched": [
+        "data/mathlib_kv_milestone*.json",
+        "data/mathlib_olean_milestone*.json",
+        "reports/mathlib-kv-milestone*/*.json",
+        "reports/mathlib-olean-milestone*/*.json",
+        "docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md (prose \u2014 not evidence)"
+      ],
+      "does_not_claim": "Nothing is claimed. In particular this row must NOT be read as a denial that the milestone happened \u2014 only that no committed artifact in this checkout evidences it. The neighbouring mathlib-olean-recheck-sweep-2026-07-08 row is a DIFFERENT corpus pin and is not a substitute for it.",
+      "mint_command": "target/release/clean mathverse stamp-verified <mathlib>/.lake/build/lib/lean/Mathlib/Logic/Basic.olean --out-dir data/mathlib_kv_milestone --closure-root <mathlib>/.lake/build/lib/lean --json   # then commit the emitted summary JSON, and repeat for Mathlib/Algebra/Group/Defs.olean"
+    },
+    {
+      "name": "mathlib-olean-recheck-sweep-2026-07-08",
+      "status": "measured",
+      "statement": "440079/440145 value-bearing Mathlib constants across 6441 modules were re-checked by Clean's KERNEL after .olean import (66 rejected, in 15 modules).",
+      "value": 440079,
+      "denominator": 440145,
+      "unit": "constants",
+      "ratchet": "up",
+      "guards": [
+        {
+          "key": "failed_constants",
+          "value": 66,
+          "direction": "down",
+          "note": "constants the kernel REJECTED on re-check"
+        },
+        {
+          "key": "modules_with_failures",
+          "value": 15,
+          "direction": "down",
+          "note": "modules carrying at least one rejection"
+        }
+      ],
+      "sources": [
+        {
+          "path": "reports/mathlib-kv-sweep-2026-07-08/rerun-results/*.txt",
+          "schema": "kernel_verified=N (values_checked=M) failed=K",
+          "records": 1334,
+          "sha256": null,
+          "tracked_and_clean": true
+        },
+        {
+          "path": "reports/mathlib-kv-sweep-2026-07-08/tail-results/*.txt",
+          "schema": "kernel_verified=N (values_checked=M) failed=K",
+          "records": 6204,
+          "sha256": null,
+          "tracked_and_clean": true
+        },
+        {
+          "path": "reports/mathlib-kv-sweep-2026-07-08 (merged record digest)",
+          "schema": "sha256 over sorted leg/module=kv,vc,failed",
+          "sha256": "8b28bd7bec91d3da7f019a2ccaaaacfd23098d68e9e0a7f185abd53081f5a9ff",
+          "tracked_and_clean": true
+        }
+      ],
+      "measured_at": {
+        "commit": "0a3c59c414003d1530cea2a93ebee873d8e1d48d",
+        "commit_short": "0a3c59c41",
+        "commit_resolved": true,
+        "date": "2026-08-04",
+        "landed_in_commit": "0a3c59c414003d1530cea2a93ebee873d8e1d48d",
+        "landed_on_date": "2026-08-04",
+        "measurement_date": "2026-07-08 (the sweep itself; archived into git 2026-08-04)"
+      },
+      "staleness": {
+        "measured_at_commit": "0a3c59c414003d1530cea2a93ebee873d8e1d48d",
+        "matches_head": false,
+        "relation": "ancestor",
+        "commits_behind_head": 1224,
+        "label": "STALE: measured at 0a3c59c41, an ANCESTOR of HEAD (1224 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      },
+      "detail": {
+        "merge_rule": "union by module across rerun-results and tail-results; on disagreement the CONSERVATIVE record (fewest constants claimed) wins",
+        "modules_disagreeing_between_legs": 7,
+        "disagreeing_modules": [
+          "Mathlib_Algebra_Category_BialgCat_Monoidal.txt",
+          "Mathlib_Algebra_Category_ModuleCat_Stalk.txt",
+          "Mathlib_Algebra_Category_Ring_Adjunctions.txt",
+          "Mathlib_Algebra_Exact_Basic.txt",
+          "Mathlib_Algebra_Homology_HomotopyCategory_ShortExact.txt",
+          "Mathlib_Algebra_Homology_HomotopyCategory_Triangulated.txt",
+          "Mathlib_AlgebraicGeometry_AffineSpace.txt"
+        ],
+        "modules_excluded_no_checkable_target": {
+          "rerun-results": 14,
+          "tail-results": 0
+        },
+        "modules_excluded_no_output": {
+          "rerun-results": 0,
+          "tail-results": 106
+        },
+        "corpus": "mathlib4 pin fabf563a7c95a166b8d7b6efca11c8b4dc9d911f, lean4 v4.31.0",
+        "verifier": "clean release binary built 2026-07-07 at clean a1d9aef8"
+      },
+      "does_not_claim": "This is NOT the 2026-07-12 milestone and NOT source elaboration. It is a PAUSED sweep over a DIFFERENT corpus pin (mathlib431 / lean4 v4.31.0, not v4.30.0-rc2), and it re-checks PRE-ELABORATED terms imported from .olean \u2014 Clean's parser and elaborator never ran on them. It therefore says nothing about the frontend and cannot be quoted as Mathlib coverage: the sweep stopped at 6,441 of ~8,169 modules on memory pressure. Excluded module files (no checkable target, no output) are reported above rather than folded into either side of the fraction.",
+      "mint_command": "clean mathverse per-constant-verify --all-declared <module.olean> --closure-root <mathlib>/.lake/build/lib/lean"
+    }
+  ]
+}

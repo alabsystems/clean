@@ -7,7 +7,7 @@ use crate::proof::ExplainFailure;
 
 /// Statistics for equality theory
 #[derive(Clone, Debug, Default)]
-pub struct EqualityStats {
+pub(crate) struct EqualityStats {
     pub num_eclasses: usize,
     pub num_enodes: usize,
     pub num_disequalities: usize,
@@ -16,7 +16,7 @@ pub struct EqualityStats {
 
 /// Runtime counters for precise-vs-fallback EUF explanations.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ExplanationStats {
+pub(crate) struct ExplanationStats {
     pub precise_count: u64,
     pub fallback_count: u64,
     pub recursion_limit_count: u64,
@@ -43,12 +43,12 @@ impl ExplanationStats {
 
 impl EqualityTheory {
     /// Get runtime counters for precise-vs-fallback EUF explanations.
-    pub fn explanation_stats(&self) -> &ExplanationStats {
+    pub(crate) fn explanation_stats(&self) -> &ExplanationStats {
         &self.explanation_stats
     }
 
     /// Get statistics
-    pub fn stats(&self) -> EqualityStats {
+    pub(crate) fn stats(&self) -> EqualityStats {
         EqualityStats {
             num_eclasses: self.egraph.num_classes(),
             num_enodes: self.egraph.num_nodes(),

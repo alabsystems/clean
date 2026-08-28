@@ -1,0 +1,4019 @@
+{
+ "schema": "clean.verdict_set/v1",
+ "what_this_is": "The committed member list of the verdict-bearing surface \u2014 the code that could mint a false verdict even with a proved kernel \u2014 partitioned as Ring R2 demands (designs/2026-08-22-spine-and-lattice-program.md \u00a75). Derived by scripts/verdict_set.py; quoting any count of it from prose is a bug. scripts/verdict_gate.sh owns the claim.",
+ "derivation": {
+  "script": "scripts/verdict_set.py",
+  "rules": {
+   "R-OLEAN-S": "lane (a)/(b) olean roots = site files under crates/clean-olean/src/ of every data/env_bypass_census.json row whose classification contains 'S' (load-bearing-structural) \u2014 exactly 'the lanes R1 keeps structural'.",
+   "R-VERIFY": "lane (a)/(b) clean-verify roots = the declared ANCHORS table (file, required symbol, role), each verified present in code; a vanished symbol aborts the derivation.",
+   "R-SHARD": "lane (a)/(b) mathverse shard-digest roots = the declared ANCHORS table, same posture.",
+   "R-MINT": "lane (a)/(b) mathverse KernelVerified roots = every production module with a LEXED TrustLevel::KernelVerified mint site (value position; comparisons and match-arm patterns are consumption, not minting; #[cfg(test)] mod bodies and test files excluded).",
+   "R-SUITE": "lane (a)'s suite-runner input-digest machinery is PROBED for in Rust (fn input_digest over crates/**/*.rs); an empty probe is recorded as a dated correction, never as a silence.",
+   "R-GATES": "lane (c) = every data/gate_registry.json row whose artifact is a script under scripts/ with claims != 'none', plus the three Ring-R2 gate names, present or recorded absent."
+  },
+  "edge_policy": {
+   "granularity": "module (one .rs file, or a dir with mod.rs)",
+   "edges_followed": "path-qualified in-crate references: crate::, super::, self::, including the identifiers of `use ...::{a, b}` brace groups; resolved to the longest prefix that names a module",
+   "edges_not_followed": "`mod x;` declarations (declaring a submodule is not using it); references that occur only inside `#[cfg(test)] mod` bodies (test code is not production verdict surface); edges into test modules (recorded in test_modules_not_followed, never silently dropped); cross-crate paths; references that resolve to no module (recorded in unresolved_refs)",
+   "termination": "transitive to a fixed point within one crate's src/; measured small (see partition counts)",
+   "source_scan": "lexed \u2014 comments and string/raw-string/char literals are blanked before any match, and #[cfg(test)] mod bodies are excluded by brace tracking (gate-registry R9: a raw-lines scanner may not claim soundness)"
+  },
+  "closure_limit": "This is a REFERENCE closure at module granularity, NOT the per-body CALL closure. The call closure needs the trust-host whole-crate dump that data/spine_set.PENDING.md records as not yet produced (the same blocker G-SPINE-SET has). Until that dump exists, lane (a)'s membership is a conservative module-level surface: it can contain bodies no verdict path reaches, and it can MISS a body reached only through a dyn/fn-pointer edge. scripts/verdict_gate.sh refuses on this.",
+  "input_pins": {
+   "data/env_bypass_census.json": "f527328f663985fd545a4b218f8dd97c144cb9ef81eee455f1482238971f5f96",
+   "data/gate_registry.json": "994c9751de807095162a430b7e48883b637f2a5f03c23ee096cac6dd4ebe92fa"
+  },
+  "regenerate": "scripts/verdict_set.py            (--check to verify the committed copy)"
+ },
+ "partitions": {
+  "a_pure_rust": {
+   "obligation": "every member chained with the spine recipe (five links), against the committed spine set; Ring R2 gate: verdict_gate.sh over this artifact",
+   "member_count": 58,
+   "chained_count": 0,
+   "sublane_counts": {
+    "a-mathverse-shard-digest-kv": 38,
+    "a-olean-structural": 12,
+    "a-verify-checker-census-firewall": 8
+   },
+   "depth_histogram": {
+    "depth_0": 18,
+    "depth_1": 21,
+    "depth_2": 8,
+    "depth_3": 2,
+    "depth_4": 7,
+    "depth_5": 1,
+    "depth_6": 1
+   },
+   "members": [
+    {
+     "path": "crates/clean-mathverse/src/bulk_import.rs",
+     "crate": "clean-mathverse",
+     "module": "bulk_import",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1104,
+     "sha256": "256ddf4b80073e6585719e684204d8e6978e15c66b01b611dddf8d038b25a351",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/discrim.rs",
+     "crate": "clean-mathverse",
+     "module": "discrim",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1133,
+     "sha256": "72398754ba312f81b8eefa9fa6a9c6f01b15f435968b50aa60ec7200315fa395",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/embedding.rs",
+     "crate": "clean-mathverse",
+     "module": "embedding",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1684,
+     "sha256": "a680d2a7877b02471e647c55b0bb733a2d409a6a317689fc911a3acbe45b706d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/equivalence.rs",
+     "crate": "clean-mathverse",
+     "module": "equivalence",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 649,
+     "sha256": "8149ec2a466101321f31986b3fb30aeccfdb7ecad4cb7520ec98fd3a4334607d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/false_control_suite.rs",
+     "crate": "clean-mathverse",
+     "module": "false_control_suite",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 945"
+     ],
+     "lines": 1834,
+     "sha256": "56df4faef077242a2d40e1716d39cc7a09bcb7224e003815bad4dfc95850c42a",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/graduate/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "graduate",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 80,
+     "sha256": "5724c0160280499577d6a1019d20acd6b03096254e3ce0ef799e34a19f19ff7e",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/graph_alpha.rs",
+     "crate": "clean-mathverse",
+     "module": "graph_alpha",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1120,
+     "sha256": "e1ab5032eb17bc74e5842e5859bf8daf873fe65eb471c704bf0c8386dfbe75e4",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/isabelle/translate.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::isabelle::translate",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 475,
+     "sha256": "e246a647a8b59dccb4fd0dc827986729d703ec54efc032038b1f8d7971bafe71",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/isabelle/types.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::isabelle::types",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 212,
+     "sha256": "2ec2b93d8cf09abd9ee833a60b234e6624c5ff00acf5c9bff66b187413eb220a",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/isabelle/yxml_parser.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::isabelle::yxml_parser",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 750,
+     "sha256": "cc5922ce7c108ba5aa22fd9f20b61dbf351a374f2f2789d5e9753d39a3bd796d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/isabelle_shard.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::isabelle_shard",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 153"
+     ],
+     "lines": 374,
+     "sha256": "7b7c2fd981794d6b847ee404692669d1cb48e3432a23cf8e2d777aa8f9621f69",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/opentheory_bridge.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::opentheory_bridge",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 537,
+     "sha256": "4070ecbd9aa6ec741777b745286196a9d9ff2735cb50e98396b23762533b5424",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/opentheory_shard.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::opentheory_shard",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 460,
+     "sha256": "cb887954e813133615f77f774fb09ff73e5982766fa2617206f67460c0ed2f0a",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/lean4/olean/alpha.rs",
+     "crate": "clean-mathverse",
+     "module": "lean4::olean::alpha",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 2877,
+     "sha256": "c13767e70d9629bbe988d6c2f9f07dabe55f65a19cc88ee6d962f2a2f06659a9",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/lean4/olean/axiom_profile.rs",
+     "crate": "clean-mathverse",
+     "module": "lean4::olean::axiom_profile",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 580,
+     "sha256": "21637a1763a7459358299b69660737bc8673ba65a1fc7d8622382a3d37aa1344",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/lean4/olean/decl_kind.rs",
+     "crate": "clean-mathverse",
+     "module": "lean4::olean::decl_kind",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 121,
+     "sha256": "050f4c55b79d1c8a513818ae275d099bae5dcecc49d9ddcfbdf2f2fcbb6b3b13",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/library.rs",
+     "crate": "clean-mathverse",
+     "module": "library",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 3,
+     "selector": "in-crate reference closure (depth 3)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 3383,
+     "sha256": "c95c11287bfe14bbe0b68bcfe1c583f8f3988cd4795aa8927d60d80d9f25524c",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {
+      "structural*": 5
+     },
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/math_map/manifest.rs",
+     "crate": "clean-mathverse",
+     "module": "math_map::manifest",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 448,
+     "sha256": "2a0070ffa43ef21c7043ac1a7c1541eab148cda4031612fc19a7ce130f793713",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/math_map/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "math_map",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 140,
+     "sha256": "cb18ff8312c39e4635e683ca337bb872ffae5b596ad8bdd84ee3888053802c42",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/math_map/trust_audit_gate.rs",
+     "crate": "clean-mathverse",
+     "module": "math_map::trust_audit_gate",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 296,
+     "sha256": "debea5f4a578993833f1ad6e1502db2192575cebe82e9195660f3cb23f70f564",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/nn_alpha.rs",
+     "crate": "clean-mathverse",
+     "module": "nn_alpha",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 303,
+     "sha256": "49d5e480b6e2e23cb66906f7a091d5109db757ad4adab9a510dcee2bd8561f87",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/progverif/metamath/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "progverif::metamath",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 285"
+     ],
+     "lines": 483,
+     "sha256": "dce5aee541a4d667359e509e4df817130088b4dc625963757763588600cf998b",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/provenance.rs",
+     "crate": "clean-mathverse",
+     "module": "provenance",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1167,
+     "sha256": "60ab5e1601b8716b67ab273e58d833dc3458f93ff2477404ae91a5bcc73d211b",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/search.rs",
+     "crate": "clean-mathverse",
+     "module": "search",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 548,
+     "sha256": "2b9ef2445b98d007a40e5f4a8605650f9f3db8dbdfc9e0f7369fa4b005b4a756",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/shard_integrity.rs",
+     "crate": "clean-mathverse",
+     "module": "shard_integrity",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-SHARD: shard-integrity \u2014 level-param integrity audit/repair over a shard reader (anchor symbol 'pub fn audit_level_param_integrity')"
+     ],
+     "lines": 351,
+     "sha256": "526d501ce6da12a95a0d8af31abb3c7e47fab28703e9f3d8c42474b872edb2ba",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/shard_reconstruct.rs",
+     "crate": "clean-mathverse",
+     "module": "shard_reconstruct",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 963,
+     "sha256": "9b9cc3f627678b1b0d77dbdd04801506ab387b0c6cae74546437faf385d2d954",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/stats.rs",
+     "crate": "clean-mathverse",
+     "module": "stats",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 3 KernelVerified mint site(s) at line(s) 402,503,524"
+     ],
+     "lines": 956,
+     "sha256": "a7f8fc5af14a577e72957f54fc74f4f1afa430649b8154b94b14cedc766aab9b",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/audit_report.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::audit_report",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1474,
+     "sha256": "3e798a58f84917a03008d4ea01bf809ae1ef29174f5a5e3c5f1b4f7384a3ab01",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/axiom_propagation.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::axiom_propagation",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 542,
+     "sha256": "297ddb34cb29fc170dc7fc609e5d8dba1773cfb969748e487f9e7e39faefa576",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/gamma_crown.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::gamma_crown",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 181"
+     ],
+     "lines": 545,
+     "sha256": "baf9d978fde0d1c3cb6575716e0386a86ce24a579b4151b489398b308195563b",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/graph_gate.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::graph_gate",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 6 KernelVerified mint site(s) at line(s) 98,99,105,112,122,133"
+     ],
+     "lines": 271,
+     "sha256": "f5a27d13c6df4de6409634e6ed8c3c57de0de65ceed4eb4390017f4514a39129",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/policy.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::policy",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1259,
+     "sha256": "be9c9959021f7caf32a93fbb149138103fe82da9d3bf6be8dce58a51bdcf0210",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/project_audit.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::project_audit",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 180"
+     ],
+     "lines": 2032,
+     "sha256": "9484e7561d5b624990e2bb3299006cd5e8d4e80278f0e53b64881bf1ebba0a4e",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/trust_enforcement/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::trust_enforcement",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 166"
+     ],
+     "lines": 425,
+     "sha256": "e6bdb1ec5f7cd052ecedcec0a193edf51c6b8ef937c8b5dd3473f2ee490fd9c7",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/trust/verification.rs",
+     "crate": "clean-mathverse",
+     "module": "trust::verification",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 4 KernelVerified mint site(s) at line(s) 161,198,574,637"
+     ],
+     "lines": 1139,
+     "sha256": "1b5612d4cdbe719b1e7661882cf543dfa57ef45cf6c51c8362400c0fd58421b2",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/type_preservation.rs",
+     "crate": "clean-mathverse",
+     "module": "type_preservation",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 455"
+     ],
+     "lines": 1629,
+     "sha256": "0cb2c8177c7cbb827eb8701285708faa380747122a12e0255033b7458e03432a",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/types.rs",
+     "crate": "clean-mathverse",
+     "module": "types",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1464,
+     "sha256": "c62d9b8bad7fdf6b58f4a90a79ab92cb8c4918b4a54dc7244f1e43d62656753c",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-mathverse/src/verify/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "verify",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 420,
+     "sha256": "91cfe958995d8269175d85b9f90d04682c92050ecc4099011213c1f68508671d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/expr.rs",
+     "crate": "clean-olean",
+     "module": "expr",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1905,
+     "sha256": "e50090e604778a56a7476463c379527e05b75bb3a818792cd4a8d86501e5e32d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/header.rs",
+     "crate": "clean-olean",
+     "module": "header",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 603,
+     "sha256": "2b2c5714d1db5c4f6f3210daa63c2214d71f5282677aab6e2cfcc586963b6943",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/convert.rs",
+     "crate": "clean-olean",
+     "module": "import::convert",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1109,
+     "sha256": "49c79ec37abe49b1140fed33eaeab1af46a7f02c7d753bebeca7f39d8e9a7cb1",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/convert_direct.rs",
+     "crate": "clean-olean",
+     "module": "import::convert_direct",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 335,
+     "sha256": "6db57a456d630fd0d438452efb5d634cd587825ad56fdf6e0e78ffcd89fddee1",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/convert_expr.rs",
+     "crate": "clean-olean",
+     "module": "import::convert_expr",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 296,
+     "sha256": "5f5f06bc6f77102531367ff445e16d332ae93cff80e8c67f1be5b62a8d2ec6e3",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/convert_expr_direct.rs",
+     "crate": "clean-olean",
+     "module": "import::convert_expr_direct",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 756,
+     "sha256": "11fde5855af7c137bab206e8c7cffdc5db5cec3db428a49e8e38695d3bd08f39",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/load_parse.rs",
+     "crate": "clean-olean",
+     "module": "import::load_parse",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 611,
+     "sha256": "ead275e528c423940eae9648fc7fcff0074cf692a068f2c187a751ebd344798d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/load_register.rs",
+     "crate": "clean-olean",
+     "module": "import::load_register",
+     "sublane": "a-olean-structural",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-OLEAN-S: env_bypass_census:axiom-stub-upgrade-checked(S); env_bypass_census:ind-meta-structural(S)"
+     ],
+     "lines": 2765,
+     "sha256": "0aa217e611862350df029f1694e4b9dae9841ffd8877eb974913f1224f28d9c8",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {
+      "structural*": 6
+     },
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/level.rs",
+     "crate": "clean-olean",
+     "module": "level",
+     "sublane": "a-olean-structural",
+     "depth": 3,
+     "selector": "in-crate reference closure (depth 3)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 537,
+     "sha256": "5c58985ba224a4d5e2bc8cb86449f1729107785a4751ef2564b8b926ae3c10c0",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/module/mod.rs",
+     "crate": "clean-olean",
+     "module": "module",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 630,
+     "sha256": "964ce36173989e5f47c5020136a9de5c339f13f31c78439a2bc311764ef1ccb4",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/payload.rs",
+     "crate": "clean-olean",
+     "module": "payload",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 228,
+     "sha256": "71790ef52d07538308f82c9fb10aca80f788ad3058baac18075589d2a4c8ee24",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/region.rs",
+     "crate": "clean-olean",
+     "module": "region",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1032,
+     "sha256": "1827c59fc4e2e5c7cdd47326a24be40acd8e745d31833648ebfe436ca69d4e8c",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/axiom_ratchet.rs",
+     "crate": "clean-verify",
+     "module": "axiom_ratchet",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-VERIFY: census \u2014 no-new-axioms ratchet over the spec's admitted axioms (anchor symbol 'pub fn newly_admitted_axioms')"
+     ],
+     "lines": 404,
+     "sha256": "73af343636e23a2fd5307bacd19ca0cc8f7a1c5c737ba312ba536dbb9c0cdc5f",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/bootstrap_checker.rs",
+     "crate": "clean-verify",
+     "module": "bootstrap_checker",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-VERIFY: checker \u2014 bootstrap/reflection acceptance for the closed kernel core (anchor symbol 'pub struct BootstrapChecker')"
+     ],
+     "lines": 481,
+     "sha256": "5ce55c6ce2caa09e391e94fa9e3e191c876f0e4d1a3cdd3e3aeacb2121a663f4",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/no_masquerade.rs",
+     "crate": "clean-verify",
+     "module": "no_masquerade",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-VERIFY: checker \u2014 refuses theorem-wrapping-axiom masquerade at promotion (anchor symbol 'pub fn lint_constant')"
+     ],
+     "lines": 1119,
+     "sha256": "56965ac75a41f6835911e5d3852ef84c06b9d05f6dd51c15b6a930515085a78a",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/promotion_guard.rs",
+     "crate": "clean-verify",
+     "module": "promotion_guard",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-VERIFY: guard \u2014 keeps unsafe KernelProved claims from passing handoff (anchor symbol 'pub struct PromotionGuardConfig')"
+     ],
+     "lines": 464,
+     "sha256": "54ac8fda34970cf1770f13c93dfeb390c4732b3ee786c64c2c23fcbcf1e7fdc5",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/promotion_report.rs",
+     "crate": "clean-verify",
+     "module": "promotion_report",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 930,
+     "sha256": "b1463e7535201a6fea8daa092a8d99a1bd675ef2fb06c24c392034c0798b0a82",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/spec/mod.rs",
+     "crate": "clean-verify",
+     "module": "spec",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 231,
+     "sha256": "5bc9094d70a51c93e2ba0a3627f23df3ecbaa021c6b522347fd7d6769fcd42ef",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/spec_axiom_closure.rs",
+     "crate": "clean-verify",
+     "module": "spec_axiom_closure",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-VERIFY: census \u2014 transitive axiom closure vs the spec's hand-maintained honesty labels (anchor symbol 'pub fn audit_definition_honesty')"
+     ],
+     "lines": 456,
+     "sha256": "07bda0e4534cc1d07cced62733002fe30e406e0a735d6788f6a85723fd285e2d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-verify/src/vacuity_firewall.rs",
+     "crate": "clean-verify",
+     "module": "vacuity_firewall",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-VERIFY: firewall \u2014 decides a generated relation is non-vacuous (\u00a78 R2: firewall on every generated relation) (anchor symbol 'pub fn audit_relation')"
+     ],
+     "lines": 1291,
+     "sha256": "043e7b1992795d66889e3cfc8eac961c11ec4f1a55e74961878ec8561acbb5ee",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    }
+   ]
+  },
+  "b_io_bearing": {
+   "obligation": "decode-pure separated from read-IO where feasible; every residual IO boundary contract-modeled and ledgered with a probe (program \u00a73.6)",
+   "member_count": 23,
+   "ledgered_count": 0,
+   "separated_count": 0,
+   "sublane_counts": {
+    "a-mathverse-shard-digest-kv": 20,
+    "a-olean-structural": 2,
+    "a-verify-checker-census-firewall": 1
+   },
+   "depth_histogram": {
+    "depth_0": 5,
+    "depth_1": 10,
+    "depth_2": 3,
+    "depth_3": 1,
+    "depth_4": 2,
+    "depth_5": 1,
+    "depth_6": 1
+   },
+   "io_site_total": 211,
+   "members": [
+    {
+     "path": "crates/clean-mathverse/src/artifacts.rs",
+     "crate": "clean-mathverse",
+     "module": "artifacts",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 419,
+     "sha256": "5354f557842b66baf05524342de7cb46eeadf9c42f5847ad33be482ab5c3eb73",
+     "io_token_count": 20,
+     "io_sites": [
+      {
+       "line": 29,
+       "token": "std::fs"
+      },
+      {
+       "line": 31,
+       "token": "std::process"
+      },
+      {
+       "line": 79,
+       "token": "process::Command"
+      },
+      {
+       "line": 93,
+       "token": "std::io"
+      },
+      {
+       "line": 106,
+       "token": "process::Command"
+      },
+      {
+       "line": 111,
+       "token": "std::io"
+      },
+      {
+       "line": 137,
+       "token": "fs::*"
+      },
+      {
+       "line": 140,
+       "token": "process::Command"
+      }
+     ],
+     "io_sites_truncated": 12,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/attempt_log/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "attempt_log",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 2151,
+     "sha256": "782c600d3d0a960e54de05a0895909d5c8957524a779ae8b518d08783a925419",
+     "io_token_count": 15,
+     "io_sites": [
+      {
+       "line": 12,
+       "token": "std::fs"
+      },
+      {
+       "line": 12,
+       "token": "OpenOptions"
+      },
+      {
+       "line": 13,
+       "token": "std::io"
+      },
+      {
+       "line": 13,
+       "token": "io::*"
+      },
+      {
+       "line": 56,
+       "token": "std::process"
+      },
+      {
+       "line": 942,
+       "token": "fs::*"
+      },
+      {
+       "line": 951,
+       "token": "OpenOptions"
+      },
+      {
+       "line": 1036,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 7,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/authority_scope.rs",
+     "crate": "clean-mathverse",
+     "module": "authority_scope",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 133,
+     "sha256": "302e62587ae78af648270006b819872f3f774b240e55249bbd87fa16ee5b5e48",
+     "io_token_count": 3,
+     "io_sites": [
+      {
+       "line": 7,
+       "token": "std::fs"
+      },
+      {
+       "line": 34,
+       "token": "fs::*"
+      },
+      {
+       "line": 79,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/coq/alpha.rs",
+     "crate": "clean-mathverse",
+     "module": "coq::alpha",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 3,
+     "selector": "in-crate reference closure (depth 3)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 18952,
+     "sha256": "e44d601a7979f533688ce64e9707d49461427af8f4da08564a3c39bb0fedfb34",
+     "io_token_count": 5,
+     "io_sites": [
+      {
+       "line": 2880,
+       "token": "env::var"
+      },
+      {
+       "line": 4347,
+       "token": "env::var"
+      },
+      {
+       "line": 4353,
+       "token": "env::var"
+      },
+      {
+       "line": 4363,
+       "token": "env::var"
+      },
+      {
+       "line": 4505,
+       "token": "env::var"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/coq/universe_releveling.rs",
+     "crate": "clean-mathverse",
+     "module": "coq::universe_releveling",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 2753,
+     "sha256": "acdddb470032c115dc6ae062d68ebcaaef61adc0f3b99c98e0f93bd49702bbb3",
+     "io_token_count": 1,
+     "io_sites": [
+      {
+       "line": 181,
+       "token": "env::var"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/drift.rs",
+     "crate": "clean-mathverse",
+     "module": "drift",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 735"
+     ],
+     "lines": 1944,
+     "sha256": "9c219d56195c980c8890f7574f7b886c36295c25ae5c1c75fec2e65a1892a278",
+     "io_token_count": 10,
+     "io_sites": [
+      {
+       "line": 27,
+       "token": "std::fs"
+      },
+      {
+       "line": 28,
+       "token": "BufReader"
+      },
+      {
+       "line": 28,
+       "token": "BufWriter"
+      },
+      {
+       "line": 28,
+       "token": "std::io"
+      },
+      {
+       "line": 76,
+       "token": "std::io"
+      },
+      {
+       "line": 602,
+       "token": "fs::*"
+      },
+      {
+       "line": 609,
+       "token": "File::open/create"
+      },
+      {
+       "line": 614,
+       "token": "BufWriter"
+      }
+     ],
+     "io_sites_truncated": 2,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/env_fingerprint.rs",
+     "crate": "clean-mathverse",
+     "module": "env_fingerprint",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 569,
+     "sha256": "1e4f695569d458f2506b96bbd150f0820ac2f844366cbec190ae4cb9bc7a782e",
+     "io_token_count": 13,
+     "io_sites": [
+      {
+       "line": 7,
+       "token": "std::fs"
+      },
+      {
+       "line": 9,
+       "token": "std::process"
+      },
+      {
+       "line": 185,
+       "token": "process::Command"
+      },
+      {
+       "line": 213,
+       "token": "process::Command"
+      },
+      {
+       "line": 245,
+       "token": "fs::*"
+      },
+      {
+       "line": 262,
+       "token": "fs::*"
+      },
+      {
+       "line": 262,
+       "token": "read_to_string"
+      },
+      {
+       "line": 270,
+       "token": "process::Command"
+      }
+     ],
+     "io_sites_truncated": 5,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/error.rs",
+     "crate": "clean-mathverse",
+     "module": "error",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 338,
+     "sha256": "7d0b641f7b90506d892ff866475e0480dc9c69cbe5d1638468ad8aadc0fa1340",
+     "io_token_count": 2,
+     "io_sites": [
+      {
+       "line": 92,
+       "token": "std::io"
+      },
+      {
+       "line": 109,
+       "token": "std::io"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/error.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::error",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 36,
+     "sha256": "ac4af6a4269190d89283fcfc3d2de13d615378a2a6e4aa56a8dc15db68fa494a",
+     "io_token_count": 1,
+     "io_sites": [
+      {
+       "line": 23,
+       "token": "std::io"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+     "crate": "clean-mathverse",
+     "module": "hol::isabelle::importer",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 636,
+     "sha256": "284de164c4c66197624b57f1aa57a761561dc7d3d12e75750e3a9cd6af9bd43e",
+     "io_token_count": 6,
+     "io_sites": [
+      {
+       "line": 65,
+       "token": "std::io"
+      },
+      {
+       "line": 96,
+       "token": "std::io"
+      },
+      {
+       "line": 465,
+       "token": "std::fs"
+      },
+      {
+       "line": 465,
+       "token": "fs::*"
+      },
+      {
+       "line": 484,
+       "token": "std::fs"
+      },
+      {
+       "line": 484,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/inductive_replay.rs",
+     "crate": "clean-mathverse",
+     "module": "inductive_replay",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1549,
+     "sha256": "16600cd29f69378c118036bdbd7c1802fdbbe542d0f74ac6ebdcfaf4b4d293c4",
+     "io_token_count": 5,
+     "io_sites": [
+      {
+       "line": 38,
+       "token": "env::var"
+      },
+      {
+       "line": 1004,
+       "token": "env::var"
+      },
+      {
+       "line": 1050,
+       "token": "env::var"
+      },
+      {
+       "line": 1067,
+       "token": "env::var"
+      },
+      {
+       "line": 1147,
+       "token": "env::var"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/math_map/bundle.rs",
+     "crate": "clean-mathverse",
+     "module": "math_map::bundle",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 485,
+     "sha256": "2f5c3305ebde7e8b3e9614133e842b739ce9b835a3c821b86d5b1776d6cfbb2b",
+     "io_token_count": 10,
+     "io_sites": [
+      {
+       "line": 15,
+       "token": "std::fs"
+      },
+      {
+       "line": 16,
+       "token": "std::io"
+      },
+      {
+       "line": 16,
+       "token": "io::*"
+      },
+      {
+       "line": 41,
+       "token": "std::io"
+      },
+      {
+       "line": 173,
+       "token": "std::io"
+      },
+      {
+       "line": 196,
+       "token": "fs::*"
+      },
+      {
+       "line": 223,
+       "token": "fs::*"
+      },
+      {
+       "line": 240,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 2,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/math_map/ingest.rs",
+     "crate": "clean-mathverse",
+     "module": "math_map::ingest",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-MINT: 1 KernelVerified mint site(s) at line(s) 2689"
+     ],
+     "lines": 3369,
+     "sha256": "b51a4e525c6a53b208fa115c902877251a0427f19892cce4c599ec0ca3bab991",
+     "io_token_count": 10,
+     "io_sites": [
+      {
+       "line": 29,
+       "token": "std::fs"
+      },
+      {
+       "line": 30,
+       "token": "std::io"
+      },
+      {
+       "line": 30,
+       "token": "io::*"
+      },
+      {
+       "line": 32,
+       "token": "std::process"
+      },
+      {
+       "line": 460,
+       "token": "std::process"
+      },
+      {
+       "line": 509,
+       "token": "std::process"
+      },
+      {
+       "line": 659,
+       "token": "fs::*"
+      },
+      {
+       "line": 659,
+       "token": "read_to_string"
+      }
+     ],
+     "io_sites_truncated": 2,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/math_map/keys.rs",
+     "crate": "clean-mathverse",
+     "module": "math_map::keys",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 865,
+     "sha256": "3e0693a30289a65302860536257f8bf518d491129b3bc425f460fcbebc30c148",
+     "io_token_count": 4,
+     "io_sites": [
+      {
+       "line": 20,
+       "token": "std::fs"
+      },
+      {
+       "line": 95,
+       "token": "std::io"
+      },
+      {
+       "line": 411,
+       "token": "fs::*"
+      },
+      {
+       "line": 411,
+       "token": "read_to_string"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/math_map/policy.rs",
+     "crate": "clean-mathverse",
+     "module": "math_map::policy",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 500,
+     "sha256": "2972afd4055b4d08e725124f6ae425d397ee472a1425c77406b3f8f9f511ac79",
+     "io_token_count": 4,
+     "io_sites": [
+      {
+       "line": 14,
+       "token": "std::fs"
+      },
+      {
+       "line": 77,
+       "token": "std::io"
+      },
+      {
+       "line": 201,
+       "token": "fs::*"
+      },
+      {
+       "line": 201,
+       "token": "read_to_string"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/release.rs",
+     "crate": "clean-mathverse",
+     "module": "release",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 801,
+     "sha256": "18e7c70f4d7db7182517dd607ae08d1f751940a27e9755312c1aae961448bada",
+     "io_token_count": 48,
+     "io_sites": [
+      {
+       "line": 14,
+       "token": "std::fs"
+      },
+      {
+       "line": 15,
+       "token": "std::io"
+      },
+      {
+       "line": 15,
+       "token": "io::*"
+      },
+      {
+       "line": 17,
+       "token": "std::process"
+      },
+      {
+       "line": 28,
+       "token": "fs::*"
+      },
+      {
+       "line": 33,
+       "token": "std::io"
+      },
+      {
+       "line": 34,
+       "token": "std::io"
+      },
+      {
+       "line": 145,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 40,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/shard.rs",
+     "crate": "clean-mathverse",
+     "module": "shard",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-SHARD: shard-digest \u2014 .mathverse format reader: whole-file checksum verification AND the documented checksum-skipping lazy mmap path (anchor symbol 'fn from_mmap_no_checksum')"
+     ],
+     "lines": 6340,
+     "sha256": "5ba9fe633625e695bad3218c73d71c8f02c70b572d936ebbd0c3419e82f13b2d",
+     "io_token_count": 25,
+     "io_sites": [
+      {
+       "line": 51,
+       "token": "std::io"
+      },
+      {
+       "line": 51,
+       "token": "io::*"
+      },
+      {
+       "line": 56,
+       "token": "mmap"
+      },
+      {
+       "line": 98,
+       "token": "env::var"
+      },
+      {
+       "line": 981,
+       "token": "std::fs"
+      },
+      {
+       "line": 981,
+       "token": "fs::*"
+      },
+      {
+       "line": 981,
+       "token": "File::open/create"
+      },
+      {
+       "line": 982,
+       "token": "BufWriter"
+      }
+     ],
+     "io_sites_truncated": 17,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/shard_verify/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "shard_verify",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-SHARD: KernelVerified minting lane \u2014 batch kernel re-check of shard constants via add_decl (anchor symbol 'pub fn verify_shard_dir')"
+     ],
+     "lines": 304,
+     "sha256": "f254e55308adabb372a9d102a512d0605f75c1f973255d87d51361d6b938f21a",
+     "io_token_count": 4,
+     "io_sites": [
+      {
+       "line": 17,
+       "token": "std::fs"
+      },
+      {
+       "line": 107,
+       "token": "std::io"
+      },
+      {
+       "line": 185,
+       "token": "fs::*"
+      },
+      {
+       "line": 291,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+     "crate": "clean-mathverse",
+     "module": "verify::incremental",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 4390,
+     "sha256": "37a18a09162ed0ebb912dcd109aaecdb4d3768b6eb37fad5122b42905f6f6cb1",
+     "io_token_count": 6,
+     "io_sites": [
+      {
+       "line": 1149,
+       "token": "env::var"
+      },
+      {
+       "line": 1681,
+       "token": "env::var"
+      },
+      {
+       "line": 1705,
+       "token": "std::io"
+      },
+      {
+       "line": 1705,
+       "token": "io::*"
+      },
+      {
+       "line": 1706,
+       "token": "std::fs"
+      },
+      {
+       "line": 1706,
+       "token": "OpenOptions"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {
+      "*_unchecked": 4
+     },
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+     "crate": "clean-mathverse",
+     "module": "verify::kernel_verified_manifest",
+     "sublane": "a-mathverse-shard-digest-kv",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 453,
+     "sha256": "67452ae17b24d77f7506935da1c58506da16e0a8b5bf0ad47ac6b457e9d4b2ab",
+     "io_token_count": 5,
+     "io_sites": [
+      {
+       "line": 279,
+       "token": "std::fs"
+      },
+      {
+       "line": 279,
+       "token": "fs::*"
+      },
+      {
+       "line": 288,
+       "token": "std::fs"
+      },
+      {
+       "line": 288,
+       "token": "fs::*"
+      },
+      {
+       "line": 288,
+       "token": "read_to_string"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/error.rs",
+     "crate": "clean-olean",
+     "module": "error",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 248,
+     "sha256": "047c08a36c8df2f9ccf1b00158a62e8bfd2bac6852add736e40a44f154b25301",
+     "io_token_count": 1,
+     "io_sites": [
+      {
+       "line": 44,
+       "token": "std::io"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/import/mod.rs",
+     "crate": "clean-olean",
+     "module": "import",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 519,
+     "sha256": "4942b9793b3d3c768edd51068c0d4851b4912e225a8aeaba44092c0e4c963c33",
+     "io_token_count": 6,
+     "io_sites": [
+      {
+       "line": 120,
+       "token": "std::io"
+      },
+      {
+       "line": 136,
+       "token": "std::io"
+      },
+      {
+       "line": 444,
+       "token": "std::fs"
+      },
+      {
+       "line": 444,
+       "token": "fs::*"
+      },
+      {
+       "line": 474,
+       "token": "std::fs"
+      },
+      {
+       "line": 474,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-verify/src/external_checker.rs",
+     "crate": "clean-verify",
+     "module": "external_checker",
+     "sublane": "a-verify-checker-census-firewall",
+     "depth": 0,
+     "selector": "root",
+     "why": [
+      "R-VERIFY: checker \u2014 external/independent backend acceptance (subprocess boundary) (anchor symbol 'pub struct ProcessChecker')"
+     ],
+     "lines": 339,
+     "sha256": "3c46f8447c44568183d7c1f4176bf6cf72e019177733a0b6aeef616b843ce6c1",
+     "io_token_count": 7,
+     "io_sites": [
+      {
+       "line": 10,
+       "token": "std::io"
+      },
+      {
+       "line": 12,
+       "token": "std::process"
+      },
+      {
+       "line": 54,
+       "token": "std::io"
+      },
+      {
+       "line": 58,
+       "token": "std::io"
+      },
+      {
+       "line": 126,
+       "token": "process::Command"
+      },
+      {
+       "line": 173,
+       "token": "read_to_string"
+      },
+      {
+       "line": 174,
+       "token": "read_to_string"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    }
+   ]
+  },
+  "c_script_surface": {
+   "obligation": "each member either rewritten in Rust (entering lane (a)) or declared TCB with a committed digest + line-count ratchet; and a claim-owning gate that has never been SEEN to refuse is an unearned claim (registry: demonstrated or waived)",
+   "member_count": 59,
+   "rewritten_to_rust_count": 0,
+   "tcb_declared_count": 59,
+   "demonstrated_count": 34,
+   "waived_count": 3,
+   "undemonstrated_unwaived_count": 22,
+   "undemonstrated_with_self_test_count": 3,
+   "line_ratchet": {
+    "what": "total committed lines of the TCB script surface; may fall freely, may rise only through scripts/verdict_set.py --rebase-up '<reason>' (recorded below)",
+    "direction": "down",
+    "baseline_total_lines": 28976,
+    "measured_total_lines": 28976,
+    "minted_utc": "2026-08-26T04:14:27Z",
+    "rebases": [
+     {
+      "date": "2026-08-26",
+      "from": 28612,
+      "to": 28976,
+      "reason": "Ring R2 lane (b) contract modeling: verdict_gate.sh grew the P2b IO-contract-model validation block (schema/lineage/denominator/row-completeness/row-ratchet refusals) and rewrote partition (b)'s categorical 'N sites unmodelled' ledger into one line per named CONTRACT with its probe, plus 13 new self-test arms including a green one. The TCB script surface grew because the refusal it owns became specific; the growth is the claim getting sharper, not the surface getting wider."
+     }
+    ]
+   },
+   "members": [
+    {
+     "path": "scripts/aristotle_corpus_gate.py",
+     "registry_id": "aristotle_corpus_gate",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 977,
+     "sha256": "1a0396c7999ac61959918caad533b58a1b9ad88e76cc0ffe79f44bcc8298b197",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "Justfile",
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/axiom_audit_release_check.sh",
+     "registry_id": "axiom_audit_release_check",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 132,
+     "sha256": "8d59032518d30516b9819e4b2958485c99e3da7d2c8761d6a7f4196c483cf060",
+     "demonstrated": false,
+     "waived": true,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "crates/clean-cli/src/cmd_axiom_audit_release_check.rs",
+      "crates/clean-cli/src/cmd_replacement/consts.rs"
+     ]
+    },
+    {
+     "path": "scripts/check_add_decl_ratchet.py",
+     "registry_id": "check_add_decl_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 743,
+     "sha256": "3202861079c341b169839451f01d4dd0e349a2fc84726770314da685c14ec767",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "Justfile",
+      "scripts/deny_sorry_gate.sh",
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/release_readiness_smoke.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_ay_updates.py",
+     "registry_id": "check_ay_updates",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 569,
+     "sha256": "2969eef201aef2c130e5628c060e27df0539d2fdfc10f068309c12df64bd0b33",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "Justfile",
+      "scripts/release_readiness_smoke.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_benchmark_publication.py",
+     "registry_id": "check_benchmark_publication",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 1165,
+     "sha256": "7d472d2d6fc81ffbc4de5c0d80e151359ae59c9cebb88ff5b5f4ce715fe985da",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "crates/clean-cli/src/cmd_bench.rs",
+      "scripts/release_readiness_smoke.sh",
+      "scripts/run_public_benchmarks.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_constructive_ratchet.py",
+     "registry_id": "check_constructive_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 306,
+     "sha256": "6bfdcbfd5298265261f0e4ddbf5d247e09b914e0f478b2ad997597e9b37ca3a0",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/check_enum_tag_pin.py",
+     "registry_id": "check_enum_tag_pin",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 350,
+     "sha256": "73adb22bf57053fe5a47ec5fcecc7766de3e643dc09da929d5cbd385ef431a6e",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_env_bypass_census.py",
+     "registry_id": "check_env_bypass_census",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 701,
+     "sha256": "2dc0ffce2e205cb3a2ac958bd8fd843557c6ac43b46c64d0d258ae8d65f87447",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_extend_constants_ratchet.py",
+     "registry_id": "check_extend_constants_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 673,
+     "sha256": "9a6d96567db806d5dbe63b5851ac6911a251b166aa8d7e08d19a9f50339fb45d",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_fmt_changed.py",
+     "registry_id": "check_fmt_changed",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 439,
+     "sha256": "6e5162562e9e791a498e08347fb628f0e8982479427e91a6165e8aad80f264fb",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_gate_registry.py",
+     "registry_id": "check_gate_registry",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 1799,
+     "sha256": "77a8baa5251874358546a1692d82fbf6e42c3b359d08a7e1898321699fa7d669",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_hook_coverage.py",
+     "registry_id": "check_hook_coverage",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 465,
+     "sha256": "9c785985a944577590799e49c294e9e88dcb509a19562a615f5ddb0d0ba519bf",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/install-git-hooks.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_lint_coverage.py",
+     "registry_id": "check_lint_coverage",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 216,
+     "sha256": "32bb2e5b4d2e3f71f206da5cd390f8e75466dc1cb604a4b0b885325da2f8c025",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "Justfile",
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_prelude_collision_ratchet.py",
+     "registry_id": "check_prelude_collision_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 170,
+     "sha256": "0ee7e0769b57f6f1a04c9b80e25a4ef774af228379d1b2160ea210f38bf3776f",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_prelude_instance_priority_ratchet.py",
+     "registry_id": "check_prelude_instance_priority_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 199,
+     "sha256": "61f04c7921ad4c8b5ad6e11396949e4146dd115f4ddd4148f616dbe5b39956f5",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_public_release_libraries.sh",
+     "registry_id": "check_public_release_libraries",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 154,
+     "sha256": "3fb50681406e3e89bae370ad693c5812955b257870f34785b8eabb732efdc06e",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "publish/config.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_script_selftests.sh",
+     "registry_id": "check_script_selftests",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 188,
+     "sha256": "6d29d578b3238d3a448436ff11dcd1a2e25ae3e52c7eae3591ae2ea2ac8445da",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "Justfile",
+      "scripts/check_gate_registry.py",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_silent_tactic_ratchet.py",
+     "registry_id": "check_silent_tactic_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 191,
+     "sha256": "83b9f17b8efbcb98709f1587fb277147a32e9cfaffee8668b94c20cdfeecbc3e",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_suite_journal.py",
+     "registry_id": "check_suite_journal",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 566,
+     "sha256": "8dd765b48d6566ab8182df30fdba5ab4c4481a0aeb67b938c6d51e1975e5f5b6",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_trust_verdict_emitters.py",
+     "registry_id": "check_trust_verdict_emitters",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 274,
+     "sha256": "77d77c90d9916a8eea695e6876db30bc65e1005fdeb80d540d351bbb59f17a37",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_trustcore_evidence_staleness.py",
+     "registry_id": "check_trustcore_evidence_staleness",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 186,
+     "sha256": "cdf280f2e8b3611ecbbf7ed1e2f0485981b233ca9fd277a8a248d7fd29375ada",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/check_workspace_dependency_boundary.py",
+     "registry_id": "check_workspace_dependency_boundary",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 1290,
+     "sha256": "08fe8b55862442063c32639160ab16acf82a9ec9fca3911702f44722bc3fbedb",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/release_readiness_smoke.sh"
+     ]
+    },
+    {
+     "path": "scripts/crystal_a0_census.py",
+     "registry_id": "crystal_a0_census",
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 241,
+     "sha256": "cb9a310a39d326b34cd68c097d9bd8ef454d0f5c16451f676683c333f41ed09b",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_fixture_freshness.py",
+     "registry_id": "crystal_fixture_freshness",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 569,
+     "sha256": "0b432544a841eebf589a5074b8303fe7facf31de7d2f1ab1d5c0be4b0b623fca",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/crystal_chain_revalidation.py",
+      "scripts/crystal_fixture_rebaseline.py",
+      "scripts/crystal_freshness_scope.py",
+      "scripts/local_gate.sh",
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/crystal_freshness_scope.py",
+     "registry_id": "crystal_freshness_scope",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 1201,
+     "sha256": "32aed980b51a6c404d3d83bfe2c6d7c8ba2f1f128f6948bd9f6f3f98d373e433",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "Justfile",
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/crystal_frontier_census.py",
+     "registry_id": "crystal_frontier_census",
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 360,
+     "sha256": "f616c3618b95fb82c179082574c9375afe9b7e8340cb72275d4163121e9c7422",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_branching_and_derived.sh",
+     "registry_id": "crystal_perturb_branching_and_derived",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 280,
+     "sha256": "fbb90648b50b901e05a36844539049c84d91ad941f11a232fa2bc31af7b85b2f",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_computing_chains.sh",
+     "registry_id": "crystal_perturb_computing_chains",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 253,
+     "sha256": "2c40ff903d1ca926f360d7911d9b3efc07e33e7990e0b794effd155a149186d4",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_float_div.sh",
+     "registry_id": "crystal_perturb_float_div",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 353,
+     "sha256": "ba8d1110b33e3f577034aee638d09f01613879fc173225a9c936b5fda980130b",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_from_source.sh",
+     "registry_id": "crystal_perturb_from_source",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 151,
+     "sha256": "eeecb1d170110e374cfaaade3adc16988e16b2d3b4c0cd9b814c49042b424b82",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_from_source_spec.sh",
+     "registry_id": "crystal_perturb_from_source_spec",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 121,
+     "sha256": "dca3c4f0abf916ab68658d7986b97b7e94e5679b2017b36047d306e8d5b29567",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_get_char_val_trunc.sh",
+     "registry_id": "crystal_perturb_get_char_val_trunc",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 465,
+     "sha256": "c2ddfddf6aa133dbe6d1483922e9b3cb3d2d00c9a5fcc3d7164b72b8a620fdc5",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_markers_channel.sh",
+     "registry_id": "crystal_perturb_markers_channel",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 166,
+     "sha256": "f961016badfd635001ff22d7b15c82eda5b3413602e000bbd46973e0294db63b",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/crystal_perturb_meta_tag_shl.sh",
+     "registry_id": "crystal_perturb_meta_tag_shl",
+     "kind": "battery",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 589,
+     "sha256": "e374eefe32598b22efb9cd9ee84c858f50303e1b9141bb6d61cacc4101eb34e0",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/deny_sorry_gate.sh",
+     "registry_id": "deny_sorry_gate",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 425,
+     "sha256": "c5fee70f77ad1fe20b0fcb83b28f43385f81059668f4503b41a0ccf85c1d741f",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "crates/clean-cli/src/cmd_replacement/consts.rs",
+      "scripts/check_add_decl_ratchet.py"
+     ]
+    },
+    {
+     "path": "scripts/green_artifact_recheck.sh",
+     "registry_id": "green_artifact_recheck",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 89,
+     "sha256": "55613b07456b027de113b6e0307e25e1d19f9ff842e4749a31f103863ae3bc1c",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/install-git-hooks.sh",
+     "registry_id": "install_git_hooks",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 239,
+     "sha256": "d001cd7db59496d4a5aaba7cee012a1e0a132f18ae3c87e28f5be08028de97a4",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "Justfile"
+     ]
+    },
+    {
+     "path": "scripts/kernel_lint_ratchet.sh",
+     "registry_id": "kernel_lint_ratchet",
+     "kind": "gate",
+     "claims": "quality",
+     "disposition": "tcb-declared",
+     "lines": 79,
+     "sha256": "3ceceb53f6115b772b615e5e081873b89ac257b9824142805b039305304db441",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/kernel_soundness_gate.sh",
+     "registry_id": "kernel_soundness_gate",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 360,
+     "sha256": "4d35826f2664e57cc3210f1f233fcc77756dc1ce580091e99afdb187b4694dc7",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "crates/clean-cli/src/cmd_replacement/consts.rs"
+     ]
+    },
+    {
+     "path": "scripts/kv_invariance_gate.sh",
+     "registry_id": "kv_invariance_gate",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 130,
+     "sha256": "aac2b316c66f6655cc7a24a9670ac7490ae3ae8aadb52cbc45fe2a643a40aea8",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/kv_ratchet_gate.sh",
+     "registry_id": "kv_ratchet_gate",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 159,
+     "sha256": "462dbfecc03ee75f43cb444ddef2c312fcc2bd1d0fe5b64fb89993ac6d64e133",
+     "demonstrated": false,
+     "waived": true,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/local_gate.sh",
+     "registry_id": "local_gate",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 779,
+     "sha256": "ce80a94b0a9c8b1152d9dfda8752c9078b5444ad2f5f7935c94f96aba10f460c",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "Justfile",
+      "scripts/check_gate_registry.py",
+      "scripts/check_hook_coverage.py",
+      "scripts/check_lint_coverage.py",
+      "scripts/githooks/pre-push",
+      "scripts/install-git-hooks.sh",
+      "scripts/kernel_lint_ratchet.sh"
+     ]
+    },
+    {
+     "path": "scripts/north_star_census.py",
+     "registry_id": "north_star_census",
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 114,
+     "sha256": "919980e8df68f641fc7b874bc7ac202c56a8ee06f032a36c99ec4c0dc25a1535",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/paragon_ratchet.sh",
+     "registry_id": "paragon_ratchet",
+     "kind": "gate",
+     "claims": "quality",
+     "disposition": "tcb-declared",
+     "lines": 409,
+     "sha256": "186db08fd3c088e59a904f7f7c9d67e101760587e7c889e4dd064feafd8fd4f7",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/run_build_regression_gate.sh",
+     "registry_id": "run_build_regression_gate",
+     "kind": "gate",
+     "claims": "quality",
+     "disposition": "tcb-declared",
+     "lines": 155,
+     "sha256": "44e1de953e5c184c7369bdea645fefcb8ce266934eccf3450b7664a964f2ec90",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/release_readiness_smoke.sh"
+     ]
+    },
+    {
+     "path": "scripts/rust_frontend.sh",
+     "registry_id": "rust_frontend",
+     "kind": "gate",
+     "claims": "quality",
+     "disposition": "tcb-declared",
+     "lines": 298,
+     "sha256": "8a1e7b9c49266ee47ce3ebcf9970fc0cef95ad628b2ca2513ded1ade2ddaed8c",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "Justfile",
+      "scripts/local_gate.sh",
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/source_elab_gate.sh",
+     "registry_id": "source_elab_gate",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 863,
+     "sha256": "e3963aa69915223c2b55d0b66498ff612abd2c120b123b0c732fe30d5c0e6812",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/spine_scoreboard.py",
+     "registry_id": "spine_scoreboard",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 626,
+     "sha256": "dc44115569f67fab3c96de93baf18892366b6b173c2f1459563fd6e22774e12b",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/tactic_parity/family_gate.py",
+     "registry_id": "family_gate",
+     "kind": "gate",
+     "claims": "quality",
+     "disposition": "tcb-declared",
+     "lines": 505,
+     "sha256": "986e52ab3a2cf1e61104c2c9db146c3b2ad862488400e0a4deec4a220e1fe655",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/tactic_parity/g_auto.sh",
+      "scripts/tactic_parity/g_simp.sh"
+     ]
+    },
+    {
+     "path": "scripts/tactic_parity/g_auto.sh",
+     "registry_id": "g_auto",
+     "kind": "gate",
+     "claims": "quality",
+     "disposition": "tcb-declared",
+     "lines": 13,
+     "sha256": "a11b56d427e1adcacb507c1ddb80d621d52dc6db699065c85769f6a92d57e192",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/tactic_parity/g_simp.sh",
+     "registry_id": "g_simp",
+     "kind": "gate",
+     "claims": "quality",
+     "disposition": "tcb-declared",
+     "lines": 13,
+     "sha256": "a09c28e82d1f18aa13e9f84ee87ba7152b316d7fbb7bf68a2f4f72968a8c1f9b",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/tcb_target_ratchet.py",
+     "registry_id": "tcb_target_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 120,
+     "sha256": "9eb1903274c2d6b18e1831d3d549ee165bbd249dbf73b021882684edfab6bec2",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/test_isabelle_ops_portability.py",
+     "registry_id": "test_isabelle_ops_portability",
+     "kind": "gate",
+     "claims": "hygiene",
+     "disposition": "tcb-declared",
+     "lines": 200,
+     "sha256": "dc785786731de9014708fe203222b51423ced52dad994d09d6b2e6d32451ef7f",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
+     "path": "scripts/trust_ir_axes.py",
+     "registry_id": "trust_ir_axes",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 1167,
+     "sha256": "823fd065e121a4c213918c36cb2b72ee426834bbf73ab67c21ecc4bd065f2981",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/trust_ir_build.sh"
+     ]
+    },
+    {
+     "path": "scripts/trust_ir_build.sh",
+     "registry_id": "trust_ir_build",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 380,
+     "sha256": "9e565306449c6fa7fa77f732fc07c11c20c0ed99b2b4cb5ec7408db98b829b15",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/crystal_chain_revalidation.py",
+      "scripts/crystal_fixture_rebaseline.py",
+      "scripts/local_gate.sh",
+      "scripts/trust_ir_axes.py",
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/trust_verify_ratchet.sh",
+     "registry_id": "trust_verify_ratchet",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 432,
+     "sha256": "79a402be35217b19da083467b8d9b47185390f2283a6c105e24c941c1817cf58",
+     "demonstrated": false,
+     "waived": true,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh",
+      "scripts/trust_ir_build.sh"
+     ]
+    },
+    {
+     "path": "scripts/trust_verify_soundness_gate.py",
+     "registry_id": "trust_verify_soundness_gate",
+     "kind": "gate",
+     "claims": "soundness",
+     "disposition": "tcb-declared",
+     "lines": 659,
+     "sha256": "234c3a71b2f46c4fa380a93408c340dff8f7e57105b736bd394628cff657b730",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/trust_verify_ratchet.sh"
+     ]
+    },
+    {
+     "path": "scripts/verdict_gate.sh",
+     "registry_id": "verdict_gate",
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 900,
+     "sha256": "d0547d5fa09ccba480612eed6cbee7f0de4d11b1637aedd44fc4d42a54b07f1b",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/verify_runner.py",
+     "registry_id": null,
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 3360,
+     "sha256": "08b6f2dc5db6feb70454c56239f178147395493eea430d8ff06e3c062e0139db",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [],
+     "note": "admitted by correction R-SUITE-not-rust: it owns the suite-state freshness verdict (input_digest decides whether a GREEN survives or demotes to UNKNOWN) and has NO data/gate_registry.json row"
+    }
+   ],
+   "excluded_by_rule": [
+    {
+     "path": "crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/tests_boundary.rs",
+     "id": "clean-auto::ay_coupling_boundary_ratchet",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "crates/clean-auto/tests/expr_let_constructor_hygiene.rs",
+     "id": "clean-auto::expr_let_constructor_hygiene",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "crates/clean-elab/src/cert/external/tests_source_hygiene.rs",
+     "id": "clean-elab::cert::external::tests_source_hygiene",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "crates/clean-elab/src/tactic/tests/bypass_ratchet.rs",
+     "id": "clean-elab::tactic::bypass_ratchet",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "crates/clean-elab/src/tactic/tests/replace_target.rs",
+     "id": "clean-elab::tactic::replace_target_ratchet",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "crates/clean-elab/src/tactic/tests/core.rs",
+     "id": "clean-elab::tactic::tests::core::bypass_ratchets",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "crates/clean-verify/tests/premise_witness_gate.rs",
+     "id": "clean-verify::test::premise_witness_gate",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "scripts/dead_code_audit.py",
+     "id": "dead_code_audit",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/heavy_gate.sh",
+     "id": "heavy_gate",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/recompute_axiom_audit_aggregates.sh",
+     "id": "recompute_axiom_audit_aggregates",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/sorry_census.sh",
+     "id": "sorry_census",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/system_health_check.py",
+     "id": "system_health_check",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/trust_boundary_audit.py",
+     "id": "trust_boundary_audit",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/spine_gate.sh",
+     "id": null,
+     "reason": "Ring R2 gate named by program \u00a75 but ABSENT from the tree \u2014 planned, recorded, not assumed"
+    },
+    {
+     "path": "scripts/lattice_gate.sh",
+     "id": null,
+     "reason": "Ring R2 gate named by program \u00a75 but ABSENT from the tree \u2014 planned, recorded, not assumed"
+    }
+   ]
+  }
+ },
+ "evidence": {
+  "roots": {
+   "a-olean-structural": [
+    {
+     "file": "crates/clean-olean/src/import/load_register.rs",
+     "why": "env_bypass_census:axiom-stub-upgrade-checked(S); env_bypass_census:ind-meta-structural(S)",
+     "rule": "R-OLEAN-S"
+    }
+   ],
+   "a-verify-checker-census-firewall": [
+    {
+     "file": "crates/clean-verify/src/vacuity_firewall.rs",
+     "why": "firewall \u2014 decides a generated relation is non-vacuous (\u00a78 R2: firewall on every generated relation) (anchor symbol 'pub fn audit_relation')",
+     "rule": "R-VERIFY"
+    },
+    {
+     "file": "crates/clean-verify/src/spec_axiom_closure.rs",
+     "why": "census \u2014 transitive axiom closure vs the spec's hand-maintained honesty labels (anchor symbol 'pub fn audit_definition_honesty')",
+     "rule": "R-VERIFY"
+    },
+    {
+     "file": "crates/clean-verify/src/axiom_ratchet.rs",
+     "why": "census \u2014 no-new-axioms ratchet over the spec's admitted axioms (anchor symbol 'pub fn newly_admitted_axioms')",
+     "rule": "R-VERIFY"
+    },
+    {
+     "file": "crates/clean-verify/src/bootstrap_checker.rs",
+     "why": "checker \u2014 bootstrap/reflection acceptance for the closed kernel core (anchor symbol 'pub struct BootstrapChecker')",
+     "rule": "R-VERIFY"
+    },
+    {
+     "file": "crates/clean-verify/src/external_checker.rs",
+     "why": "checker \u2014 external/independent backend acceptance (subprocess boundary) (anchor symbol 'pub struct ProcessChecker')",
+     "rule": "R-VERIFY"
+    },
+    {
+     "file": "crates/clean-verify/src/no_masquerade.rs",
+     "why": "checker \u2014 refuses theorem-wrapping-axiom masquerade at promotion (anchor symbol 'pub fn lint_constant')",
+     "rule": "R-VERIFY"
+    },
+    {
+     "file": "crates/clean-verify/src/promotion_guard.rs",
+     "why": "guard \u2014 keeps unsafe KernelProved claims from passing handoff (anchor symbol 'pub struct PromotionGuardConfig')",
+     "rule": "R-VERIFY"
+    }
+   ],
+   "a-mathverse-shard-digest-kv": [
+    {
+     "file": "crates/clean-mathverse/src/shard.rs",
+     "why": "shard-digest \u2014 .mathverse format reader: whole-file checksum verification AND the documented checksum-skipping lazy mmap path (anchor symbol 'fn from_mmap_no_checksum')",
+     "rule": "R-SHARD"
+    },
+    {
+     "file": "crates/clean-mathverse/src/shard_integrity.rs",
+     "why": "shard-integrity \u2014 level-param integrity audit/repair over a shard reader (anchor symbol 'pub fn audit_level_param_integrity')",
+     "rule": "R-SHARD"
+    },
+    {
+     "file": "crates/clean-mathverse/src/shard_verify/mod.rs",
+     "why": "KernelVerified minting lane \u2014 batch kernel re-check of shard constants via add_decl (anchor symbol 'pub fn verify_shard_dir')",
+     "rule": "R-SHARD"
+    },
+    {
+     "file": "crates/clean-mathverse/src/drift.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 735",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/false_control_suite.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 945",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/hol/isabelle_shard.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 153",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/math_map/ingest.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 2689",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/progverif/metamath/mod.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 285",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/stats.rs",
+     "why": "3 KernelVerified mint site(s) at line(s) 402,503,524",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/trust/gamma_crown.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 181",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/trust/graph_gate.rs",
+     "why": "6 KernelVerified mint site(s) at line(s) 98,99,105,112,122,133",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/trust/project_audit.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 180",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/trust/trust_enforcement/mod.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 166",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/trust/verification.rs",
+     "why": "4 KernelVerified mint site(s) at line(s) 161,198,574,637",
+     "rule": "R-MINT"
+    },
+    {
+     "file": "crates/clean-mathverse/src/type_preservation.rs",
+     "why": "1 KernelVerified mint site(s) at line(s) 455",
+     "rule": "R-MINT"
+    }
+   ]
+  },
+  "corrections": [
+   {
+    "id": "R-OLEAN-S-scope-gap",
+    "date": "2026-08-25",
+    "statement": "Ring R2 lane (a) names 'clean-olean's decode/registration for the lanes R1 keeps structural'. Measured: 6 S-classified env-bypass census site(s) live OUTSIDE crates/clean-olean/src \u2014 in clean-server's handlers and clean-mathverse's per-constant/closure/parallel CLI load paths. They mint the same class of admission with the same structural tier, so either the lane's scope widens to cover them or a dated decision records why it does not. Neither has happened; the sites are listed here so the gap is a number, not a silence.",
+    "sites": [
+     {
+      "file": "crates/clean-server/src/handlers/admin.rs",
+      "census_row": "env-serde-load",
+      "classification": "S",
+      "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+     },
+     {
+      "file": "crates/clean-server/benches/server_ops.rs",
+      "census_row": "env-serde-load",
+      "classification": "S",
+      "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+     },
+     {
+      "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
+      "census_row": "axiom-stub-upgrade-checked",
+      "classification": "S",
+      "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+     },
+     {
+      "file": "crates/clean-mathverse/src/cli/closure_load.rs",
+      "census_row": "lazy-constant-source",
+      "classification": "S/P",
+      "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+     },
+     {
+      "file": "crates/clean-mathverse/src/cli/parallel_verify.rs",
+      "census_row": "lazy-constant-source",
+      "classification": "S/P",
+      "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+     },
+     {
+      "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
+      "census_row": "lazy-constant-source",
+      "classification": "S/P",
+      "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+     }
+    ],
+    "owed": "a scope decision (widen lane (a), or record why these are out of scope)"
+   },
+   {
+    "id": "R-OLEAN-NONS-doors",
+    "date": "2026-08-25",
+    "statement": "R-OLEAN-S admits only the lanes R1 keeps STRUCTURAL, because that is the sentence Ring R2 wrote. Measured consequence: 1 clean-olean source file(s) carrying a non-S env-bypass door are outside the verdict set and are reached by no other root. A 'P' (provable-in-place) classification is an intention, not a proof \u2014 until R1's theorem lands, that door mints admissions the same way an S door does. Either the rule widens to P/unclassified doors or a dated decision records why lane (a) stops at S.",
+    "sites": [
+     {
+      "file": "crates/clean-olean/src/verify_batch.rs",
+      "census_row": "env-snapshot-restore",
+      "classification": "P",
+      "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+     }
+    ],
+    "owed": "a decision on non-S clean-olean doors (widen R-OLEAN-S to P/unclassified, or record why not)"
+   },
+   {
+    "id": "R-MINT-scope-gap",
+    "date": "2026-08-25",
+    "statement": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse. Measured: 4 production module(s) in OTHER crates mint TrustLevel::KernelVerified in a value position. Same posture as the olean scope gap: the lane widens or a dated decision says why not.",
+    "sites": [
+     "crates/clean-cli/src/cmd_attempts.rs",
+     "crates/clean-cli/src/cmd_audit.rs",
+     "crates/clean-kernel/src/cert/bundle.rs",
+     "crates/clean-verify/src/sat_verify/pipeline.rs"
+    ],
+    "owed": "a scope decision (widen lane (a), or record why these are out of scope)"
+   },
+   {
+    "id": "R-SUITE-not-rust",
+    "date": "2026-08-25",
+    "statement": "Ring R2 lane (a) lists 'the suite runner's input-digest machinery' as PURE-RUST verdict code. Measured at HEAD: no Rust `fn input_digest` exists anywhere under crates/ (crates/clean-verify/tests/crystal_a1_lineage/freshness.rs even documents the machinery as `verify_runner.py::input_digest`). The machinery is Python, so it cannot be chained with the spine recipe and cannot enter lane (a); it is routed to lane (c) as claim-owning script surface. R6 (measurement > design doc) governs: the design's lane assignment is corrected here, dated, rather than the measurement being rounded to fit it.",
+    "routed_to": "c_script_surface",
+    "member": "scripts/verify_runner.py",
+    "member_present": true,
+    "registry_row": null
+   }
+  ],
+  "olean_sites_excluded_by_rule": [
+   {
+    "file": "crates/clean-server/src/handlers/admin.rs",
+    "census_row": "env-serde-load",
+    "classification": "S",
+    "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+   },
+   {
+    "file": "crates/clean-server/benches/server_ops.rs",
+    "census_row": "env-serde-load",
+    "classification": "S",
+    "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+   },
+   {
+    "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
+    "census_row": "axiom-stub-upgrade-checked",
+    "classification": "S",
+    "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+   },
+   {
+    "file": "crates/clean-mathverse/src/cli/closure_load.rs",
+    "census_row": "lazy-constant-source",
+    "classification": "S/P",
+    "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+   },
+   {
+    "file": "crates/clean-mathverse/src/cli/parallel_verify.rs",
+    "census_row": "lazy-constant-source",
+    "classification": "S/P",
+    "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+   },
+   {
+    "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
+    "census_row": "lazy-constant-source",
+    "classification": "S/P",
+    "reason": "S-classified site outside crates/clean-olean/src/ \u2014 outside Ring R2 lane (a)'s declared olean scope; recorded so the scoping is visible"
+   },
+   {
+    "file": "crates/clean-olean/src/verify_batch.rs",
+    "census_row": "env-snapshot-restore",
+    "classification": "P",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-olean/examples/init_snapshot_prove.rs",
+    "census_row": "env-snapshot-restore",
+    "classification": "P",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-auto/src/bridge/superposition_reconstruction/types.rs",
+    "census_row": "skolem-axiom",
+    "classification": "P",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-elab/src/register.rs",
+    "census_row": "axiom-stub-discharge",
+    "classification": "P",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-olean/src/import/load_register.rs",
+    "census_row": "axiom-stub-discharge",
+    "classification": "P",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-elab/src/command_elab_registry.rs",
+    "census_row": "reducibility-hints",
+    "classification": "unclassified",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-elab/src/decl_attributes.rs",
+    "census_row": "reducibility-hints",
+    "classification": "unclassified",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-olean/src/import/load_register.rs",
+    "census_row": "reducibility-hints",
+    "classification": "unclassified",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-server/src/handlers/check_decl_validation.rs",
+    "census_row": "shadowing-overlay",
+    "classification": "unclassified",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-mathverse/src/graduate/intake.rs",
+    "census_row": "kernel-canonical-builders",
+    "classification": "P",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-elab/src/register.rs",
+    "census_row": "structure-field-metadata",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-elab/src/structure_cmd.rs",
+    "census_row": "structure-field-metadata",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-lake/src/build.rs",
+    "census_row": "structure-field-metadata",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-olean/src/import/load_register.rs",
+    "census_row": "structure-field-metadata",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-server/src/handlers/check_decl_validation.rs",
+    "census_row": "structure-field-metadata",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-elab/src/register.rs",
+    "census_row": "param-binder-metadata",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-olean/src/import/load_register.rs",
+    "census_row": "persistent-extension-state",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   }
+  ],
+  "mint_sites_outside_declared_lane": [
+   {
+    "file": "crates/clean-cli/src/cmd_attempts.rs",
+    "mint_sites": [
+     {
+      "line": 1317,
+      "form": "=> Ok(TrustLevel::KernelVerified),"
+     }
+    ],
+    "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."
+   },
+   {
+    "file": "crates/clean-cli/src/cmd_audit.rs",
+    "mint_sites": [
+     {
+      "line": 626,
+      "form": "TrustLevel::KernelVerified"
+     },
+     {
+      "line": 633,
+      "form": "TrustLevel::KernelVerified"
+     },
+     {
+      "line": 773,
+      "form": "Some(TrustLevel::KernelVerified)"
+     }
+    ],
+    "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."
+   },
+   {
+    "file": "crates/clean-kernel/src/cert/bundle.rs",
+    "mint_sites": [
+     {
+      "line": 1312,
+      "form": "TrustLevel::KernelVerified"
+     }
+    ],
+    "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."
+   },
+   {
+    "file": "crates/clean-verify/src/sat_verify/pipeline.rs",
+    "mint_sites": [
+     {
+      "line": 675,
+      "form": "TrustLevel::KernelVerified"
+     },
+     {
+      "line": 703,
+      "form": "TrustLevel::KernelVerified"
+     },
+     {
+      "line": 748,
+      "form": "TrustLevel::KernelVerified"
+     }
+    ],
+    "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."
+   }
+  ],
+  "unresolved_refs": {
+   "clean-olean": [
+    "OleanError",
+    "parse_header"
+   ]
+  },
+  "test_modules_not_followed": {},
+  "artifacts_this_surface_depends_on": {
+   "data/spine_set.json": false,
+   "data/spine_set.PENDING.md": true,
+   "data/spine_assumption_ledger.json": false,
+   "data/verdict_io_contracts.json": true
+  }
+ }
+}

@@ -322,8 +322,26 @@ impl Parser {
         })
     }
 
-    /// Parse `let h : T := val` in tactic mode
+    /// Parse tactic-mode `let` in both of its surface forms:
+    ///   `let h : T := val`   — named, optionally typed
+    ///   `let ⟨a, b⟩ := e`    — anonymous-constructor destructuring
+    ///
+    /// The destructuring form is desugared to [`SurfaceTactic::Obtain`],
+    /// exactly as [`Self::parse_tactic_have`] does for `have ⟨a, b⟩ := e`: the
+    /// leading `⟨` disambiguates from the named form, and the remaining parse
+    /// (optional `: T` ascription, `:=`, scrutinee) is character-for-character
+    /// `obtain`'s, so it routes through the same kernel-checked pattern engine.
+    ///
+    /// Semantic caveat, carried deliberately: Lean's `let` pattern introduces
+    /// LET-BOUND definitions where `obtain` introduces opaque hypotheses. In
+    /// practice `obtain ⟨a, b⟩ := p` destructs `p` and substitutes `⟨a, b⟩`
+    /// into the goal, so a component projection still reduces (`p.1` ↝ `a` by
+    /// iota rather than by zeta) — but the two are not identical, and a proof
+    /// that needs `a` to unfold to `p.1` in the OTHER direction can differ.
     pub(crate) fn parse_tactic_let(&mut self, start: Span) -> Result<SurfaceTactic, ParseError> {
+        if matches!(self.current_kind(), TokenKind::LAngle) {
+            return self.parse_tactic_obtain(start);
+        }
         let name = self.expect_ident("let")?;
         let ty = if self.eat(&TokenKind::Colon) {
             Some(Box::new(self.parse_tactic_expr()?))
@@ -608,16 +626,21 @@ impl Parser {
         start: Span,
         mut only: bool,
     ) -> Result<SurfaceTactic, ParseError> {
+        // `simp optConfig (&" only")? ("[" … "]")? (location)?` — the boolean
+        // options come BEFORE `only` (191 mathlib4 sites write `simp +x only`,
+        // none write `simp only +x`). See `Parser::eat_tactic_config_items`.
+        self.eat_tactic_config_items();
+
         // Check for `simp only`
         if matches!(self.current_kind(), TokenKind::Ident(ref s) if s == "only") {
             self.advance();
             only = true;
         }
 
-        let lemmas = if self.check(&TokenKind::LBracket) {
+        let (lemmas, use_hypotheses) = if self.check(&TokenKind::LBracket) {
             self.parse_simp_lemmas()?
         } else {
-            Vec::new()
+            (Vec::new(), false)
         };
 
         let location = self.parse_tactic_location();
@@ -627,27 +650,39 @@ impl Parser {
             only,
             lemmas,
             location,
+            use_hypotheses,
         })
     }
 
-    /// Parse `[lemma1, lemma2, ...]` simp lemma list
-    fn parse_simp_lemmas(&mut self) -> Result<Vec<SurfaceExpr>, ParseError> {
+    /// Parse `[lemma1, lemma2, ...]` simp lemma list.
+    ///
+    /// Returns the parsed lemma terms plus whether the list contained Lean's
+    /// `*` element (`simp [*]`, `simp only [*]`, `simp [foo, *]`). `*` is not a
+    /// term — it is the instruction "also use every local hypothesis as a
+    /// rewrite rule" — so it is reported separately rather than pushed into the
+    /// lemma list.
+    fn parse_simp_lemmas(&mut self) -> Result<(Vec<SurfaceExpr>, bool), ParseError> {
         self.expect(&TokenKind::LBracket)?;
         let mut lemmas = Vec::new();
+        let mut use_hypotheses = false;
 
         if !self.check(&TokenKind::RBracket) {
             loop {
                 // Skip `<-`/`-` simp modifiers
                 let _ = self.eat(&TokenKind::LeftArrow) || self.eat(&TokenKind::Minus);
-                let e = self.expr()?;
-                lemmas.push(e);
+                if self.eat(&TokenKind::Star) {
+                    use_hypotheses = true;
+                } else {
+                    let e = self.expr()?;
+                    lemmas.push(e);
+                }
                 if !self.eat(&TokenKind::Comma) {
                     break;
                 }
             }
         }
         self.expect(&TokenKind::RBracket)?;
-        Ok(lemmas)
+        Ok((lemmas, use_hypotheses))
     }
 
     /// Parse `simp_rw [rules] (at loc)?`

@@ -31,7 +31,6 @@ mod prove_smt;
 mod search_proof;
 mod swarm;
 mod tactics;
-mod tla;
 mod trusted_arith_provenance;
 mod verify_c;
 mod verify_cert;

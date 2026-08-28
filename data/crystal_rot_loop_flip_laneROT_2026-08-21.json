@@ -1,0 +1,260 @@
+{
+  "lane": "ROT",
+  "date": "2026-08-21",
+  "task": "rotation marker class: W2 narrowed + W4 modelled + W6 built; nat_gcd respelled to loop orientation; the kernel's one loop at -O3",
+  "provenance": {
+    "trust_base": "47236131c9 (origin/main at measurement)",
+    "trust_landing_tip_check": "to_mir.rs byte-identical 47236131c9..d2da911e03 (wave-WB moved flip.rs only)",
+    "clean_base": "1291938fb (origin/main at measurement)",
+    "clean_respell": "7a535eae6 (nat_gcd loop orientation, one hunk)",
+    "sysroot": "laneREG sysroot-v13 (METADATA_VERSION 13), STRENGTHENED sysrootcheck (decode probe) OK before every measurement",
+    "wall_rederivation": "plan_loop_markers/loop_plan_available/loop_source_form_admits/source_form_gate/hir_params_are_simple_bindings/div_idiom byte-identical 26d0a0e8ee..b041fe27c6..47236131c9 (fn-extraction sha256); planwalk at HEAD: nat_gcd(while) refuses W2 then W3; r1 refuses W2; r2 refuses W2 then W4",
+    "trust_landing": "388db3ffab (the rotation class + reports/rot-marker-class-2026-08-21/, on d2da911e03)"
+  },
+  "drivers": {
+    "ctl": "75504fad1c848fb4b02c183592718613fe9de9313b1a464680a55cacf5864da8",
+    "sub": "aabd283bad12c679a982062bf00c38b928043bf8686d7ddcedfbe606ed2f2f8a"
+  },
+  "probes_lrpm_O3": {
+    "ctl": {
+      "rows": {
+        "r1_rot_let_and": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+        },
+        "r2_rot_let_rem": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "9 canonical line(s) identical",
+          "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+        },
+        "r3_rot_while": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "marker channel(built): storage marker in unwalked block 7 (cleanup/dead code)"
+        },
+        "r4_no_hazard": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "15 marker line(s) identical"
+        }
+      },
+      "flip_events": [
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:6 ~ lrpm[814e]::r4_no_hazard), asserts=0, lineage=sha256:727ef068e8329f26f03bcece31c02ceac77fc453329614a22afe5ac9008707e9, flipped_so_far=1"
+      ]
+    },
+    "sub": {
+      "rows": {
+        "r1_rot_let_and": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "19 marker line(s) identical"
+        },
+        "r2_rot_let_rem": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "9 canonical line(s) identical",
+          "markers_detail": "19 marker line(s) identical"
+        },
+        "r3_rot_while": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "marker channel(built): storage marker in unwalked block 7 (cleanup/dead code)"
+        },
+        "r4_no_hazard": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "15 marker line(s) identical"
+        }
+      },
+      "flip_events": [
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:6 ~ lrpm[814e]::r4_no_hazard), asserts=0, lineage=sha256:727ef068e8329f26f03bcece31c02ceac77fc453329614a22afe5ac9008707e9, flipped_so_far=1",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:4 ~ lrpm[814e]::r2_rot_let_rem), asserts=1, lineage=sha256:8b635fcc48fb5bf91a5991d79964729d6d94161b132da36535ccb25492768183, flipped_so_far=2",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:3 ~ lrpm[814e]::r1_rot_let_and), asserts=0, lineage=sha256:63df96efca9d1457b4d95e1388390678b64338e1af67929672090e854e7a75f8, flipped_so_far=3"
+      ]
+    }
+  },
+  "probes_lrpm_O0": {
+    "ctl": {
+      "rows": {
+        "r1_rot_let_and": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+        },
+        "r2_rot_let_rem": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "9 canonical line(s) identical",
+          "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`"
+        },
+        "r3_rot_while": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "marker channel(built): storage marker in unwalked block 7 (cleanup/dead code)"
+        },
+        "r4_no_hazard": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "15 marker line(s) identical"
+        }
+      },
+      "flip_events": [
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:3 ~ lrpm[814e]::r1_rot_let_and), asserts=0, lineage=sha256:63df96efca9d1457b4d95e1388390678b64338e1af67929672090e854e7a75f8, flipped_so_far=1",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:4 ~ lrpm[814e]::r2_rot_let_rem), asserts=1, lineage=sha256:8b635fcc48fb5bf91a5991d79964729d6d94161b132da36535ccb25492768183, flipped_so_far=2",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:5 ~ lrpm[814e]::r3_rot_while), asserts=0, lineage=sha256:5077e0544912f756f3df324e02423f6170c8ae2a4f0eddbaf567c5d65d36befb, flipped_so_far=3",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:6 ~ lrpm[814e]::r4_no_hazard), asserts=0, lineage=sha256:727ef068e8329f26f03bcece31c02ceac77fc453329614a22afe5ac9008707e9, flipped_so_far=4"
+      ]
+    },
+    "sub": {
+      "rows": {
+        "r1_rot_let_and": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "19 marker line(s) identical"
+        },
+        "r2_rot_let_rem": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "9 canonical line(s) identical",
+          "markers_detail": "19 marker line(s) identical"
+        },
+        "r3_rot_while": {
+          "verdict": "agreed",
+          "markers_exact": false,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "marker channel(built): storage marker in unwalked block 7 (cleanup/dead code)"
+        },
+        "r4_no_hazard": {
+          "verdict": "agreed",
+          "markers_exact": true,
+          "detail": "8 canonical line(s) identical",
+          "markers_detail": "15 marker line(s) identical"
+        }
+      },
+      "flip_events": [
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:3 ~ lrpm[814e]::r1_rot_let_and), asserts=0, lineage=sha256:63df96efca9d1457b4d95e1388390678b64338e1af67929672090e854e7a75f8, flipped_so_far=1",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:4 ~ lrpm[814e]::r2_rot_let_rem), asserts=1, lineage=sha256:8b635fcc48fb5bf91a5991d79964729d6d94161b132da36535ccb25492768183, flipped_so_far=2",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:5 ~ lrpm[814e]::r3_rot_while), asserts=0, lineage=sha256:5077e0544912f756f3df324e02423f6170c8ae2a4f0eddbaf567c5d65d36befb, flipped_so_far=3",
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:6 ~ lrpm[814e]::r4_no_hazard), asserts=0, lineage=sha256:727ef068e8329f26f03bcece31c02ceac77fc453329614a22afe5ac9008707e9, flipped_so_far=4"
+      ]
+    }
+  },
+  "probes_lrpm_O3_noflip": {
+    "ctl": {
+      "flip_events": []
+    },
+    "sub": {
+      "flip_events": []
+    }
+  },
+  "probes_lrlm_O3_identity": "verdicts, marker details, flip sets {l1,l2,l6,m6} and ALL lineage digests IDENTICAL ctl<->sub (diff of flip logs empty)",
+  "wholecrate_rowexact": {
+    "base_O3": {
+      "rows": 13844,
+      "moved_any_field": 0,
+      "flips": "244 = 244, gained [], lost []"
+    },
+    "base_O0": {
+      "rows": 13815,
+      "moved_any_field": 0,
+      "flips": "650 = 650, gained [], lost []"
+    },
+    "resp_O3": {
+      "rows": 13844,
+      "moved": {
+        "markers_exact": [
+          "env::native_reducers_bool_ext::nat_gcd: False -> True"
+        ]
+      },
+      "flips": "244 -> 245, gained [nat_gcd], lost []"
+    },
+    "resp_O0": {
+      "rows": 13815,
+      "moved": {
+        "markers_exact": [
+          "nat_gcd: False -> True"
+        ]
+      },
+      "flips": "650 = 650 (nat_gcd already flips at -O0 under BOTH), gained [], lost []"
+    }
+  },
+  "the_event": {
+    "row": {
+      "verdict": "agreed",
+      "markers_exact": true,
+      "detail": "9 canonical line(s) identical",
+      "markers_detail": "19 marker line(s) identical",
+      "lineage": "sha256:da031a9407da758977cb2d1d097746e128152bda05cf404596dbe86f8c518e04",
+      "nat_gcd_flip_events": [
+        "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15107 ~ clean_kernel[79c7]::env::native_reducers_bool_ext::nat_gcd), asserts=1, lineage=sha256:da031a9407da758977cb2d1d097746e128152bda05cf404596dbe86f8c518e04, flipped_so_far=218"
+      ],
+      "flip_events_total": 245
+    },
+    "control_row": {
+      "verdict": "agreed",
+      "markers_exact": false,
+      "detail": "9 canonical line(s) identical",
+      "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`",
+      "lineage": "sha256:da031a9407da758977cb2d1d097746e128152bda05cf404596dbe86f8c518e04",
+      "nat_gcd_flip_events": [],
+      "flip_events_total": 244
+    },
+    "negative_control_noflip": {
+      "verdict": "agreed",
+      "markers_exact": true,
+      "detail": "9 canonical line(s) identical",
+      "markers_detail": "19 marker line(s) identical",
+      "lineage": "sha256:da031a9407da758977cb2d1d097746e128152bda05cf404596dbe86f8c518e04",
+      "nat_gcd_flip_events": [],
+      "flip_events_total": 0
+    },
+    "perturb_marker_order": {
+      "verdict": "unsupported",
+      "markers_exact": false,
+      "detail": "shim: marker law: the derived body's marker sequence is not the one the sealed plans predict \u2014 line 14: predicted `mk b8.1:dead s6:U64@b4.3:0` vs derived `mk b8.1:dead s5:U64@b8.0:",
+      "markers_detail": "",
+      "lineage": "sha256:da031a9407da758977cb2d1d097746e128152bda05cf404596dbe86f8c518e04",
+      "nat_gcd_flip_events": [],
+      "flip_events_total": 236
+    },
+    "perturb_marker_drop": {
+      "verdict": "unsupported",
+      "markers_exact": false,
+      "detail": "shim: marker law: the derived body's marker sequence is not the one the sealed plans predict \u2014 line 4: predicted `mk b2.0:dead s3:U64@b1.1:0` vs derived `mk b4.0:dead s2:Bool@term`",
+      "markers_detail": "",
+      "lineage": "sha256:da031a9407da758977cb2d1d097746e128152bda05cf404596dbe86f8c518e04",
+      "nat_gcd_flip_events": [],
+      "flip_events_total": 222
+    }
+  },
+  "mutation_proofs": {
+    "method": "coherent model+emitter corruption per wall; law green, only the ORACLE can refuse; subject to_mir.rs restored byte-identically after each (blob e5be8ea90f re-verified)",
+    "w2_let_cluster_tail_order": {
+      "r1": "markers_exact False; oracle line 13: built `mk b5.6:dead s7:u64` vs derived `mk b5.7:dead s7:u64`; -O3 flip GONE",
+      "r2": "markers_exact False; oracle line 13: built `mk b6.3:dead s7:u64` vs derived `mk b6.4:dead s7:u64`; -O3 flip GONE",
+      "r4": "untouched, exact, flips, lineage 727ef068e8 unchanged"
+    },
+    "w4_guard_retirement_forward": {
+      "r2": "markers_exact False; oracle line 10: built `mk b6.1:dead s6:u64` vs derived `mk b6.1:dead s5:u64` (alpha slot trade, same position); flip GONE",
+      "r1": "UNTOUCHED: 19 identical, still flips, lineage 63df96efca equal to subject"
+    },
+    "w6_let_retirement_dropped": {
+      "r1": "markers_exact False; oracle line 14: built `mk b5.7:dead s4:u64` vs derived `mk b6.0:dead s3:u64` (sequence one line short); flip GONE",
+      "r2": "same at line 14 (b6.4 vs b7.0); flip GONE",
+      "r4": "untouched"
+    },
+    "verdicts_retained": "agreed retained on every mutated body in every mutant; no flip ever shipped from a corrupted sequence"
+  }
+}

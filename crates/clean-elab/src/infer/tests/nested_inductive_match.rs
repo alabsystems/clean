@@ -442,7 +442,7 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
     let sentinel = ctx.push_local("sentinel".to_string(), nat.clone());
     ctx.current_expected_type = Some(nat.clone());
     let locals_before = ctx.locals.clone();
-    let let_values_before = ctx.local_let_values.clone();
+    let let_values_before = ctx.locals.let_values().clone();
     let instances_before = ctx.local_instances.clone();
     let expected_before = ctx.current_expected_type.clone();
     let universes_before = ctx.universe_params.clone();
@@ -495,7 +495,7 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
         "malformed constructor metadata must fail as a typed invariant, got {result:?}"
     );
     assert_eq!(ctx.locals, locals_before);
-    assert_eq!(ctx.local_let_values, let_values_before);
+    assert_eq!(*ctx.locals.let_values(), let_values_before);
     assert_eq!(ctx.local_instances, instances_before);
     assert_eq!(ctx.current_expected_type, expected_before);
     assert_eq!(ctx.universe_params, universes_before);
@@ -1720,7 +1720,7 @@ fn malformed_nested_subpattern_restores_complete_elab_context() {
     });
 
     let locals_before = ctx.locals.clone();
-    let let_values_before = ctx.local_let_values.clone();
+    let let_values_before = ctx.locals.let_values().clone();
     let local_instances_before = ctx.local_instances.clone();
     let cache_before = ctx.instance_cache.clone();
     let expected_before = ctx.current_expected_type.clone();
@@ -1771,7 +1771,7 @@ fn malformed_nested_subpattern_restores_complete_elab_context() {
         ctx.locals, locals_before,
         "local stack changed after rollback"
     );
-    assert_eq!(ctx.local_let_values, let_values_before);
+    assert_eq!(*ctx.locals.let_values(), let_values_before);
     assert_eq!(ctx.local_instances, local_instances_before);
     assert_eq!(ctx.instance_cache, cache_before);
     assert_eq!(ctx.current_expected_type, expected_before);

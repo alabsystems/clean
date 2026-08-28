@@ -60,9 +60,14 @@ pub(super) fn elaborate_bodies(
         }
         let mut progressed = false;
 
+        // Recomputed every round, because it SHRINKS: a declaration that had
+        // no header but whose body registers this round becomes an ordinary
+        // resolvable name, and must stop being reported as unreachable.
+        let siblings = unstaged_siblings(plan);
+
         for index in pending {
             staging_options.enter(staging, &plan.nodes[index]);
-            let elaboration = elaborate_node(&*staging, &plan.nodes[index]);
+            let elaboration = elaborate_node(&*staging, &plan.nodes[index], &siblings);
             let result = match elaboration.result {
                 Ok(result) => result,
                 Err(error) => {
@@ -179,6 +184,7 @@ pub(super) fn elaborate_bodies(
     // authored order: they name declarations this batch introduced, and they
     // register nothing themselves.
     let mut publish_options = OptionScope::default();
+    let command_siblings = unstaged_siblings(plan);
     for index in 0..plan.nodes.len() {
         if plan.nodes[index].class != NodeClass::Command
             || !matches!(plan.nodes[index].status, NodeStatus::Pending)
@@ -186,7 +192,7 @@ pub(super) fn elaborate_bodies(
             continue;
         }
         publish_options.enter(publish, &plan.nodes[index]);
-        let elaboration = elaborate_node(&*publish, &plan.nodes[index]);
+        let elaboration = elaborate_node(&*publish, &plan.nodes[index], &command_siblings);
         let node = &mut plan.nodes[index];
         node.hole_contexts = elaboration.hole_contexts;
         match elaboration.result {
@@ -217,6 +223,59 @@ pub(super) fn elaborate_bodies(
     publish_options.leave(publish);
 
     rejections
+}
+
+/// Every named declaration of this batch that a body written before it cannot
+/// forward-reference: no staged header, and not yet registered.
+///
+/// This exists so a refusal can NAME the sibling. An identifier matching one of
+/// these is not a typo and has no nearest-theorem answer — the report belongs to
+/// the sibling, whose own refusal in the same batch says what its signature
+/// needs (Trust ruling v7/D3: a refusal must carry the fix, with options).
+///
+/// Registered nodes are excluded, so the list shrinks as the worklist makes
+/// progress and a name that has BECOME resolvable is never reported as absent.
+fn unstaged_siblings(plan: &Plan) -> Vec<crate::infer::UnstagedSibling> {
+    plan.nodes
+        .iter()
+        .filter(|node| node.header.is_none() && !matches!(node.status, NodeStatus::Registered))
+        .filter_map(|node| {
+            node.name
+                .as_ref()
+                .map(|name| crate::infer::UnstagedSibling {
+                    name: name.to_string(),
+                    reason: header_absence_phrase(node.no_header),
+                })
+        })
+        .collect()
+}
+
+/// Why a declaration staged no header, as a phrase that completes
+/// "`x` has no forward-resolvable header (…)".
+fn header_absence_phrase(reason: Option<super::NoHeaderReason>) -> &'static str {
+    match reason {
+        Some(super::NoHeaderReason::TypeInferredFromBody) => {
+            "its type is read off its body, which a header may not look at"
+        }
+        Some(super::NoHeaderReason::ResidualMetavariable) => {
+            "its signature still carried a metavariable or an unsolved universe \
+             level, which are solved from its body"
+        }
+        Some(super::NoHeaderReason::UnsupportedShape) => {
+            "its shape has no signature-only form — an anonymous `instance` \
+             mints its canonical name against the environment, so staging one \
+             would freeze a name the authoritative pass does not use"
+        }
+        Some(super::NoHeaderReason::TypeLevelDeclaration) => {
+            "it is a type-level declaration, elaborated completely rather than \
+             staged, and its own elaboration has not succeeded"
+        }
+        // The default is also the honest answer for a node that never reached
+        // the header phase at all: nothing of its signature is in the index.
+        Some(super::NoHeaderReason::SignatureDidNotElaborate) | None => {
+            "its own signature did not elaborate"
+        }
+    }
 }
 
 /// Does the declaration about to be registered disagree with the signature that

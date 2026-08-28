@@ -105,11 +105,13 @@ COMPOSITION_BLOCKS = ("inductive Step", "def Confl", "inductive Tm", "inductive 
 #
 # `cr` is genuinely discharged: a byte-identical sibling rung proves
 # `confluence : Confl` with no hypotheses (checked by the composition gate
-# below). `sn` and `decWH` are not discharged anywhere in the corpus — and `sn`
-# is worse than open, it is FALSE for the modelled λ* (`Type : Type` is
-# Girard-inconsistent; 41 corpus files carry the note), which makes every
-# completeness/decidability theorem depending on it vacuous rather than merely
-# conditional. See HANDOFF_CORRECTION_2026-07-24.md.
+# below). `sn`'s status is CALCULUS-SCOPED: FALSE for the modelled λ*
+# (`Type : Type` is Girard-inconsistent; the nine dependent rungs' capstones
+# are vacuous — see CONDITIONAL_VACUITY and HANDOFF_CORRECTION_2026-07-24.md),
+# but on the STRATIFIED rungs (the kernel's own level discipline, 2026-08-2x)
+# it is open-with-proved-fragments — see PER_RUNG_DISCHARGE["sn"]
+# ["stratified-sn"]. `decWH` is discharged twice: on `whnf-conversion`
+# (simply typed) and constructively on `stratified-sn` (fuel-free reducer).
 #
 # ONE STATUS PER NAME IS NOT ENOUGH, and pretending otherwise misreports the
 # corpus in BOTH directions. `sn` is false-under-`Type : Type` for the dependent
@@ -321,6 +323,27 @@ _RETIRED_OBSTRUCTIONS = {
 }
 
 PER_RUNG_DISCHARGE = {
+    "whnf_conv": {
+        "dep-bidir-r4":
+            "The oracle FAMILY is discharged on the stratified sibling, not here: "
+            "stratified-sn's Bidir* defines whnfD (fuel-free whnfOf on SN terms) and "
+            "PROVES whnfD_conv/whnfD_steps unconditionally and whnfD_pi on SN+WT "
+            "scope, then runs infer/check oracle-free on the CC fragment "
+            "(infer_sound_cc/infer_complete_cc, executed both polarities). THIS "
+            "rung's own binders stay open BY DESIGN: they range over its lambda-star "
+            "calculus, where no total genuine whnf exists",
+    },
+    "whnf_reduces": {
+        "dep-bidir-r4":
+            "See whnf_conv/dep-bidir-r4 — discharged as whnfD_steps on the "
+            "stratified sibling; open by design over lambda-star here",
+    },
+    "whnf_pi": {
+        "dep-bidir-r4":
+            "See whnf_conv/dep-bidir-r4 — discharged as whnfD_pi (SN+WT scope, via "
+            "confluence + weak-head classification) on the stratified sibling; open "
+            "by design over lambda-star here",
+    },
     "pinj": {
         "proof-irrelevance-r4":
             "proof-irrelevance-r4.KMain.piInj_proved — GENUINELY PROVED, no hypotheses, "
@@ -350,11 +373,29 @@ PER_RUNG_DISCHARGE = {
             "whnf-conversion.decWH_discharged — decWHConvOfSN from `sn` and `cr` alone, "
             "axiom closure [propext]; typechecks AS the decWH parameter of decConv_whnf "
             "and instConvDecidable_whnf with no coercion",
+        "stratified-sn":
+            "Stratified/WhnfDec.lean `decWHConv` + `decWH_of_sn` — DISCHARGED "
+            "CONSTRUCTIVELY, in exactly the shape the ported capstones consume: "
+            "deterministic one-step weak-head reduction (`whstep`) iterated along the "
+            "Acc proof inside SN (no fuel, no partial def), invariance "
+            "`whconv_whnf_inv`, decision by head comparison recursing on "
+            "`Acc BelowPlus`. Choice-free (`#print axioms`: no Classical.choice)",
     },
     "sn": {
         "whnf-conversion":
             "stlc-sn.sn_of_typed_open (open-context SN); (Tm, Step, HasType, SN) "
             "byte-identical to stlc-sn, so the proof transfers by the same route as `cr`",
+        "stratified-sn":
+            "NOT a global discharge and must not be read as one — `sn_strat` for the "
+            "full imax tower stays OPEN (residual wall proved: "
+            "`no_uniform_sort1_shape`). What IS proved on this rung, unconditionally: "
+            "sn_pred (predicative), sn_nf (impredicative normal types), sn_fomega "
+            "(impredicative higher-order, value-domain model), sn_cc (full Calculus "
+            "of Constructions embedded in HasType) — plus `complete_core_free`, which "
+            "shows the capstone engine consumes only PER-TERM accessibility, so the "
+            "capstones are INSTANTIATED without any sn hypothesis at the CC fragment "
+            "(`decConv_cc`, run both polarities). The remaining `sn` binders on this "
+            "rung are the reference capstones ported verbatim for comparability",
     },
 }
 
@@ -397,7 +438,11 @@ def extract_block(code: str, header: str) -> str | None:
     """Return the source of the top-level declaration beginning with ``header``."""
     lines = code.splitlines()
     for idx, line in enumerate(lines):
-        if line.startswith(header):
+        # Word-boundary match: `inductive HasType` must not swallow
+        # `inductive HasTypeN` — a DIFFERENT relation is not a re-spelling.
+        if line.startswith(header) and not (
+            len(line) > len(header) and (line[len(header)].isalnum() or line[len(header)] == "_")
+        ):
             body = [line]
             for nxt in lines[idx + 1 :]:
                 if nxt and not nxt[0].isspace() and DECL_START.match(nxt):

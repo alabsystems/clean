@@ -1,0 +1,50 @@
+{
+ "chain": "ir_gc",
+ "body": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. Every aggregate lane is EMPTY, and that is a measurement: reader A's crate_enum_ids_seen and crate_struct_ids_seen are both [] on the laneREG wc-REG dump_O3 2026-08-21 dump. What this table pins is the INTERFACE -- and this chain's first parameter is the sharpest row of the five migrated today: a UNIT closure environment, printed `()`, that the body never reads.",
+ "how_it_is_used": "`ir_mint::mint` reads the (empty) aggregate lanes -- no alias line is minted -- and `ir_mint::project` compares the emitted header rows against the `interface` object below, refusing a body whose interface is not the pinned one.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Read `ir_h2.tags.json`'s `interface_what`. Two sharp slots here: the FIRST parameter is the closure's environment and its type is UNIT (`bb0(%0: (), %1: u64)`) -- the core module carries only the SSA id, so a twin whose environment is a captured pointer would be one core module and is refused by this row; and the SECOND parameter's width is what `trunc u64 -> u32` truncates FROM, the whole semantic content of a one-instruction body.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. No token names a crate-level id, so canonical and observed coincide. Reader A's own record on the laneREG wc-REG dump_O3 2026-08-21 dump: `param_tys_erased: [\"Unit\", \"U64\"]`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 370,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The producer A/B record has this index at 540/540/368 over its three dumps and reader A's 2026-08-21 laneREG dump says 367 -- the recorded whole-crate drift class. The pin compares reader B's header against the FIXTURE-ERA 370; reader A's value is RECORDED in ir_gc.mint.json, NEVER COMPARED, like observed_ty.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "()",
+    "observed_ty": "()",
+    "rust_type": "the closure environment (captures nothing)",
+    "note": "UNIT, and the body never reads it -- the first zero-sized parameter any chained body carries. The core module holds only the SSA id, so this row is the ONLY witness that the environment is empty."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "u64",
+    "observed_ty": "u64",
+    "rust_type": "n: u64",
+    "note": "The value truncated. The 64 here and the 32 in the instruction ARE the body; both widths are semantic (ir_cast_eval faults on any other pair)."
+   }
+  ],
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement: this body contains no memory instruction of any kind.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. The closure calls NOTHING: reader A's `crate_func_ids_seen` is the single entry [3288] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`; `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`."
+}

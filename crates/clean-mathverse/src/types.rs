@@ -604,7 +604,7 @@ impl AxiomProfile {
 
     /// Check if a specific bit is set (accepts u64 for zone alpha compat).
     #[inline]
-    pub const fn has_bit(self, bit: u64) -> bool {
+    pub(crate) const fn has_bit(self, bit: u64) -> bool {
         (self.0 & bit) != 0
     }
 
@@ -628,13 +628,13 @@ impl AxiomProfile {
 
     /// Check if this profile is a superset of another.
     #[inline]
-    pub const fn is_superset_of(self, other: Self) -> bool {
+    pub(crate) const fn is_superset_of(self, other: Self) -> bool {
         (self.0 & other.0) == other.0
     }
 
     /// Check if this profile is trust-gated (should be invisible by default).
     #[inline]
-    pub const fn is_trust_gated(self) -> bool {
+    pub(crate) const fn is_trust_gated(self) -> bool {
         (self.0 & Self::TRUST_GATED.0) != 0
     }
 
@@ -997,7 +997,7 @@ impl MathverseConstantHeader {
 
     /// Check if this constant is trust-gated.
     #[inline]
-    pub const fn is_trust_gated(&self) -> bool {
+    pub(crate) const fn is_trust_gated(&self) -> bool {
         self.axiom_profile.is_trust_gated()
     }
 
@@ -1013,7 +1013,7 @@ impl MathverseConstantHeader {
     /// replay rebuild parameterized or indexed single-type inductive families
     /// through checked `Environment::add_inductive`.
     #[inline]
-    pub fn set_inductive_decl_num_params(&mut self, num_params: u32) {
+    pub(crate) fn set_inductive_decl_num_params(&mut self, num_params: u32) {
         self._pad2[Self::INDUCTIVE_METADATA_VERSION_OFFSET] = Self::INDUCTIVE_METADATA_VERSION;
         self._pad2[Self::INDUCTIVE_METADATA_FLAGS_OFFSET] |=
             Self::INDUCTIVE_METADATA_HAS_NUM_PARAMS;
@@ -1023,7 +1023,7 @@ impl MathverseConstantHeader {
 
     /// Read typed shard metadata for `InductiveDecl.num_params`, when present.
     #[inline]
-    pub fn inductive_decl_num_params(&self) -> Option<u32> {
+    pub(crate) fn inductive_decl_num_params(&self) -> Option<u32> {
         if self._pad2[Self::INDUCTIVE_METADATA_VERSION_OFFSET] != Self::INDUCTIVE_METADATA_VERSION {
             return None;
         }
@@ -1048,7 +1048,7 @@ impl MathverseConstantHeader {
     /// meaningful on `DeclKind::Inductive` headers and lets incremental replay
     /// rebuild the full `InductiveDecl.types` block for simple mutual families.
     #[inline]
-    pub fn set_inductive_decl_all_names(&mut self, start: StringIdx, count: u16) {
+    pub(crate) fn set_inductive_decl_all_names(&mut self, start: StringIdx, count: u16) {
         self._pad2[Self::INDUCTIVE_METADATA_VERSION_OFFSET] = Self::INDUCTIVE_METADATA_VERSION;
         self._pad2[Self::INDUCTIVE_METADATA_FLAGS_OFFSET] |= Self::INDUCTIVE_METADATA_HAS_ALL_NAMES;
         let start_offset = Self::INDUCTIVE_METADATA_ALL_NAMES_START_OFFSET;
@@ -1059,7 +1059,7 @@ impl MathverseConstantHeader {
 
     /// Read typed shard metadata for `InductiveVal.all_names`, when present.
     #[inline]
-    pub fn inductive_decl_all_names_block(&self) -> Option<(StringIdx, u16)> {
+    pub(crate) fn inductive_decl_all_names_block(&self) -> Option<(StringIdx, u16)> {
         if self._pad2[Self::INDUCTIVE_METADATA_VERSION_OFFSET] != Self::INDUCTIVE_METADATA_VERSION {
             return None;
         }

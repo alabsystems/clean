@@ -22,7 +22,10 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use clean_kernel::env::{Environment, SnapshotHeader, SnapshotLoadOutcome, SNAPSHOT_VERSION};
+use clean_kernel::env::{
+    Environment, SnapshotAttestation, SnapshotHeader, SnapshotLoadOutcome, SnapshotReceiptPolicy,
+    SNAPSHOT_VERSION,
+};
 use clean_olean::load_module_with_deps;
 
 fn main() {
@@ -63,18 +66,33 @@ fn run() {
     );
 
     // -- WRITE the snapshot (in production this is gated on a successful full
-    //    re-verify; here we isolate the load-time mechanism cost). -------------
+    //    re-verify; here we isolate the load-time mechanism cost, and the
+    //    attestation SAYS SO — the receipt binds the claim to these exact env
+    //    bytes, it never upgrades the claim). ---------------------------------
     let hdr = SnapshotHeader::current("prove-it-closure-hash");
-    cold_env.save_snapshot(&snap, hdr.clone()).expect("save");
+    let attestation = SnapshotAttestation {
+        scope: format!(
+            "init_snapshot_prove harness: load-only closure of {module} \
+             (mechanism demo, NOT a re-verification)"
+        ),
+        decls_verified: 0,
+        verified_at: "prove-it".to_string(),
+    };
+    cold_env
+        .save_snapshot(&snap, hdr.clone(), Some(&attestation))
+        .expect("save");
     let bytes = std::fs::metadata(&snap).map(|m| m.len()).unwrap_or(0);
     println!("SNAP  bytes={bytes}");
 
     // -- WARM: restore from snapshot, timed. ----------------------------------
     let tr = Instant::now();
-    let warm_env = match Environment::load_snapshot(&snap, &hdr).expect("load") {
-        SnapshotLoadOutcome::Loaded(e) => *e,
-        SnapshotLoadOutcome::Mismatch(_) => panic!("matching header must Load"),
-    };
+    let warm_env =
+        match Environment::load_snapshot(&snap, &hdr, SnapshotReceiptPolicy::RequireReceipt)
+            .expect("load")
+        {
+            SnapshotLoadOutcome::Loaded(e) => *e,
+            other => panic!("matching header + bound receipt must Load, got {other:?}"),
+        };
     let warm_secs = tr.elapsed().as_secs_f64();
     println!(
         "WARM  secs={warm_secs:.3} constants={}",
@@ -104,8 +122,13 @@ fn run() {
     // -- TAMPER: bump version; the gate must refuse to reuse. ------------------
     let mut tampered = hdr.clone();
     tampered.snapshot_version = SNAPSHOT_VERSION + 99;
-    let outcome = Environment::load_snapshot(&snap, &tampered).expect("parse");
-    let reused = matches!(outcome, SnapshotLoadOutcome::Loaded(_));
+    let outcome =
+        Environment::load_snapshot(&snap, &tampered, SnapshotReceiptPolicy::RequireReceipt)
+            .expect("parse");
+    let reused = matches!(
+        outcome,
+        SnapshotLoadOutcome::Loaded(_) | SnapshotLoadOutcome::LoadedUnreceipted { .. }
+    );
     println!("TAMPER reused={reused} (must be false => stale snapshot discarded, full re-verify)");
 
     let _ = std::fs::remove_dir_all(&cache);

@@ -111,6 +111,64 @@ fn test_parse_by_simp_only_with_lemmas() {
     }
 }
 
+/// `*` in a simp lemma list is Lean's "also use every local hypothesis"
+/// element. It is not a term, so it must set `use_hypotheses` and stay out of
+/// `lemmas` — previously it raised `Unexpected token: Star` and dropped the
+/// remainder of the declaration into parser recovery.
+#[test]
+fn test_parse_simp_star_sets_use_hypotheses() {
+    let cases: [(&str, bool, usize); 5] = [
+        ("by simp [*]", false, 0),
+        ("by simp only [*]", true, 0),
+        ("by simp [Nat.add_zero, *]", false, 1),
+        ("by simp [*, Nat.add_zero]", false, 1),
+        ("by simp [*, Nat.add_zero, Nat.zero_add]", false, 2),
+    ];
+    for (src, want_only, want_lemmas) in cases {
+        let expr = Parser::parse_expr(src).unwrap_or_else(|e| panic!("{src} should parse: {e:?}"));
+        let SurfaceExpr::ByTactic(_, tactics) = expr else {
+            panic!("{src}: expected ByTactic");
+        };
+        match &tactics[0] {
+            SurfaceTactic::Simp {
+                only,
+                lemmas,
+                use_hypotheses,
+                ..
+            } => {
+                assert!(*use_hypotheses, "{src}: `*` must set use_hypotheses");
+                assert_eq!(*only, want_only, "{src}: `only` flag");
+                assert_eq!(lemmas.len(), want_lemmas, "{src}: named lemma count");
+            }
+            other => panic!("{src}: expected Simp, got {other:?}"),
+        }
+    }
+}
+
+/// A star-free lemma list must leave `use_hypotheses` false.
+#[test]
+fn test_parse_simp_without_star_leaves_use_hypotheses_false() {
+    for src in [
+        "by simp",
+        "by simp [Nat.add_zero]",
+        "by simp only [foo, bar]",
+    ] {
+        let expr = Parser::parse_expr(src).unwrap_or_else(|e| panic!("{src} should parse: {e:?}"));
+        let SurfaceExpr::ByTactic(_, tactics) = expr else {
+            panic!("{src}: expected ByTactic");
+        };
+        match &tactics[0] {
+            SurfaceTactic::Simp { use_hypotheses, .. } => {
+                assert!(
+                    !*use_hypotheses,
+                    "{src}: no `*`, so use_hypotheses is false"
+                );
+            }
+            other => panic!("{src}: expected Simp, got {other:?}"),
+        }
+    }
+}
+
 #[test]
 fn test_parse_by_rw() {
     let expr = Parser::parse_expr("by rw [Nat.add_comm]").unwrap();

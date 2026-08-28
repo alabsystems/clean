@@ -143,7 +143,14 @@ impl Specification {
         self.add_eval_ir_float_fin()?;
         self.add_eval_ir_float_fin_witnesses()?;
         self.add_eval_ir_float_tables()?;
-        self.add_eval_ir_float_machine()
+        self.add_eval_ir_float_machine()?;
+        // The RESIDUE band (2026-08-25): fneg/fabs, fmin/fmax,
+        // ffloor/fceil/ftrunc and the unary dispatcher — appended AFTER every
+        // pre-existing float def so their registration positions are
+        // unchanged, and BEFORE add_eval_ir_arith (which runs next in
+        // add_eval_ir_ops) because ir_unop_eval/ir_binop_eval's residue arms
+        // dispatch into these names.
+        self.add_eval_ir_float_res()
     }
 
     /// Bit-pattern classification: sign, magnitude, and the four-way class.

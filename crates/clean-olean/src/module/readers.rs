@@ -23,7 +23,7 @@ impl<'a> CompactedRegion<'a> {
     /// # ENSURES
     /// - Returns the root pointer stored immediately after the header.
     /// - Returns `OleanError::UnsupportedVersion` on unknown header versions.
-    pub fn root_ptr(&self) -> OleanResult<u64> {
+    pub(crate) fn root_ptr(&self) -> OleanResult<u64> {
         let version =
             self.data
                 .get(MAGIC.len())
@@ -66,7 +66,7 @@ impl<'a> CompactedRegion<'a> {
     /// # ENSURES
     /// - Returns `ParsedModule` with imports, constants, and names populated.
     /// - Returns `OleanError` if the region is malformed or tags mismatch.
-    pub fn read_module_data(&self) -> OleanResult<ParsedModule> {
+    pub(crate) fn read_module_data(&self) -> OleanResult<ParsedModule> {
         self.read_module_data_opts(false)
     }
 

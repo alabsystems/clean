@@ -108,7 +108,7 @@ impl SyntaxQuote {
     /// `` macro "capture " x:term : term => `(let a := 1; $x + a) `` behave as
     /// Lean 4 does: in `let a := 10; capture a` the spliced `a` is the caller's
     /// `10`, not the template's `1`.
-    pub fn substitute_hygienic(
+    pub(crate) fn substitute_hygienic(
         &self,
         bindings: &HashMap<String, Syntax>,
         hygiene: &mut HygieneState,

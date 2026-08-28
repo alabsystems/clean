@@ -1,0 +1,13 @@
+-- p05 — CLASS II CONTROL (the control that names the defect).
+--
+-- PROVES: with a `Const`-headed receiver type (`And p q`), the SAME missing
+-- field already produced the correct, Lean-shaped diagnostic — the identifier
+-- `And.nosuchfield` is named. So the class-II message defect was never "Clean
+-- cannot report a missing dot target"; it was that the non-`Const`-headed path
+-- lost the name.
+--
+-- RULES OUT: that the class-II repair is a broad rewrite of missing-field
+-- reporting. This path is untouched by the repair and must stay byte-stable —
+-- if this fragment moves, the repair leaked out of its intended site
+-- (`infer/elab_proj.rs`, the `get_type_name` bail).
+theorem probe_const_head_missing {p q : Prop} (h : And p q) : True := h.nosuchfield

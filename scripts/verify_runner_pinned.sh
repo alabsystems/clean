@@ -17,7 +17,11 @@
 #   COMMITISH=origin/main scripts/verify_runner_pinned.sh run
 #
 # Records land in the SHARED data/suite_state/ -- one artifact, whichever mode
-# produced a row. Note that a row measured at a commit reads UNKNOWN from a
+# produced a row -- and therefore in the SHARED journal too: the journal is keyed
+# on the resolved VERIFY_RUNNER_STATE_DIR, not on REPO_ROOT, precisely so this
+# throwaway worktree and the main checkout cannot end up with two of them.
+#
+# Note that a row measured at a commit reads UNKNOWN from a
 # dirty main tree, and GREEN from this pinned view. Both are correct: they are
 # claims about different trees.
 #

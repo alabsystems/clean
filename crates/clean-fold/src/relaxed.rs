@@ -47,7 +47,7 @@ impl RelaxedR1CSInstance {
     /// Create from a standard R1CS instance
     ///
     /// The error vector is zero and u=1 for a standard instance.
-    pub fn from_r1cs_instance(instance: &R1CSInstance, commit_w: G1) -> Self {
+    pub(crate) fn from_r1cs_instance(instance: &R1CSInstance, commit_w: G1) -> Self {
         Self {
             commit_w,
             commit_e: G1::zero(),
@@ -98,7 +98,7 @@ impl RelaxedR1CSWitness {
     /// Create from a standard R1CS witness
     ///
     /// The error vector is zero for a satisfying witness.
-    pub fn from_r1cs_witness(witness: &R1CSWitness, num_constraints: usize) -> Self {
+    pub(crate) fn from_r1cs_witness(witness: &R1CSWitness, num_constraints: usize) -> Self {
         Self {
             w: witness.w.clone(),
             e: vec![Scalar::zero(); num_constraints],
@@ -138,7 +138,7 @@ impl RelaxedR1CSWitness {
 /// Check if a relaxed R1CS instance/witness pair satisfies the relation
 ///
 /// Verifies: Az ∘ Bz = u·Cz + E
-pub fn is_relaxed_satisfied(
+pub(crate) fn is_relaxed_satisfied(
     shape: &R1CSShape,
     u: Scalar,
     x: &[Scalar],
@@ -173,7 +173,7 @@ pub fn is_relaxed_satisfied(
 ///
 /// This is the "error" introduced by folding, which gets absorbed
 /// into the error vector of the folded instance.
-pub fn compute_cross_term(
+pub(crate) fn compute_cross_term(
     shape: &R1CSShape,
     u1: Scalar,
     x1: &[Scalar],

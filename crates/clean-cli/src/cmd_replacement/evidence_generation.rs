@@ -357,8 +357,12 @@ pub(crate) fn evaluate_deny_sorry_lane(
 ) -> Result<DenySorryLaunchLaneEvidence, ReplacementError> {
     let matched_expected_count = match lane.command {
         // The lint and ratchet lanes run in-process before the lane loop;
-        // reaching here means validate_sorry_bypass_lint and
-        // validate_unchecked_decl_ratchet already returned Ok.
+        // reaching here means validate_sorry_bypass_lint,
+        // validate_unchecked_decl_ratchet, validate_unchecked_decl_ratchet_closed
+        // AND validate_add_decl_bypass_sites_measured all returned Ok. The last
+        // of those is the SOURCE measurement (G7, 2026-08-27); before it this
+        // arm returned `true` for a lane named `…_accounted` on the strength of
+        // two functions that could not see the source tree.
         None => true,
         Some(command) => {
             let output =
@@ -406,14 +410,21 @@ pub(crate) fn generate_deny_sorry_launch_evidence_with(
     // yield passing DENY_SORRY evidence (validate_deny_sorry_launch_evidence
     // re-checks this on the finished artifact), so refuse before the
     // expensive lanes rather than after them. Same message either way.
-    if ratchet.add_decl_structural_count != 0 || ratchet.add_decl_unchecked_count != 0 {
-        return Err(ReplacementError::StaleTrustCoreArtifact {
-            message: format!(
-                "current ratchet is not closed at 0/0: structural={}, unchecked={}",
-                ratchet.add_decl_structural_count, ratchet.add_decl_unchecked_count
-            ),
-        });
-    }
+    // G6 (2026-08-23): "closed" is no longer "the counts are 0" — that was a
+    // claim about a JSON literal and it was false. See `ratchet_closure`.
+    validate_unchecked_decl_ratchet_closed(&ratchet)
+        .map_err(|message| ReplacementError::StaleTrustCoreArtifact { message })?;
+    // G7 (2026-08-27): …and neither of the two calls above reads a line of
+    // Rust. Both take `&UncheckedDeclRatchetArtifact` and nothing else, so by
+    // their signatures a bypass planted in a production file is invisible to
+    // them — yet this generator minted the lane `unchecked_decl_ratchet_accounted`
+    // as passed, and THIS command (not scripts/deny_sorry_gate.sh) is the
+    // evidence command the Green `fallback-denial` scorecard row cites. The
+    // shell lane has re-derived the call sites from crates/**/*.rs since G6;
+    // this is the same measurement, in-process, so the two producers of one
+    // lane id answer the same question. See `add_decl_bypass_scan`.
+    validate_add_decl_bypass_sites_measured(&repo_root(), &ratchet)
+        .map_err(|message| ReplacementError::StaleTrustCoreArtifact { message })?;
 
     let mut source_sha256 = BTreeMap::new();
     for path in [TRUST_CORE_RUST_SOURCE_PATH, UNCHECKED_DECL_RATCHET_PATH] {

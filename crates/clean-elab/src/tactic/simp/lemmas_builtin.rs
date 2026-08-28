@@ -9,7 +9,7 @@
 //! constant presence and config exclusions.
 
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, Level};
+use clean_kernel::{BinderInfo, Expr, Level};
 
 use super::types::{SimpConfig, SimpIndexMode, SimpLemma};
 use crate::tactic::core::ProofState;
@@ -570,9 +570,10 @@ fn collect_prop_not_lemmas(state: &ProofState, config: &SimpConfig) -> Vec<SimpL
     lemmas
 }
 
-/// Collect built-in List simp lemmas.
+/// Collect built-in List simp lemmas: `List.append_nil`, the `List.length_*`
+/// family, `List.reverse_reverse`, and `List.map_map`.
 ///
-/// Currently registers `List.append_nil : xs ++ [] = xs`. The reducing
+/// On `List.append_nil : xs ++ [] = xs` specifically: the reducing
 /// direction `[] ++ xs = xs` closes by ι-reduction (rfl) without a lemma, but
 /// the symbolic-tail direction is stuck on the recursion target and needs the
 /// kernel-proved `List.append_nil` theorem (registered, axiom-free, by
@@ -685,7 +686,125 @@ pub(crate) fn collect_list_lemmas(state: &ProofState, config: &SimpConfig) -> Ve
         }
     });
 
+    // List.reverse_reverse: xs.reverse.reverse = xs
+    //
+    // BVar(1) ↦ ?α (implicit, applied FIRST), BVar(0) ↦ ?xs (explicit, applied
+    // LAST). The proof reconstructs `@List.reverse_reverse.{u_simp} α xs`
+    // (kernel-proved by `init_list_reverse_map_lemmas`, axiom-free). The
+    // rewrite leaves `xs = xs`, closed by the existing `eq_self` lemma.
+    //
+    // SOUNDNESS: the pattern's inner argument is literally
+    // `@List.reverse ?α ?xs` (same `?α` as the outer), so it fires only on a
+    // double reverse and rewrites to the inner operand; the reconstructed
+    // proof is the kernel-checked theorem and `close_goal`/`add_decl`
+    // re-verify, so any mis-assembly fails closed.
+    push_if_present(state, config, &mut lemmas, "List.reverse_reverse", || {
+        SimpLemma {
+            name: Name::from_string("List.reverse_reverse"),
+            lhs: make_list_reverse_reverse_pattern(),
+            rhs: Expr::bvar(0),
+            eq_type: None,
+            proof_expr: None,
+            // `List.reverse` δ-unfolds to a stuck `reverseAux`/`List.rec` body
+            // under the discrimination-tree key path (the B103 WHNF-rot
+            // disease), so star-keyed like `List.append_nil`; still guarded by
+            // the unifier + def-eq check + kernel re-verification.
+            index_mode: SimpIndexMode::Unindexed,
+            priority: 100,
+        }
+    });
+
+    // List.map_map: (xs.map f).map g = xs.map (fun x => g (f x))
+    //
+    // BVar layout mirrors the declaration's binder order
+    // (`{α β γ} (g) (f) (xs)`): ?α=BVar(5), ?β=BVar(4), ?γ=BVar(3),
+    // ?g=BVar(2), ?f=BVar(1), ?xs=BVar(0). The RHS spells the fused function
+    // as the raw lambda `fun x => g (f x)` — exactly what Clean's elaborator
+    // desugars `g ∘ f` to — so after the rewrite the goal's two sides are
+    // syntactically identical and `eq_self` closes it.
+    //
+    // Unlike the single-`u_simp` builtins, the pattern spells the
+    // DECLARATION's own level params (`u`,`v`,`w`): `List.map_map` needs three
+    // independent levels, and `resolve_lemma_level` resolves decl params under
+    // their own names first (the environment-pattern convention), so the
+    // unifier's per-name solutions flow straight into the reconstructed
+    // `@List.map_map.{u,v,w}` proof head.
+    push_if_present(state, config, &mut lemmas, "List.map_map", || SimpLemma {
+        name: Name::from_string("List.map_map"),
+        lhs: make_list_map_map_pattern(),
+        rhs: make_list_map_map_rhs(),
+        eq_type: None,
+        proof_expr: None,
+        // `List.map` δ-unfolds to a stuck `List.rec` body under the key path
+        // (same B103 WHNF-rot class), so star-keyed.
+        index_mode: SimpIndexMode::Unindexed,
+        priority: 100,
+    });
+
     lemmas
+}
+
+/// Build `@List.reverse.{u_simp} ?α (@List.reverse.{u_simp} ?α ?xs)` for
+/// `List.reverse_reverse`.
+///
+/// `?α` = BVar(1) (shared by both `List.reverse` type args), `?xs` = BVar(0).
+/// The `u_simp` level param is solved by the unifier and re-applied to the
+/// reconstructed proof (same as `List.append_nil`).
+fn make_list_reverse_reverse_pattern() -> Expr {
+    let u_simp = Level::param(Name::from_string("u_simp"));
+    let alpha = Expr::bvar(1);
+    let xs = Expr::bvar(0);
+    let rev_of = |l: Expr| {
+        Expr::app(
+            Expr::app(
+                Expr::const_(Name::from_string("List.reverse"), vec![u_simp.clone()]),
+                alpha.clone(),
+            ),
+            l,
+        )
+    };
+    rev_of(rev_of(xs))
+}
+
+/// Build `@List.map.{v,w} ?β ?γ ?g (@List.map.{u,v} ?α ?β ?f ?xs)` for
+/// `List.map_map`.
+///
+/// `?α`=BVar(5), `?β`=BVar(4), `?γ`=BVar(3), `?g`=BVar(2), `?f`=BVar(1),
+/// `?xs`=BVar(0). Levels spell the declaration's own params (`u`,`v`,`w`) —
+/// see the registration comment.
+fn make_list_map_map_pattern() -> Expr {
+    let u = Level::param(Name::from_string("u"));
+    let v = Level::param(Name::from_string("v"));
+    let w = Level::param(Name::from_string("w"));
+    let inner = Expr::apps(
+        Expr::const_(Name::from_string("List.map"), vec![u, v.clone()]),
+        [Expr::bvar(5), Expr::bvar(4), Expr::bvar(1), Expr::bvar(0)],
+    );
+    Expr::apps(
+        Expr::const_(Name::from_string("List.map"), vec![v, w]),
+        [Expr::bvar(4), Expr::bvar(3), Expr::bvar(2), inner],
+    )
+}
+
+/// Build `@List.map.{u,w} ?α ?γ (fun (x : ?α) => ?g (?f x)) ?xs` — the RHS of
+/// `List.map_map`.
+///
+/// Inside the lambda body the pattern indices shift by one for the lambda's
+/// own binder (`substitute_bvars_with_metas` is depth-aware): `?g` = BVar(3),
+/// `?f` = BVar(2), the bound `x` = BVar(0). The lambda's domain (outside the
+/// binder) is `?α` = BVar(5).
+fn make_list_map_map_rhs() -> Expr {
+    let u = Level::param(Name::from_string("u"));
+    let w = Level::param(Name::from_string("w"));
+    let comp_lam = Expr::lam(
+        BinderInfo::Default,
+        Expr::bvar(5),
+        Expr::app(Expr::bvar(3), Expr::app(Expr::bvar(2), Expr::bvar(0))),
+    );
+    Expr::apps(
+        Expr::const_(Name::from_string("List.map"), vec![u, w]),
+        [Expr::bvar(5), Expr::bvar(3), comp_lam, Expr::bvar(0)],
+    )
 }
 
 /// Build `@List.length.{u_simp} α l` for the given `α` / `l` sub-patterns.

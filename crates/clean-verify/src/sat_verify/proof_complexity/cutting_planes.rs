@@ -161,7 +161,7 @@ impl CuttingPlanesProof {
 
     /// Get the derived inequality at a step index.
     #[must_use]
-    pub fn inequality_at(&self, idx: usize) -> Option<&CpInequality> {
+    pub(crate) fn inequality_at(&self, idx: usize) -> Option<&CpInequality> {
         self.derived.get(idx)
     }
 

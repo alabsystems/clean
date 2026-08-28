@@ -6,9 +6,12 @@
 //!
 //! Provides the `tauto` tactic for solving classical propositional logic goals.
 
+mod atom_split;
 mod classical;
+mod search;
 
 use clean_kernel::expr::ExprKind;
+use clean_kernel::Expr;
 
 use super::{
     assumption, cases, clear, contradiction, exprs_syntactically_equal, intro, is_false, left_,
@@ -18,7 +21,7 @@ use super::{
 use crate::stack_safe;
 use crate::tactic::simp::{is_trivial_equality, is_true_const};
 
-use classical::{try_by_cases_for_disjunction, try_classical_dne};
+use search::tauto_prove;
 
 /// Solve propositional tautologies.
 ///
@@ -67,7 +70,8 @@ pub fn tauto(state: &mut ProofState) -> TacticResult {
     if trace {
         eprintln!("tauto-trace: closers done, entering tauto_prove");
     }
-    if tauto_prove(state, &goal, 0, max_depth)? {
+    let mut atom_splits = DEFAULT_TAUTO_MAX_ATOM_SPLITS;
+    if tauto_prove(state, &goal, 0, max_depth, &mut atom_splits)? {
         return Ok(());
     }
 
@@ -112,6 +116,16 @@ fn preprocess_tauto_context(state: &mut ProofState) -> Result<(), TacticError> {
                 progress = true;
                 break;
             }
+
+            // An Iff hypothesis is inert to every matcher in tauto_prove;
+            // destructing it into its mp/mpr implications makes both sides
+            // reachable by solve_by_elim. Terminates: mp/mpr are Pis, which
+            // this arm never re-matches.
+            if match_iff(&ty_whnf).is_some() {
+                cases(state, &decl.name)?;
+                progress = true;
+                break;
+            }
         }
 
         if !progress {
@@ -141,254 +155,30 @@ fn find_or_hypothesis(state: &mut ProofState, goal: &Goal) -> Option<String> {
 /// Without this bound, nested disjunctions cause exponential time blowup.
 const DEFAULT_TAUTO_MAX_DEPTH: usize = 20;
 
-/// Main propositional tautology prover.
+/// Global `by_cases` budget for classical atom splits, per `tauto` invocation.
 ///
-/// REQUIRES: `state` has at least one goal.
-/// ENSURES: Returns Ok(true) if the goal was proved as a propositional
-///   tautology using tableau-style search. Returns Ok(false) if the search
-///   exhausted without proof or depth limit reached.
-fn tauto_prove(
-    state: &mut ProofState,
-    _goal: &Goal,
-    depth: usize,
-    max_depth: usize,
-) -> Result<bool, TacticError> {
-    stack_safe(|| {
-        if depth >= max_depth {
-            return Ok(false);
-        }
+/// Threaded through `tauto_prove` as a never-restored countdown: every
+/// EXECUTED `by_cases` decrements it, including on branch failure, so at most
+/// this many splits run in total — an additive bound over the existing
+/// tableau search rather than a multiplicative per-dead-end retry. (grind
+/// restores its split budget on branch failure; restoring here would re-arm
+/// exhausted subtrees on top of an already 3-way-exponential search.)
+///
+/// Sizing: the split fires at EVERY dead end, so branches that were always
+/// going to fail (the or-target's left_/right_ subtrees) burn budget at
+/// their nested dead ends before the shallow profitable split runs. The
+/// canonical class (from `a ↔ b` prove `(¬a ∧ ¬b) ∨ (b ∧ ¬¬a)`) hand-traces
+/// to 15 total executions — 12 of them spent inside failing subtrees — so 8
+/// (one full 3-atom split tree) is NOT enough; 24 covers the trace with
+/// margin while staying well under grind's effective 32-with-restore.
+const DEFAULT_TAUTO_MAX_ATOM_SPLITS: usize = 24;
 
-        if std::env::var_os("CLEAN_GRIND_TRACE").is_some() {
-            eprintln!("tauto-trace: prove depth={depth}");
-        }
-        preprocess_tauto_context(state)?;
-
-        if state.goals.is_empty() {
-            return Ok(true);
-        }
-
-        let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-        let target = &goal.target;
-
-        if contradiction(state).is_ok() {
-            return Ok(true);
-        }
-
-        if let Some(hyp_name) = find_or_hypothesis(state, &goal) {
-            // SOUNDNESS/COMPLETENESS: back out the METAVARIABLE state as well
-            // as the goal list. `cases`/`left_`/`right_` close the goal meta
-            // via `close_goal`, and `MetaState::assign` refuses re-assignment,
-            // so restoring only `state.goals` leaves the meta assigned and
-            // every LATER alternative at this choice point fails — tauto was
-            // effectively a left-spine-only prover (and `grind`, which
-            // delegates its propositional work here, inherited that). Use the
-            // push_scope/commit/pop_scope discipline `try_tactic_preserving_state`
-            // and grind's own `try_split_disjunction` already use.
-            let goals_backup = state.goals.clone();
-            state.metas_mut().push_scope();
-            if cases(state, &hyp_name).is_ok() {
-                let remaining_goals = state.goals.split_off(1);
-                let first_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                if tauto_prove(state, &first_goal, depth + 1, max_depth)? {
-                    state.goals.extend(remaining_goals);
-                    if state.goals.is_empty() {
-                        return Ok(true);
-                    }
-                    let second_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                    let remaining_after_second = state.goals.split_off(1);
-                    if tauto_prove(state, &second_goal, depth + 1, max_depth)? {
-                        state.goals.extend(remaining_after_second);
-                        state.metas_mut().commit();
-                        return Ok(true);
-                    }
-                }
-            }
-            state.invalidate_tc_cache();
-            state.goals = goals_backup;
-            state.metas_mut().pop_scope();
-        }
-
-        if is_true_const(target) {
-            return Ok(trivial(state).is_ok());
-        }
-
-        if is_false(target) {
-            if assumption(state).is_ok() {
-                return Ok(true);
-            }
-            if contradiction(state).is_ok() {
-                return Ok(true);
-            }
-            return Ok(false);
-        }
-
-        // Check for P ∨ ¬P (excluded middle)
-        if let Some((p, q)) = match_or(target) {
-            if let Some(inner_p) = match_not(&q) {
-                if exprs_syntactically_equal(&p, &inner_p) {
-                    let hyp_name = fresh_hyp_name(&goal.local_ctx, "h");
-                    if super::by_cases(state, &hyp_name, p.clone()).is_ok()
-                        && left_(state).is_ok()
-                        && assumption(state).is_ok()
-                        && right_(state).is_ok()
-                        && assumption(state).is_ok()
-                    {
-                        return Ok(true);
-                    }
-                }
-            }
-            if let Some(inner_p) = match_not(&p) {
-                if exprs_syntactically_equal(&inner_p, &q) {
-                    let hyp_name = fresh_hyp_name(&goal.local_ctx, "h");
-                    if super::by_cases(state, &hyp_name, q.clone()).is_ok()
-                        && right_(state).is_ok()
-                        && assumption(state).is_ok()
-                        && left_(state).is_ok()
-                        && assumption(state).is_ok()
-                    {
-                        return Ok(true);
-                    }
-                }
-            }
-        }
-
-        // Conjunction: split and prove both
-        if let Some((_p, _q)) = match_and(target) {
-            if split_(state).is_ok() {
-                let first_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                if tauto_prove(state, &first_goal, depth + 1, max_depth)? && !state.goals.is_empty()
-                {
-                    let second_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                    if tauto_prove(state, &second_goal, depth + 1, max_depth)? {
-                        return Ok(true);
-                    }
-                }
-            }
-            return Ok(false);
-        }
-
-        // Biconditional (Iff): split into two implications
-        if match_iff(target).is_some() {
-            if split_(state).is_ok() {
-                let first_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                if tauto_prove(state, &first_goal, depth + 1, max_depth)? && !state.goals.is_empty()
-                {
-                    let second_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                    if tauto_prove(state, &second_goal, depth + 1, max_depth)? {
-                        return Ok(true);
-                    }
-                }
-            }
-            return Ok(false);
-        }
-
-        // Disjunction: try left, then right, then by_cases
-        if match_or(target).is_some() {
-            // Each alternative runs in its own metavariable scope: `left_`
-            // assigns the goal meta, so without the rollback below a failed
-            // left branch permanently blocked `right_` (see the note at the
-            // or-hypothesis site above).
-            let goals_backup = state.goals.clone();
-
-            state.metas_mut().push_scope();
-            if left_(state).is_ok() {
-                let left_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                if tauto_prove(state, &left_goal, depth + 1, max_depth)? {
-                    state.metas_mut().commit();
-                    return Ok(true);
-                }
-            }
-
-            state.invalidate_tc_cache();
-            state.goals = goals_backup.clone();
-            state.metas_mut().pop_scope();
-
-            state.metas_mut().push_scope();
-            if right_(state).is_ok() {
-                let right_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                if tauto_prove(state, &right_goal, depth + 1, max_depth)? {
-                    state.metas_mut().commit();
-                    return Ok(true);
-                }
-            }
-
-            state.invalidate_tc_cache();
-            state.goals = goals_backup;
-            state.metas_mut().pop_scope();
-
-            state.metas_mut().push_scope();
-            if try_by_cases_for_disjunction(state)? {
-                state.metas_mut().commit();
-                return Ok(true);
-            }
-            state.metas_mut().pop_scope();
-
-            return Ok(false);
-        }
-
-        // Implication: intro and continue
-        if let ExprKind::Pi(_, _, _) = target.kind() {
-            let hyp_name = fresh_hyp_name(&goal.local_ctx, "h");
-            if intro(state, &hyp_name).is_ok() {
-                let new_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-                return tauto_prove(state, &new_goal, depth + 1, max_depth);
-            }
-        }
-
-        if assumption(state).is_ok() {
-            return Ok(true);
-        }
-
-        if try_classical_dne(state).is_ok() {
-            return Ok(true);
-        }
-
-        // Keep the fallback local-hypothesis search within the caller's remaining
-        // tauto budget so `set_option max_depth` cannot be bypassed here.
-        let solve_by_elim_max_depth = max_depth - depth;
-        if solve_by_elim(state, solve_by_elim_max_depth).is_ok() {
-            return Ok(true);
-        }
-
-        // LAST RESORT: retry the structural dispatch on the REDUCED target.
-        // Mathlib spells many propositional lemmas over a `def` head
-        // (`Xor' a b := (a ∧ ¬b) ∨ (b ∧ ¬a)`), and every matcher above tests
-        // the RAW target, so the ∨/∧ structure is invisible and tauto reports
-        // no progress. Reducing exposes it.
-        //
-        // Deliberately narrow, for the reason recorded on
-        // `ProofState::whnf_indexing` (core/type_check.rs): unbudgeted
-        // full-delta WHNF under a real `import Init` is the 2026-08-13 OOM
-        // class. So this runs ONLY here, on the path that has already failed
-        // every other route, only once per goal (the `reduced != target`
-        // guard plus the depth budget bound the recursion), and the tactic
-        // that consumes it is re-entered through the normal budgeted path.
-        let reduced = state.whnf(&goal, target);
-        if reduced != *target && depth < max_depth {
-            // Struct-update rather than `reduced_goal.target = ...`.
-            //
-            // This is only a LOCAL fallback clone — the real state is advanced
-            // by `replace_target_def_eq` below, which carries the def-eq
-            // obligation. But `test_ratchet_no_new_inplace_target_mutations`
-            // scans SYNTACTICALLY for `.target = `, and cannot see that
-            // distinction; it flagged this as a 7th in-place mutation against a
-            // baseline of 6. Building the fallback by struct-update keeps the
-            // behaviour identical and keeps the ratchet meaningful, rather than
-            // raising a soundness baseline for a site that is not a soundness
-            // bypass.
-            let reduced_goal = Goal {
-                target: reduced.clone(),
-                ..goal.clone()
-            };
-            if state.replace_target_def_eq(reduced).is_ok() {
-                let cur = state.current_goal().cloned().unwrap_or(reduced_goal);
-                return tauto_prove(state, &cur, depth + 1, max_depth);
-            }
-        }
-
-        Ok(false)
-    })
-}
+/// Per-dead-end cap on collected split-atom candidates.
+///
+/// Bounds per-dead-end ATTEMPTS (a failed `by_cases` still consumes budget);
+/// goal-target leaves are collected before hypothesis leaves so large
+/// imported contexts cannot drain the budget on context junk.
+const MAX_ATOM_CANDIDATES: usize = 4;
 
 /// Generate a fresh hypothesis name
 pub(crate) fn fresh_hyp_name(local_ctx: &[LocalDecl], base: &str) -> String {

@@ -1,0 +1,76 @@
+{
+ "chain": "ir_br",
+ "body": "expr::bvar_in_range",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. On this chain every aggregate lane is EMPTY, and that is a measurement: the body takes three u32 arguments BY VALUE, performs no load, and names no enum or struct anywhere -- reader A's crate_enum_ids_seen and crate_struct_ids_seen are both [] on the laneREG wc-REG dump_O3 2026-08-21 dump. The table still exists because the INTERFACE half is load-bearing: three by-value integer parameters and two Bool join parameters are exactly the slots a widened twin would hide in.",
+ "how_it_is_used": "`ir_mint::mint` reads the (empty) aggregate lanes -- so the minted script carries no alias line -- and `ir_mint::project` compares the emitted header and block-parameter rows against the `interface` object below, refusing a body whose interface is not the pinned one.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print: every parameter's TYPE, every `align` operand and the KINDS of trailing annotation clause. Read `ir_h2.tags.json`'s `interface_what` for why they are pinned here rather than in the module. On this chain the sharp slots are the three parameter WIDTHS (`bb0(%0: u32, %1: u32, %2: u32)`: ir_int_cmp canonicalizes both operands at the width the instruction carries, so a u16 or u64 twin computes a different function through the same CFG) and the two join widths (`bb3(%3: bool)` / `bb6(%4: bool)`).",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED, because it moves. No token on this chain names a crate-level id, so canonical and observed coincide. Reader A's own record on the laneREG wc-REG dump_O3 2026-08-21 dump: `param_tys_erased: [\"U32\", \"U32\", \"U32\"]`, `block_param_tys_erased: [\"bb3:Bool\", \"bb6:Bool\"]`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Both are printed by `Display for Function` only when they are not the default. Read the notes in ir_h2.tags.json.",
+  "functy": 467,
+  "functy_note": "Pinned VERBATIM and re-pinned under review: a body has one header signature, so there is nothing to intern it against, and the emitted text carries no signature table. The producer A/B record has this index at 641/641/465 over its three dumps and reader A's 2026-08-21 laneREG dump says 464, all with the instruction text byte-identical -- the recorded whole-crate drift class. The pin compares reader B's header against the FIXTURE-ERA 467; reader A's value is RECORDED in ir_br.mint.json, NEVER COMPARED, like observed_ty.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "u32",
+    "observed_ty": "u32",
+    "rust_type": "idx: u32",
+    "note": "The index under test. BY VALUE -- this body performs no load at all."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "u32",
+    "observed_ty": "u32",
+    "rust_type": "start: u32",
+    "note": "The closed end. Compared twice, in bb1 and bb2 -- the recomputation is the short circuit's residue and the core module carries it as two distinct SSA results."
+   },
+   {
+    "block": 0,
+    "index": 2,
+    "ssa": 2,
+    "ty": "u32",
+    "observed_ty": "u32",
+    "rust_type": "end: u32",
+    "note": "The open end, first compared against the u32::MAX sentinel the entry block materializes."
+   }
+  ],
+  "block_params": [
+   {
+    "block": 3,
+    "index": 0,
+    "ssa": 3,
+    "ty": "bool",
+    "observed_ty": "bool",
+    "note": "The OUTER join -- the only block that returns. Both arms of the source `if` funnel here by different routes."
+   },
+   {
+    "block": 6,
+    "index": 0,
+    "ssa": 4,
+    "ty": "bool",
+    "observed_ty": "bool",
+    "note": "The INNER join -- the short circuit's merge, which immediately branches into the outer join. A transcription that collapsed the two joins would agree on every answer and be a different graph."
+   }
+  ],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement: this body contains no memory instruction of any kind.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `expr::bvar_in_range` calls NOTHING: its coverage row records zero calls, reader A's `crate_func_ids_seen` is the single entry [3751] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`, under which reader B reserves canonical index 0 and interns callees from 1; with no callee that is exactly reader A's numbering. `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`, so this cannot silently become the 2026-08-20 namespace collision."
+}

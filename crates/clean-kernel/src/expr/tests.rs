@@ -4659,4 +4659,141 @@ mod tests {
         let result = e.clone().lift(1).instantiate(&v);
         assert_eq!(result, e, "inst(lift(nested Lam, 1), v) identity");
     }
+
+    // ── Lean-notation pretty-printing (queue-B rank 7, M half) ──────────────
+    //
+    // `Display` is what every editor surface renders: infoview goals, hover,
+    // completion detail, signature help, diagnostics, code lenses. These pin
+    // the notation layer — an unnotated printer produced
+    // `Eq {1} Nat (HAdd.hAdd {0, 0, 0} Nat Nat Nat instHAddNat …)` where Lean
+    // shows `1 + 1 = 2`.
+
+    /// `@OfNat.ofNat Nat n (instOfNatNat n)` — how a Lean numeral elaborates.
+    fn numeral(n: u64) -> Expr {
+        let nat = Expr::const_str("Nat");
+        Expr::app(
+            Expr::app(
+                Expr::app(
+                    Expr::const_str_levels("OfNat.ofNat", vec![Level::zero()]),
+                    nat,
+                ),
+                Expr::nat_lit(n),
+            ),
+            Expr::app(Expr::const_str("instOfNatNat"), Expr::nat_lit(n)),
+        )
+    }
+
+    /// `@HAdd.hAdd Nat Nat Nat instHAddNat a b`.
+    fn nat_add(a: Expr, b: Expr) -> Expr {
+        let nat = || Expr::const_str("Nat");
+        let head = Expr::const_str_levels(
+            "HAdd.hAdd",
+            vec![Level::zero(), Level::zero(), Level::zero()],
+        );
+        let spine = Expr::app(
+            Expr::app(Expr::app(Expr::app(head, nat()), nat()), nat()),
+            Expr::const_str("instHAddNat"),
+        );
+        Expr::app(Expr::app(spine, a), b)
+    }
+
+    /// `@Eq Nat a b`.
+    fn nat_eq(a: Expr, b: Expr) -> Expr {
+        let head = Expr::const_str_levels("Eq", vec![Level::succ(Level::zero())]);
+        Expr::app(
+            Expr::app(Expr::app(head, Expr::const_str("Nat")), a),
+            b,
+        )
+    }
+
+    #[test]
+    fn test_display_renders_lean_notation_for_arithmetic_equation() {
+        // The exact goal measured at the LSP wire for
+        // `theorem leftover : (1 : Nat) + 1 = 2 := by skip`.
+        let goal = nat_eq(nat_add(numeral(1), numeral(1)), numeral(2));
+        assert_eq!(format!("{goal}"), "1 + 1 = 2");
+    }
+
+    #[test]
+    fn test_display_suppresses_universe_levels_on_constants() {
+        // Lean's default is `pp.universes false`; `List.{0} Nat` reads
+        // `List Nat`.
+        let e = Expr::app(
+            Expr::const_str_levels("List", vec![Level::zero()]),
+            Expr::const_str("Nat"),
+        );
+        assert_eq!(format!("{e}"), "List Nat");
+    }
+
+    #[test]
+    fn test_display_application_head_needs_no_parentheses_around_relation() {
+        // `Nat.myTriple n = n + n + n` — an application binds tighter than
+        // `=`, so neither side is parenthesised, and `+` is left-associative
+        // so the right side is a flat chain.
+        let n = Expr::fvar(FVarId(7));
+        let lhs = Expr::app(Expr::const_str("Nat.myTriple"), n.clone());
+        let rhs = nat_add(nat_add(n.clone(), n.clone()), n);
+        assert_eq!(
+            format!("{}", nat_eq(lhs, rhs)),
+            "Nat.myTriple fvar#7 = fvar#7 + fvar#7 + fvar#7"
+        );
+    }
+
+    #[test]
+    fn test_display_right_associative_power_parenthesises_left_operand() {
+        // `^` is right-associative: `(a ^ b) ^ c` must keep its parentheses,
+        // otherwise the rendering re-reads as `a ^ (b ^ c)`.
+        let pow = |a: Expr, b: Expr| {
+            let nat = || Expr::const_str("Nat");
+            let head = Expr::const_str_levels(
+                "HPow.hPow",
+                vec![Level::zero(), Level::zero(), Level::zero()],
+            );
+            let spine = Expr::app(
+                Expr::app(Expr::app(Expr::app(head, nat()), nat()), nat()),
+                Expr::const_str("instHPowNat"),
+            );
+            Expr::app(Expr::app(spine, a), b)
+        };
+        let inner = pow(numeral(2), numeral(3));
+        assert_eq!(format!("{}", pow(inner, numeral(4))), "(2 ^ 3) ^ 4");
+    }
+
+    #[test]
+    fn test_display_partial_application_is_not_printed_as_an_operator() {
+        // `@HAdd.hAdd Nat Nat Nat instHAddNat 1` is a *function*, not a sum.
+        // Printing it `1 + ` (or dropping an operand) would be a lie, so the
+        // notation table demands the exact arity and this falls back to
+        // juxtaposition.
+        let nat = || Expr::const_str("Nat");
+        let head = Expr::const_str_levels(
+            "HAdd.hAdd",
+            vec![Level::zero(), Level::zero(), Level::zero()],
+        );
+        let partial = Expr::app(
+            Expr::app(
+                Expr::app(Expr::app(Expr::app(head, nat()), nat()), nat()),
+                Expr::const_str("instHAddNat"),
+            ),
+            numeral(1),
+        );
+        assert_eq!(
+            format!("{partial}"),
+            "HAdd.hAdd Nat Nat Nat instHAddNat 1"
+        );
+    }
+
+    #[test]
+    fn test_display_carries_no_rust_debug_shapes() {
+        // The property the LSP wire test asserts, pinned at the printer
+        // itself: no derived-Debug fragment may survive into a rendering.
+        let goal = nat_eq(nat_add(numeral(1), numeral(1)), numeral(2));
+        let rendered = format!("{goal}");
+        for banned in ["lean4_hash", "Const(Name", "App(", "Nat(Small(", "Succ(Zero)"] {
+            assert!(
+                !rendered.contains(banned),
+                "Display leaked the Rust Debug fragment {banned:?}: {rendered}"
+            );
+        }
+    }
 }

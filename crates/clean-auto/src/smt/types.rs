@@ -34,7 +34,7 @@ impl TermId {
 
 /// Signed integer value used in SMT terms.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum SmtInt {
+pub(crate) enum SmtInt {
     /// Non-negative integer.
     NonNegative(BigNat),
     /// Negative integer with absolute value.
@@ -81,7 +81,7 @@ impl std::fmt::Display for SmtInt {
 
 /// Internal term representation
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum SmtTerm {
+pub(crate) enum SmtTerm {
     /// A constant/variable
     Const(Symbol),
     /// Function application
@@ -97,7 +97,7 @@ pub enum SmtTerm {
 /// Result of SMT solving
 #[derive(Clone, Debug)]
 #[must_use = "SMT results should be inspected to determine satisfiability"]
-pub enum SmtResult {
+pub(crate) enum SmtResult {
     /// Satisfiable with the given model
     Sat(SmtModel),
     /// Unsatisfiable, optionally with an unsat core
@@ -111,13 +111,17 @@ pub enum SmtResult {
 /// Used for hint-based proof reconstruction (QuerySMT-style).
 /// See: Clune, Barbosa, Avigad, "Hint-Based SMT Proof Reconstruction"
 #[derive(Clone, Debug, Default)]
-pub struct UnsatCore {
+pub(crate) struct UnsatCore {
     /// Clause references that form the unsatisfiable core
     pub(crate) clauses: Vec<ClauseRef>,
 }
 
 /// SMT model
 #[derive(Clone, Debug)]
+// NOT demotable: `SmtModel` is carried by the PUBLIC
+// `bridge::SmtVerificationResult::Refuted(SmtModel)` variant, which clean-elab
+// pattern-matches (tactic/smt/decide/mod.rs). A pub(crate) here is a private
+// type in a public interface — it broke clean-elab and clean-c-sem when tried.
 pub struct SmtModel {
     /// The underlying SAT model
     pub(crate) sat_model: Vec<bool>,
@@ -150,7 +154,7 @@ impl SmtModel {
 /// maps trail entries back to hypotheses to guide proof term construction
 /// instead of blind search.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ProofTrailEntry {
+pub(crate) enum ProofTrailEntry {
     /// Theory found a conflict: these literals are mutually inconsistent.
     /// The SAT solver added the negation as a blocking clause.
     TheoryConflict {
@@ -185,7 +189,7 @@ pub enum ProofTrailEntry {
 
 /// SMT solver statistics
 #[derive(Clone, Debug, Default)]
-pub struct SmtStats {
+pub(crate) struct SmtStats {
     pub(crate) num_vars: usize,
     pub(crate) num_clauses: usize,
     pub(crate) num_terms: usize,

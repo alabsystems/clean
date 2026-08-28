@@ -343,6 +343,76 @@ pub(super) fn setup_env_for_finite_cases() -> Environment {
     env
 }
 
+/// Declare Lean 4 core's `forall_congr` (`Init/SimpLemmas.lean`):
+///
+/// ```text
+/// theorem forall_congr {α : Sort u} {p q : α → Prop}
+///     (h : ∀ a, p a = q a) : (∀ a, p a) = (∀ a, q a)
+/// ```
+///
+/// `simp`'s `mk_forall_congr` builds against exactly this signature — `Eq` in,
+/// `Eq` out, no `propext` — and REFUSES to emit a proof when the environment
+/// has no `forall_congr` or has one whose conclusion is not an equation. Test
+/// environments that want the Pi-body congruence path therefore have to
+/// declare it.
+pub(super) fn add_lean_forall_congr(env: &mut Environment) {
+    let prop = Expr::prop();
+    let u = Name::from_string("u");
+    // `@Eq.{1} Prop a b` — α = Prop : Sort 1, so Eq sits at level 1.
+    let prop_eq = |a: Expr, b: Expr| {
+        Expr::app(
+            Expr::app(
+                Expr::app(
+                    Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+                    Expr::prop(),
+                ),
+                a,
+            ),
+            b,
+        )
+    };
+    // Under (α, p, q): α = BVar 2, p = BVar 1, q = BVar 0; one more binder for
+    // `a` shifts each by one.
+    let pointwise = Expr::pi(
+        BinderInfo::Default,
+        Expr::bvar(2),
+        prop_eq(
+            Expr::app(Expr::bvar(2), Expr::bvar(0)),
+            Expr::app(Expr::bvar(1), Expr::bvar(0)),
+        ),
+    );
+    // Under (α, p, q, h): α = BVar 3, p = BVar 2, q = BVar 1.
+    let all_p = Expr::pi(
+        BinderInfo::Default,
+        Expr::bvar(3),
+        Expr::app(Expr::bvar(3), Expr::bvar(0)),
+    );
+    let all_q = Expr::pi(
+        BinderInfo::Default,
+        Expr::bvar(3),
+        Expr::app(Expr::bvar(2), Expr::bvar(0)),
+    );
+    let ty = Expr::pi(
+        BinderInfo::Default,
+        Expr::sort(Level::param(u.clone())),
+        Expr::pi(
+            BinderInfo::Default,
+            Expr::pi(BinderInfo::Default, Expr::bvar(0), prop.clone()),
+            Expr::pi(
+                BinderInfo::Default,
+                Expr::pi(BinderInfo::Default, Expr::bvar(1), prop),
+                Expr::pi(BinderInfo::Default, pointwise, prop_eq(all_p, all_q)),
+            ),
+        ),
+    );
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("forall_congr"),
+        level_params: vec![u],
+        type_: ty,
+    })
+    .expect("test environment must accept Lean's forall_congr signature");
+}
+
 /// Setup environment with Eq + Eq.subst + Eq.symm + N + x,y,z:N + P:N→Prop
 ///
 /// Shared helper for rewrite, equality, and at-location test files.
@@ -558,6 +628,7 @@ mod decide_eq_noconfusion_shape;
 mod decide_eq_wrapper_parity;
 mod decide_fallback_routing;
 mod domain_profile;
+mod dsimp_finisher;
 mod equality;
 mod extensionality;
 mod field_simp_proof_carry;
@@ -608,10 +679,12 @@ mod proj_mdata_traversal;
 mod project_mathverse;
 mod proof_scope_wideners;
 mod propositional;
+mod propositional_atom_split;
 mod proptest_simp_soundness;
 mod reduce_eq;
 mod replace_target;
 mod replace_target_witness;
+mod rewrite_def_unfold;
 mod rewrite_subst;
 mod rfl_prod_cases_on;
 mod ring_hadd_hmul;
@@ -628,17 +701,22 @@ mod ring_roundtrip;
 mod search_tactics;
 mod seq_focus;
 mod simp;
+mod simp_binder_congruence_proof;
+mod simp_budget_refusal;
 mod simp_local_context;
 mod simp_multi_binder_proof;
 mod simp_perf_cache;
 mod simp_proof_carry;
+mod simp_star_hypotheses;
 mod simp_unfold_defs;
 mod simp_universe_levels;
+mod simpa_using_term_type;
 mod simproc;
 mod sorry_absence;
 mod sorry_census;
 mod sorry_runtime;
 mod surface_expr_to_name;
+mod tactic_let_pattern;
 mod tactic_parity_registry;
 mod trusted_arith;
 mod trusted_axiom_fallback_sites;

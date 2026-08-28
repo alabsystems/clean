@@ -1,0 +1,931 @@
+{
+ "schema": "clean.crystal.g25_condbr_head/2",
+ "date": "2026-08-24",
+ "lane": "LANE G25 \u2014 family D (the condbr-headed pair) BUILT and measured, and the residual re-derived at the tip with a CONVERTING CONTROL for every refusal that has one",
+ "question": "Lane F8B answered `no, neither `combine` nor `clamp_u32` is marker-only` and named what each needs. Do the two things it named \u2014 a plan-gated condition temp for the `||`/`&&` sugar head, and a delayed defining statement for a marked operand at a non-leftmost position \u2014 actually convert them, and what is left after that?",
+ "provenance": {
+  "method": "two sealed drivers from ONE detached trust worktree at ONE rev, each whole-crate clean-kernel at -O3 / -O0 / -O3+noflip against one PINNED clean corpus; probes dumped through the CONTROL and the SUBJECT",
+  "trust_base": "52e0a70314 + lane F8B's LANDED flip path \u2014 the control's to_mir.rs blob is 593e595c3e, which is trust a7459f92b4's verbatim",
+  "clean_corpus_rev": "1852198c0a5e35bf5cf9f32033dd427ac0a0229e",
+  "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13)",
+  "trust_commit": "742ad58b099bd4509c326cce5531ebdbde50bf74 (pushed to trust main on top of 0fde9ff0e6; pre-push GREEN on all four legs including measurement provenance, 4 `Measured-on:` trailers, every stamp naming a tree the commit carries)",
+  "landed_blobs": {
+   "crates/trust-thir-lower/src/to_mir.rs": "26e06222d4db5f98d9231176f5bd89b379ad7f26",
+   "compiler/rustc_session/src/options.rs": "6784b23d8c23bcc82513ead1d853f58ed33e8c9d",
+   "compiler/rustc_driver_impl/src/lib.rs": "44069c2b0d1729fa86be425b5d348a9b878593f1",
+   "compiler/rustc_driver_impl/src/tests.rs": "7cf9e994c328a963bda9e178101cf18d34336604"
+  },
+  "the_landed_blobs_were_COMPILED_AND_TESTED": "`cargo test --locked --release -p trust-thir-lower --lib` against exactly those four blobs: `ok. 795 passed; 0 failed`. That is what makes the test-count claim and the `Measured-on:` stamps the SAME tree, and it is also the only run that establishes the REBASED combination (this lane's diff on top of wall A) compiles at all \u2014 no earlier run did.",
+  "drivers": {
+   "control": "$HOME/trust/scratchpad/laneG25/seal-ctl",
+   "subject": "$HOME/trust/scratchpad/laneG25/seal-subj"
+  },
+  "driver_digests": {
+   "control": "284268ba9449ade90434a7e2615261862dc4ae8f14076c4497bf22310886905e",
+   "subject": "0035be016f5bc3be47a7fa3d14dd9f169f82d008821ebdd5d1278232d80698f0"
+  },
+  "subject_flip_path_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "e92e026609f1ac954bd333a63bbe55e86dd370f5",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "f8c322b777a7e8896aa51772a28402134fdd2464",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+  },
+  "control_flip_path_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "e92e026609f1ac954bd333a63bbe55e86dd370f5",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "593e595c3e6109a6032897c642dfe637e60a5fe0",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+  },
+  "mcor_flip_path_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "e92e026609f1ac954bd333a63bbe55e86dd370f5",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "0ecca5c60ee9c034b12e5d9bdc2a5d24989d4fca",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+  },
+  "flip_path_files_that_differ_control_vs_subject": [
+   "crates/trust-thir-lower/src/to_mir.rs"
+  ],
+  "flip_path_files_that_differ_subject_vs_mcor": [
+   "crates/trust-thir-lower/src/to_mir.rs"
+  ],
+  "the_FROZEN_oracle": {
+   "file": "crates/trust-thir-lower/src/mir_differential.rs",
+   "blob": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "identical_across_drivers": true
+  },
+  "only_file_that_differs": "crates/trust-thir-lower/src/to_mir.rs (plus the three driver-side files that REGISTER the `g25-hoist` SAT class); the FROZEN mir_differential.rs (the ORACLE) is byte-identical across both drivers",
+  "instruments": {
+   "census": "laneG25/analyze.py (laneGAP2's analyze3.py via laneF8/laneF8B, unchanged)",
+   "ab": "laneG25/compare.py (laneGAP/laneS3's, unchanged)",
+   "markers": "laneG25/markers.py + graph.py (lane R53's canon_markers re-implementation and lane F8's fine-order renderer, unchanged)",
+   "scan": "laneG25/scan_sc.py (this lane's \u2014 the statement-call-sequence blast radius)",
+   "probes": "laneG25/probes/{g25,g25b,g25c,g25d,f8b}.rs"
+  }
+ },
+ "baseline_reconciliation": {
+  "claim": "this lane's CONTROL reproduces the standing CODEGEN baseline exactly and differs from lane F8B's ctfe count by one at each level, and the cause is the CLEAN CORPUS, not the flip path",
+  "standing_baseline_2026-08-23": "-O3 593 + 42 ctfe, -O0 617 + 43 ctfe, residual gap 25",
+  "this_lane_control": "-O3 593 + 41 ctfe, -O0 617 + 42 ctfe, residual gap 25",
+  "why": "lane F8B measured 13,879 bodies on clean 51c893ce5; this lane measures 13,881 on clean 1852198c0a5e \u2014 the corpus moved by two bodies and one ctfe flip. The CODEGEN counts (593 / 617) and the GAP (25) are identical, the control's flip path is lane F8B's landed to_mir.rs blob 593e595c3e verbatim, and the SUBJECT measures the same ctfe counts as the control (41 / 42), so nothing this lane did moved a ctfe row.",
+  "control_to_mir_blob": "593e595c3e6109a6032897c642dfe637e60a5fe0 (= trust a7459f92b4's, lane F8B's landed subject)",
+  "the_tip_is_ONE_COMMIT_further": "trust origin/main's to_mir.rs is 34bd31250c \u2014 wall A (ade2fb94f4) added `SigSource::Instance` and `rederive_abi_sig_at_instance` on top. The standing baseline records wall A as level-symmetric with 0 gap bodies, and the landed file here is this lane's diff REBASED onto it."
+ },
+ "census_control": {
+  "totals": {
+   "bodies": 13881,
+   "agreed": 1591,
+   "agreed_markers_exact": 1566,
+   "codegen_flips_O3": 593,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 41,
+   "ctfe_flips_O0": 42,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "54c2b14bbb6a16cfe5cc6f6eaadac4eae3f9cc1c1451ce6dba1046087e2080ea",
+   "coverage_O0_sha256": "54c2b14bbb6a16cfe5cc6f6eaadac4eae3f9cc1c1451ce6dba1046087e2080ea",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": 25,
+  "gap_detail": {
+   "size": 25,
+   "by_kind": {
+    "fn": 24,
+    "const-init": 1
+   },
+   "partition_by_channel": {
+    "derived-end@0": 25
+   },
+   "partition_sums_to_gap": true,
+   "shape_overlay": {
+    "other": 19,
+    "WB8-named-chain": 3,
+    "chain-forward (all-calls, unnamed)": 2,
+    "NO-TRUST-IR-BODY": 1
+   },
+   "first_divergence_built_types_derived_end_at_0": {
+    "bool": 9,
+    "()": 7,
+    "u32": 3,
+    "&core::cell::Cell": 1,
+    "adt:clean_kernel::expr::sorry::SorryFlags": 1,
+    "u64": 1,
+    "&clean_kernel::level::Level": 1,
+    "adt:clean_kernel::memory_model::AllocationId": 1,
+    "usize": 1
+   },
+   "first_divergence_built_types_by_shape": {
+    "other": {
+     "bool": 7,
+     "()": 5,
+     "u32": 2,
+     "&core::cell::Cell": 1,
+     "adt:clean_kernel::expr::sorry::SorryFlags": 1,
+     "u64": 1,
+     "adt:clean_kernel::memory_model::AllocationId": 1,
+     "usize": 1
+    },
+    "WB8-named-chain": {
+     "bool": 2,
+     "&clean_kernel::level::Level": 1
+    },
+    "NO-TRUST-IR-BODY": {
+     "u32": 1
+    },
+    "chain-forward (all-calls, unnamed)": {
+     "()": 2
+    }
+   }
+  }
+ },
+ "census_subject": {
+  "totals": {
+   "bodies": 13881,
+   "agreed": 1591,
+   "agreed_markers_exact": 1568,
+   "codegen_flips_O3": 595,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 41,
+   "ctfe_flips_O0": 42,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "2cf4d21406a504aacdeeac07eaa1185750668153f7529036cc21089810941ec0",
+   "coverage_O0_sha256": "2cf4d21406a504aacdeeac07eaa1185750668153f7529036cc21089810941ec0",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": 23,
+  "gap_detail": {
+   "size": 23,
+   "by_kind": {
+    "fn": 22,
+    "const-init": 1
+   },
+   "partition_by_channel": {
+    "derived-end@0": 23
+   },
+   "partition_sums_to_gap": true,
+   "shape_overlay": {
+    "other": 17,
+    "WB8-named-chain": 3,
+    "chain-forward (all-calls, unnamed)": 2,
+    "NO-TRUST-IR-BODY": 1
+   },
+   "first_divergence_built_types_derived_end_at_0": {
+    "bool": 7,
+    "()": 7,
+    "u32": 3,
+    "&core::cell::Cell": 1,
+    "adt:clean_kernel::expr::sorry::SorryFlags": 1,
+    "u64": 1,
+    "&clean_kernel::level::Level": 1,
+    "adt:clean_kernel::memory_model::AllocationId": 1,
+    "usize": 1
+   },
+   "first_divergence_built_types_by_shape": {
+    "other": {
+     "bool": 5,
+     "()": 5,
+     "u32": 2,
+     "&core::cell::Cell": 1,
+     "adt:clean_kernel::expr::sorry::SorryFlags": 1,
+     "u64": 1,
+     "adt:clean_kernel::memory_model::AllocationId": 1,
+     "usize": 1
+    },
+    "WB8-named-chain": {
+     "bool": 2,
+     "&clean_kernel::level::Level": 1
+    },
+    "NO-TRUST-IR-BODY": {
+     "u32": 1
+    },
+    "chain-forward (all-calls, unnamed)": {
+     "()": 2
+    }
+   }
+  }
+ },
+ "whole_crate_subject_vs_control": {
+  "base": "$HOME/trust/scratchpad/laneG25/wc-ctl",
+  "subject": "$HOME/trust/scratchpad/laneG25/wc-subj",
+  "O3": {
+   "codegen_base": 593,
+   "codegen_subject": 595,
+   "ctfe_base": 41,
+   "ctfe_subject": 41,
+   "gained": 2,
+   "lost": 0,
+   "gained_names": [
+    "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+    "tc::heartbeat_profiler::types::clamp_u32"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 617,
+   "codegen_subject": 617,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 2
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+   "tc::heartbeat_profiler::types::clamp_u32"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1591,
+   "subject_agreed": 1591,
+   "base_markers_exact": 1566,
+   "subject_markers_exact": 1568
+  }
+ },
+ "per_body_marker_line_counts": {
+  "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine": {
+   "ctl": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic": "8 canonical line(s) identical"
+   },
+   "subj": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical",
+    "semantic": "8 canonical line(s) identical"
+   }
+  },
+  "tc::heartbeat_profiler::types::clamp_u32": {
+   "ctl": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic": "6 canonical line(s) identical"
+   },
+   "subj": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "10 marker line(s) identical",
+    "semantic": "6 canonical line(s) identical"
+   }
+  }
+ },
+ "probe_confirmation_before_the_whole_crate_run": {
+  "claim": "the SUBJECT driver converts both family-D bodies on their probes, and the counts are exactly the ones DERIVATION.md predicted BEFORE the driver was built",
+  "control": {
+   "V::p4": "agreed, markers_exact false, `markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>``, 8 canonical line(s) identical",
+   "p5": "agreed, markers_exact false, same first divergence, 6 canonical line(s) identical"
+  },
+  "subject": {
+   "V::p4": "agreed, markers_exact TRUE, `2 marker line(s) identical`, 8 canonical line(s) identical",
+   "p5": "agreed, markers_exact TRUE, `10 marker line(s) identical`, 6 canonical line(s) identical"
+  },
+  "prediction_stated_first": "DERIVATION.md, written before the subject driver existed: `combine` TWO marker lines, `clamp_u32` TEN"
+ },
+ "the_population_that_can_lose_is_SCANNED": {
+  "instrument": "laneG25/scan.py over the whole-crate trust-ir TEXT dump",
+  "bodies_scanned": 7072,
+  "note": "the text dump carries the 7,072 bodies the producer emits a function for; the coverage table's 13,881 rows include every body the differential considered, `unsupported` ones among them",
+  "sugar_shape_hits": [
+   "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine"
+  ],
+  "delay_shape_hits": [
+   "tc::heartbeat_profiler::types::clamp_u32"
+  ],
+  "reading": "the population that this lane can newly admit \u2014 and therefore the only population that can LOSE a verdict through the marker law \u2014 is exactly the two bodies it converts. The sugar scan is SPAN-AGNOSTIC, so 1 is also the M-COR's blast radius."
+ },
+ "probe_level_A_B": {
+  "totals": {
+   "probe_files": 7,
+   "bodies_compared": 84,
+   "gained": 2,
+   "lost": 0,
+   "verdict_moves": 0,
+   "semantic_detail_moves": 0
+  },
+  "per_file": {
+   "f8b": {
+    "bodies": 12,
+    "markers_exact_gained": [
+     "V::p4",
+     "p5"
+    ],
+    "markers_exact_lost": [],
+    "verdict_moves": [],
+    "semantic_detail_moves": [],
+    "gained_detail": {
+     "V::p4": {
+      "ctl": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+      "subj": "2 marker line(s) identical"
+     },
+     "p5": {
+      "ctl": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+      "subj": "10 marker line(s) identical"
+     }
+    }
+   },
+   "g25": {
+    "bodies": 27,
+    "markers_exact_gained": [],
+    "markers_exact_lost": [],
+    "verdict_moves": [],
+    "semantic_detail_moves": [],
+    "gained_detail": {}
+   },
+   "g25b": {
+    "bodies": 13,
+    "markers_exact_gained": [],
+    "markers_exact_lost": [],
+    "verdict_moves": [],
+    "semantic_detail_moves": [],
+    "gained_detail": {}
+   },
+   "g25c": {
+    "bodies": 5,
+    "markers_exact_gained": [],
+    "markers_exact_lost": [],
+    "verdict_moves": [],
+    "semantic_detail_moves": [],
+    "gained_detail": {}
+   },
+   "g25d": {
+    "bodies": 8,
+    "markers_exact_gained": [],
+    "markers_exact_lost": [],
+    "verdict_moves": [],
+    "semantic_detail_moves": [],
+    "gained_detail": {}
+   },
+   "k": {
+    "bodies": 8,
+    "markers_exact_gained": [],
+    "markers_exact_lost": [],
+    "verdict_moves": [],
+    "semantic_detail_moves": [],
+    "gained_detail": {}
+   },
+   "k2": {
+    "bodies": 11,
+    "markers_exact_gained": [],
+    "markers_exact_lost": [],
+    "verdict_moves": [],
+    "semantic_detail_moves": [],
+    "gained_detail": {}
+   }
+  }
+ },
+ "perturbation_g25_hoist_PROBE": {
+  "scope": "the PROBE crate (probes/f8b.rs), through the SEALED drivers \u2014 no gate slot, one rustc per run; the whole-crate form is the row-exact A/B and is reported separately",
+  "class": "g25-hoist \u2014 the `||`/`&&` sugar condition temp and the delayed cast, each MOVED to a position the plan never puts it at with the TOTAL unchanged, so the marker law stays green and only the FROZEN ORACLE can refuse the result",
+  "flips": {
+   "control": 3,
+   "subject": 5,
+   "subject_perturbed": 3
+  },
+  "flip_names": {
+   "control": [
+    "pf8b[ad1e]::p1",
+    "pf8b[ad1e]::p2",
+    "pf8b[ad1e]::{impl#0}::p3"
+   ],
+   "subject": [
+    "pf8b[ad1e]::p1",
+    "pf8b[ad1e]::p2",
+    "pf8b[ad1e]::p5",
+    "pf8b[ad1e]::{impl#0}::p3",
+    "pf8b[ad1e]::{impl#1}::p4"
+   ],
+   "subject_perturbed": [
+    "pf8b[ad1e]::p1",
+    "pf8b[ad1e]::p2",
+    "pf8b[ad1e]::{impl#0}::p3"
+   ]
+  },
+  "gained_subject_vs_control": [
+   "pf8b[ad1e]::p5",
+   "pf8b[ad1e]::{impl#1}::p4"
+  ],
+  "lost_subject_vs_control": [],
+  "removed_by_the_perturbation": [
+   "pf8b[ad1e]::p5",
+   "pf8b[ad1e]::{impl#1}::p4"
+  ],
+  "regressed_by_the_perturbation_vs_control": [],
+  "applications": {
+   "pf8b[ad1e]::CM::A::{constant#0}": 0,
+   "pf8b[ad1e]::CM::B::{constant#0}": 0,
+   "pf8b[ad1e]::CM::C::{constant#0}": 0,
+   "pf8b[ad1e]::CM::D::{constant#0}": 0,
+   "pf8b[ad1e]::CM::E::{constant#0}": 0,
+   "pf8b[ad1e]::CM::F::{constant#0}": 0,
+   "pf8b[ad1e]::p1": 0,
+   "pf8b[ad1e]::p2": 0,
+   "pf8b[ad1e]::{impl#0}::p3": 0,
+   "pf8b[ad1e]::{impl#1}::p4": 1,
+   "pf8b[ad1e]::p5": 1
+  },
+  "applications_nonzero": {
+   "pf8b[ad1e]::{impl#1}::p4": 1,
+   "pf8b[ad1e]::p5": 1
+  },
+  "applications_zero_count": 9,
+  "reading": "the subject gains exactly the two family-D bodies and loses nothing; the sealed-plan control removes exactly those two, regresses nothing against the control, and REACHES them (`applications=1` on each, 0 on every other body the control saw)"
+ },
+ "perturbation_g25_hoist_WHOLE_CRATE": {
+  "runs": {
+   "pertA": {
+    "class": "g25-hoist",
+    "flips_O3": {
+     "control": 634,
+     "subject": 636,
+     "subject_perturbed": 634
+    },
+    "removed_by_the_perturbation": [
+     "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+     "tc::heartbeat_profiler::types::clamp_u32"
+    ],
+    "gained_by_the_perturbation": [],
+    "regressed_vs_control": [],
+    "applications_rows_seen": 1595,
+    "applications_nonzero": {
+     "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine": 1,
+     "tc::heartbeat_profiler::types::clamp_u32": 1
+    },
+    "applications_zero": 1593,
+    "coverage_sha256_O3": "2f1f9dc6458a55da7678e371d4f48a678a1dd69c8a74af5cb14089db40651397"
+   },
+   "pert": {
+    "class": "g25-hoist",
+    "flips_O3": {
+     "control": 634,
+     "subject": 636,
+     "subject_perturbed": 634
+    },
+    "removed_by_the_perturbation": [
+     "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+     "tc::heartbeat_profiler::types::clamp_u32"
+    ],
+    "gained_by_the_perturbation": [],
+    "regressed_vs_control": [],
+    "applications_rows_seen": 1595,
+    "applications_nonzero": {
+     "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine": 1,
+     "tc::heartbeat_profiler::types::clamp_u32": 1
+    },
+    "applications_zero": 1593,
+    "coverage_sha256_O3": "2f1f9dc6458a55da7678e371d4f48a678a1dd69c8a74af5cb14089db40651397"
+   }
+  },
+  "independently_reproduced": "the sealed-plan control was run TWICE, as two separate whole-crate compiles through the same sealed subject driver (`wc-pertA` and `wc-pert`, 40 minutes apart and on different gate admissions). Every field agrees, coverage digest included.",
+  "all_fields_identical": true
+ },
+ "unit_tests": {
+  "ctl": "NOT MEASURED (no $HOME/trust/scratchpad/laneG25/test-ctl.log)",
+  "subj": {
+   "passed": 792,
+   "failed": 1,
+   "result_lines": 1
+  },
+  "subj2": {
+   "passed": 795,
+   "failed": 0,
+   "result_lines": 1
+  },
+  "land": {
+   "passed": 795,
+   "failed": 0,
+   "result_lines": 1
+  },
+  "mcor": {
+   "passed": 794,
+   "failed": 1,
+   "result_lines": 1
+  }
+ },
+ "unit_test_finding": {
+  "headline": "THE SUBJECT'S OWN UNIT SUITE WAS RED, AND THE TEST WAS ASSERTING SOMETHING FALSE.",
+  "first_run": {
+   "command": "cargo test --locked --release -p trust-thir-lower --lib",
+   "result": "FAILED. 792 passed; 1 failed; 0 ignored",
+   "failing_test": "to_mir::branch_marker_plan_tests::a_leftmost_cast_is_not_delayed",
+   "panic": "to_mir.rs:23704: `body should be inside the multi-block marker class`"
+  },
+  "root_cause": "the test asked `clamp_u32(swap = true)` \u2014 the corpus body with the comparison's operands exchanged, so the CAST is leftmost \u2014 to be ADMITTED with an empty delay set. It is not admitted. That body's comparison result IS the `CondBr` condition and therefore MARKED, and ORDERING RULE (1) (a marked result may not take a marked operand) refuses the whole body. Rule (1) is lane K's, unchanged by this lane, and it already refuses this shape at HEAD \u2014 so the test's own comment (`bodies in that shape FLIP today`) was false as well.",
+  "why_it_did_not_show_up_in_the_whole_crate_run": "the corpus body is `clamp_u32(swap = false)`, the NON-leftmost order, which is admitted and delayed and is one of the two bodies this lane converts. The failing test is about the leftmost twin, which the corpus does not contain.",
+  "repair": {
+   "what": "the false assertion is replaced by THREE tests, and the claim it meant to pin \u2014 the delay is taken at a non-leftmost operand position and nowhere else \u2014 is pinned in a body the plan ACCEPTS in both orders (`arm_cast`, whose comparison flows into a `Br` edge argument and is therefore unmarked, keeping rule (1) out of the question)",
+   "tests": [
+    "a_leftmost_cast_in_an_admitted_body_is_not_delayed \u2014 ADMITTED, delay set EMPTY",
+    "the_same_admitted_body_with_the_cast_non_leftmost_is_delayed \u2014 ADMITTED, delay set {v6}; one operand apart from the first, same instructions, same block graph, same marked set",
+    "a_leftmost_cast_under_a_marked_consumer_is_refused_by_ordering_rule_one \u2014 the ORIGINAL fixture, now asserting the refusal that actually happens and naming the rule"
+   ],
+   "strictly_stronger": "the old test made ONE assertion that could not hold; the three make four that do, and they separate the delay's condition from rule (1)'s refusal instead of conflating them",
+   "the_sealed_driver_is_UNAFFECTED_and_that_is_checked_not_asserted": "the whole repair lies in old lines 23901-23908 of `to_mir.rs`, inside `#[cfg(test)] mod branch_marker_plan_tests` (lines 23630-24035). Everything before 23901 and everything after 23908 is byte-identical. `cargo build --release` does not compile `cfg(test)` code, so the SEALED subject driver \u2014 built from the pre-repair file and the source of every whole-crate number in this artifact \u2014 compiles the same non-test source the repaired file does. No re-seal, and no number here moves."
+  },
+  "re_run": {
+   "command": "cargo test --locked --release -p trust-thir-lower --lib (the same command, the repaired worktree)",
+   "result": "ok. 795 passed; 0 failed; 0 ignored",
+   "arithmetic": "793 tests before (792 passing + 1 failing); one removed, three added -> 795, all passing",
+   "the_three_new_tests_all_ran_and_passed": [
+    "to_mir::branch_marker_plan_tests::a_leftmost_cast_in_an_admitted_body_is_not_delayed ... ok",
+    "to_mir::branch_marker_plan_tests::the_same_admitted_body_with_the_cast_non_leftmost_is_delayed ... ok",
+    "to_mir::branch_marker_plan_tests::a_leftmost_cast_under_a_marked_consumer_is_refused_by_ordering_rule_one ... ok"
+   ],
+   "blobs": {
+    "the file the SEALED driver was built from": "f8c322b777a7e8896aa51772a28402134fdd2464",
+    "the file that lands and that these tests ran against": "9de3c063194b08d7e11472bf2b6de210e753381b"
+   },
+   "and_the_difference_is_cfg_test_ONLY_checked": "the two files agree on lines 1..23900 and on everything after old-line 23908; that whole window lies inside `#[cfg(test)] mod branch_marker_plan_tests` (old lines 23630..24035), which `cargo build --release` does not compile. So the sealed driver \u2014 the source of every whole-crate number in this artifact \u2014 compiles the same non-test source the landed file does."
+  }
+ },
+ "mutation_mcor": {
+  "mutation": "DELETE `logical_sugar_head`'s SPAN CLAUSE \u2014 `if c.span? != term_span { return None }` \u2014 the wall that separates the `||`/`&&` desugar (whose short-circuit constant carries the `CondBr`'s OWN `#loc`) from the written-out forms `if a { true } else { b }` and `match a { true => true, false => b }` (whose constant carries the LITERAL's). Everything else is the SUBJECT, byte for byte.",
+  "driver": {
+   "seal": "$HOME/trust/scratchpad/laneG25/seal-mcor",
+   "to_mir_blob": "0ecca5c60ee9c034b12e5d9bdc2a5d24989d4fca",
+   "every_other_flip_path_blob": "IDENTICAL to the control's and the subject's, the FROZEN mir_differential.rs (13cd4f2586\u2026) included"
+  },
+  "prediction_stated_before_the_run": "the sugar scan is SPAN-AGNOSTIC and finds exactly ONE body in the corpus, the same one the span clause admits, so the wall is expected to be VACUOUS HERE: the crate row-exact identical, and the kill carried by the unit test alone.",
+  "whole_crate_vs_the_subject": {
+   "O3": {
+    "codegen_base": 595,
+    "codegen_subject": 595,
+    "ctfe_base": 41,
+    "ctfe_subject": 41,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "O0": {
+    "codegen_base": 617,
+    "codegen_subject": 617,
+    "ctfe_base": 42,
+    "ctfe_subject": 42,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "channel_moves": {},
+   "verdict_regressions": [],
+   "markers_gained": [],
+   "markers_lost": [],
+   "totals": {
+    "base_agreed": 1591,
+    "subject_agreed": 1591,
+    "base_markers_exact": 1568,
+    "subject_markers_exact": 1568
+   }
+  },
+  "coverage_sha256_O3": {
+   "subject": "2cf4d21406a504aacdeeac07eaa1185750668153f7529036cc21089810941ec0",
+   "mcor": "2cf4d21406a504aacdeeac07eaa1185750668153f7529036cc21089810941ec0"
+  },
+  "ROW_EXACT_IDENTICAL": "the -O3 coverage JSON is BYTE-IDENTICAL to the subject's, and the A/B shows zero moves of any kind at BOTH levels \u2014 so the wall is vacuous on this corpus exactly as predicted, and it is the UNIT TEST that carries the kill",
+  "unit_tests": {
+   "passed": 794,
+   "failed": 1
+  },
+  "the_test_it_KILLS": [
+   "to_mir::branch_marker_plan_tests::a_written_out_bool_branch_over_a_bare_param_is_still_refused"
+  ],
+  "and_that_is_the_right_test": "`a_written_out_bool_branch_over_a_bare_param_is_still_refused` exists for exactly this wall: it asserts that `logical_or(46, true)` \u2014 the written-out form, whose constant arm carries the LITERAL's span rather than the operator's \u2014 stays REFUSED. Delete the span clause and the plan admits it, which is the silent flip-loss the wall prevents. One live test, killed by name.",
+  "verdict": "M-COR 4-of-4: whole-crate ROW-EXACT IDENTICAL (byte-identical coverage), exactly ONE live unit test killed, the frozen oracle untouched, and the prediction stated before the run"
+ },
+ "coverage_sha256_O3": {
+  "ctl": "54c2b14bbb6a16cfe5cc6f6eaadac4eae3f9cc1c1451ce6dba1046087e2080ea",
+  "subj": "2cf4d21406a504aacdeeac07eaa1185750668153f7529036cc21089810941ec0"
+ },
+ "coverage_sha256_O0": {
+  "ctl": "54c2b14bbb6a16cfe5cc6f6eaadac4eae3f9cc1c1451ce6dba1046087e2080ea",
+  "subj": "2cf4d21406a504aacdeeac07eaa1185750668153f7529036cc21089810941ec0"
+ },
+ "the_residual_re_derived_at_the_tip": {
+  "method": "every probe is validated against its corpus row by that row's OWN canonical-line count and first marker divergence BEFORE any number is taken from it; a probe that CONVERTS while its corpus twin does not is what names the single refusing clause",
+  "instrument": "laneG25/probecov.sh + probedump.sh through seal-ctl; block arithmetic by laneG25/graph.py (canon_markers' DFS preorder over RAW successors); marker sequences by laneG25/markers.py (lane R53's canon_markers re-implementation)",
+  "families": [
+   {
+    "family": "A \u2014 short-circuit over CALLS",
+    "bodies": 6,
+    "sub_shapes": [
+     {
+      "shape": "A1 \u2014 4 blocks, `||` over two calls",
+      "delta_blocks": 1,
+      "delta_is": "lane K's empty false-edge trampoline, and nothing else",
+      "built_reachable": 7,
+      "derived_reachable": 6,
+      "probe": "probes/g25.rs::V::a1 (11 canonical lines, first divergence `mk b0.0:live s0:bool` \u2014 IDENTICAL to try_struct_eta_eq's row)",
+      "corpus": [
+       "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+       "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion",
+       "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion",
+       "expr::kind::arc_eq"
+      ]
+     },
+     {
+      "shape": "A2 \u2014 4 blocks + a scalar POST-OP (`&&` with `== 0`)",
+      "delta_blocks": 2,
+      "delta_is": "the trampoline AND a CONST-ARM SPLIT \u2014 built spells `bb2: dead(_3); goto bb5` / `bb5: _0 = const false; goto bb7` where the shim emits one block",
+      "built_reachable": 8,
+      "derived_reachable": 6,
+      "probe": "probes/g25.rs::Summ::a3 (8 canonical lines, identical to the corpus row)",
+      "corpus": [
+       "env::sorry_summary::DeclarationTrustSummary::is_fully_verified"
+      ]
+     },
+     {
+      "shape": "A3 \u2014 6 blocks, a FOUR-WAY `||` chain",
+      "delta_blocks": 7,
+      "delta_is": "a trampoline AND a goto join per link, and the three CondBrs SHARE one short-circuit arm (built f13 has three predecessors), which lane K's `preds == 1` clause refuses on a second independent line",
+      "built_reachable": 17,
+      "derived_reachable": 10,
+      "probe": "probes/g25.rs::V::a2 (17 canonical lines, identical to the corpus row)",
+      "corpus": [
+       "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq"
+      ]
+     }
+    ],
+    "what_all_six_need": "a plan that admits `Inst::Call` in a MULTI-BLOCK body; `plan_branch_markers::operands_of` has no `Call` arm and its `?` refuses every one of them at the FIRST call node"
+   },
+   {
+    "family": "B \u2014 STATEMENT-CALL SEQUENCES",
+    "bodies": 2,
+    "headline": "ZERO BLOCK DELTA, and five siblings of the same shape ALREADY FLIP",
+    "built_reachable": 4,
+    "derived_reachable": 4,
+    "probe": "probes/g25.rs::Env::b3 (7 canonical lines for 3 calls against the corpus's 8 for 4; first divergence `mk b0.0:live s0:()`, identical)",
+    "built_discipline": "per call k: bb_k carries live(unit_k)@0, live(arg_k)@0, `arg_k = &mut (*_1)`, call -> bb_{k+1}; bb_{k+1} carries dead(arg_k)@0, dead(unit_k)@0. FOUR marker lines per call, and the per-call group is a RULE rather than a coincidence of the first probe: measured at arity 3 (12 lines, 4 blocks), arity 4 (16 lines, 5 blocks) and arity 6 (24 lines, 7 blocks) on probes/g25e.rs \u2014 so `init_bitvec_native_reducers`' 4 calls are 16 marker lines and `ensure_native_reducers`' 21 are 84",
+    "already_shipping_for_N_eq_1": {
+     "claim": "five bodies of exactly this shape with ONE call flip TODAY through wave-CF's `unit_stmt` + reborrow-argument path, and each prints `4 marker line(s) identical`",
+     "names": [
+      "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+      "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+      "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+      "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+      "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local"
+     ]
+    },
+    "blast_radius_scanned": {
+     "instrument": "laneG25/scan_sc.py over all 13,881 bodies",
+     "exact_shape_hits": 15,
+     "already_flipping": 5,
+     "derived_mir_unsupported": 8,
+     "in_the_gap": 2,
+     "reading": "gating the widening on N >= 2 leaves every currently-flipping body byte-identical and newly admits exactly the two gap bodies"
+    },
+    "build_item_by_code_site": [
+     "plan_call_fwd_markers \u2014 the `!= 1` call-count refusal at its `call_ix` computation is the FIRST thing that refuses these bodies",
+     "MfCallFwdPlan is VALUE-keyed (`args: Vec<(ValueId, Ty)>`) and every call in a sequence passes the SAME `%0`; built mints a DIFFERENT temp per call (`_3`,`_5`,`_7`, all `= &mut (*_1)`), so the plan must key by (call index, argument position) \u2014 the only structural work in the item and the reason wave-CF cannot simply be relaxed",
+     "MfSlot needs SeqUnit(k)/SeqArg(k,v) for the reason ArgLit has its own constructor: two calls' temps must not alpha-rename onto one another",
+     "predict_call_fwd \u2014 loop b.block(k)/b.block(k+1) over the groups; the loop body is today's two-block walk verbatim",
+     "the emitter's Inst::Call arm already runs PER CALL and already mints `Rvalue::Ref(re_erased, Mut|Shared, mk_place_deref(place))` for a `ty::Ref` argument \u2014 built's own spelling; only the slot keying changes"
+    ],
+    "predicted_gain_stated_before_any_run": "+2 at -O3, 0 lost",
+    "corpus": [
+     "env::native_reducers_bitvec::<impl env::Environment>::init_bitvec_native_reducers",
+     "env::Environment::ensure_native_reducers"
+    ],
+    "zero_block_delta_at_every_arity": {
+     "claim": "built reachable == derived reachable at every arity measured, so nothing in this family is a block-arithmetic problem",
+     "arity_3": {
+      "built": 4,
+      "derived": 4
+     },
+     "arity_4": {
+      "built": 5,
+      "derived": 5
+     },
+     "arity_6": {
+      "built": 7,
+      "derived": 7
+     },
+     "probe": "probes/g25e.rs::Env::n4 / ::n6 (n4 is init_bitvec_native_reducers' arity exactly)"
+    }
+   },
+   {
+    "family": "C \u2014 single-block AGGREGATES",
+    "bodies": 4,
+    "sub_shapes": [
+     {
+      "shape": "C1 \u2014 a by-value STRUCT-typed field",
+      "bodies": 2,
+      "delta_blocks": 0,
+      "converting_controls": [
+       "probes/g25c.rs::h1 `P3 { a, b, c }` from three SCALAR params -> markers_exact TRUE, 6 marker lines",
+       "probes/g25c.rs::h5 the same as a `const fn` -> markers_exact TRUE, 6 marker lines",
+       "probes/g25b.rs::<Stats as Default>::default, four SCALAR call results -> markers_exact TRUE, 8 marker lines"
+      ],
+      "refusing_control": "probes/g25c.rs::h4 \u2014 h1 with ONE by-value struct field (`AId`) -> REFUSED, 6 canonical lines and first divergence `mk b0.0:live s0:adt:\u2026`, IDENTICAL to MemoryRegion::new's row",
+      "the_clause": "to_mir.rs's aggregate field loop: `match field_ty(v) { Some(t) if SCALAR_CANDS.contains(&t) => {} _ => return false }`",
+      "AND_THE_WALL_IS_NOT_to_mir": "that clause's own comment records the measurement \u2014 `mk_pair(&u8, usize, usize)` gained `markers_exact` and then LOST its flip, because the derived body then carries a STRUCT temp and the FLIP FRAGMENT GATE refuses one: crates/trust-thir-lower/src/flip.rs:1878, `\"struct temp {l:?} used outside call-dest / bare store / whole read / scalar field read\"`. An aggregate-field operand read is not in that list. The build item is in flip.rs, and it must be measured for LOSS before it is taken: converting these two while the fragment gate refuses them is a NET LOSS.",
+      "corpus": [
+       "memory_model::MemoryRegion::new",
+       "<env::ai_proof_search::AiSearchStats as std::default::Default>::default"
+      ]
+     },
+     {
+      "shape": "C2 \u2014 an ARITHMETIC result at a non-leftmost aggregate field",
+      "bodies": 1,
+      "delta_blocks": 0,
+      "converting_control": "probes/g25d.rs::Pos::k3 `Pos { f: self.f, l: self.l, c: 0 }` -> markers_exact TRUE, 4 marker lines",
+      "refusing_controls": [
+       "probes/g25d.rs::Pos::k4 `Pos { f: self.f, l: self.l / 10, c: 0 }` -> REFUSED, 5 canonical lines, first divergence `mk b0.0:live s0:u32` \u2014 IDENTICAL to the corpus row",
+       "probes/g25d.rs::Pos::k2 the same with `*` instead of `/` -> REFUSED, 5 canonical lines"
+      ],
+      "the_div_guard_is_NOT_what_refuses_it": "k2 carries no assert and is refused all the same",
+      "the_clause": "ORDERING RULE (2) \u2014 a MARKED operand (the arithmetic result at field 1) preceded by a PLACE operand (`self.f` at field 0)",
+      "and_this_lane_already_breaches_it": "the `delayed` set built for `clamp_u32` (`value > (u32::MAX as u64)` \u2014 a place at operand 0, a marked cast result at operand 1) is the same shape one level down; SourcePos::coalesced is the next body that machinery can take",
+      "corpus": [
+       "tc::heartbeat_profiler::types::SourcePos::coalesced"
+      ]
+     },
+     {
+      "shape": "C3 \u2014 a `let` scope",
+      "bodies": 1,
+      "the_clause": "`#scope: 1` in the body; the wave-MF firewall `func.scopes.is_none()` refuses it before any shape question, and correctly \u2014 a source `let` mints a named local plus a `FakeRead` the instruction stream cannot see",
+      "corpus": [
+       "expr::sorry::<impl expr::Expr>::sorry_scan"
+      ]
+     }
+    ]
+   },
+   {
+    "family": "E \u2014 EARLY RETURN + checked arithmetic",
+    "bodies": 4,
+    "delta_blocks": 4,
+    "built_reachable": 11,
+    "derived_reachable": 7,
+    "delta_is": "FOUR blocks the derived side lacks, one of them STATEMENT-BEARING (the `if`-statement's `_0 = const ()` scope-exit) and one a SHARED return join where the shim emits two `Return`s",
+    "probe": "probes/g25.rs::f2 (11 canonical lines against round_up_to_next's 11, first divergence `mk b0.0:live s0:()`)",
+    "note": "both `to_signed` bodies additionally hit the `func.scopes.is_some()` firewall, which is correct AND redundant \u2014 each also carries a second `Inst::Return`",
+    "corpus": [
+     "env::native_reducers_bitvec::to_signed",
+     "env::native_reducers_sint::to_signed",
+     "expr::subst::<impl expr::Expr>::has_loose_bvar",
+     "tc::heartbeat_profiler::types::round_up_to_next"
+    ]
+   },
+   {
+    "family": "F \u2014 single-block, ONE CLAUSE AWAY",
+    "bodies": 2,
+    "rows": [
+     {
+      "corpus": "expr::types::BigNat::is_zero::{closure#0}",
+      "converting_control": "probes/g25b.rs::g2a `fn(x: &u64) -> bool { *x == 0 }` -> markers_exact TRUE, 2 marker lines",
+      "refusing_control": "probes/g25b.rs::g2b::{closure#0} `|&l| l == 0` -> REFUSED, 5 canonical lines and first divergence `mk b0.0:live s0:u64` \u2014 IDENTICAL to the corpus row",
+      "the_clause": "the `|&l|` DESTRUCTURING PARAMETER PATTERN, refused by the source-form gate's rule 1 (`hir_params_are_simple_bindings`): built mints a binding local for it and the producer cannot see one"
+     },
+     {
+      "corpus": "<level::LevelArc as std::fmt::Debug>::fmt",
+      "converting_control": "probes/g25b.rs::g1 \u2014 the SAME two-call chain (`%2 = call f(%0); %3 = call g(%2,%1); ret %3`), 7 canonical lines like the corpus row, and it CONVERTS: markers_exact TRUE, 8 marker line(s) identical",
+      "the_clause": "the corpus body is `Level::fmt(&**self, f)` \u2014 it derefs TWICE through the LevelArc, a THREE-local chain; wave-WB8's measured refusal is exactly that, and g1 is the 2-local control that isolates it"
+     }
+    ]
+   },
+   {
+    "family": "G \u2014 structural / no route",
+    "bodies": 3,
+    "rows": [
+     {
+      "corpus": "env::origin::ConstantOrigin::is_unpinned_olean_import",
+      "probe": "probes/g25b.rs::g3 (9 canonical lines, first divergence `mk b0.0:live s0:bool`, identical to the corpus row)",
+      "the_clause": "a `switch` head with a two-arm const join feeding a `CondBr` on the JOIN PARAMETER whose taken arm is two chained calls \u2014 the ONE row that needs the switch-join class AND a call-admitting multi-block plan to hold at once"
+     },
+     {
+      "corpus": "env::ext_instance::PRIORITY_BYTES",
+      "the_clause": "a `{const-init}` the producer emits NO function for; there is no derived body to put a marker in and nothing in to_mir.rs can move this row"
+     },
+     {
+      "corpus": "tc::equiv_manager::EquivManager::add_equiv",
+      "probe": "probes/g25.rs::EM::b5 (9 canonical lines, first divergence `mk b0.0:live s0:u32`, identical)",
+      "delta_blocks": 0,
+      "built_reachable": 4,
+      "derived_reachable": 4,
+      "the_clause": "the `func.scopes.is_some()` firewall (`let r1 = \u2026; let r2 = \u2026;`), not shape"
+     }
+    ]
+   }
+  ],
+  "the_count_after_family_D": {
+   "total": 23,
+   "zero_block_delta_marker_work_only": {
+    "n": 6,
+    "rows": "B(2) + C1(2) + C2(1) + G::add_equiv(1)"
+   },
+   "delta_1_one_trampoline": {
+    "n": 4,
+    "rows": "A1"
+   },
+   "delta_2": {
+    "n": 1,
+    "rows": "A2"
+   },
+   "delta_4_one_statement_bearing": {
+    "n": 4,
+    "rows": "E"
+   },
+   "delta_7": {
+    "n": 1,
+    "rows": "A3"
+   },
+   "one_source_form_clause": {
+    "n": 2,
+    "rows": "F"
+   },
+   "needs_two_classes_at_once": {
+    "n": 1,
+    "rows": "G::is_unpinned_olean_import"
+   },
+   "no_derived_body_at_all": {
+    "n": 1,
+    "rows": "G::PRIORITY_BYTES"
+   },
+   "the_let_firewall": {
+    "n": 3,
+    "rows": "C3 + E's two `to_signed` (redundantly)"
+   }
+  },
+  "fine_order_simulation": {
+   "instrument": "laneG25/fine_sim.py \u2014 replays canon_markers' DFS preorder on the DERIVED block graph with the shim's planned extra blocks appended, and checks it element for element against BUILT's. This is the block half of the channel; a marker plan cannot move it, so a mismatch here is a refusal no plan can close.",
+   "A1_one_trampoline": {
+    "probe": "g25.rs::V::a1",
+    "built_reachable": 7,
+    "derived_reachable_with_1": 7,
+    "roles_coincide": "f0 head-call / f1 switch / f2 trampoline / f3 rhs-call / f4 rhs-cont / f5 join / f6 const-arm \u2014 element for element",
+    "verdict": "ONE empty Goto on the switch's `0` edge closes the block half"
+   },
+   "A2_two_trampolines": {
+    "probe": "g25.rs::Summ::a3",
+    "built_reachable": 8,
+    "derived_reachable_with_2": 8,
+    "correction": "lane F8B called the second block a STATEMENT-BEARING split. It need not be: built's const arm is `bb2: dead(_3); goto bb5` (0 assigns, 1 marker at .0) and `bb5: _0 = const false; goto bb7` (1 assign, NO marker). The derived side already carries that assign in its own const block and the interposed block carries no marker on either side, so a PLAIN empty Goto suffices for the marker channel.",
+    "verdict": "TWO empty Gotos \u2014 one on the switch's `0` edge, one on the const arm's exit edge"
+   },
+   "B_zero_trampolines": {
+    "probe": "g25.rs::Env::b3",
+    "built_reachable": 4,
+    "derived_reachable_with_0": 4,
+    "per_block": "built assigns 1/1/1/1 against derived 0/0/0/0, and EVERY built marker sits at position .0 \u2014 before the block's own assign \u2014 so the missing assign moves no marker position at all",
+    "closed_form_marker_model": "per call k: one `()` RESULT temp (live at .0 of bb_k, dead at .0 of bb_{k+1} AFTER the argument deads) and one ARGUMENT reborrow temp (live at .0 of bb_k, then `arg = &mut (*_1)`, dead at .0 of bb_{k+1} FIRST). No extra block, one added assign per call, and built's final `_0 = const ()` is NOT required by the marker channel.",
+    "verdict": "the block half is already closed; the whole conversion is marker emission"
+   }
+  }
+ },
+ "the_landed_files_are_a_REBASE_and_the_apply_is_checked": {
+  "why": "the measured drivers were built at 52e0a70314 with lane F8B's landed flip path; trust origin/main has moved since (wall A, ade2fb94f4). Staging this worktree's files WHOLESALE would silently REVERT that lane and break the build.",
+  "how": "each of the four files is built by applying THIS lane's own control->subject diff onto the TIP's version (`push_trust2.sh`), and the push ABORTS on a reject",
+  "measured": {
+   "to_mir.rs": "+817 / -19 applies clean; the rebased file differs from the MEASURED one by exactly wall A's 85 ADDED lines and nothing removed",
+   "options.rs": "+1 / -1 applies clean",
+   "rustc_driver_impl/lib.rs": "+7 / -2 applies clean",
+   "rustc_driver_impl/tests.rs": "+3 / -2 applies clean"
+  },
+  "dry_run_tree": "db45e5d1d507c99b3be193dd5ea2de5ea1a18912 over base 74d8b337fb, 4 files M, numstat 845/19 + 1/1 + 7/2 + 3/2"
+ },
+ "owed": []
+}

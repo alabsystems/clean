@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use clean_kernel::env::TrustedEnvExt;
 use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr, ExprKind, FVarId};
 
@@ -143,6 +144,15 @@ impl SymbolMap {
     /// allows the type checker to accept proof terms that reference them.
     pub fn declare_skolems(&self, env: &mut Environment) {
         for (name, ty) in &self.skolem_decls {
+            // SOUNDNESS: registers an UNCHECKED axiom via the TrustedEnvExt
+            // choke trait. The sole production caller
+            // (AutomationEngine::prepare_superposition_reconstruction_env,
+            // engine.rs) passes recon_env — a dropped clone of the caller's
+            // environment used only to type-check the reconstructed proof
+            // term. Reconstructed proofs re-enter persistent envs only
+            // through checked add_decl, where unresolved Skolem references
+            // are UnknownConst. The isolation theorem is owed under
+            // R1-SKOLEM (data/env_bypass_census.json row "skolem-axiom").
             env.add_skolem_axiom(name.clone(), ty.clone());
         }
     }

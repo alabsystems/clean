@@ -1,0 +1,23 @@
+(module
+  (funcs
+    (func 0
+      (params)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 0) (const (uint 64) (int 1)))
+            (node (results 1) (const (int 32) (int 63)))
+            (node (results 2) (cast bitcast (int 32) (uint 32) 1))
+            (node (results 3) (const (uint 32) (int 64)))
+            (node (results 4) (icmp ult (uint 32) 2 3))
+            (node (results) (assert 4))
+            (node (results 5) (cast sext (int 32) (uint 64) 1))
+            (node (results 6) (binop shl (uint 64) 0 5))
+            (node (results) (ret (vals 6)))
+          ))
+      ))
+  )
+  (globals)
+)

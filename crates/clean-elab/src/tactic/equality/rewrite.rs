@@ -17,6 +17,7 @@ use super::expr_utils::{
     abstract_over, contains_expr, find_defeq_subterm_with, match_equality, match_iff, replace_expr,
     rewrite_candidate_summaries,
 };
+use super::rewrite_delta::{delta_rule, shadowed_by_local, unfold_at_hyp, unfold_in_goal};
 use crate::unify::{MetaState, Unifier, UnifyResult};
 
 /// Direction of a rewrite operation.
@@ -146,6 +147,34 @@ impl RewriteRule {
 pub fn rewrite(state: &mut ProofState, hyp_name: &str, reverse: bool) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
+    // `rw [X]` where `X` is a DEFINITION whose type is not an equation — the
+    // `rw [Xor', or_and_right, …]` shape from `Mathlib/Logic/Basic.lean:365`.
+    // Such a rule is a δβ UNFOLD, handled entirely inside `rewrite_delta`; it is
+    // deliberately NOT admitted as a synthesized equation flowing through
+    // `peel_and_resolve_rewrite_equation`. See that module's header for the
+    // corpus hang the shared-resolver route caused (reverted 2026-08-23) and
+    // for the guards that replace it.
+    //
+    // Three narrowing conditions, each load-bearing:
+    //   * ENTRY POINT ONLY — the shared resolvers below are untouched, so no
+    //     caller of theirs (the conv focus path via `resolve_env_rewrite_parts`,
+    //     `rw?`'s trial rewrite, `script_runner`) can reach the delta path
+    //     except through this `rw` entry;
+    //   * forward only — `rw [← X]` would need the definition's BODY as a match
+    //     pattern, which re-enters the unifier this brick exists to stay out of;
+    //     it keeps the pre-existing admission error;
+    //   * environment constants only — a local hypothesis of the same name
+    //     shadows the constant (Lean 4 resolution order), checked here so the
+    //     delta path never even looks at the environment in that case.
+    let delta = if reverse || shadowed_by_local(&goal, hyp_name) {
+        None
+    } else {
+        delta_rule(state, hyp_name)
+    };
+    if let Some(rule) = delta {
+        return unfold_in_goal(state, &rule);
+    }
+
     // Resolution order matches Lean 4: a local hypothesis named `hyp_name`
     // shadows an environment constant of the same name. Only when no such
     // hypothesis exists do we fall back to the environment (`rw [Nat.add_comm]`).
@@ -270,6 +299,21 @@ fn iff_rewrite_equation(iff_ty: &Expr, iff_proof: Expr) -> Option<RewriteEquatio
 /// `focus_path` is attached to a `RewriteNoMatch` error so the diagnostic can
 /// say whether the no-match was at the goal (empty) or a named hypothesis.
 ///
+/// # This function must stay equation-only
+///
+/// A `Definition`-kind constant whose type is not an equation (`rw [Xor']`) is
+/// handled by [`super::rewrite_delta`], reached from the `rw`/`rewrite_at`
+/// ENTRY POINTS before this resolver runs — never by adding a delta arm here.
+/// This resolver is shared with the conv focus path
+/// ([`resolve_env_rewrite_parts`] ← `builtins_phase3d_rewrite::conv_focus_rewrite`),
+/// with `rw?`'s trial rewrite and with `script_runner`; more importantly, it
+/// feeds `unify_pattern_with_subterm`, whose full-unifier fallback runs the
+/// UNBUDGETED `Unifier::with_env` type checker (Default transparency,
+/// `honor_reducibility`, no heartbeat). Admitting a δ-reducible `Definition`
+/// head with metavariable arguments into that path is what wedged
+/// `Mathlib/Logic/Basic.lean` for 17 h at 7 GB RSS in the reverted 2026-08-23
+/// attempt. Keep non-equation sources out of here.
+///
 /// # Errors
 /// - `HypothesisNotFound` if `name` is neither a local hypothesis nor a constant.
 /// - `GoalMismatch` if the constant's type is not an equality (under binders).
@@ -354,6 +398,18 @@ pub fn resolve_env_rewrite_parts(
 /// It changes only *which* proof term is built (`proof_base meta…`); that term's
 /// `Eq.subst`/`Eq.mpr` cast is still re-checked by the kernel downstream
 /// (`close_goal` / `replace_local_decl_with_cast`). No kernel/TCB code is touched.
+///
+/// # This function must stay equation-only
+///
+/// The `GoalMismatch` below is the admission gate for the whole rewrite
+/// pipeline, and it is deliberately raised BEFORE `unify_pattern_with_subterm`
+/// runs. Do not relax it to admit a synthesized equation for a non-equation
+/// source: the unification that follows invokes the unbudgeted
+/// `Unifier::with_env` type checker on every candidate subterm, and a
+/// `Definition`-headed pattern turns that into a full-delta whnf bomb (the
+/// reverted 2026-08-23 `rw`-by-definition attempt; see
+/// [`super::rewrite_delta`], which does the same job with no unification, no
+/// synthesized proof term and a bounded body).
 ///
 /// # Errors
 /// - `GoalMismatch` if the body under the binders is neither an `Eq` nor an `Iff`.
@@ -562,12 +618,29 @@ fn unify_pattern_with_subterm(
 /// consulted, so a remaining const-vs-const head mismatch means "recurse
 /// structurally", never "force a unify here".
 fn rigid_const_head_mismatch(pattern: &Expr, haystack: &Expr) -> bool {
-    let (ExprKind::Const(pat_name, _), ExprKind::Const(hay_name, _)) =
-        (pattern.get_app_fn().kind(), haystack.get_app_fn().kind())
-    else {
+    let ExprKind::Const(pat_name, _) = pattern.get_app_fn().kind() else {
         return false;
     };
-    pat_name != hay_name
+    match haystack.get_app_fn().kind() {
+        ExprKind::Const(hay_name, _) => pat_name != hay_name,
+        // U2 stage 1 (2026-08-25, lane U2): a NON-META FVar head is exactly as
+        // rigid as a mismatched const head, and running the full unifier here
+        // was exactly as harmful — the doc comment at the call site already
+        // named "an fvar `n`" as a case, but only const-vs-const was
+        // implemented. Measured: in `theorem probe {α : Sort v} … : pid a = b
+        // := by rw [pid_eq]`, the pre-order walk reaches the bare binder `α`
+        // (an FVar) BEFORE the `pid`-headed node; the fallback WHNF collapsed
+        // the reducible `pid {u_N} ?α ?a` pattern to the bare `?a`, bound it
+        // to `α`, and committed a spurious match that stopped the search —
+        // `finish_rewrite` then failed with RewriteNoMatch. Monomorphic goals
+        // never hit this only because THEIR type argument is a Const (`Nat`),
+        // which the const-vs-const arm already gated — which is why the
+        // symptom surfaced selectively on universe-polymorphic declarations.
+        // A metavariable FVar head stays fallback-eligible: a flex head can
+        // genuinely absorb the pattern.
+        ExprKind::FVar(id) => MetaState::from_fvar(*id).is_none(),
+        _ => false,
+    }
 }
 
 /// Keyed head-symbol match between a rewrite `pattern` and a goal subterm,
@@ -975,6 +1048,19 @@ pub fn rewrite_at(
 
     let target_fvar = goal.local_ctx[target_idx].fvar;
     let old_ty = goal.local_ctx[target_idx].ty.clone();
+
+    // `rw [X] at h` where `X` is a DEFINITION whose type is not an equation:
+    // the at-hypothesis mirror of the at-goal delta entry in `rewrite`, with the
+    // same three narrowing conditions (entry point only, forward only,
+    // environment constants only). See `rewrite_delta`.
+    let delta = if reverse || shadowed_by_local(&goal, lemma_name) {
+        None
+    } else {
+        delta_rule(state, lemma_name)
+    };
+    if let Some(rule) = delta {
+        return unfold_at_hyp(state, &rule, target_fvar, target_hyp, &old_ty);
+    }
 
     // Resolve the rewrite rule exactly like the at-goal path: a local hypothesis
     // named `lemma_name` shadows an environment constant of the same name; only

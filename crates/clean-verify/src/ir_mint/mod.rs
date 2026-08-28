@@ -179,52 +179,22 @@ mod tests;
 pub use core::{digest, parse, print, Sx};
 pub use decode::decode;
 pub use emitted::{
-    read as read_emitted, read_with_self as read_emitted_with_self,
-    read_with_tags as read_emitted_with_tags, ObservedTags, SelfFunc, CALLING_CONVS, CLAUSE_KINDS,
-    DEFAULT_CALLING_CONV, DEFAULT_LINKAGE, LINKAGES, SELF_FUNC_INDEX,
+    read as read_emitted, read_with_pins as read_emitted_with_pins,
+    read_with_self as read_emitted_with_self, read_with_tags as read_emitted_with_tags,
+    ObservedTags, SelfFunc, CALLING_CONVS, CLAUSE_KINDS, DEFAULT_CALLING_CONV, DEFAULT_LINKAGE,
+    LINKAGES, SELF_FUNC_INDEX,
 };
 pub use error::{CoreError, DecodeError, EmittedError, InterfaceError, MintError};
 pub use interface::{project, Interface, ParamSlot, Projection};
 pub use mint::{mint, MintedScript};
-pub use tags::Tags;
+pub use tags::{Tags, UsizePin};
 
-/// The committed core module of the width-one chain, produced by reader A.
-pub const IR_H2_CORE: &str = include_str!("../spec/core_spec/generated/ir_h2.core.txt");
-/// The committed minted definition script of the width-one chain.
-pub const IR_H2_DEFS: &str = include_str!("../spec/core_spec/generated/ir_h2.defs.txt");
-/// The committed mint record: provenance, digests and the unwitnessed ledger.
-pub const IR_H2_RECORD: &str = include_str!("../spec/core_spec/generated/ir_h2.mint.json");
-/// The committed tag table of the width-one chain: canonical first-use index →
-/// the crate-level interning id the artifact names.
-pub const IR_H2_TAGS: &str = include_str!("../spec/core_spec/generated/ir_h2.tags.json");
-/// The committed core module of the ELEVENTH chain,
-/// `env::types::SimpPriority::value` — the first chained body that computes an
-/// address with a `gep` and loads through the result.
-pub const IR_PV_CORE: &str = include_str!("../spec/core_spec/generated/ir_pv.core.txt");
-/// The committed minted definition script of the `gep` chain.
-pub const IR_PV_DEFS: &str = include_str!("../spec/core_spec/generated/ir_pv.defs.txt");
-/// The committed mint record of the `gep` chain.
-pub const IR_PV_RECORD: &str = include_str!("../spec/core_spec/generated/ir_pv.mint.json");
-/// The committed tag table of the `gep` chain. Its one enum is interned at
-/// **127**, outside the `ir_d0..ir_d16` atom pool, which is why
-/// `mint::interning_id` exists.
-pub const IR_PV_TAGS: &str = include_str!("../spec/core_spec/generated/ir_pv.tags.json");
-/// The committed core module of the designated target `level::Level::is_zero`,
-/// produced by reader A. Not minted — see `crystal_a2_mint`'s
-/// `level_is_zero_mints_only_up_to_a_named_refusal` — but read by the callee
-/// identity lane, which is the only chain in the set that CALLS anything.
-pub const IR_LZ_CORE: &str = include_str!("../spec/core_spec/generated/ir_lz.core.txt");
-/// Reader A's append-only provenance for the exact Clean-0.4 source-bound
-/// binary that produced [`IR_LZ_CORE`].  The callee-identity gate cross-links
-/// its binary hash to the fixture-rebaseline evidence rather than trusting a
-/// transient dump pathname.  The a152 predecessor remains committed beside
-/// this file as the account of its own binary.
-pub const IR_LZ_B039_PROVENANCE: &str =
-    include_str!("../spec/core_spec/generated/ir_lz.b039.prov.json");
-/// The committed tag table of the designated target. Its `funcs` lane is the
-/// only one in the tree that is non-empty, because `level_is_zero` is the only
-/// chained body that calls anything.
-pub const IR_LZ_TAGS: &str = include_str!("../spec/core_spec/generated/ir_lz.tags.json");
+/// The committed per-chain artifacts: every `IR_<chain>_{CORE,DEFS,RECORD,TAGS}`
+/// constant, one block per chain, in mint order. Split out of this file when
+/// the seventeenth chain pushed it past the 500-line paragon rule; the
+/// module docs above remain the reading order.
+mod chains;
+pub use chains::*;
 
 /// One field that a given reader structurally cannot witness.
 #[derive(Debug, Clone, PartialEq, Eq)]

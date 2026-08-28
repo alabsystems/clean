@@ -41,7 +41,7 @@ impl Ord for PrioritizedClause {
 }
 
 /// Superposition prover
-pub struct SuperpositionProver {
+pub(crate) struct SuperpositionProver {
     /// Term ordering
     pub(super) ordering: Box<dyn TermOrdering>,
     /// Processed clauses (active set)
@@ -67,7 +67,7 @@ pub struct SuperpositionProver {
 
 /// Prover statistics
 #[derive(Clone, Debug, Default)]
-pub struct ProverStats {
+pub(crate) struct ProverStats {
     /// Number of inferences performed
     pub inferences: u64,
     /// Number of clauses generated
@@ -82,7 +82,7 @@ pub struct ProverStats {
 
 /// Result of the prover
 #[derive(Clone, Debug)]
-pub enum ProverResult {
+pub(crate) enum ProverResult {
     /// Unsatisfiable - found empty clause
     Unsatisfiable(ProofTrace),
     /// Satisfiable - saturated without finding empty clause
@@ -93,7 +93,7 @@ pub enum ProverResult {
 
 /// Proof trace for reconstruction
 #[derive(Clone, Debug)]
-pub struct ProofTrace {
+pub(crate) struct ProofTrace {
     /// The empty clause
     pub empty_clause: Clause,
     /// All clauses used in the proof
@@ -108,7 +108,7 @@ impl Default for SuperpositionProver {
 
 impl SuperpositionProver {
     /// Create a new prover with default KBO ordering, empty clause sets.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         SuperpositionProver {
             ordering: Box::new(KBO::new()),
             processed: Vec::new(),
@@ -123,7 +123,7 @@ impl SuperpositionProver {
     }
 
     /// Create a new prover with custom ordering
-    pub fn with_ordering(ordering: Box<dyn TermOrdering>) -> Self {
+    pub(crate) fn with_ordering(ordering: Box<dyn TermOrdering>) -> Self {
         SuperpositionProver {
             ordering,
             processed: Vec::new(),
@@ -138,7 +138,7 @@ impl SuperpositionProver {
     }
 
     /// Set the selection strategy
-    pub fn set_strategy(&mut self, strategy: SelectionStrategy) {
+    pub(crate) fn set_strategy(&mut self, strategy: SelectionStrategy) {
         self.strategy = strategy;
     }
 
@@ -157,7 +157,7 @@ impl SuperpositionProver {
     /// - Clause added to unprocessed set (unless tautology)
     /// - Tautologies (containing both `l` and `!l`) are discarded
     /// - `stats.generated` incremented for non-tautologies
-    pub fn add_clause(&mut self, literals: Vec<Literal>) {
+    pub(crate) fn add_clause(&mut self, literals: Vec<Literal>) {
         let clause = Clause::new(literals, self.next_id);
         self.next_id += 1;
 
@@ -206,7 +206,7 @@ impl SuperpositionProver {
     /// # Implementation Notes
     ///
     /// Uses ordered resolution, superposition, and equality factoring inference rules.
-    pub fn prove(&mut self, max_iterations: u64) -> ProverResult {
+    pub(crate) fn prove(&mut self, max_iterations: u64) -> ProverResult {
         self.prove_until(max_iterations, None)
     }
 
@@ -223,7 +223,11 @@ impl SuperpositionProver {
     ///
     /// Soundness is unchanged: a deadline only causes an *earlier* `ResourceLimit`
     /// (no proof claimed), exactly like exhausting `max_iterations`.
-    pub fn prove_until(&mut self, max_iterations: u64, deadline: Option<Instant>) -> ProverResult {
+    pub(crate) fn prove_until(
+        &mut self,
+        max_iterations: u64,
+        deadline: Option<Instant>,
+    ) -> ProverResult {
         for _ in 0..max_iterations {
             // Poll the wall-clock deadline before each given-clause step. A single
             // iteration can generate/​simplify many clauses, so this is the finest

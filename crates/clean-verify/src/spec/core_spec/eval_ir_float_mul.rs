@@ -150,10 +150,41 @@ const SRC_ENV_REDUCE_FLOAT_MUL: &str =
     "def env_reduce_float_mul (a : Nat) (b : Nat) : IROption Nat := ir_f64_mul a b";
 const SRC_IR_FM_RES: &str = "def ir_fm_res (o : IROption Nat) : IROutcome := IROption.rec Nat (fun (_ : IROption Nat) => IROutcome) (IROutcome.unmodelled IRFault.float_domain) (fun (k : Nat) => IROutcome.ret (ir_vl1 (IRScalar.float_ k))) o";
 
-// ── the emitted module, transcribed ───────────────────────────────────
-const SRC_IR_FM_B0: &str = "def ir_fm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.binop IRBinOp.fmul ir_fm_tf64 ir_d1 ir_d2) ir_d3) (ir_nd (IRInst.ret (ir_nl1 ir_d3))))";
-const SRC_IR_FM_FUNC: &str = "def ir_fm_func : IRFunc := IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0 (ir_blk ir_fm_b0 ir_blk0)";
-const SRC_IR_FM_MODULE: &str = "def ir_fm_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_fm_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_fm.core.txt` + `generated/ir_fm.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_floats.rs` fails closed if this
+/// committed script is not what minting the committed core module produces.
+/// The 2026-08-21 migration found NO semantic divergence — the same two
+/// notation-level, definitionally-equal ones as `ir_fa` (inlined `IRTy.float_
+/// 64` for the `ir_fm_tf64` alias; the raw `IRList.cons` spine for `ir_nl3`).
+const MINTED_IR_FM: &str = include_str!("generated/ir_fm.defs.txt");
+
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_FM_DOCS: &[&str] = &[
+    "ir_fm_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fm.core.txt, cut from tests/fixtures/float_mul.trust-ir.txt's body). One fmul at f64 over %1 and %2 in that order into %3, then `ret %3`. \n\nThe operand ORDER is minted and gated structurally by the binops lane even though this operator is commutative on the modelled fragment: the gate compares the artifact, not the semantics. The TYPE (f64, not f32) and the RETURNED id (%3, the product -- not %1, the left operand) are the two lanes the eighth chain added. DerivedProved, zero axiom_deps.",
+    "ir_fm_func: the closure as EvalIR -- THREE parameters (%0 the closure environment pointer, %1 and %2 the operands), entry block 0, one block. %0 is bound and never read, and A4 quantifies over it with no premise at all. The minted parameter list is the raw IRList.cons spine, definitionally equal to the hand transcription's ir_nl3. DerivedProved, zero axiom_deps.",
+    "ir_fm_module: the module for env::native_reducers_float::reduce_float_mul::{closure#0}, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger (no switch in the body); see crate::ir_mint for what that establishes and what it does not. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order — ONE source of truth for
+/// [`Specification::add_eval_ir_float_mul`] and anything that must run the
+/// machine on *the registered module* rather than on a second transcription.
+static MINTED_IR_FM_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_FM
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `reduce_float_mul::{closure#0}` module definitions, in
+/// registration order.
+#[must_use]
+pub(crate) fn ir_fm_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_FM_LINES
+}
 
 // ── the machine ───────────────────────────────────────────────────────
 const SRC_IR_FM_MACH0: &str = "def ir_fm_mach0 (p : IRScalar) (a : Nat) (b : Nat) (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl3 ir_d0 ir_d1 ir_d2) (ir_vl3 p (IRScalar.float_ a) (IRScalar.float_ b)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
@@ -223,9 +254,20 @@ impl Specification {
         self.add_recursive_def(SRC_IR_FM_TF64, "ir_fm_tf64: f64 -- binary64, the type the emitted fmul is at. ir_float_binop reads the width off it and DECIDES only 64, giving every other float width the tagged unmodelled outcome; ir_fm_binary32_is_unmodelled executes that on the same two operands the fin/fin witness answers on. A separate alias from ir_fd_tf64 rather than a reuse, because the CFG type lane resolves the alias declared beside its own chain. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_ENV_REDUCE_FLOAT_MUL, "env_reduce_float_mul: the reflected env::native_reducers_float::reduce_float_mul::{closure#0} (native_reducers_float.rs:218), which is `|a, b| a * b` on f64. It is ir_f64_mul -- the classified binary64 multiplication of super::eval_ir_float, whose fin/fin cell is the rounded 106-bit product of super::eval_ir_float_fin -- and NOT a proof that ir_f64_mul is the hardware multiplier. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FM_RES, "ir_fm_res: the outcome a classified float answer produces -- the returned value when the fragment is modelled, and IROutcome.unmodelled IRFault.float_domain when it is not. \n\nThe eighth chain's device, at ir_f64_mul instead of ir_f64_div. Its two constructors are still both REACHABLE here: `some` on every finite pair and on the answering special-value cells, `none` on a NaN operand and on 0*inf. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FM_B0, "ir_fm_b0: THE WHOLE BODY, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/float_mul.trust-ir.txt). One fmul at f64 over %1 and %2 in that order into %3, then `ret %3`. \n\nThe operand ORDER is transcribed and gated structurally by the binops lane even though this operator is commutative on the modelled fragment: the gate compares the artifact, not the semantics. The TYPE (f64, not f32) and the RETURNED id (%3, the product -- not %1, the left operand) are the two lanes the eighth chain added. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FM_FUNC, "ir_fm_func: the closure as EvalIR -- THREE parameters (%0 the closure environment pointer, %1 and %2 the operands), entry block 0, one block. %0 is bound and never read, and A4 quantifies over it with no premise at all. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FM_MODULE, "ir_fm_module: the module for env::native_reducers_float::reduce_float_mul::{closure#0}, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir recorded at tests/fixtures/float_mul.trust-ir.txt and checked graph-for-graph and instruction-for-instruction, including the type and ret lanes, by tests/crystal_a1_lineage/float_mul.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_priority.rs posture.
+        let minted = ir_fm_module_defs();
+        if minted.len() != MINTED_IR_FM_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_fm script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_FM_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_FM_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_FM_MACH0, "ir_fm_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds THREE parameters positionally. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FM_M1, "ir_fm_m1: the machine after the fmul, with the CLASSIFIED ANSWER ABSTRACTED to an IROption parameter. On symbolic bit patterns ir_f64_mul is stuck under ir_f64_class, so the machine is stuck there and no fuel unsticks it; at o := env_reduce_float_mul a b this term is DEFINITIONALLY one ir_step of ir_fm_mach0. The abstraction also keeps the finite arm out of the symbolic proofs entirely -- ir_f64_mul_fin never has to reduce for A4 to hold. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FM_ONE_STEP, "ir_fm_one_step: ONE step of the machine IS ir_fm_m1 at the real classified answer. Eq.refl -- both configurations carry the classification unreduced, so the check is bounded by the size of one instruction's semantics rather than by a 106-bit product. DerivedProved, zero axiom_deps.")?;

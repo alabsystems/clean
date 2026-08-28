@@ -99,14 +99,38 @@ pub(crate) fn handle_compile_command(args: CompileArgs) -> anyhow::Result<()> {
 }
 
 pub(crate) fn compile_to_string(args: CompileArgs) -> anyhow::Result<String> {
+    compile_to_string_with_decl_type(args).map(|(c, _)| c)
+}
+
+/// Emit the requested declaration AND report the elaborated type it was
+/// declared at.
+///
+/// The native entry driver needs both. Arity it can read off the emitted C
+/// prototype, but the *return shape* is invisible there: `IO Unit` and
+/// `IO UInt32` both lower to `clean_obj* l_main(...)`, and that distinction is
+/// exactly what decides whether the process exit status is a hardcoded `0` or
+/// the value the entry returned. So the driver reads it from the Lean type,
+/// which is the only place it survives lowering.
+///
+/// This costs no extra elaboration: [`select_lcnf_decl`] already returns the
+/// elaborated environment it built, so the type is a lookup on the way out.
+pub(crate) fn compile_to_string_with_decl_type(
+    args: CompileArgs,
+) -> anyhow::Result<(String, Option<Expr>)> {
     let (lcnf_decls, compile_env, pipeline) = select_lcnf_decl(&args)?;
-    emit_decls(
+    let decl_type = args
+        .decl
+        .as_deref()
+        .and_then(|decl| compile_env.get_const(&Name::from_string(decl)))
+        .map(|info| info.type_.clone());
+    let emitted = emit_decls(
         &lcnf_decls,
         &compile_env,
         args.emit,
         &pipeline,
         args.file.as_deref(),
-    )
+    )?;
+    Ok((emitted, decl_type))
 }
 
 /// Elaborate the source file, select the requested declaration, and lower it
@@ -354,7 +378,12 @@ fn host_trust_cg_target() -> anyhow::Result<&'static str> {
 /// referenced symbol is compiled from source or forward-declared by probing
 /// `constant_to_decl` + IR lowering uniformly, regardless of which the const
 /// originated in. So this returns only the environment.
-fn elaborate_file_to_env(path: &Path) -> anyhow::Result<Environment> {
+///
+/// `pub(crate)` for `cmd_extract`'s Rust backend: it needs exactly this front
+/// half (same elaboration, same intra-project imports, same kernel-checked
+/// registration) WITHOUT the root L5CNF lowering that `select_lcnf_decl`
+/// additionally performs, because it translates the kernel value directly.
+pub(crate) fn elaborate_file_to_env(path: &Path) -> anyhow::Result<Environment> {
     let mut env = Environment::with_prelude();
     env.init_io_ops()
         .with_context(|| format!("failed to initialize IO operations for {}", path.display()))?;
@@ -438,14 +467,28 @@ fn elaborate_file_body(
     // registered before this file's own decls reference them. External modules
     // (no project-local `.lean`) resolve to `None` and fall through to the
     // `.olean` flow handled by the `Import` decl in the main loop below.
+    let mut satisfied_from_source = HashSet::new();
     for decl in &decls {
-        resolve_and_elaborate_imports(decl, path, env, in_flight, completed)?;
+        resolve_and_elaborate_imports(
+            decl,
+            path,
+            env,
+            in_flight,
+            completed,
+            &mut satisfied_from_source,
+        )?;
     }
 
     let mut file_ctx = FileContext::new();
     // Thread Lake `.olean` search paths so external imports still resolve via
     // the existing artifact loader during the main elaboration pass.
     file_ctx.set_import_search_paths(clean_elab::lake_import_search_paths_for_file(path));
+    // ...and tell it which imports the pass above already satisfied from source,
+    // so the fail-closed policy does not refuse them for lacking an artifact
+    // this project has never built.
+    for module in &satisfied_from_source {
+        file_ctx.mark_import_satisfied_from_source(module);
+    }
 
     for decl in &decls {
         let processed = preprocess_decl_with_context(decl, &mut file_ctx);
@@ -476,12 +519,21 @@ fn elaborate_file_body(
 /// Descends through `namespace`/`section`/`mutual` wrappers and the bodies of
 /// `set_option`/`open` that may carry nested decls, mirroring
 /// `cmd_core::collect_intra_project_imports`.
+/// Resolve `import M.X.Y` to sibling `.lean` sources and elaborate them into
+/// `env`, recording each module name that was satisfied that way in
+/// `satisfied_from_source`.
+///
+/// That record is not bookkeeping: a source-only project has no `.olean` for its
+/// own modules and never will, so the 2026-08-26 fail-closed import policy
+/// (`clean_elab::ImportPolicy`) would otherwise read the expected absence as an
+/// unresolvable module and refuse every internal import in the main pass.
 fn resolve_and_elaborate_imports(
     decl: &clean_parser::SurfaceDecl,
     parent_path: &Path,
     env: &mut Environment,
     in_flight: &mut HashSet<PathBuf>,
     completed: &mut HashSet<PathBuf>,
+    satisfied_from_source: &mut HashSet<String>,
 ) -> anyhow::Result<()> {
     use clean_parser::SurfaceDecl;
     match decl {
@@ -495,6 +547,7 @@ fn resolve_and_elaborate_imports(
                     clean_elab::resolve_intra_project_import(&module_name, parent_path)
                 {
                     elaborate_file_into_env(&import_file, env, in_flight, completed)?;
+                    satisfied_from_source.insert(module_name);
                 }
             }
         }
@@ -502,7 +555,14 @@ fn resolve_and_elaborate_imports(
         | SurfaceDecl::Section { decls, .. }
         | SurfaceDecl::Mutual { decls, .. } => {
             for inner in decls {
-                resolve_and_elaborate_imports(inner, parent_path, env, in_flight, completed)?;
+                resolve_and_elaborate_imports(
+                    inner,
+                    parent_path,
+                    env,
+                    in_flight,
+                    completed,
+                    satisfied_from_source,
+                )?;
             }
         }
         SurfaceDecl::SetOption {
@@ -511,7 +571,14 @@ fn resolve_and_elaborate_imports(
         | SurfaceDecl::Open {
             body: Some(body), ..
         } => {
-            resolve_and_elaborate_imports(body, parent_path, env, in_flight, completed)?;
+            resolve_and_elaborate_imports(
+                body,
+                parent_path,
+                env,
+                in_flight,
+                completed,
+                satisfied_from_source,
+            )?;
         }
         _ => {}
     }
@@ -909,8 +976,16 @@ def usesHelper (x : Nat) : Nat := helper x
 
     /// An external-looking import (`Mathlib.X`) with no project-local `.lean`
     /// must NOT abort the compile: it resolves to `None` here and keeps its
-    /// existing `.olean` flow (a no-op when no artifact is present). A decl
-    /// that does not actually reference any external symbol still compiles.
+    /// existing `.olean` flow. A decl that does not actually reference any
+    /// external symbol still compiles.
+    ///
+    /// The module is `Mathlib.Data.Real.Basic` — one a `PRELUDE_PROVIDERS` entry
+    /// names VERBATIM — and that choice is load-bearing since the 2026-08-26
+    /// fail-closed import brick. The fixture used to be
+    /// `Mathlib.Data.Nat.Basic`, which no provider names: it was served by the
+    /// `Mathlib.*` prefix wildcard, which now resolves nothing. Both modules
+    /// are equally "external-looking" and equally absent from the project tree,
+    /// so this still measures local-vs-external resolution and nothing else.
     #[test]
     fn compile_external_import_is_not_resolved_as_local() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -918,7 +993,7 @@ def usesHelper (x : Nat) : Nat := helper x
         let main = root.join("Main.lean");
         std::fs::write(
             &main,
-            "import Mathlib.Data.Nat.Basic\ndef plain (n : Nat) : Nat := n\n",
+            "import Mathlib.Data.Real.Basic\ndef plain (n : Nat) : Nat := n\n",
         )
         .expect("Main.lean");
 

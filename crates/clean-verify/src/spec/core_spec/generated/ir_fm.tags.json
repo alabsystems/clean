@@ -1,0 +1,59 @@
+{
+ "chain": "ir_fm",
+ "body": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. This body names NO aggregate at all -- every lane below is measured empty, not omitted: the emitted instructions are one `fmul f64` and a `ret`, and `f64` is a machine type, not a crate table entry. The table still exists because the INTERFACE lanes are load-bearing on exactly this chain: the core module cannot say that %1 and %2 are f64, and an f32 body computes `unmodelled` where this one computes a value.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to check the callee namespace (empty lane = a module with no `call`, which m1 pins) and would read it for aggregate aliases if there were any. `ir_mint::project` reads the `interface` block in the other direction and REFUSES a fixture whose header or parameter types are not the pinned ones.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print: every parameter's TYPE, every `align` operand and the KINDS of trailing annotation clause. Read `ir_h2.tags.json`'s `interface_what` for why they are pinned here rather than in the module. On this chain the sharp slot is the OPERAND WIDTH: `bb0(%0: ptr, %1: f64, %2: f64)` against `bb0(%0: ptr, %1: f32, %2: f32)` -- ir_float_binop reads the width off the binop TYPE, which the core module does carry, but the parameter row is what says the artifact's operands are the width the registered type claims.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. Both were read from reader A's own record on the dump this chain was cut from: `param_tys_erased: [\"Ptr\", \"F64\", \"F64\"]`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Both are printed by `Display for Function` only when they are not the default. Read the notes in ir_h2.tags.json.",
+  "functy": 381,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read the notes in ir_h2.tags.json. All four float-tranche closures share this index -- one signature `(ptr, f64, f64) -> f64`, one crate table entry -- so a drift here moves four chains at once and a drift in ONE of the four is not a re-interning.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&{closure environment}",
+    "note": "The closure environment pointer, BOUND AND NEVER READ -- the closure captures nothing. The a1 gate pins that %0 appears exactly once in the emitted text."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "f64",
+    "observed_ty": "f64",
+    "rust_type": "f64",
+    "note": "The left factor `a`. The width is the semantic payload of this row: ir_float_binop DECIDES only 64, so an f32 here is a different program that the core module alone cannot separate."
+   },
+   {
+    "block": 0,
+    "index": 2,
+    "ssa": 2,
+    "ty": "f64",
+    "observed_ty": "f64",
+    "rust_type": "f64",
+    "note": "The right factor `b`."
+   }
+  ],
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement rather than an omission: the body contains no memory instruction at all. Reader A's `aligns_erased` is [] on the dump this chain was cut from.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. The closure calls NOTHING: its coverage row records calls {resolved 0, extern_decls 0, unresolved 0}, reader A's `crate_func_ids_seen` is the single entry [3400] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`, under which reader B reserves canonical index 0 and interns callees from 1; `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`."
+}

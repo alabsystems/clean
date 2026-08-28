@@ -300,12 +300,19 @@ impl Environment {
     /// Initialize Nat multiplication ordering lemmas
     ///
     /// This adds:
-    /// - Nat.mul_lt_mul_left : axiom ∀ a b c : Nat, Nat.lt Nat.zero c → Nat.lt a b → Nat.lt (Nat.mul c a) (Nat.mul c b)
-    /// - Nat.mul_lt_mul_right : axiom ∀ a b c : Nat, Nat.lt Nat.zero c → Nat.lt a b → Nat.lt (Nat.mul a c) (Nat.mul b c)
-    /// - Nat.mul_le_mul_left : axiom ∀ a b c : Nat, Nat.le a b → Nat.le (Nat.mul c a) (Nat.mul c b)
-    /// - Nat.mul_le_mul_right : axiom ∀ a b c : Nat, Nat.le a b → Nat.le (Nat.mul a c) (Nat.mul b c)
-    /// - Nat.mul_lt_mul : axiom ∀ a b c d : Nat, Nat.lt a b → Nat.lt c d → Nat.lt Nat.zero c → Nat.lt (Nat.mul a c) (Nat.mul b d)
-    /// - Nat.mul_le_mul : axiom ∀ a b c d : Nat, Nat.le a b → Nat.le c d → Nat.le (Nat.mul a c) (Nat.mul b d)
+    /// - Nat.mul_lt_mul_left : ∀ a b c : Nat, Nat.lt Nat.zero c → Nat.lt a b → Nat.lt (Nat.mul c a) (Nat.mul c b)
+    /// - Nat.mul_lt_mul_right : ∀ a b c : Nat, Nat.lt Nat.zero c → Nat.lt a b → Nat.lt (Nat.mul a c) (Nat.mul b c)
+    /// - Nat.mul_le_mul_left : ∀ a b c : Nat, Nat.le a b → Nat.le (Nat.mul c a) (Nat.mul c b)
+    /// - Nat.mul_le_mul_right : ∀ a b c : Nat, Nat.le a b → Nat.le (Nat.mul a c) (Nat.mul b c)
+    /// - Nat.mul_lt_mul : ∀ a b c d : Nat, Nat.lt a b → Nat.lt c d → Nat.lt Nat.zero c → Nat.lt (Nat.mul a c) (Nat.mul b d)
+    /// - Nat.mul_le_mul : ∀ a b c d : Nat, Nat.le a b → Nat.le c d → Nat.le (Nat.mul a c) (Nat.mul b d)
+    ///
+    /// All six are `Declaration::Theorem`s in the default lane — the `le`
+    /// family and `mul_lt_mul_left` since #3604, `mul_lt_mul_right` and
+    /// `mul_lt_mul` since #49 (`nat_mul_lt_mul_proof.rs`). The
+    /// `Declaration::Axiom` blocks below are `get_const`-guarded fallbacks that
+    /// no longer fire there; they still describe the import lane, where the
+    /// whole family is withheld so the genuine Lean-core constants import.
     ///
     /// These are fundamental ordering lemmas for multiplication.
     /// Note: mul_lt_mul_left and mul_lt_mul_right require positivity of the multiplier (0 < c).
@@ -339,6 +346,16 @@ impl Environment {
         // `init_nat_add_ord`. See `nat_arith_order_proof.rs`. The legacy mul
         // Axiom `add_decl`s below are guarded by `get_const`.
         self.register_nat_arith_order_proofs()?;
+
+        // #49: Demote `Nat.mul_lt_mul_right` and `Nat.mul_lt_mul` — the last two
+        // `Nat.mul_*` ordering AXIOMS, and two of the six asserted propositions
+        // the default prelude shipped — to constructive
+        // `Declaration::Theorem`s. Registered *before* the legacy Axiom block so
+        // the Theorem form wins; both Axiom `add_decl`s below are now guarded by
+        // `get_const` and become no-ops once the Theorems are present. Import
+        // mode is untouched: the registrar returns early under
+        // `suppress_lossy_structure_stubs`. See `nat_mul_lt_mul_proof.rs`.
+        self.register_nat_mul_lt_mul_proofs()?;
 
         let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
         let lt_const = Expr::const_(Name::from_string("Nat.lt"), vec![]);
@@ -441,11 +458,18 @@ impl Environment {
                 b.finish(e)
             };
 
-            self.add_decl(Declaration::Axiom {
-                name: Name::from_string("Nat.mul_lt_mul_right"),
-                level_params: vec![],
-                type_: mul_lt_mul_right_type,
-            })?;
+            // #49: Guarded — skipped when the constructive Theorem form is
+            // present (registered by `register_nat_mul_lt_mul_proofs` above).
+            if self
+                .get_const(&Name::from_string("Nat.mul_lt_mul_right"))
+                .is_none()
+            {
+                self.add_decl(Declaration::Axiom {
+                    name: Name::from_string("Nat.mul_lt_mul_right"),
+                    level_params: vec![],
+                    type_: mul_lt_mul_right_type,
+                })?;
+            }
         }
 
         // Built with EnvDeclBuilder (#1444).
@@ -551,11 +575,18 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("Nat.mul_lt_mul"),
-            level_params: vec![],
-            type_: mul_lt_mul_type,
-        })?;
+        // #49: Guarded — skipped when the constructive Theorem form is present
+        // (registered by `register_nat_mul_lt_mul_proofs` above).
+        if self
+            .get_const(&Name::from_string("Nat.mul_lt_mul"))
+            .is_none()
+        {
+            self.add_decl(Declaration::Axiom {
+                name: Name::from_string("Nat.mul_lt_mul"),
+                level_params: vec![],
+                type_: mul_lt_mul_type,
+            })?;
+        }
 
         // Built with EnvDeclBuilder (#1444).
         // FIDELITY: match Lean core's real `Nat.mul_le_mul` signature —

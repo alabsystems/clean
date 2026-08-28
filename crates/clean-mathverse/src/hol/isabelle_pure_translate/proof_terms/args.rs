@@ -7,7 +7,6 @@
 //! `proof_terms` module verbatim.
 
 use super::super::super::isabelle_pure::IsaTerm;
-use super::super::*;
 use super::*;
 use clean_kernel::Expr;
 

@@ -2209,3 +2209,191 @@ fn test_instance_cache_with_metavars() {
     let (cached_count, _) = ctx.instance_cache_stats();
     assert_eq!(cached_count, 1);
 }
+
+// ==========================================================================
+// FRONTIER STAGE I-2 — the goal side: a Pi-shaped goal's ∀-telescope is
+// opened, the conclusion resolved by the UNCHANGED search, and the answer
+// re-abstracted into lambdas (`ElabCtx::resolve_goal_pi_abstracted`).
+//
+// The fixture family `tests/fixtures/source_frontier/p18,p24..p27` measures
+// this end-to-end through `clean check`; these tests pin the same properties
+// at the resolution API, where the returned Expr can be inspected directly
+// and where the depth boundary is observable as a verdict rather than only as
+// a term shape.
+// ==========================================================================
+
+/// Environment + context carrying `class C (α : Type)` with `instCNat : C Nat`,
+/// and `class D (α : Type)` with no instance yet.
+fn goal_side_ctx(env: &Environment) -> ElabCtx<'_> {
+    let mut ctx = ElabCtx::new(env);
+    ctx.instances_mut()
+        .register_class(Name::from_string("C"), 1, vec![]);
+    ctx.instances_mut()
+        .register_class(Name::from_string("D"), 1, vec![]);
+    let c_nat = Expr::app(
+        Expr::const_(Name::from_string("C"), vec![]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    );
+    ctx.instances_mut().add_instance(
+        Name::from_string("instCNat"),
+        Name::from_string("C"),
+        Expr::const_(Name::from_string("instCNat"), vec![]),
+        c_nat,
+        crate::instances::DEFAULT_PRIORITY,
+    );
+    ctx
+}
+
+fn goal_side_env() -> Environment {
+    use clean_kernel::env::Declaration;
+    let mut env = Environment::new();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("Nat"),
+        level_params: vec![],
+        type_: Expr::type_(),
+    })
+    .unwrap();
+    for class in ["C", "D"] {
+        env.add_decl(Declaration::Axiom {
+            name: Name::from_string(class),
+            level_params: vec![],
+            type_: Expr::arrow(Expr::type_(), Expr::type_()),
+        })
+        .unwrap();
+    }
+    env
+}
+
+fn c_nat_goal() -> Expr {
+    Expr::app(
+        Expr::const_(Name::from_string("C"), vec![]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    )
+}
+
+fn nat_const() -> Expr {
+    Expr::const_(Name::from_string("Nat"), vec![])
+}
+
+/// The capability: `(x : Nat) → C Nat` is answered by `fun (x : Nat) => instCNat`.
+/// No candidate has that type — the term is BUILT, which is the whole of
+/// stage I-2.
+#[test]
+fn test_goal_side_pi_goal_is_answered_by_an_abstraction() {
+    let env = goal_side_env();
+    let mut ctx = goal_side_ctx(&env);
+
+    let goal = Expr::pi(BinderInfo::Default, nat_const(), c_nat_goal());
+    let resolved = ctx
+        .resolve_instance(&goal)
+        .expect("a Pi-shaped goal whose conclusion resolves must be answered by an abstraction");
+
+    match resolved.kind() {
+        ExprKind::Lam(_, ty, body) => {
+            assert_eq!(ty.as_ref(), &nat_const(), "binder type is the goal's own");
+            match body.kind() {
+                ExprKind::Const(name, _) => {
+                    assert_eq!(name, &Name::from_string("instCNat"));
+                }
+                other => {
+                    panic!("expected the conclusion's instance under the lambda, got {other:?}")
+                }
+            }
+        }
+        other => panic!("expected a Lam (the abstraction), got {other:?}"),
+    }
+}
+
+/// The refusal: instance search is not a synthesizer for arbitrary Pi types.
+/// `Nat → Nat` is Pi-shaped and inhabited; its conclusion is const-headed and
+/// still not an instance goal, so there is no answer.
+#[test]
+fn test_goal_side_refuses_a_pi_whose_conclusion_is_not_an_instance() {
+    let env = goal_side_env();
+    let mut ctx = goal_side_ctx(&env);
+
+    let goal = Expr::pi(BinderInfo::Default, nat_const(), nat_const());
+    assert!(
+        ctx.resolve_instance(&goal).is_none(),
+        "a Pi goal whose conclusion is not resolvable must stay unresolved"
+    );
+}
+
+/// The ground restriction: a goal that still carries a metavariable could be
+/// SOLVED by the attempt rather than answered by it, so it is refused
+/// outright — the same hole stage I-1 self-caught in its match (C), closed
+/// here by construction.
+#[test]
+fn test_goal_side_refuses_a_pi_goal_carrying_a_metavariable() {
+    let env = goal_side_env();
+    let mut ctx = goal_side_ctx(&env);
+
+    let meta_id = ctx.metas.fresh(Expr::type_());
+    let meta = Expr::fvar(MetaState::to_fvar(meta_id));
+    let goal = Expr::pi(
+        BinderInfo::Default,
+        nat_const(),
+        Expr::app(Expr::const_(Name::from_string("C"), vec![]), meta),
+    );
+    assert!(
+        ctx.resolve_instance(&goal).is_none(),
+        "a Pi goal with an open carrier must not be answered by assigning it"
+    );
+}
+
+/// Deliberately narrow: an `[inst]` binder in the GOAL's telescope would have
+/// to be pushed as a local INSTANCE as well as a local, which is a separate
+/// increment with its own safety argument. Refused, not opened half-way —
+/// even though the conclusion on its own resolves (previous test).
+#[test]
+fn test_goal_side_refuses_an_instance_implicit_goal_binder() {
+    let env = goal_side_env();
+    let mut ctx = goal_side_ctx(&env);
+
+    let goal = Expr::pi(BinderInfo::InstImplicit, c_nat_goal(), c_nat_goal());
+    assert!(
+        ctx.resolve_instance(&goal).is_none(),
+        "an instance-implicit goal binder is refused rather than opened"
+    );
+}
+
+/// THE BOUNDARY, and the reason stage I-1's "only after the primary search
+/// returned None" argument was not sufficient here. The same
+/// `(x : Nat) → C Nat` goal:
+///   * as the ELABORATOR's goal (depth 0) it is answered — first test above;
+///   * as a candidate's own `[inst]` sub-goal it is NOT, so `D Nat` stays
+///     unresolved.
+/// Without the `depth == 0` restriction this test's `D Nat` would resolve —
+/// and so would the `decEq` bridge's `DecidableEq α` delegation, which would
+/// silently change the TERM of goals that already resolve today.
+#[test]
+fn test_goal_side_is_not_applied_to_an_internal_subgoal() {
+    let env = goal_side_env();
+    let mut ctx = goal_side_ctx(&env);
+
+    let pi_goal = Expr::pi(BinderInfo::Default, nat_const(), c_nat_goal());
+    let d_nat = Expr::app(Expr::const_(Name::from_string("D"), vec![]), nat_const());
+    // instD : [(x : Nat) → C Nat] → D Nat
+    ctx.instances_mut().add_instance(
+        Name::from_string("instD"),
+        Name::from_string("D"),
+        Expr::lam(
+            BinderInfo::InstImplicit,
+            pi_goal.clone(),
+            Expr::const_(Name::from_string("instD"), vec![]),
+        ),
+        Expr::pi(BinderInfo::InstImplicit, pi_goal.clone(), d_nat.clone()),
+        crate::instances::DEFAULT_PRIORITY,
+    );
+
+    assert!(
+        ctx.resolve_instance(&d_nat).is_none(),
+        "the goal-side telescope must not answer a candidate's sub-goal"
+    );
+    // ... and the SAME goal, asked by the elaborator, still is answered:
+    // the boundary is the depth, not the goal.
+    assert!(
+        ctx.resolve_instance(&pi_goal).is_some(),
+        "the same goal at depth 0 must still be answered"
+    );
+}

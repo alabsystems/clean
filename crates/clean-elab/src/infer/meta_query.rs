@@ -393,8 +393,8 @@ impl<'a> ElabCtx<'a> {
             Ok(elaborated)
         } else {
             Err(ElabError::TypeMismatch {
-                expected: format!("{expected_ty:?}"),
-                actual: format!("{actual_ty:?}"),
+                expected: format!("{expected_ty}"),
+                actual: format!("{actual_ty}"),
             })
         }
     }

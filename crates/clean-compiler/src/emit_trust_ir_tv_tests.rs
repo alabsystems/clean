@@ -129,13 +129,8 @@ fn test_mint_certifies_the_corpus_decl_end_to_end() {
     // Payload decodes back to kernel Exprs (bincode-1 wire format).
     let _proof: Expr = bincode::deserialize(term).expect("term decodes to an Expr");
     let comparand: Expr = bincode::deserialize(context).expect("context decodes to an Expr");
-    let rhs = clean_reflect::denote_source(
-        &tv_demo_original(),
-        32,
-        &[],
-        &clean_reflect::RecordVocab::empty(),
-    )
-    .expect("in-fragment");
+    let rhs =
+        denote_source(&tv_demo_original(), 32, &[], &RecordVocab::empty()).expect("in-fragment");
     let expected_lambda = Expr::lam(BinderInfo::Default, Expr::const_str("Nat"), rhs.body);
     assert_eq!(
         comparand, expected_lambda,
@@ -358,14 +353,14 @@ fn test_mint_refuses_miscompiled_caller_composition() {
             matches!(
                 &n.inst,
                 Inst::Const {
-                    value: trust_ir::constant::Constant::Int(1),
+                    value: Constant::Int(1),
                     ..
                 }
             )
         })
         .expect("caller has the const 1");
     if let Inst::Const { value, .. } = &mut one.inst {
-        *value = trust_ir::constant::Constant::Int(2);
+        *value = Constant::Int(2);
     }
 
     let originals = vec![
@@ -1937,10 +1932,10 @@ fn heap_ledger_ten_fields_twenty_stores_recheck_time() {
 
     // Measure the recheck decomposed: prelude env build, heap vocabulary
     // install, and the actual kernel judgment (theorem add).
-    let lhs = clean_reflect::denote_function(&module, &module.functions[0])
-        .expect("ledger program is in-fragment");
-    let vocab = clean_reflect::RecordVocab::from_module(&module);
-    let rhs = clean_reflect::denote_source(&src, 32, &[], &vocab).expect("ledger source denotes");
+    let lhs =
+        denote_function(&module, &module.functions[0]).expect("ledger program is in-fragment");
+    let vocab = RecordVocab::from_module(&module);
+    let rhs = denote_source(&src, 32, &[], &vocab).expect("ledger source denotes");
     assert_eq!(lhs.arity, rhs.arity);
 
     let t0 = Instant::now();
@@ -1950,11 +1945,11 @@ fn heap_ledger_ten_fields_twenty_stores_recheck_time() {
         env.add_decl(decl).expect("heap vocabulary installs");
     }
     let t1 = Instant::now();
-    env.add_decl(clean_kernel::env::Declaration::Theorem {
-        name: Name::from_string(&clean_reflect::tv_theorem_name("ledger_ten")),
+    env.add_decl(Declaration::Theorem {
+        name: Name::from_string(&tv_theorem_name("ledger_ten")),
         level_params: vec![],
-        type_: clean_reflect::tv_statement(&[], lhs.arity, &lhs.body, &rhs.body),
-        value: clean_reflect::tv_proof_term(&[], lhs.arity, &lhs.body),
+        type_: tv_statement(&[], lhs.arity, &lhs.body, &rhs.body),
+        value: tv_proof_term(&[], lhs.arity, &lhs.body),
     })
     .expect("the kernel decides the 10-field/20-store equation");
     let t_thm = t1.elapsed();
@@ -2220,7 +2215,7 @@ fn test_fragment5_certifies_nat_mul_constant() {
     ));
     let mut f = Function::new(FuncId::new(2), "demoMul", FuncTyId::new(2), BlockId::new(0));
     let mut b = Block::new(BlockId::new(0));
-    let mut push = |b: &mut Block, inst: Inst, r: u32| {
+    let push = |b: &mut Block, inst: Inst, r: u32| {
         b.body
             .push(InstrNode::new(inst).with_result(ValueId::new(r)));
     };

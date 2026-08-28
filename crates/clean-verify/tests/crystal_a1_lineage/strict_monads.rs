@@ -24,9 +24,9 @@
 //! ## What these gates do NOT establish
 //!
 //! Structural correspondence, not a semantic proof that Clean's `IRInst`
-//! encoding means what trust-ir's does. `ir_sm_module` is hand-transcribed:
-//! this makes an incorrect transcription FAIL, not a correct one automatic.
-//! And the A0 evidence is pinned AT THE STRENGTH IT WAS MEASURED: the
+//! encoding means what trust-ir's does. `ir_sm_module` is MINTED (crystal A2,
+//! gated by `tests/crystal_a2_mint_sm.rs`); this lane remains the independent
+//! reader D. And the A0 evidence is pinned AT THE STRENGTH IT WAS MEASURED: the
 //! producer's interpreter differential is **NOT-RUN on this body (0
 //! samples)** — unlike the float closures' agreed/64 — and the last test
 //! asserts that refusal as recorded, so nothing downstream can quietly claim
@@ -44,7 +44,8 @@ fn strict_monads_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_strict_monads.rs", "const SRC_IR_SM_B0"),
+        // The MINTED script (crystal A2) — the same lines the spec replays.
+        &clean_block_sources("generated/ir_sm.defs.txt", "def ir_sm_b"),
         "def ir_sm_b",
     );
 
@@ -139,7 +140,7 @@ fn strict_monads_proved_module_matches_the_emitted_artifact() {
         2,
         "the receiver is dereferenced TWICE — once to load, once to store back: {text}"
     );
-    let func = clean_block_sources("eval_ir_strict_monads.rs", "const SRC_IR_SM_FUNC");
+    let func = clean_block_sources("generated/ir_sm.defs.txt", "def ir_sm_func");
     assert!(
         func.contains("IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0"),
         "the registered IRFunc must bind the same two parameter ids in the same order: {func}"
@@ -155,7 +156,7 @@ fn strict_monads_proved_module_matches_the_emitted_artifact() {
     // final whole-Cfg equality.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_strict_monads.rs", "const SRC_IR_SM_FUNC"),
+        &clean_block_sources("generated/ir_sm.defs.txt", "def ir_sm_func"),
         "strict_monads",
     );
     assert_lanes(&emitted, &clean, "strict_monads");
@@ -266,7 +267,7 @@ fn strict_monads_the_write_lanes_catch_what_every_old_lane_misses() {
 #[test]
 fn strict_monads_the_lanes_catch_a_drifted_spec_module_too() {
     let emitted = parse_emitted(&fixture("strict_monads.trust-ir.txt"));
-    let src = clean_block_sources("eval_ir_strict_monads.rs", "const SRC_IR_SM_B0");
+    let src = clean_block_sources("generated/ir_sm.defs.txt", "def ir_sm_b");
     let good = parse_clean(&src, "def ir_sm_b");
     assert_eq!(
         emitted.insertfields, good.insertfields,
@@ -360,7 +361,7 @@ fn strict_monads_a_volatile_store_is_refused_not_dropped() {
         "the refusal must name the flag and the repair"
     );
 
-    let src = clean_block_sources("eval_ir_strict_monads.rs", "const SRC_IR_SM_B0");
+    let src = clean_block_sources("generated/ir_sm.defs.txt", "def ir_sm_b");
     let vol = src.replace(
         "IRInst.store ir_sm_tenv ir_d0 ir_d3 Bool.false",
         "IRInst.store ir_sm_tenv ir_d0 ir_d3 Bool.true",

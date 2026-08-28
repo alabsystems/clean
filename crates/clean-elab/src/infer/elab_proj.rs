@@ -60,8 +60,15 @@ impl<'a> ElabCtx<'a> {
                 // struct instance, an inductive/constructor), keep the existing
                 // structure-projection / method dot-notation path so e.g.
                 // `pairVal.snd` projects the field even when a `pairVal.snd`
-                // constant also happens to exist.
-                if !self.ident_resolves_to_value(base_name) {
+                // constant also happens to exist. A TYPE-FORMER base (`Eq.symm`,
+                // `Nat.myLemma`) is namespace-like even though the type constant
+                // is in scope: Lean resolves `T.member` as one identifier
+                // (`resolveGlobalName`), never as a projection OF the type
+                // former, and elaborating `T` as a receiver mints a stray
+                // universe param for it that nothing later pins.
+                if !self.ident_resolves_to_value(base_name)
+                    || self.ident_resolves_to_type_former(base_name)
+                {
                     let qualified = format!("{base_name}.{field}");
                     // Resolve the dotted name namespace-relatively too (B03):
                     // `B.c` written inside `namespace A` must find `A.B.c`
@@ -174,11 +181,20 @@ impl<'a> ElabCtx<'a> {
                                         ));
                                     }
                                 }
+                                // Forward the qualified-name diagnostic whenever
+                                // it is MORE SPECIFIC than a bare unknown-ident:
+                                // suggestions, a protected-name pointer, a
+                                // same-batch sibling, or the self-reference
+                                // recursion report all name the identifier AS
+                                // WRITTEN (`foo.a`), which the base error has
+                                // already truncated to its root (`foo`). Only a
+                                // signal-free bare `UnknownIdent` falls back.
+                                // (The old filter forwarded ONLY the suggestion
+                                // variant, so the richer self-reference report
+                                // introduced for recursive defs was silently
+                                // DISCARDED here in favor of the truncated one.)
                                 let qualified_err = self.unknown_ident_error(&qualified);
-                                if matches!(
-                                    qualified_err,
-                                    ElabError::UnknownIdentWithSuggestions { .. }
-                                ) {
+                                if !matches!(qualified_err, ElabError::UnknownIdent(_)) {
                                     return Err(qualified_err);
                                 }
                             }
@@ -218,11 +234,12 @@ impl<'a> ElabCtx<'a> {
                                             ));
                                         }
                                     }
+                                    // Same forwarding rule as the Ident-base arm
+                                    // above: anything more specific than a bare
+                                    // `UnknownIdent` wins over the truncated
+                                    // base-name error.
                                     let qualified_err = self.unknown_ident_error(&qualified);
-                                    if matches!(
-                                        qualified_err,
-                                        ElabError::UnknownIdentWithSuggestions { .. }
-                                    ) {
+                                    if !matches!(qualified_err, ElabError::UnknownIdent(_)) {
                                         return Err(qualified_err);
                                     }
                                     // Return error with full qualified name for better message
@@ -281,6 +298,53 @@ impl<'a> ElabCtx<'a> {
                                 // report the (more informative) unknown-field error.
                                 if let Ok(method_expr) = self.elab_dot_notation(&expr_val, proj) {
                                     return Ok(method_expr);
+                                }
+                                // INHERITED FIELD, composed ON THE FLY — Lean's
+                                // `mkBaseProjections` (`src/Lean/Elab/App.lean`).
+                                // `field_name` is not an own field of `struct_name`,
+                                // but it may be projectable through an `extends`
+                                // parent SUBOBJECT, in which case Lean emits the
+                                // composition `Parent.f (Child.toParent self)` at THIS
+                                // use site and declares no constant for it. Clean
+                                // additionally MATERIALIZES that composition as a
+                                // constant `Child.f` (`elab_structure::
+                                // build_inherited_projections`), so the arm above
+                                // normally resolves first.
+                                //
+                                // SAFETY PROPERTY, precisely: this arm CANNOT change
+                                // any term that elaborates today — wherever the
+                                // constant exists `elab_dot_notation` already
+                                // returned, and wherever it does not the old code had
+                                // already failed. It only ever turns a loud
+                                // unknown-field error into a resolved projection, and
+                                // the kernel re-checks every `Proj` it emits, so a
+                                // wrong walk fails closed. Three real places reach it:
+                                // a field `collect_flattened_projectable_instantiated`
+                                // DROPPED fail-closed (level-param mismatch,
+                                // under-shaped telescope, self-dependent after
+                                // instantiation — all cases the kernel's own `Proj`
+                                // typing rule handles natively, which is why the chain
+                                // succeeds where the constant could not be built); an
+                                // `.olean`-IMPORTED structure (no `structure_parents`
+                                // metadata, so the walk declines there today); and the
+                                // Lean-4-parity mode measured in
+                                // `designs/2026-08-24-inherited-projection-parity.md`.
+                                //
+                                // The composed chain is a pure kernel `Proj` spine, so
+                                // it needs no name lookup and no universe params, and
+                                // it is definitionally equal to the generated
+                                // constant's application by delta (pinned by
+                                // `composed_inherited_projection_is_def_eq_to_generated_constant`).
+                                if let Some(chain) =
+                                    crate::name_resolution::compose_subobject_projection(
+                                        self.env,
+                                        &struct_name,
+                                        &field_name,
+                                        expr_val.clone(),
+                                        0,
+                                    )
+                                {
+                                    return Ok(chain);
                                 }
                                 let field_names: Vec<String> = self
                                     .env
@@ -425,6 +489,61 @@ impl<'a> ElabCtx<'a> {
             loop {
                 let qualified = Name::from_string(&format!("{prefix}.{name}"));
                 if is_known(&qualified) {
+                    return true;
+                }
+                match prefix.rsplit_once('.') {
+                    Some((parent, _)) => prefix = parent,
+                    None => break,
+                }
+            }
+        }
+        false
+    }
+
+    /// Does the bare identifier `name` denote a *type former* — a registered
+    /// inductive, or an accessible constant whose declared type strips Pi
+    /// binders down to a `Sort`? Locals shadow globals and are never type
+    /// formers here (`lookup_local` first), so a receiver that merely reuses a
+    /// type's name keeps the projection / dot-notation path. Resolution order
+    /// mirrors `ident_resolves_to_value` (direct, `open` aliases, enclosing
+    /// namespaces). Read-only: never auto-binds. Syntactic Pi-stripping only —
+    /// no whnf — so a defined alias that only REDUCES to a Sort is not
+    /// classified; such a base keeps the receiver path, which still resolves
+    /// it via `elab_dot_notation`'s namespace walk.
+    fn ident_resolves_to_type_former(&self, name: &str) -> bool {
+        if self.lookup_local(name).is_some() {
+            return false;
+        }
+        let is_type_former = |n: &Name| {
+            if self.env.get_inductive(n).is_some() {
+                return true;
+            }
+            let Some(info) = self.env.get_const(n) else {
+                return false;
+            };
+            if !self.is_const_accessible(n) {
+                return false;
+            }
+            let mut ty = &info.type_;
+            while let ExprKind::Pi(_, _, body) = ty.kind() {
+                ty = body;
+            }
+            matches!(ty.kind(), ExprKind::Sort(_))
+        };
+        let direct = Name::from_string(name);
+        if is_type_former(&direct) {
+            return true;
+        }
+        if let Some(qualified) = self.namespace_state.resolve(name) {
+            if is_type_former(qualified) {
+                return true;
+            }
+        }
+        if !self.namespace_prefix.is_empty() {
+            let mut prefix = self.namespace_prefix.as_str();
+            loop {
+                let qualified = Name::from_string(&format!("{prefix}.{name}"));
+                if is_type_former(&qualified) {
                     return true;
                 }
                 match prefix.rsplit_once('.') {
@@ -848,7 +967,38 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        let type_name = self.get_type_name(&expr_ty)?;
+        // Name the target instead of dumping the receiver's normalised type.
+        //
+        // `get_type_name` (`infer/elab_match/helpers.rs`) WHNFs before reading
+        // the head, so a `def`-based alias or a projection stuck on an opaque
+        // instance variable has no nameable head by the time it looks — and its
+        // refusal, `NotImplemented("cannot extract type name from <Expr dump>")`,
+        // deleted the identifier that failed to resolve and printed a raw
+        // expression in its place. That message is 44 of the 497 failures in the
+        // 2026-08-25 five-file Mathlib-source measurement
+        // (`docs/analysis/frontier-next-class-2026-08-25.md` §5), and it named
+        // neither the identifier nor which of `get_type_name`'s ~15 call sites
+        // raised it, so the class could not be triaged from the artifact.
+        //
+        // This is a MESSAGE repair and nothing else: it runs only where
+        // resolution has already failed, on the `?` path this line always took,
+        // and no site selects on the error's shape (the `UnknownIdent` matches
+        // in `elab_proj` above are on the RECEIVER's elaboration, which has long
+        // since succeeded here). Which declarations elaborate is byte-identical
+        // — verified probe-by-probe against `tests/fixtures/source_frontier/`.
+        //
+        // Naming the target is honest here specifically because the un-reduced
+        // head has already been tried: the Track-UU pre-whnf lookup above ran
+        // `<head>.<field>` through `get_const` + `is_const_accessible` and found
+        // nothing, so `<head>.<field>` is known-unresolvable at this point. The
+        // repair also makes this site self-identifying: any
+        // `cannot extract type name from …` still left in a future corpus report
+        // is definitively one of the OTHER callers (the match-lowering family),
+        // which is the per-site attribution the artifact could not give.
+        let type_name = match self.get_type_name(&expr_ty) {
+            Ok(type_name) => type_name,
+            Err(_) => return Err(self.unresolved_dot_target(&expr_ty, &field_name)),
+        };
         let const_name = format!("{type_name}.{field_name}");
         let name = Name::from_string(&const_name);
 
@@ -928,6 +1078,66 @@ impl<'a> ElabCtx<'a> {
         };
         let fn_expr = Expr::const_(name, levels);
         self.apply_dot_receiver(fn_expr, &fn_type, expr_val, &expr_ty, &type_name)
+    }
+
+    /// Build the named refusal for a dot-notation target that did not resolve
+    /// on a receiver whose type has no nameable head after normalisation.
+    ///
+    /// Diagnostic only — see the call site in `elab_dot_notation` for why this
+    /// changes no verdict and why the named identifier is known-unresolvable by
+    /// the time it is reported.
+    ///
+    /// The name is taken from the receiver type's UN-REDUCED head, which is the
+    /// namespace Lean resolves dot notation against (`resolveLValLoop`,
+    /// `Lean/Elab/App.lean`) and the one the pre-whnf lookup above already
+    /// consulted. When that head is not a constant there is no namespace to
+    /// name, so the field is reported alone rather than guessed at.
+    fn unresolved_dot_target(&self, expr_ty: &Expr, field_name: &str) -> ElabError {
+        let name = match expr_ty.get_app_fn().kind() {
+            ExprKind::Const(head, _) => format!("{head}.{field_name}"),
+            _ => field_name.to_string(),
+        };
+        ElabError::UnresolvedDotTarget {
+            name,
+            field: field_name.to_string(),
+            receiver: format!("{expr_ty}"),
+            normalized_head: self.describe_normalized_head(expr_ty),
+        }
+    }
+
+    /// Compact label for the head `get_type_name` could not name.
+    ///
+    /// Mirrors that function's own walk — normalise, then descend the
+    /// application spine, re-normalising each function head — so the label
+    /// describes the expression it actually rejected. Only the constructor is
+    /// reported (plus the structure and index for a projection, which is what
+    /// separates this class's stuck-projection face from its unfolded-alias
+    /// face); the full `Expr` dump this replaces is what made the class
+    /// untriageable in the first place.
+    fn describe_normalized_head(&self, expr_ty: &Expr) -> String {
+        // Spine depth is bounded so a pathological term cannot turn a
+        // diagnostic into a hang; `get_type_name` is stack-safe for the same
+        // reason. A spine this deep has no nameable head anyway.
+        const MAX_SPINE: usize = 256;
+        let mut head = self.whnf(expr_ty);
+        for _ in 0..MAX_SPINE {
+            let ExprKind::App(func, _) = head.kind() else {
+                break;
+            };
+            head = self.whnf(func);
+        }
+        match head.kind() {
+            ExprKind::Pi(..) => "Pi".to_string(),
+            ExprKind::Lam(..) => "Lam".to_string(),
+            ExprKind::Sort(_) => "Sort".to_string(),
+            ExprKind::Let(..) => "Let".to_string(),
+            ExprKind::Lit(_) => "Lit".to_string(),
+            ExprKind::BVar(_) => "BVar".to_string(),
+            ExprKind::Proj(struct_name, idx, _) => format!("Proj({struct_name}, {idx})"),
+            ExprKind::FVar(_) => "opaque type variable".to_string(),
+            ExprKind::Const(head_name, _) => format!("Const({head_name})"),
+            _ => "unnameable head".to_string(),
+        }
     }
 
     /// Nested-aux container coercion for dot notation (#3239 follow-up).

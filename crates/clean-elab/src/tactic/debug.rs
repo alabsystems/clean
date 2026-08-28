@@ -96,7 +96,7 @@ pub fn trace_with_level(
 ) -> Result<TraceOutput, TacticError> {
     let goal_summary = if let Some(goal) = state.current_goal() {
         format!(
-            "⊢ {:?} (with {} hypotheses)",
+            "⊢ {} (with {} hypotheses)",
             goal.target,
             goal.local_ctx.len()
         )
@@ -158,7 +158,7 @@ pub fn trace_state(state: &ProofState) -> Result<TraceOutput, TacticError> {
 pub fn trace_expr(state: &ProofState, expr: &Expr) -> Result<TraceOutput, TacticError> {
     let message = format!("Expression structure: {expr:?}");
     let goal_summary = if let Some(goal) = state.current_goal() {
-        format!("⊢ {:?}", goal.target)
+        format!("⊢ {}", goal.target)
     } else {
         "no goals".to_string()
     };

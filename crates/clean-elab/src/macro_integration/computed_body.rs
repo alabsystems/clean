@@ -78,37 +78,24 @@
 //! at the call site — it is never silently mis-expanded. No kernel bypass, no
 //! axioms.
 //!
-//! # Honest-pinned: fresh-name / hygiene gensym (`mkFreshId` / `addMacroScope`)
+//! # Fresh-name / hygiene gensym (`mkFreshId` / `addMacroScope`) — CLOSED
 //!
 //! A computed body that introduces a *fresh* binder — `let fresh <- mkFreshId`
-//! then `` `(fun $fresh => …) `` — is NOT yet evaluated here, and DEFERS. This is
-//! a genuine architectural gap, not a quick add, for one structural reason:
+//! then `` `(fun $fresh => …) `` — no longer defers. It was pinned here as a
+//! genuine architectural gap for a real reason: this evaluator runs ONCE, at
+//! registration time, producing a single static [`SyntaxQuote`] template, while
+//! a faithful `mkFreshId` must yield a distinct unique name per EXPANSION,
+//! threaded from the expander's live fresh-name counter
+//! ([`clean_macro::hygiene::HygieneContext::fresh`] — a monotone `AtomicU64`,
+//! deterministic and scope-tagged) which lives in the expander, not here.
 //!
-//! - This evaluator runs **once, at registration time**, producing a single
-//!   static [`SyntaxQuote`] template stored in the `MacroDef`. The macro expander
-//!   ([`clean_macro::expand`]) then substitutes the matched antiquotations into
-//!   that fixed template on *every* application.
-//! - A faithful `mkFreshId` must yield a **distinct unique name per expansion**,
-//!   threaded from the expander's live fresh-name counter. Clean already HAS that
-//!   counter — [`clean_macro::hygiene::HygieneContext::fresh`] /
-//!   [`clean_macro::hygiene::HygieneState::gensym`], deterministic (a monotone
-//!   `AtomicU64`, no `Date.now`/random) and hygienic (scope-tagged) — but it lives
-//!   in the *expander*, not at registration time, and bakes nothing into a static
-//!   template.
-//!
-//! The precise design to close this (a focused follow-up, not done here):
-//!   1. Store the computed body **unevaluated** in the `MacroDef` (a new
-//!      `MacroDef` expansion variant alongside the static `SyntaxQuote`), instead
-//!      of evaluating it once at registration.
-//!   2. When the expander applies that arm, evaluate the body **lazily** with the
-//!      matched antiquotation environment AND a `&mut HygieneContext` borrowed
-//!      from the active `HygienicExpander`. `mkFreshId`/`addMacroScope` then call
-//!      `HygieneContext::fresh`/`gensym`, producing a per-expansion hygienic
-//!      unique name.
-//!   3. Splice the fresh name as the resolved value of its `$fresh`
-//!      antiquotation, exactly as `let`-bound quotations are spliced today.
-//!
-//! Until that lands, a fresh-name body defers honestly here.
+//! That is now threaded: `mkFreshId`, `mkFreshUserName` and
+//! `addMacroScope <ident>` are recognized as fresh-name effects in both the
+//! `<-` and `:=` binding forms, and the name is resolved per expansion rather
+//! than baked into the template. `test_macro_rules_mkfreshid_distinct_per_expansion`
+//! expands the same input twice and asserts the two fresh ids DIFFER, with
+//! `test_macro_rules_static_template_unchanged_alongside_fresh` as the negative
+//! control that a non-gensym macro still expands identically every time.
 
 use clean_parser::{DoElem, QAntiquotContent, Span, SurfaceArg, SurfaceExpr, SurfaceFieldAssign};
 

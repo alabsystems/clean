@@ -25,6 +25,15 @@
 //! Neither could be produced by a channel that extracts nothing. What this does NOT do is
 //! rehabilitate the chain bodies' own flag — that stays empty-vs-empty, and the witness
 //! fixture says so in `what_this_does_NOT_establish`.
+//!
+//! NEGATIVE CONTROLS. This module's own falsifiability is proved by mutation, not
+//! asserted: `scripts/crystal_perturb_markers_channel.sh` corrupts each recorded value in
+//! `tests/fixtures/markers_channel_witness.json` in turn, asserts the test binary FAILS,
+//! reverts, and asserts it PASSES again. Named here because a battery nothing points at is
+//! a battery nobody runs — a 2026-08-22 audit found this script referenced by NOTHING in
+//! the tree, docs included, while its four siblings are all named from
+//! `docs/CRYSTAL_STATUS.md`. Run it with
+//! `CRYSTAL_BIN=<compiled crystal_a1_lineage test binary> scripts/crystal_perturb_markers_channel.sh`.
 
 use super::fixture;
 

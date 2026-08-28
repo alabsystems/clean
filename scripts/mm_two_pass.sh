@@ -21,9 +21,20 @@
 #               (default: a fresh mktemp dir, path printed at the end)
 #
 # Output:
-#   $OUTDIR/range_<start>_<end>.out   per-worker stdout (VERIFIED_COUNT + V <label>)
+#   $OUTDIR/range_<start>_<end>.out   per-worker stdout (VERIFIED_FORMAT/COUNT,
+#                                     `V <label>`, and `G <label>` for the
+#                                     GROUND-ONLY subset)
 #   $OUTDIR/range_<start>_<end>.err   per-worker stderr (timing + any FAILs)
-#   $OUTDIR/verified_union.txt        sorted union of all verified labels
+#   $OUTDIR/verified_union.txt        sorted union, in the same VERIFIED_FORMAT 2
+#                                     shape — feed it straight to `mm_gate`
+#
+# R1-MM: the union MUST carry the `G <label>` marking. A theorem that verified only
+# on the GROUND fallback is verified but NOT reusable, and `mm_gate` has to drop its
+# dependents to reproduce the sequential verifier's set (issue
+# docs/issues/2026-08-23-r1-mm-two-pass-theorem.md). The `VERIFIED_FORMAT 2` stamp is
+# written only if EVERY worker's output carried it, so a stale `mm_verify_range`
+# binary produces an unstamped union that `mm_gate` REFUSES — never a silently
+# all-reusable one.
 #
 # Each worker's PASS 1 traverses [0, end) to build dependency-type axioms, so
 # every worker pays the (cheap) type-registration cost for its prefix; only its
@@ -190,17 +201,50 @@ for pid in "${PIDS[@]}"; do
   fi
 done
 
-# Union the verified labels (lines beginning "V ") across all workers, sorted.
+# Union the verified labels across all workers, PRESERVING the ground-only marking.
+#
+# `V <label>` = verified; `G <label>` = verified only on the GROUND (non-reusable)
+# fallback. `G` is STICKY across workers: ranges are disjoint so exactly one worker
+# owns each label, but a sticky union is fail-closed under any re-partitioning.
+# The `VERIFIED_FORMAT 2` stamp is emitted only when every worker output had it.
 UNION="$OUTDIR/verified_union.txt"
-# shellcheck disable=SC2046
-cat $(ls "$OUTDIR"/range_*.out 2>/dev/null) 2>/dev/null \
-  | awk '/^V /{print $2}' \
-  | sort -u > "$UNION"
+# bash 3.2 (the macOS system shell) has no `mapfile`, so collect with a glob loop.
+WORKER_OUTS=()
+for f in "$OUTDIR"/range_*.out; do
+  if [[ -f "$f" ]]; then
+    WORKER_OUTS+=("$f")
+  fi
+done
+n_outs="${#WORKER_OUTS[@]}"
+stamped=0
+for f in ${WORKER_OUTS+"${WORKER_OUTS[@]}"}; do
+  if grep -q '^VERIFIED_FORMAT 2' "$f"; then
+    stamped=$(( stamped + 1 ))
+  fi
+done
+if [[ "$n_outs" -gt 0 && "$stamped" -eq "$n_outs" ]]; then
+  echo "VERIFIED_FORMAT 2" > "$UNION"
+else
+  : > "$UNION"
+  echo "WARNING: $stamped/$n_outs worker outputs carry the VERIFIED_FORMAT 2 stamp." >&2
+  echo "         The union is written UNSTAMPED and mm_gate will REFUSE it (fail-closed)." >&2
+  echo "         Rebuild mm_verify_range (rm -f '$BIN') and re-run — see R1-MM." >&2
+  fail=1
+fi
+# `G` wins over `V` for the same label (sticky, order-independent). Both lines are
+# emitted for a ground-only label so a v1 `/^V /` reader still sees every label.
+cat ${WORKER_OUTS+"${WORKER_OUTS[@]}"} 2>/dev/null \
+  | awk '/^V /{v[$2]=1} /^G /{g[$2]=1; v[$2]=1}
+         END {for (l in v) {print "V " l; if (l in g) print "G " l}}' \
+  | sort -u >> "$UNION"
 
-union_count="$(wc -l < "$UNION" | tr -d ' ')"
+union_count="$(awk '/^V /{n++} END{print n+0}' "$UNION")"
+ground_count="$(awk '/^G /{n++} END{print n+0}' "$UNION")"
 echo "===============================================" >&2
-echo "two-pass UNION verified labels: $union_count" >&2
+echo "two-pass UNION verified labels: $union_count ($ground_count ground-only)" >&2
 echo "union written to: $UNION" >&2
+echo "next: mm_gate <set.mm> $UNION   # drops dependents of unverified AND of" >&2
+echo "      ground-only \$p-deps — this is what makes the set equal sequential" >&2
 if grep -rq "    FAIL " "$OUTDIR"/range_*.err 2>/dev/null; then
   echo "WARNING: at least one worker reported a FAIL (soundness alarm) — see *.err" >&2
   fail=1

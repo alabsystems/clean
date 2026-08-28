@@ -278,7 +278,7 @@ impl R1CSBuilder {
     }
 
     /// Index of public input i (0-indexed) in z
-    pub fn io_idx(&self, i: usize) -> usize {
+    pub(crate) fn io_idx(&self, i: usize) -> usize {
         1 + i
     }
 

@@ -226,6 +226,52 @@ impl InstanceTable {
         instances.insert(pos, info);
     }
 
+    /// Append an instance WITHOUT maintaining the priority order; the caller
+    /// must finish with [`Self::sort_instances_by_priority`] before the table
+    /// is read. Bulk-load path for [`crate::infer::ElabCtx::new`].
+    ///
+    /// MEASURED (Mathlib `Logic/Basic` through `clean check`, 166k-constant
+    /// environment): with the local-context cache in place, 76-93% of all
+    /// elaboration time was `ElabCtx::new` → `init_instances_from_env` →
+    /// [`Self::add_instance_with_synth_order`] — the sorted insert's position
+    /// scan plus `Vec::insert` shift make loading a class's instances
+    /// QUADRATIC in their count, paid again for EVERY declaration because the
+    /// table is rebuilt per `ElabCtx`. Appending and sorting once is
+    /// O(n log n) and yields the identical order (see the sort's contract).
+    pub(crate) fn push_instance_unsorted(
+        &mut self,
+        instance_name: Name,
+        class_name: Name,
+        expr: Expr,
+        type_: Expr,
+        priority: u32,
+        synth_order: Option<Vec<usize>>,
+    ) {
+        let info = InstanceInfo {
+            name: instance_name,
+            class_name: class_name.clone(),
+            expr,
+            type_,
+            priority,
+            synth_order,
+        };
+        self.instances.entry(class_name).or_default().push(info);
+    }
+
+    /// Restore the per-class order [`Self::add_instance_with_synth_order`]
+    /// maintains: priority descending, and among equal priorities the
+    /// insertion order. The sorted insert places each newcomer after every
+    /// existing entry of priority `>=` its own, which is exactly what a STABLE
+    /// descending sort of the append order produces — so a table bulk-loaded
+    /// through [`Self::push_instance_unsorted`] and sorted here is
+    /// element-for-element equal to one built by repeated sorted inserts.
+    pub(crate) fn sort_instances_by_priority(&mut self) {
+        for instances in self.instances.values_mut() {
+            // `sort_by_key` is stable.
+            instances.sort_by_key(|info| std::cmp::Reverse(info.priority));
+        }
+    }
+
     /// Get all instances for a class, sorted by priority (highest first)
     pub fn get_instances(&self, class_name: &Name) -> &[InstanceInfo] {
         self.instances.get(class_name).map_or(&[], Vec::as_slice)

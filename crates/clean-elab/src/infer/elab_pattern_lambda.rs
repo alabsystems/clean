@@ -104,7 +104,7 @@ impl<'a> ElabCtx<'a> {
             Level::Succ(level) => Ok(level.as_ref().clone()),
             actual => Err(ElabError::TypeMismatch {
                 expected: "Type-valued pattern-lambda binder".to_string(),
-                actual: format!("{actual:?}"),
+                actual: format!("{actual}"),
             }),
         }
     }

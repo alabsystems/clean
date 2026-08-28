@@ -212,6 +212,18 @@ pub(crate) fn try_prove_nat_equality_direct(target: &Expr) -> Option<Expr> {
         }
     }
 
+    // Succ-elimination pre-pass (B7 arith-double-eq-induction): rewrite every
+    // `Nat.succ t` node in the ADDITIVE/lit-mul structure into `Nat.add t 1`, so
+    // succ-spined identity goals (`succ (succ (k + k)) = 2 * succ k`) flatten
+    // into the same leaf multiset on both sides. The rewrite is DEFINITIONAL
+    // (`Nat.add t 1` iota-reduces to `Nat.succ t`), so the whole pass is carried
+    // by a single `Eq.refl` re-typed at `side = eliminated` — accepted by the
+    // kernel iff genuinely def-eq (the soundness gate stays `close_goal`).
+    // A side with no succ node is returned verbatim, leaving the synthesized
+    // term byte-identical to the pre-pass behavior.
+    let elim_l = eliminate_succ_nodes(&lhs);
+    let elim_r = eliminate_succ_nodes(&rhs);
+
     // Expand every literal-coefficient multiplication leaf (`k * atom` /
     // `atom * k`) into the `k`-fold additive sum `atom + (atom + … + atom)`,
     // producing a proof `side = expanded_side`. This lets the additive
@@ -221,8 +233,19 @@ pub(crate) fn try_prove_nat_equality_direct(target: &Expr) -> Option<Expr> {
     // `Nat.zero_mul`/`Nat.mul_one`/`Nat.mul_zero`), so it adds zero
     // domain-specific axioms; the whole term is still kernel-rechecked by the
     // caller. A side with no mul leaf expands to itself with a reflexive proof.
-    let (exp_l, expand_l) = expand_mul_leaves(&lhs)?; // expand_l : lhs = exp_l
-    let (exp_r, expand_r) = expand_mul_leaves(&rhs)?; // expand_r : rhs = exp_r
+    let (exp_l, expand_l0) = expand_mul_leaves(&elim_l)?; // expand_l0 : elim_l = exp_l
+    let (exp_r, expand_r0) = expand_mul_leaves(&elim_r)?; // expand_r0 : elim_r = exp_r
+                                                          // Compose `lhs = elim_l` (refl, def-eq) with `elim_l = exp_l`.
+    let expand_l = if elim_l == lhs {
+        expand_l0
+    } else {
+        mk_trans(&lhs, &elim_l, &exp_l, &mk_refl(&lhs), &expand_l0)
+    };
+    let expand_r = if elim_r == rhs {
+        expand_r0
+    } else {
+        mk_trans(&rhs, &elim_r, &exp_r, &mk_refl(&rhs), &expand_r0)
+    };
 
     // Normalize both expanded sides to the SAME canonical right-folded sum, then
     // `Eq.trans (l = canon) (Eq.symm (r = canon))`.
@@ -1108,6 +1131,57 @@ fn expand_mul_leaves(e: &Expr) -> Option<(Expr, Expr)> {
     // Any other leaf (atom, literal, `succ …`, symbolic×symbolic mul that the
     // parser already rejected upstream): unchanged, reflexive proof.
     Some((e.clone(), mk_refl(e)))
+}
+
+/// Rewrite every `Nat.succ t` node in the additive / literal-multiplication
+/// structure of `e` into `Nat.add t' 1` (recursing into `t`, both `add`
+/// children, and the *symbolic* side of a `k * atom` / `atom * k` leaf).
+/// Ground leaves (`eval_nat_expr`-evaluable) and all other atoms are preserved
+/// verbatim, so atom identity stays aligned with the [`accumulate`] decision
+/// gate.
+///
+/// The transformation is DEFINITIONAL: `Nat.add t 1` iota-reduces to
+/// `Nat.succ t` (literal `1` unfolds to `Nat.succ Nat.zero` in major-premise
+/// position), and an `HAdd`/`HMul` head delta-reduces to `Nat.add`/`Nat.mul`.
+/// The caller therefore carries the whole pass with a single re-typed
+/// `Eq.refl`, and a non-def-eq rebuild is rejected by the kernel (fail closed).
+fn eliminate_succ_nodes(e: &Expr) -> Expr {
+    // Ground leaf: keep verbatim (the literal folder handles it downstream).
+    if eval_nat_expr(e).is_some() {
+        return e.clone();
+    }
+    // `Nat.succ t` → `Nat.add t' 1`.
+    if let ExprKind::App(f, arg) = e.kind() {
+        if let ExprKind::Const(name, _) = f.kind() {
+            if name.to_string() == "Nat.succ" {
+                let inner = eliminate_succ_nodes(arg);
+                return nat_add(inner, Expr::nat_lit(1));
+            }
+        }
+    }
+    // Additive node: recurse into both children.
+    if is_add(e) {
+        if let Some((l, r)) = nat_add_children(e) {
+            let l2 = eliminate_succ_nodes(&l);
+            let r2 = eliminate_succ_nodes(&r);
+            if l2 == l && r2 == r {
+                return e.clone();
+            }
+            return nat_add(l2, r2);
+        }
+    }
+    // Literal-coefficient mul leaf: recurse into the symbolic side only.
+    if let Some((k, atom, side)) = match_lit_mul(e) {
+        let atom2 = eliminate_succ_nodes(&atom);
+        if atom2 == atom {
+            return e.clone();
+        }
+        return match side {
+            LitSide::Left => nat_mul(Expr::nat_lit(k), atom2),
+            LitSide::Right => nat_mul(atom2, Expr::nat_lit(k)),
+        };
+    }
+    e.clone()
 }
 
 /// Extract `(a, b)` from `Nat.add a b` / `HAdd.hAdd .. a b` / `Add.add a b`.

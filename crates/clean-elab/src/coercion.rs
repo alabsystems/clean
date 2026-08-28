@@ -320,19 +320,19 @@ pub(crate) fn try_coerce(
     expected_type: &Expr,
 ) -> Result<Expr, ElabError> {
     let source = head_type_name(actual_type).ok_or_else(|| ElabError::TypeMismatch {
-        expected: format!("{expected_type:?}"),
-        actual: format!("{actual_type:?}"),
+        expected: format!("{expected_type}"),
+        actual: format!("{actual_type}"),
     })?;
     let target = head_type_name(expected_type).ok_or_else(|| ElabError::TypeMismatch {
-        expected: format!("{expected_type:?}"),
-        actual: format!("{actual_type:?}"),
+        expected: format!("{expected_type}"),
+        actual: format!("{actual_type}"),
     })?;
 
     let path = registry
         .find_chain(&source, &target)
         .ok_or_else(|| ElabError::TypeMismatch {
-            expected: format!("{expected_type:?}"),
-            actual: format!("{actual_type:?}"),
+            expected: format!("{expected_type}"),
+            actual: format!("{actual_type}"),
         })?;
 
     Ok(apply_coercion_path(&path, expr))

@@ -25,8 +25,19 @@ impl LanguageServer for CleanBackend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::INCREMENTAL,
+                // The OPTIONS form, not the scalar `Kind`. `Kind(INCREMENTAL)`
+                // carries no `save` field, so a spec-conforming client is told
+                // this server does not want save notifications and need never
+                // send `textDocument/didSave` — leaving the `did_save` handler
+                // below unreachable through no fault of its own. Announcing
+                // `save` is what makes it reachable.
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        open_close: Some(true),
+                        change: Some(TextDocumentSyncKind::INCREMENTAL),
+                        save: Some(TextDocumentSyncSaveOptions::Supported(true)),
+                        ..Default::default()
+                    },
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -178,7 +189,11 @@ impl LanguageServer for CleanBackend {
             Document::new(uri.clone(), version, text, language_id),
         );
 
-        self.check_document(&uri).await;
+        // Parse-first inline, elaboration in the background: the parse
+        // diagnostics publish completes before this handler returns, while
+        // the full elaboration runs as a per-URI spawned task (see
+        // `backend::background`).
+        self.spawn_check_document(&uri).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -193,11 +208,24 @@ impl LanguageServer for CleanBackend {
             }
         }
 
-        self.check_document(&uri).await;
+        // Parse-first inline, elaboration in the background: a keystroke's
+        // notification handler no longer awaits its own full elaboration. A
+        // newer didChange supersedes (and aborts) the in-flight task via the
+        // per-URI generation counter, and `commit_elaboration`'s version
+        // check discards any stale result that still lands. Requests racing
+        // the task (hover, plainGoal, ...) answer from the last committed
+        // snapshot, which `Document::apply_change` preserves across edits.
+        self.spawn_check_document(&uri).await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
+
+        // Abort any in-flight background elaboration first: its commit would
+        // be discarded anyway (the document entry is removed below), and a
+        // post-close diagnostics publish must not resurrect diagnostics the
+        // clearing publish at the end of this handler removes.
+        self.discard_elaboration_task(&uri);
 
         // Remove definitions from this document
         let to_remove: Vec<String> = self
@@ -215,7 +243,12 @@ impl LanguageServer for CleanBackend {
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        self.check_document(&params.text_document.uri).await;
+        // Background, exactly like didOpen/didChange. This awaited the FULL
+        // elaboration inline, so saving a large file stalled the notification
+        // handler and with it every message queued behind it. A save is not a
+        // more urgent trigger than a keystroke: it runs through the same
+        // generation-counter supersession and the same version-checked commit.
+        self.spawn_check_document(&params.text_document.uri).await;
     }
 
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
@@ -251,8 +284,10 @@ impl LanguageServer for CleanBackend {
 
         let mut items = Vec::new();
 
-        // Add completions from definitions
-        for entry in &self.definitions {
+        // Add completions from definitions. (`.iter()` rather than `&…`:
+        // the map is `Arc`-shared for background elaboration handles, and
+        // `&Arc<DashMap>` is not itself an iterator.)
+        for entry in self.definitions.iter() {
             let name = entry.key();
             if prefix.is_empty() || name.starts_with(&prefix) {
                 // Determine completion kind based on where the definition came from
@@ -1023,7 +1058,7 @@ impl CleanBackend {
                     }
                 }
             }
-            for entry in &self.definitions {
+            for entry in self.definitions.iter() {
                 if &entry.value().uri == uri {
                     def_spans.insert((entry.value().name_start, entry.value().name_end));
                 }

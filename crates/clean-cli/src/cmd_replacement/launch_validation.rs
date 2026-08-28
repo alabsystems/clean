@@ -294,12 +294,9 @@ pub(crate) fn validate_deny_sorry_launch_evidence(
             ratchet.add_decl_unchecked_count
         ));
     }
-    if ratchet.add_decl_structural_count != 0 || ratchet.add_decl_unchecked_count != 0 {
-        return Err(format!(
-            "current ratchet is not closed at 0/0: structural={}, unchecked={}",
-            ratchet.add_decl_structural_count, ratchet.add_decl_unchecked_count
-        ));
-    }
+    // G6 (2026-08-23): "closed" means every counted bypass is sanctioned and
+    // capped, not that the counts are 0 — see `ratchet_closure`.
+    validate_unchecked_decl_ratchet_closed(ratchet)?;
 
     let ratchet_sha =
         sha256_repo_artifact(UNCHECKED_DECL_RATCHET_PATH).map_err(|error| error.to_string())?;

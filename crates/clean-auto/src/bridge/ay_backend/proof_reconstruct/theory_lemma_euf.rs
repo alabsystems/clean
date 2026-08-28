@@ -112,7 +112,14 @@ impl<'a> ReconstructionContext<'a> {
             // chain[0] → chain[1] → ... → chain[n-1]
             let endpoints = self.get_chain_endpoints(clause, chain, step_id)?;
 
-            // Build the chain: Eq.trans h₁ (Eq.trans h₂ (... hₙ))
+            // Build the chain: Eq.trans h₁ (Eq.trans h₂ (... hₙ)).
+            // Invariant: after processing edge i, `current : eᵢ = eₙ` (the
+            // chain's FAR endpoint), so every `Eq.trans` step is
+            // `@Eq.trans α eᵢ eᵢ₊₁ eₙ hᵢ current`. Using `eᵢ₊₂` as the third
+            // operand only coincides with `eₙ` for the last step (and for
+            // two-edge chains); for longer chains it yields a term that
+            // `infer_type` accepts but the full `check_type` rejects.
+            let far_end = &endpoints[chain.len()];
             let mut current =
                 self.get_chain_proof_at(clause, chain, chain.len() - 1, depth, &alpha, step_id)?;
 
@@ -120,9 +127,8 @@ impl<'a> ReconstructionContext<'a> {
                 let h_i = self.get_chain_proof_at(clause, chain, i, depth, &alpha, step_id)?;
                 let a_expr = &endpoints[i];
                 let b_expr = &endpoints[i + 1];
-                let c_expr = &endpoints[i + 2];
                 current =
-                    expr_builders::mk_eq_trans(&alpha, a_expr, b_expr, c_expr, &h_i, &current);
+                    expr_builders::mk_eq_trans(&alpha, a_expr, b_expr, far_end, &h_i, &current);
             }
 
             Ok(current)

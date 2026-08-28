@@ -20,7 +20,8 @@
 //!
 //! - Basic expression types (no metadata, spans, etc.)
 //! - Substitution with de Bruijn indices
-//! - Simple WHNF (beta + let only, no delta)
+//! - WHNF: beta + zeta, plus (env-aware mode) delta body unfolding and the
+//!   closed-allowlist native Nat/Bool iota and Bool.rec/Nat.rec recursors
 //! - Structural equality after WHNF
 //!
 //! ## Trust Model

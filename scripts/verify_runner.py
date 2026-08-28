@@ -187,6 +187,10 @@ STATUS_GREEN = "GREEN"
 STATUS_RED = "RED"
 STATUS_RUNNING = "RUNNING"
 STATUS_ERROR = "ERROR"
+# A gate that SKIPPED measured nothing, and nothing is not a pass. `derive`
+# already sends any status outside {GREEN, RED, RUNNING} to UNKNOWN, which is
+# exactly where a deferral belongs. See _SKIPPED_VERDICT_RE.
+STATUS_SKIPPED = "SKIPPED"
 
 # Derived buckets reported to a human.
 BUCKET_GREEN = "GREEN"
@@ -313,6 +317,13 @@ TIMEOUT_FLOOR_BY_KIND = {
     # measured duration, and a shard that blows this budget is KILLED and
     # reported UNKNOWN exactly like any other.
     "lib-shard-spec": 18_000,
+    # A MEASUREMENT gate: it does not compile the workspace, it re-elaborates
+    # real Mathlib source through Clean's own frontend and compares the result
+    # to a committed baseline. Only `gate::srcelab` is of this kind. Floor set
+    # from the first end-to-end measurement of the whole pinned slice (see the
+    # row's own comment) rather than from the 3600s `gate` floor, which would
+    # kill it during its first file.
+    "gate-measure": 43_200,
 }
 TIMEOUT_FLOOR_DEFAULT = 3_600
 
@@ -587,6 +598,160 @@ WORKSPACE_GATES = [
         # recorded green reading fresh -- the precise failure mode
         # `_dir_content_digest` exists to prevent.
         "_extra_paths": ["data/paragon_ratchet.json", "scripts/paragon_ratchet.sh"],
+    },
+    # The Mathlib SOURCE-elaboration measurement (SRCELAB), added 2026-08-23 for
+    # the same reason gate::paragon was: NOTHING RAN IT. `scripts/source_elab_gate.sh`
+    # landed 2026-07 with a verdict-line contract, a ratchet artifact and its own
+    # 26-case self-test, and for six weeks the only caller was a human typing it
+    # by hand. Its ratchet sat UNARMED with all-zero baselines the whole time, and
+    # three of its four pinned files had never been measured end to end -- so the
+    # one number the repo has for "Clean elaborates real Mathlib source" could
+    # regress to zero without anything going red.
+    #
+    # It is a `gate-measure`, not a `gate`: it compiles nothing and lints nothing.
+    # It runs the RELEASE `clean` binary over FIVE pinned Mathlib .lean files
+    # through Clean's own parser -> elaborator -> kernel and enforces that each
+    # file's success count never drops below data/source_elab_ratchet.json.
+    #
+    # The slice grew from four to five on 2026-08-23 (Mathlib/Order/Basic.lean
+    # added, and Mathlib/Logic/Unique.lean un-capped because the ~19.5 GB OOM
+    # that forced its line-240 cap no longer reproduces -- 3.13 GiB measured for
+    # the full file).
+    #
+    # `--jobs` deliberately STAYS AT 4. Five concurrent processes would be five
+    # olean closures at ~6 GB each, i.e. ~30 GB against the ~15 GB this row's
+    # gate weight was learned from -- and _gate_weight_gb only re-learns AFTER a
+    # run, so the first five-wide pass would run under-reserved on a box whose
+    # 2026-08-19 kernel panic was caused by exactly that: many medium processes
+    # at once. At --jobs 4 the fifth file backfills the first freed slot, so the
+    # peak is unchanged and the wall grows by the SHORTEST file rather than by a
+    # whole wave -- a few hundred seconds on a row with a 43,200 s floor.
+    #
+    # COST, measured 2026-08-23 at a86c5ffd6 on this box with --jobs 4, against
+    # real Mathlib v4.30.0-rc2 oleans, sharing the box with five other lanes:
+    #   Mathlib/Logic/Basic.lean          12,905 s   151/256 success
+    #   Mathlib/Logic/Function/Basic.lean 10,125 s    77/230
+    #   Mathlib/Data/Subtype.lean          1,698 s    13/45
+    #   Mathlib/Logic/Unique.lean:1-240      489 s     8/35
+    # 25,217 s of CPU; 12,906 s (3 h 35 min) of WALL, i.e. max(file), which is
+    # why `--jobs 4` is load-bearing: serially this row is the SUM, 7 CPU-hours,
+    # and that is how the ratchet went un-armed for six weeks. Peak RSS was
+    # ~6 GB per process, ~15 GB for the four. The 43,200 s `gate-measure` floor
+    # is ~3.3x the measured wall, and the runner replaces it with 4x the row's
+    # own last duration as soon as it has one.
+    #
+    # TWO HONESTY NOTES, both of which a reader of this row must apply:
+    #
+    #   1. It SKIP-GREENS (exit 0, verdict `SRCELAB_GATE=skipped:<reason>`) when
+    #      target/release/clean or the Mathlib checkout is absent -- deliberate,
+    #      so clones without a 4 GB olean corpus are not permanently red, and the
+    #      same discipline scripts/kv_ratchet_gate.sh uses. This runner records
+    #      the gate's verbatim final line, which IS the verdict line, so
+    #      `verify_runner.sh status` shows `SRCELAB_GATE=measured` for a real
+    #      measurement and `SRCELAB_GATE=skipped:no-binary` for a deferral. A
+    #      GREEN on this row whose reason starts with `skipped:` measured NOTHING.
+    #      The suite does not build the release binary; that is a prerequisite.
+    #   2. The Mathlib checkout is OUTSIDE the repository and therefore outside
+    #      the input digest -- the same documented exclusion this runner already
+    #      carries for `.olean` corpora. A corpus that moves does not demote this
+    #      row's green; the recorded per-file decl counts in
+    #      reports/source-elab/ are how a reader notices.
+    #
+    # It never passes --update: arming a ratchet is a deliberate act with a report
+    # behind it, never a side effect of the suite running.
+    {
+        "id": "gate::srcelab",
+        "package": "__workspace__",
+        "kind": "gate-measure",
+        "argv": ["scripts/source_elab_gate.sh", "--jobs", "4"],
+        # The verdict is decided against the ratchet, computed by the classifier
+        # and driven by the pinned slice inside the gate script -- none of which
+        # is inside a crate directory, so without these an edit to any of them
+        # would leave a recorded green reading fresh.
+        "_extra_paths": [
+            "scripts/source_elab_gate.sh",
+            "scripts/srcelab_classify.py",
+            "data/source_elab_ratchet.json",
+        ],
+    },
+    # The constructive-theorem SET ratchet, added 2026-08-25 for the third time
+    # the same reason has come up: NOTHING RAN IT. `check_constructive_ratchet.py`
+    # landed 2026-04 and was invoked by no runner in the tree -- it was the live
+    # instance `scripts/check_gate_registry.py` cites in its own module docstring.
+    # Its only fellow reader of `data/constructive_ratchet.json` was a pair of
+    # unwired `scripts/audits/prover_*_audit.sh` ratchets, retired 2026-08-25, so
+    # the property was enforced NOWHERE.
+    #
+    # And it is a property no other gate has: the NAMES of the clean-native
+    # theorems with an empty transitive domain-axiom closure. `tcb_target_ratchet`
+    # pins the axiom census (3 foundational / 0 domain) and does not move by one
+    # when a constructive theorem silently DISAPPEARS. `axiom_audit.json`'s
+    # `constructive_theorems` sums `theorems` over conjecture rows flagged
+    # `constructive: true` -- a different population (265 there, 318 here).
+    #
+    # It lives here rather than in `local_gate.sh` for two reasons, both
+    # measured. It shells out to a release `mathverse_shard build-native`, which
+    # is minutes of cargo -- that cost is exactly why it fell out of every cheap
+    # path and drifted for two months. And `do_check` accepts arbitrary drift
+    # when `data/constructive_ratchet.json` is STAGED, an escape hatch that is
+    # inert in a detached pinned worktree where nothing is ever staged, and would
+    # be a live bypass in a pre-push leg. Falsifiability is
+    # `scripts/test_constructive_ratchet.py` (10 arms on do_check + 4 on the
+    # refresh path, in the `check_script_selftests.sh` suite); gutting `do_check`
+    # turns all 10 red. Arms 8-10 (lane LOOSE, 2026-08-25) pin the
+    # `Classical.choice` exception set as part of the baseline: `Constructive`
+    # here means "no DOMAIN axiom", and Classical.choice IS foundational, so 2 of
+    # the 396 are excluded middle counted "constructive". That set now moves only
+    # through --update --notes -- the staged-file escape hatch does not cover it.
+    {
+        "id": "gate::constructive",
+        "package": "__workspace__",
+        "kind": "gate",
+        "argv": ["python3", "scripts/check_constructive_ratchet.py"],
+        # The gate MEASURES crates/clean-mathverse (covered by the workspace
+        # dirs) but DECIDES against data/constructive_ratchet.json, using the
+        # comparison in the script. Neither is inside a crate dir, so without
+        # this a baseline edit or a comparison edit would leave a recorded green
+        # reading fresh.
+        "_extra_paths": [
+            "data/constructive_ratchet.json",
+            "scripts/check_constructive_ratchet.py",
+        ],
+    },
+    # The ALWAYS-ON M1/M2/M4 MASQUERADE gate over the registered kernel corpus,
+    # added 2026-08-25 (lane MASQ) for the fourth instance of the same story:
+    # NOTHING RAN IT ON PURPOSE. It is a `#[test]` in
+    # `crates/clean-kernel/src/env/tests_masquerade_gate.rs`, so it moves only
+    # when somebody runs `cargo test -p clean-kernel --lib` or a whole-workspace
+    # sweep -- neither of which is in local_gate.sh, the hook, or this suite. The
+    # masquerade vector was therefore guarded by a test with no scheduled runner,
+    # while the only other artifact aimed at it (`scripts/masquerade_gate/`, a
+    # five-file Python fragment) could not even be imported: its `__main__.py`
+    # imports a `cli` module that has never existed in this repo's history.
+    # RETIRED 2026-08-25, superseded by this row -- see the registry's `retired`
+    # list.
+    #
+    # It lives here rather than in local_gate.sh for one measured reason: it is a
+    # BUILD. Measured 2026-08-25 at 0b3b94e5b on an 18-core box with two other
+    # lanes loading the machine: ~25 min from an empty target dir, then 24.9 s of
+    # test. Nothing that costs a cold clean-kernel test build belongs in a
+    # pre-push leg. Warm, the run is seconds -- which is what makes it a suite
+    # row rather than a battery nobody schedules.
+    #
+    # No `_extra_paths`: the gate MEASURES the registered corpus, which is
+    # crates/clean-kernel/src/env/nn_verify_*.rs plus the prelude, and every one
+    # of those is inside a crate directory already covered by the workspace
+    # digest. An edit to any of them demotes this row's green to UNKNOWN, which
+    # is exactly the wanted behaviour: a new registration is a new theorem to
+    # scan.
+    {
+        "id": "gate::masquerade",
+        "package": "__workspace__",
+        "kind": "gate",
+        "argv": [
+            "cargo", "test", "--locked", "-p", "clean-kernel", "--lib",
+            "--", "masquerade",
+        ],
     },
 ]
 
@@ -1296,10 +1461,33 @@ def _peak_rss_gb(pgid: int, stop: threading.Event) -> float:
     return peak
 
 
-def _gate_weight_gb(target_id: str) -> int:
+def _prior_peak_rss_gb(target_id: str) -> float | None:
+    """The last peak this target ACTUALLY cost here, carried across interruptions.
+
+    A killed run -- by its timeout, by `stop`, by a lane clearing a gate wedge --
+    leaves a RUNNING record whose `peak_rss_gb` is blank, because no measurement
+    was taken. Reading only that key therefore DOWNGRADES an interrupted target
+    to the unmeasured default on its retry, which is the one direction a memory
+    gate must never move by accident.
+
+    Measured 2026-08-23: eight targets were stopped mid-queue while waiting at
+    the gate, and `clean-verify::test::kernel_core_red_env_fidelity` -- whose
+    measured peak is 56.3 GB -- would have re-admitted at the 12 GB default. A
+    44 GB under-reservation is exactly the unaccounted concurrency that panicked
+    this machine on 2026-08-19. So the RUNNING template carries the last known
+    peak forward under `prior_peak_rss_gb`, and this reader falls back to it.
+    """
     prior = load_record(target_id) or {}
-    measured = prior.get("peak_rss_gb")
-    if isinstance(measured, (int, float)) and measured > 0:
+    for key in ("peak_rss_gb", "prior_peak_rss_gb"):
+        value = prior.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            return float(value)
+    return None
+
+
+def _gate_weight_gb(target_id: str) -> int:
+    measured = _prior_peak_rss_gb(target_id)
+    if measured is not None:
         # +50% headroom: peak RSS is sampled, so the true peak can fall between
         # samples, and a target's cost grows as the spec does.
         return max(MIN_TARGET_GB, math.ceil(measured * 1.5))
@@ -1328,15 +1516,28 @@ GATE_ACQUIRE_ATTEMPTS = 3
 GATE_ACQUIRE_BACKOFF_S = 5.0
 
 
-def _gate_acquire(weight_gb: int, label: str) -> tuple[str | None, bool]:
+def _gate_acquire(weight_gb: int, label: str) -> tuple[str | None, bool, bool]:
     """Reserve `weight_gb` from the machine-wide gate.
 
-    Returns `(token, admitted)`. `admitted` is False when the gate could not
-    admit us and the caller is proceeding UNGATED -- never a reason to skip the
-    target, always a reason to say so in the record.
+    Returns `(token, admitted, refused)`.
+
+    A gate MALFUNCTION -- missing script, lock starvation, an exception -- keeps
+    the old fail-open contract: `admitted=False`, and the caller proceeds
+    loudly, because a broken ledger must not stop the suite.
+
+    A gate REFUSAL (exit 2: "this cannot run") is a DIFFERENT ANSWER and is NOT
+    fail-open. Measured 2026-08-24: 31 clean-verify targets weighed more than
+    this 24 GB box's whole budget, the gate refused every one, this function
+    reported `admitted=False`, the caller ran them anyway -- TWO AT A TIME,
+    since the worker runs `--jobs 2` -- and the kernel watchdog panicked the
+    machine with two 23 GB spec binaries alive. Fail-open on a refusal converts
+    "does not fit" into "unbounded", so a refusal now ERRORs the row instead.
+    (After the same-day heavy_gate fix an oversize job is admitted exclusively
+    rather than refused, so this path should no longer fire at all -- which is
+    exactly why it must be closed rather than left as the silent fallback.)
     """
     if not HEAVY_GATE.exists():
-        return None, False
+        return None, False, False
     for attempt in range(GATE_ACQUIRE_ATTEMPTS):
         try:
             env = dict(os.environ, HEAVY_GATE_OWNER_PID=str(os.getpid()))
@@ -1344,12 +1545,14 @@ def _gate_acquire(weight_gb: int, label: str) -> tuple[str | None, bool]:
                                   capture_output=True, text=True, env=env)
             token = proc.stdout.strip()
             if proc.returncode == 0 and token:
-                return token, True
+                return token, True, False
+            if proc.returncode == 2:
+                return None, False, True    # refusal: do not retry, do not run
         except Exception:
             pass         # never let the gate stop the suite from running
         if attempt + 1 < GATE_ACQUIRE_ATTEMPTS:
             time.sleep(GATE_ACQUIRE_BACKOFF_S * (attempt + 1))
-    return None, False
+    return None, False, False
 
 
 def _gate_release(token: str | None) -> None:
@@ -1359,6 +1562,345 @@ def _gate_release(token: str | None) -> None:
                            capture_output=True, timeout=10)
         except Exception:
             pass
+
+
+# --------------------------------------------------------------------------
+# the write-through journal
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS -- A CHECKOUT ATE A 14.33-HOUR SWEEP
+# ----------------------------------------------------
+# `data/suite_state/` is git-TRACKED, and it is also RUNNER OUTPUT that changes
+# without a commit. Those two roles are incompatible in exactly one place: any
+# `git checkout` / `git restore` / branch switch touching the directory silently
+# reverts every record written since the last commit, with no error, no warning
+# and no exit code. A routine crash-recovery checkout destroyed a complete
+# 14.33-hour sweep that way; the results survived only because the
+# worker's out-of-tree `worker.log` happened to still hold them, and recovering
+# from a log is heroics, not a design.
+#
+# So the tracked directory stops being the truth and becomes a PROJECTION. The
+# truth is an append-only journal outside the working tree, which git has no
+# handle on at all:
+#
+#     write_record()  ->  journal_append()   [truth, append-only, out of tree]
+#                     ->  _project_record()  [projection, tracked, reviewable]
+#
+# A checkout can still revert the projection. It can no longer lose anything:
+# the next `status` re-projects the journal and says so out loud.
+#
+# WHY THE JOURNAL IS KEYED ON STATE_DIR, NOT ON REPO_ROOT
+# -------------------------------------------------------
+# `verify_runner_pinned.sh` runs THIS FILE from a throwaway worktree while
+# exporting VERIFY_RUNNER_STATE_DIR back at the main checkout, precisely so both
+# modes feed one artifact. REPO_ROOT differs between the two; STATE_DIR does
+# not. Keying the journal on the resolved STATE_DIR therefore gives the
+# invariant that matters -- ONE JOURNAL PER PROJECTION -- and gives the module's
+# own tests a sandboxed journal for free, since they already redirect STATE_DIR.
+#
+# WHY NOT A LOCK OR A CHECKOUT HOOK
+# ---------------------------------
+# A pidfile-held guard only covers the in-flight case, and this runner has
+# already shipped a pidfile that was never written on one of its two launch
+# paths (`run --foreground`, fixed in edf6ec0f5) -- a guard keyed on that would
+# have been disarmed and silent, which is the failure mode being fixed here. The
+# journal has no armed/disarmed state: if the record was written, it is in the
+# journal.
+JOURNAL_SCHEMA = "clean.suite_journal/v1"
+
+# Records under a `superseded-*` directory are the retired output of a retired
+# scheme. They are kept as evidence and are MECHANICALLY INERT: `record_path`
+# only ever addresses `shards/<parent>/<id>.json`, and every walk below globs
+# one level, so nothing here reads them, rolls them up, or journals them.
+SUPERSEDED_DIR_PREFIX = "superseded-"
+
+
+def _journal_dir() -> Path:
+    override = os.environ.get("VERIFY_RUNNER_JOURNAL_DIR")
+    if override:
+        return Path(override)
+    xdg = os.environ.get("XDG_STATE_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".local" / "state"
+    return base / "clean" / "suite-journal"
+
+
+def journal_path() -> Path:
+    """The journal for THIS projection directory.
+
+    Outside the repository on purpose: a path inside it survives `git checkout`
+    only while it stays ignored, and one `git clean -xdf` -- or one lane tidying
+    its worktree, which this machine does routinely -- would put us back where
+    we started. The name carries a readable stem plus a digest of the resolved
+    state directory, so two clones never share a journal and neither can be
+    mistaken for the other.
+    """
+    real = os.path.realpath(STATE_DIR)
+    key = hashlib.sha256(real.encode("utf-8")).hexdigest()[:12]
+    stem = re.sub(r"[^A-Za-z0-9]+", "-", Path(real).name).strip("-") or "state"
+    return _journal_dir() / f"{stem}-{key}.jsonl"
+
+
+def journal_append(record: dict[str, Any], origin: str = "measured") -> None:
+    """Append one entry. Never rewrites, never truncates, never deletes.
+
+    One `os.write` on an O_APPEND descriptor, so two runners (the main-tree one
+    and the pinned one, which share a projection) interleave whole LINES and
+    never each other's bytes. fsync'd, because the accident class this file
+    exists for includes losing the machine.
+    """
+    path = journal_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "schema": JOURNAL_SCHEMA,
+        "appended_at": now_iso(),
+        "origin": origin,
+        "state_dir": str(STATE_DIR),
+        "target": record.get("target"),
+        "record": record,
+    }
+    payload = (json.dumps(entry, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    try:
+        os.write(fd, payload)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def journal_read() -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """(latest entry per target, complaints).
+
+    A malformed line is REPORTED, never skipped quietly: a torn write is exactly
+    the situation where silence would hand back a partial history as if it were
+    the whole one.
+    """
+    latest: dict[str, dict[str, Any]] = {}
+    problems: list[str] = []
+    path = journal_path()
+    if not path.exists():
+        return latest, problems
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        for lineno, line in enumerate(handle, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError as exc:
+                problems.append(f"{path}:{lineno}: not valid JSON ({exc.msg})")
+                continue
+            if not isinstance(entry, dict) or entry.get("schema") != JOURNAL_SCHEMA:
+                problems.append(f"{path}:{lineno}: not a {JOURNAL_SCHEMA} entry")
+                continue
+            record = entry.get("record")
+            target = entry.get("target")
+            if not isinstance(record, dict) or not isinstance(target, str):
+                problems.append(f"{path}:{lineno}: entry carries no target/record pair")
+                continue
+            latest[target] = entry
+    return latest, problems
+
+
+def projection_records() -> list[tuple[Path, dict[str, Any]]]:
+    """Every record file the runner can ADDRESS, with its parsed content.
+
+    Deliberately one level deep under `shards/<parent>/`, which is the whole
+    disposition of the retired fine-cut records: they sit in a
+    `superseded-*/` subdirectory that no walk here descends into.
+    """
+    out: list[tuple[Path, dict[str, Any]]] = []
+    if not STATE_DIR.exists():
+        return out
+    paths = sorted(STATE_DIR.glob("*.json"))
+    shard_root = STATE_DIR / "shards"
+    if shard_root.is_dir():
+        for parent in sorted(p for p in shard_root.iterdir() if p.is_dir()):
+            if parent.name.startswith(SUPERSEDED_DIR_PREFIX):
+                continue
+            paths.extend(sorted(parent.glob("*.json")))
+    for path in paths:
+        try:
+            doc = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(doc, dict) and isinstance(doc.get("target"), str):
+            out.append((path, doc))
+    return out
+
+
+def _record_stamp(record: dict[str, Any]) -> str:
+    return str(record.get("finished_at") or record.get("started_at") or "")
+
+
+def reconcile_projection(apply: bool = False) -> dict[str, Any]:
+    """Compare the tracked projection against the journal; optionally re-project.
+
+    Four verdicts, and the third is why this is not a blind overwrite:
+
+      ok           the projection matches the journal's latest entry.
+      restore      the projection lost it, or disagrees with a journal entry
+                   that is at least as new -- i.e. the accident. Re-projected.
+      held         the journal's entry is `adopted` -- a snapshot this journal
+                   never witnessed being measured -- and the projection differs.
+                   An adoption is not evidence, so it never overwrites content.
+                   It still restores a record the tree has LOST, which is the
+                   whole reason to adopt.
+      foreign      the projection carries a record STRICTLY NEWER than anything
+                   in this journal. That is a record from another machine,
+                   arrived by git, and this journal has no standing to overwrite
+                   it. Reported, never touched.
+      unjournalled a record in the projection that this journal has never seen.
+                   Also from elsewhere (or from before the journal existed);
+                   `journal --adopt` takes local ownership of those.
+
+    `held` is not hypothetical caution. On 2026-08-25 the lane that LOST the
+    14.33-hour sweep recovered it from `worker.log` and pushed the reconstructed
+    records; any journal that had adopted the reverted, stale versions first
+    would have been holding an older snapshot of the same targets. A rule that
+    said only "newer wins" would have depended on the reconstructed timestamps
+    happening to compare the right way. This one does not depend on that.
+    """
+    latest, problems = journal_read()
+    projected = {doc["target"]: doc for _path, doc in projection_records()}
+    actions: list[dict[str, Any]] = []
+    for target in sorted(latest):
+        entry = latest[target]
+        jrec = entry["record"]
+        prec = projected.get(target)
+        if prec is None:
+            verdict = "restore"
+            why = "record file is absent from the projection"
+        elif prec == jrec:
+            verdict = "ok"
+            why = ""
+        elif entry.get("origin") == "adopted":
+            verdict = "held"
+            why = ("journal entry is `adopted`, not measured here, and the projection "
+                   "differs; an adoption never overwrites content")
+        elif _record_stamp(prec) > _record_stamp(jrec):
+            verdict = "foreign"
+            why = f"projection is newer ({_record_stamp(prec)} > {_record_stamp(jrec)}); left alone"
+        else:
+            verdict = "restore"
+            why = "projection disagrees with the journal and is not newer"
+        if verdict == "restore" and apply:
+            _project_record(jrec)
+        actions.append(
+            {
+                "target": target,
+                "verdict": verdict,
+                "reason": why,
+                "journal_status": jrec.get("status"),
+                "journal_stamp": _record_stamp(jrec),
+                "origin": entry.get("origin"),
+            }
+        )
+    unjournalled = sorted(set(projected) - set(latest))
+    counts = {v: sum(1 for a in actions if a["verdict"] == v)
+              for v in ("ok", "restore", "held", "foreign")}
+    return {
+        "schema": JOURNAL_SCHEMA,
+        "journal": str(journal_path()),
+        "journal_exists": journal_path().exists(),
+        "state_dir": str(STATE_DIR),
+        "applied": apply,
+        "counts": counts,
+        "unjournalled": unjournalled,
+        "problems": problems,
+        "actions": actions,
+    }
+
+
+def journal_adopt() -> dict[str, Any]:
+    """Take local ownership of projection records the journal has never seen.
+
+    Labelled `adopted`, NOT `measured`: an adoption entry says only "this file
+    content was in the projection when the journal was created here". It makes
+    no claim that this machine ran the target -- the record's own
+    `runner_host` / `source` fields already say who did.
+    """
+    latest, _ = journal_read()
+    adopted = []
+    for _path, doc in projection_records():
+        if doc["target"] in latest:
+            continue
+        journal_append(doc, origin="adopted")
+        adopted.append(doc["target"])
+    return {"adopted": sorted(adopted), "journal": str(journal_path())}
+
+
+def heal_projection(quiet: bool = False) -> dict[str, Any]:
+    """Re-project anything the projection lost, and SAY SO.
+
+    Called at the top of `status`, because the projection is derived data and a
+    silently stale derived file is the entire defect. Loud on stderr so
+    `status --json` stays machine-readable.
+    """
+    report = reconcile_projection(apply=True)
+    # Take ownership of anything that arrived some other way -- a record pulled
+    # from another machine, or written before this journal existed. Only when a
+    # journal ALREADY exists: a throwaway worktree that nobody has run the
+    # runner in should not mint a journal for a projection it will never write.
+    # Safe by construction now that an `adopted` entry can never overwrite
+    # differing content; without that rule this would be a way to launder a
+    # stale snapshot into the durable record.
+    if journal_path().exists():
+        newly = journal_adopt()["adopted"]
+        if newly and not quiet:
+            print(f"[journal] adopted {len(newly)} record(s) the journal had not seen "
+                  f"(labelled `adopted`, never `measured`)", file=sys.stderr)
+    restored = [a["target"] for a in report["actions"] if a["verdict"] == "restore"]
+    if restored and not quiet:
+        print(
+            f"[journal] RESTORED {len(restored)} record(s) that {STATE_DIR} had lost or "
+            f"reverted, from {report['journal']}: "
+            + ", ".join(restored[:8])
+            + (f" (+{len(restored) - 8} more)" if len(restored) > 8 else "")
+            + "\n[journal] a checkout, restore or branch switch dropped or rewound them; the "
+              "journal is the truth and has re-projected them. Commit the restored files.",
+            file=sys.stderr,
+        )
+    if report["problems"] and not quiet:
+        for problem in report["problems"]:
+            print(f"[journal] MALFORMED: {problem}", file=sys.stderr)
+    return report
+
+
+def cmd_journal(args: argparse.Namespace) -> int:
+    if args.path:
+        print(journal_path())
+        return 0
+    if args.adopt:
+        result = journal_adopt()
+        print(f"journal: {result['journal']}")
+        print(f"adopted {len(result['adopted'])} record(s) not previously journalled")
+        for target in result["adopted"]:
+            print(f"  + {target}")
+        return 0
+    report = reconcile_projection(apply=args.apply)
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(f"journal:   {report['journal']}"
+              f"{'' if report['journal_exists'] else '  (DOES NOT EXIST)'}")
+        print(f"projection {report['state_dir']}")
+        counts = report["counts"]
+        print(f"ok {counts['ok']}   restore {counts['restore']}   held {counts['held']}   "
+              f"foreign {counts['foreign']}   unjournalled {len(report['unjournalled'])}")
+        for action in report["actions"]:
+            if action["verdict"] != "ok":
+                print(f"  {action['verdict']:<8} {action['target']}: {action['reason']}")
+        for target in report["unjournalled"]:
+            print(f"  unjournalled {target}")
+        for problem in report["problems"]:
+            print(f"  MALFORMED {problem}")
+        if args.apply:
+            print("(re-projected every `restore` row above)")
+    if report["problems"]:
+        return 1
+    if not args.apply and report["counts"]["restore"]:
+        return 1
+    return 0
 
 
 def record_path(target_id: str) -> Path:
@@ -1384,12 +1926,40 @@ def load_record(target_id: str) -> dict[str, Any] | None:
         return {"status": STATUS_ERROR, "notes": "record file is not valid JSON"}
 
 
-def write_record(record: dict[str, Any]) -> None:
+def _project_record(record: dict[str, Any]) -> None:
+    """Write the tracked, reviewable copy. Atomic, so no reader sees a half file."""
     path = record_path(record["target"])
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
     tmp.replace(path)
+
+
+def write_record(record: dict[str, Any]) -> None:
+    """JOURNAL FIRST, then project. The order is the protection.
+
+    Journalling after projecting would leave a window in which the tracked file
+    exists and the durable one does not -- and that window is precisely when a
+    checkout is fatal. Journal-first can at worst leave an entry whose
+    projection has not landed yet, which the next `status` repairs.
+    """
+    try:
+        journal_append(record)
+    except OSError as exc:
+        # A runner that cannot journal is a runner whose results are again
+        # checkout-fragile -- but throwing away a measurement that cost hours
+        # because $HOME is unwritable would be strictly worse than the problem.
+        # So: project it anyway, say so loudly, and let the record be caught at
+        # push time. `check_suite_journal.py` clause J5 refuses a record that is
+        # uncommitted AND unjournalled, which is exactly what this leaves behind.
+        print(
+            f"[journal] WRITE FAILED for {record.get('target')}: {exc}\n"
+            f"[journal] the record is being projected to {STATE_DIR} anyway, but NOTHING "
+            f"durable holds it -- one `git checkout` ends it. Fix {journal_path().parent} "
+            f"or set VERIFY_RUNNER_JOURNAL_DIR, then re-run `journal --adopt`.",
+            file=sys.stderr,
+        )
+    _project_record(record)
 
 
 def rollup(
@@ -1505,6 +2075,45 @@ def shard_count_mismatch(entry: dict[str, Any], record: dict[str, Any]) -> str |
     return None
 
 
+def zero_test_run(record: dict[str, Any]) -> str | None:
+    """Did a GREEN row exit 0 having run NO tests at all?
+
+    THE SAME PROPERTY AS ABOVE, UNBOUNDED FROM SHARDS (2026-08-26).
+
+    `shard_count_mismatch` states the principle correctly and then returns early
+    unless `entry["_shard"]` is set, so every NON-shard row was exempt from it --
+    `gate::masquerade` (`cargo test ... --lib -- masquerade`) among them. A
+    filter that stops selecting is not a sharding-specific hazard; it is what
+    `cargo test --locked -p clean-kernel axiom_refutation_gate` does today,
+    exiting 0 with "0 passed; 0 failed; 0 ignored; 0 measured; 10412 filtered
+    out" because that gate lives in clean-verify.
+
+    The signal is exact and needs no argv parsing: libtest printed at least one
+    `test result:` line -- so a test binary really did run -- and the passed +
+    failed + ignored total is zero. A shell gate produces no such line
+    (`result_lines == 0`) and is untouched; a target that genuinely declares
+    zero tests is not a pass either, and reads UNKNOWN, which is the honest
+    bucket for a measurement of nothing.
+
+    Measured over the 196 records in `data/suite_state/` carrying counts on the
+    day this landed: ZERO would flip. It fires on the new class only.
+    """
+    counts = record.get("counts") or {}
+    if int(counts.get("result_lines", 0)) < 1:
+        return None
+    ran = (
+        int(counts.get("passed", 0))
+        + int(counts.get("failed", 0))
+        + int(counts.get("ignored", 0))
+    )
+    if ran == 0:
+        return (
+            "exited 0 having run ZERO tests -- libtest reports a filter that "
+            "selects nothing as `ok`, so this row could never have failed"
+        )
+    return None
+
+
 def derive(
     entry: dict[str, Any],
     record: dict[str, Any] | None,
@@ -1555,12 +2164,23 @@ def derive(
         }
 
     if record.get("status") == STATUS_GREEN:
+        # Shard first: for a shard it knows the PLANNED count, so it says "ran 0
+        # tests, the shard plan declares 5" where the general rule can only say
+        # "ran zero". Same verdict either way; the more specific diagnostic wins.
         mismatch = shard_count_mismatch(entry, record)
         if mismatch:
             return {
                 **base,
                 "bucket": BUCKET_UNKNOWN,
                 "reason": f"shard exited 0 but {mismatch}; its filter no longer selects its planned tests",
+                "last_known": last_known,
+            }
+        vacuous = zero_test_run(record)
+        if vacuous:
+            return {
+                **base,
+                "bucket": BUCKET_UNKNOWN,
+                "reason": f"{vacuous}; re-point the filter or the package",
                 "last_known": last_known,
             }
         return {**base, "bucket": BUCKET_GREEN, "reason": record.get("final_line", ""), "last_known": last_known}
@@ -1579,6 +2199,77 @@ def derive(
 # --------------------------------------------------------------------------
 
 _RESULT_RE = re.compile(r"^test result: ")
+
+# EXIT 0 IS NOT ALWAYS A MEASUREMENT.
+#
+# Several gates under scripts/ deliberately exit 0 when a prerequisite is
+# missing -- source_elab_gate.sh and kv_ratchet_gate.sh both do -- and both say
+# so in a machine-readable verdict line rather than only in prose:
+#
+#     SRCELAB_GATE=skipped:no-binary
+#     KV_RATCHET_GATE=skipped:no-corpus
+#
+# Exiting 0 is right for the pre-push hook, which must not refuse a pusher over
+# an unbuilt release binary. It is WRONG for this artifact, whose entire claim
+# is that a row never says more than was measured: recorded GREEN,
+# `gate::srcelab` asserts the source-elab ratchet held when nothing ran at all.
+#
+# Measured 2026-08-23 at 3a2aaaa2e, which is what prompted this:
+#
+#     [worker] DONE (1/11) gate::srcelab -> GREEN (527.7s) SRCELAB_GATE=skipped:no-binary
+#
+# That row is UNKNOWN -- the absence of information, which CLAUDE.md says is
+# never rounded up in either direction. The verdict grammar is the gates' own,
+# so this reads their contract rather than inventing one.
+_SKIPPED_VERDICT_RE = re.compile(r"^[A-Z][A-Z0-9_]*_GATE=skipped:(\S+)", re.M)
+
+# A NON-ZERO EXIT IS NOT ALWAYS A MEASUREMENT EITHER.
+#
+# _SKIPPED_VERDICT_RE above closes the exit-0 half of this: a gate that exits 0
+# without measuring anything is UNKNOWN, not a pass. The non-zero half was still
+# open, and it fails the other way -- toward a red the code did not earn.
+#
+# `rust-toolchain.toml` pins `channel = "trust"`, and the Trust frontends
+# AUTHENTICATE themselves before doing any work: they hash the resolved stage2
+# binary and every ancestor directory of it, and refuse to run if any of that
+# moves while they are running. On a single-lane box that is a sound tamper
+# check. On this one it is a hair trigger, because one of those ancestors is
+# `$HOME` -- the HOME DIRECTORY -- and a dozen lanes create and delete
+# worktrees and scratch files directly inside it.
+#
+# Measured 2026-08-25 at d67054a45, `gate::clippy`:
+#
+#     error: branded Tippy driver identity changed: directory-chain identity
+#     changed while embedded Tippy compiler was running: selected Trust
+#     toolchain directory ancestor `$HOME` changed identity or contents
+#
+# and the row was recorded RED after 23.6s. The toolchain was not tampered with:
+# `targo-tippy` had not been written since Aug 8, while `$HOME` carried
+# an mtime from that same minute. Clippy never linted a line, so the run says
+# NOTHING about whether the workspace is clean -- and "RED" says it is dirty.
+#
+# That is the same defect as a stale GREEN, pointed the other way, and this
+# repo's rule is that UNKNOWN is never rounded up in EITHER direction. So a
+# refusal is recorded ERROR, which `derive` sends to UNKNOWN.
+#
+# This does not weaken the gate. UNKNOWN is not a pass: `cmd_gate` returns 2 on
+# any UNKNOWN row, so an unrunnable lint gate still fails the board -- it just
+# fails as "could not be measured" instead of as "your code is broken", which is
+# the actionable difference. A run that emitted real lint errors AND then hit a
+# refusal is also incomplete, and reporting it UNKNOWN is the honest reading:
+# nothing can claim those were all the errors.
+#
+# Matched on the frontends' own refusal vocabulary. None of these strings can
+# appear in a clippy diagnostic.
+_TOOLCHAIN_REFUSAL_RE = re.compile(
+    r"^.*(?:"
+    r"changed identity or contents"
+    r"|unauthenticated toolchain process"
+    r"|protected Trust toolchain directory"
+    r"|protected Targo frontends cannot be"
+    r").*$",
+    re.M,
+)
 
 # Live child process groups, so a SIGTERM to the worker takes its cargo
 # invocations (and the test binaries they spawned) down with it. Without this,
@@ -1664,6 +2355,7 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
     # blank `peak_rss_gb` and every target admits at the default forever. That
     # bug was live for one commit; the test below pins it.
     gate_weight = _gate_weight_gb(entry["id"])
+    prior_peak = _prior_peak_rss_gb(entry["id"])
 
     started = time.time()
     record = {
@@ -1698,6 +2390,12 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         # Peak RSS of the child's whole process group, sampled at 2 s. Feeds the
         # NEXT run's gate weight, so the runner learns each target's real cost.
         "peak_rss_gb": None,
+        # The last peak this target cost here, carried forward so a run that is
+        # killed cannot downgrade its own retry to the unmeasured default. It is
+        # provenance for the weight, never a claim that THIS run measured
+        # anything -- that is what `peak_rss_gb` above is for, and it stays blank
+        # until the sampler returns.
+        "prior_peak_rss_gb": prior_peak,
         "gate_weight_gb": gate_weight,
         # Whether the machine-wide gate actually reserved that weight. False
         # means the row ran with NO reservation -- see _gate_acquire.
@@ -1706,8 +2404,27 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
     }
     write_record(record)
 
-    gate_token, gate_admitted = _gate_acquire(gate_weight, entry["id"])
+    gate_token, gate_admitted, gate_refused = _gate_acquire(gate_weight, entry["id"])
     record["gate_admitted"] = gate_admitted
+    if gate_refused:
+        # A refusal is never a licence to run ungated -- see _gate_acquire and
+        # the 2026-08-24 panic. ERROR is the established encoding for "did not
+        # run here" (docs/SUITE_STATE.md): never GREEN, never RED, and it reads
+        # back as UNKNOWN, which is the truth.
+        record.update(
+            status=STATUS_ERROR,
+            finished_at=now_iso(),
+            duration_s=round(time.time() - started, 1),
+            exit_code=None,
+            final_line=f"<heavy_gate refused {gate_weight} GB>",
+            notes=(
+                (record["notes"] + " | ") if record["notes"] else ""
+            ) + f"heavy_gate REFUSED {gate_weight} GB; target NOT run. A refusal "
+                "is not a licence to run ungated (2026-08-24 panic).",
+        )
+        write_record(record)
+        _gate_release(gate_token)
+        return record
     if not gate_admitted:
         record["notes"] = (
             (record["notes"] + " | ") if record["notes"] else ""
@@ -1797,11 +2514,32 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         )
         final_line = f"<timed out after {timeout}s; last line: {final_line}>"
     elif exit_code == 0:
-        status = STATUS_GREEN
-        notes = ""
+        skipped = _SKIPPED_VERDICT_RE.search(text)
+        if skipped:
+            status = STATUS_SKIPPED
+            notes = (
+                f"the gate exited 0 without measuring anything ({skipped.group(0)}). "
+                "Recorded SKIPPED, which derives to UNKNOWN: a deferral is not a pass. "
+                "Supply the missing prerequisite and re-run this row."
+            )
+            final_line = skipped.group(0)
+        else:
+            status = STATUS_GREEN
+            notes = ""
     else:
-        status = STATUS_RED
-        notes = ""
+        refusal = _TOOLCHAIN_REFUSAL_RE.search(text)
+        if refusal:
+            status = STATUS_ERROR
+            notes = (
+                f"the toolchain REFUSED to run: {refusal.group(0).strip()}. Nothing was "
+                "compiled or linted, so this run says nothing about the code under test. "
+                "Recorded ERROR, which derives to UNKNOWN -- not a pass and not a failure. "
+                "Re-run when the Trust stage2 and its ancestor directories are quiet."
+            )
+            final_line = f"<toolchain refused; nothing measured: {final_line}>"
+        else:
+            status = STATUS_RED
+            notes = ""
 
     record.update(
         status=status,
@@ -1851,6 +2589,14 @@ def derive_all(inventory: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
+    # Repair the projection BEFORE deriving anything from it. A record that a
+    # checkout reverted is indistinguishable, to `derive`, from a target that
+    # never ran -- it reports UNKNOWN, which is correct about the file and wrong
+    # about the world. Healing first means the table is derived from everything
+    # this machine has actually measured. `--no-heal` inspects the projection
+    # exactly as it sits on disk.
+    if not args.no_heal:
+        heal_projection()
     inventory = select(build_inventory(args.packages), args.only)
     rows = derive_all(inventory)
 
@@ -1930,6 +2676,54 @@ def cmd_inventory(args: argparse.Namespace) -> int:
     return 0
 
 
+# A WORKER MUST ANNOUNCE ITSELF, HOWEVER IT WAS STARTED.
+#
+# `run` without `--foreground` daemonizes, and `scripts/daemonize.py --pidfile`
+# writes WORKER_PIDFILE for it. `run --foreground` called `cmd_worker` in-process
+# and wrote NOTHING, so a foreground worker was invisible to every reader of that
+# file. Two guards were silently disarmed by that:
+#
+#   * `cmd_run`'s "a worker is already running" check -- two foreground runs
+#     would both proceed and thrash one CARGO_TARGET_DIR;
+#   * `scripts/verify_runner_pinned.sh`'s refuse-to-re-pin check, whose whole
+#     job is to stop a checkout moving the input digest's own sources underneath
+#     an in-flight measurement.
+#
+# Measured here on 2026-08-25: a `--foreground` pinned run of gate::clippy was
+# in flight at dba565b24 when a plain `status` call in another shell re-pinned
+# the same worktree to d67054a45 and the guard said nothing, because worker.pid
+# still held a long-dead pid from a previous lane. That is exactly the
+# hours-of-work-discarded scenario the guard's own comment describes.
+#
+# So the WORKER owns the pidfile, not the launcher. The daemonized path writes
+# the same pid daemonize.py already recorded, so this is idempotent there.
+def _claim_worker_pidfile() -> bool:
+    """Record this process as the live worker. Returns True if we wrote it."""
+    try:
+        WORKER_PIDFILE.parent.mkdir(parents=True, exist_ok=True)
+        WORKER_PIDFILE.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        return True
+    except OSError:
+        # A worker that cannot announce itself must still run: the pidfile is a
+        # concurrency courtesy, never a precondition for measuring.
+        return False
+
+
+def _release_worker_pidfile() -> None:
+    """Drop our claim -- but only if it is still OURS.
+
+    A worker started with `--restart` SIGTERMs the incumbent and writes its own
+    pid. If the dying incumbent then unlinked the file on its way out, the live
+    worker would be invisible again and the guards would re-open. So compare
+    before unlinking.
+    """
+    try:
+        if WORKER_PIDFILE.read_text().strip() == str(os.getpid()):
+            WORKER_PIDFILE.unlink()
+    except (OSError, ValueError):
+        pass
+
+
 def cmd_worker(args: argparse.Namespace) -> int:
     """In-process queue walker. Launched detached by `run`; not for direct use.
 
@@ -1942,6 +2736,14 @@ def cmd_worker(args: argparse.Namespace) -> int:
     build, and a second cold `cargo clippy` blocked on the build-directory lock.
     """
     install_signal_handlers()
+    _claim_worker_pidfile()
+    try:
+        return _worker_loop(args)
+    finally:
+        _release_worker_pidfile()
+
+
+def _worker_loop(args: argparse.Namespace) -> int:
     queue = json.loads(Path(args.queue).read_text())
     inventory = {e["id"]: e for e in build_inventory(queue["packages"])}
     jobs = max(1, int(queue.get("jobs", 1)))
@@ -2039,7 +2841,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     # at all: the 935-test spec shard is hours and the 1499-test sat_verify
     # shard is seconds. So spec-paying shards are dispatched first and test
     # count only breaks ties among equals.
-    kind_rank = {"test": 0, "gate": 1, "lib": 2, KIND_SHARD_SPEC: 2, KIND_SHARD: 3}
+    kind_rank = {"test": 0, "gate": 1, "lib": 2, KIND_SHARD_SPEC: 2, KIND_SHARD: 3,
+                 # hours long and it forks its own children: start it early so it
+                 # is not the last thing still running when everything else is done.
+                 "gate-measure": 0}
     chosen.sort(
         key=lambda e: (
             kind_rank.get(e["kind"], 4),
@@ -2099,6 +2904,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"worker daemon pid {pid}; {len(chosen)} target(s) queued")
     print(f"  log:    {WORKER_LOG}")
     print(f"  state:  {STATE_DIR}")
+    print(f"  journal:{journal_path()}")
     print(f"  status: scripts/verify_runner.sh status")
     return 0
 
@@ -2511,6 +3317,9 @@ def main() -> int:
                                "0 only when every enumerated target is GREEN")
     p_status.add_argument("--shards", action="store_true",
                           help="list GREEN shard rows too (non-green shards always show)")
+    p_status.add_argument("--no-heal", action="store_true",
+                          help="do NOT re-project journal records the working tree has lost; "
+                               "read data/suite_state/ exactly as it sits on disk")
     p_status.set_defaults(func=cmd_status)
 
     p_inv = sub.add_parser("inventory", help="print the enumerated targets and commands")
@@ -2567,6 +3376,19 @@ def main() -> int:
 
     p_stop = sub.add_parser("stop", help="SIGTERM the running worker")
     p_stop.set_defaults(func=cmd_stop)
+
+    p_journal = sub.add_parser(
+        "journal",
+        help="the append-only durable record behind data/suite_state/ (checkout-proof)",
+    )
+    p_journal.add_argument("--path", action="store_true", help="print the journal file and exit")
+    p_journal.add_argument("--apply", action="store_true",
+                           help="re-project every record the working tree has lost")
+    p_journal.add_argument("--adopt", action="store_true",
+                           help="one-time: journal projection records this journal has never "
+                                "seen, labelled `adopted` (never `measured`)")
+    p_journal.add_argument("--json", action="store_true")
+    p_journal.set_defaults(func=cmd_journal)
 
     args = parser.parse_args()
 

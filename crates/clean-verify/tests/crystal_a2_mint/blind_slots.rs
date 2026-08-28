@@ -756,5 +756,41 @@ impl UnwrapErrOr for Result<(), InterfaceError> {
     }
 }
 
+/// **`usize-width`, the constructed pair.** A synthetic body zero-extending
+/// to `usize`: unpinned, BOTH refusal directions fire by name; pinned at 64,
+/// it reads — and its `u64`-spelled twin projects to the IDENTICAL resolved
+/// core (the declared erasure, asserted as an equality so it cannot rot into
+/// prose) while the pinned SITE COUNT is what refuses the twin, which is the
+/// row's whole claim boundary.
+#[test]
+fn usize_is_refused_unpinned_and_the_site_count_separates_the_u64_twin() {
+    let body = "rustcc fn @m::widen(functy.0) {\nbb0(%0: u32):\n    %1 = zext u32 %0 to usize\n    ret %1\n}\n";
+    let e = ir_mint::read_emitted(body)
+        .map(|_| ())
+        .expect_err("unpinned, the token must refuse");
+    assert!(
+        format!("{e}").contains("TARGET-DEPENDENT"),
+        "the refusal names the reason: {e}"
+    );
+
+    let (pinned, tags) = ir_mint::read_emitted_with_pins(body, SelfFunc::Unpinned, Some(64))
+        .expect("pinned at 64, the body reads");
+    assert_eq!(tags.usize_seen, 1, "one resolved site, counted");
+
+    let twin = body.replace("to usize", "to u64");
+    let (twin_core, twin_tags) =
+        ir_mint::read_emitted_with_pins(&twin, SelfFunc::Unpinned, Some(64))
+            .expect("the u64 twin reads with or without a pin");
+    assert_eq!(
+        canon(&pinned),
+        canon(&twin_core),
+        "the RESOLVED cores are identical — the erasure this row declares"
+    );
+    assert_eq!(
+        twin_tags.usize_seen, 0,
+        "…and the site count is the surviving discriminator: 1 vs 0"
+    );
+}
+
 #[path = "blind_slots_annotations.rs"]
 mod annotations;

@@ -1,0 +1,3745 @@
+{
+ "schema": "clean.verdict_io_contracts/v1",
+ "what_this_is": "Ring R2 lane (b)'s IO-boundary contract model: every measured IO site in data/verdict_set.json's b_io_bearing partition, classified by EFFECT (what it does) and by DEPENDENCE (whether the verdict turns on the IO's content or only on its success), each effect class carrying the contract the verdict path assumes, what checks it today, and \u2014 where nothing does \u2014 a \u00a73.6 assumption-ledger row with a probe. The ledger only shrinks. Nothing here is earned: this artifact models the obligation, it does not discharge it.",
+ "derivation": {
+  "script": "scripts/verdict_io_contracts.py",
+  "source_artifact": "data/verdict_set.json",
+  "source_artifact_sha256": "6a3d8b4da88930a26d837f6c78226b021c27210435219f0e8dc09bb98833fc5e",
+  "shared_denominator": "the site scan is IMPORTED from scripts/verdict_set.py (production_lines + IO_TOKENS) and re-run over the same members at the same pinned digests; a total that disagrees with the committed io_site_total aborts the mint",
+  "axis_1_effect": {
+   "what": "what the site actually does, decided by ordered lexical rules over the LEXED line (comments and literals blanked, #[cfg(test)] mod bodies removed); first match wins; a site matching no rule aborts the mint",
+   "rules": [
+    {
+     "id": "E-USE",
+     "effect": "declaration-import",
+     "regex": "^\\s*(?:pub\\s*(?:\\([^)]*\\)\\s*)?)?use\\s",
+     "means": "a `use` item \u2014 the module names a type; no syscall is issued here"
+    },
+    {
+     "id": "E-TYPE",
+     "effect": "declaration-type",
+     "regex": "#\\[from\\]\\s*std::io::Error|source:\\s*std::io::Error|->\\s*std::io::Result|:\\s*std::io::Error\\b|:\\s*std::io::ErrorKind\\b|\\bmmap:\\s*Mmap\\b|:\\s*Mmap\\s*[,)]|std::process::(?:ExitStatus|Output)\\b",
+     "means": "a TYPE position (error-enum field, `#[from]`, return type, closure/fn parameter) \u2014 `std::io::Error`, `Mmap` and `std::process::{ExitStatus,Output}` as types, not operations"
+    },
+    {
+     "id": "E-ERRVAL",
+     "effect": "error-value",
+     "regex": "std::io::ErrorKind::|std::io::Error::new",
+     "means": "an io::Error VALUE is constructed or inspected (`ErrorKind::\u2026`, `Error::new`) \u2014 error plumbing, no syscall"
+    },
+    {
+     "id": "E-NOIO",
+     "effect": "in-memory-no-io",
+     "regex": "io::Cursor|\\bmap_anon\\s*\\(",
+     "means": "an in-memory buffer wearing an IO name (`io::Cursor`, `MmapMut::map_anon`) \u2014 no file"
+    },
+    {
+     "id": "E-ENV",
+     "effect": "read-env",
+     "regex": "\\benv::var(?:_os)?\\s*\\(",
+     "means": "an environment-variable read (`env::var`/`env::var_os`)"
+    },
+    {
+     "id": "E-PID",
+     "effect": "read-ambient",
+     "regex": "std::process::id\\s*\\(",
+     "means": "ambient process state (`std::process::id()`)"
+    },
+    {
+     "id": "E-PIPE",
+     "effect": "process-stream",
+     "regex": "\\b(?:stdin|stdout|stderr)\\s*\\.",
+     "means": "a child process's stdin/stdout/stderr stream is read or written"
+    },
+    {
+     "id": "E-SPAWN",
+     "effect": "spawn-process",
+     "regex": "\\bCommand::new\\b|\\bStdio::",
+     "means": "a child process is configured or spawned (`Command::new`, `Stdio::\u2026`)"
+    },
+    {
+     "id": "E-STAT",
+     "effect": "stat-file",
+     "regex": "\\bfs::metadata\\s*\\(",
+     "means": "a file's metadata is read without reading its content (`fs::metadata`)"
+    },
+    {
+     "id": "E-READDIR",
+     "effect": "read-dir",
+     "regex": "\\bread_dir\\s*\\(",
+     "means": "a directory is enumerated (`read_dir`)"
+    },
+    {
+     "id": "E-READ",
+     "effect": "read-file",
+     "regex": "\\bfs::read\\s*\\(|\\bread_to_string\\s*\\(|\\bFile::open\\b|\\bMmap::map\\s*\\(|\\bBufReader::new\\b",
+     "means": "a file's CONTENT is read (`fs::read`, `read_to_string`, `File::open`, `Mmap::map`, `BufReader::new`)"
+    },
+    {
+     "id": "E-WRITE",
+     "effect": "write-file",
+     "regex": "\\bfs::write\\s*\\(|\\bFile::create\\b|\\bBufWriter::new\\b|\\bcreate_dir_all\\s*\\(|\\bremove_file\\s*\\(|\\bremove_dir_all\\s*\\(|\\bfs::copy\\s*\\(|\\bOpenOptions\\b",
+     "means": "a file or directory is created, written, appended, copied or removed"
+    },
+    {
+     "id": "E-NET",
+     "effect": "network",
+     "regex": "\\bstd::net\\b",
+     "means": "a socket type from `std::net`"
+    }
+   ]
+  },
+  "axis_2_dependence": {
+   "what": "whether the verdict's correctness depends on the IO's CONTENT or only on its SUCCESS \u2014 the axis that decides what a contract costs",
+   "classes": {
+    "verdict-irrelevant": "no syscall is issued at this site, so no verdict can turn on its result. These sites are IO-bearing only in the token scan; they cost nothing to contract, and their only residual assumption is that the LEXICAL classification is right (ledger row L-LEX).",
+    "success-only": "the verdict depends on whether the call SUCCEEDED, never on what came back \u2014 the bytes were computed in memory before the call. This is the cheap class: the contract is discharged by 'the error is propagated, and no partial artifact is later read as authoritative', with no pinning, no digest and no provenance chain.",
+    "content-bearing": "the verdict changes with what the IO RETURNED \u2014 the bytes, the entry set, the variable's value, the child's output. This is the expensive class: the contract can only be discharged by binding the returned value to something the verdict's provenance already pins."
+   },
+   "map": {
+    "declaration-import": "verdict-irrelevant",
+    "declaration-type": "verdict-irrelevant",
+    "error-value": "verdict-irrelevant",
+    "in-memory-no-io": "verdict-irrelevant",
+    "write-file": "success-only",
+    "read-file": "content-bearing",
+    "read-dir": "content-bearing",
+    "stat-file": "content-bearing",
+    "read-env": "content-bearing",
+    "read-ambient": "content-bearing",
+    "spawn-process": "content-bearing",
+    "process-stream": "content-bearing",
+    "network": "content-bearing"
+   }
+  },
+  "reporting_only_extraction": "spawned program names and environment-variable names are read from the RAW line (literals intact) to NAME what is spawned or read. They feed no classification decision \u2014 every classification rule above runs on the lexed line, per gate-registry R9.",
+  "fail_closed": [
+   "source artifact absent / malformed / wrong schema",
+   "a lane (b) member file is absent, or its sha256 has drifted from the pinned one",
+   "the re-derived site total disagrees with the committed io_site_total",
+   "any site matches no effect rule",
+   "an effect class with measured sites has no contract",
+   "a measured-absent contract acquires sites",
+   "a cited check or hole no longer resolves in the tree",
+   "a ledger row lacks statement, probe, discharge, date or owning job",
+   "the ledger row count grows without --rebase-up"
+  ],
+  "regenerate": "scripts/verdict_io_contracts.py     (--check to verify the committed file)"
+ },
+ "classification": {
+  "site_total": 211,
+  "sites_issuing_io": 128,
+  "sites_issuing_no_io": 83,
+  "by_effect": {
+   "read-file": 41,
+   "declaration-import": 34,
+   "write-file": 30,
+   "declaration-type": 24,
+   "error-value": 23,
+   "spawn-process": 23,
+   "read-env": 14,
+   "read-dir": 12,
+   "stat-file": 4,
+   "in-memory-no-io": 2,
+   "process-stream": 2,
+   "read-ambient": 2
+  },
+  "by_dependence": {
+   "content-bearing": 98,
+   "verdict-irrelevant": 83,
+   "success-only": 30
+  },
+  "effect_by_dependence": {
+   "content-bearing": {
+    "read-file": 41,
+    "spawn-process": 23,
+    "read-env": 14,
+    "read-dir": 12,
+    "stat-file": 4,
+    "process-stream": 2,
+    "read-ambient": 2
+   },
+   "success-only": {
+    "write-file": 30
+   },
+   "verdict-irrelevant": {
+    "declaration-import": 34,
+    "declaration-type": 24,
+    "error-value": 23,
+    "in-memory-no-io": 2
+   }
+  },
+  "unclassified": 0,
+  "by_member": {
+   "crates/clean-mathverse/src/artifacts.rs": {
+    "sites": 20,
+    "issuing_io": 11,
+    "content_bearing": 9,
+    "success_only": 2,
+    "verdict_irrelevant": 9,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/attempt_log/mod.rs": {
+    "sites": 15,
+    "issuing_io": 10,
+    "content_bearing": 5,
+    "success_only": 5,
+    "verdict_irrelevant": 5,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/authority_scope.rs": {
+    "sites": 3,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 1,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/coq/alpha.rs": {
+    "sites": 5,
+    "issuing_io": 5,
+    "content_bearing": 5,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/coq/universe_releveling.rs": {
+    "sites": 1,
+    "issuing_io": 1,
+    "content_bearing": 1,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/drift.rs": {
+    "sites": 10,
+    "issuing_io": 5,
+    "content_bearing": 2,
+    "success_only": 3,
+    "verdict_irrelevant": 5,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/env_fingerprint.rs": {
+    "sites": 13,
+    "issuing_io": 11,
+    "content_bearing": 11,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/error.rs": {
+    "sites": 2,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": true
+   },
+   "crates/clean-mathverse/src/hol/error.rs": {
+    "sites": 1,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 1,
+    "declaration_only": true
+   },
+   "crates/clean-mathverse/src/hol/isabelle/importer.rs": {
+    "sites": 6,
+    "issuing_io": 4,
+    "content_bearing": 4,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/inductive_replay.rs": {
+    "sites": 5,
+    "issuing_io": 5,
+    "content_bearing": 5,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/math_map/bundle.rs": {
+    "sites": 10,
+    "issuing_io": 5,
+    "content_bearing": 5,
+    "success_only": 0,
+    "verdict_irrelevant": 5,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/math_map/ingest.rs": {
+    "sites": 10,
+    "issuing_io": 3,
+    "content_bearing": 3,
+    "success_only": 0,
+    "verdict_irrelevant": 7,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/math_map/keys.rs": {
+    "sites": 4,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/math_map/policy.rs": {
+    "sites": 4,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/release.rs": {
+    "sites": 48,
+    "issuing_io": 28,
+    "content_bearing": 18,
+    "success_only": 10,
+    "verdict_irrelevant": 20,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/shard.rs": {
+    "sites": 25,
+    "issuing_io": 16,
+    "content_bearing": 11,
+    "success_only": 5,
+    "verdict_irrelevant": 9,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/shard_verify/mod.rs": {
+    "sites": 4,
+    "issuing_io": 2,
+    "content_bearing": 1,
+    "success_only": 1,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/verify/incremental/mod.rs": {
+    "sites": 6,
+    "issuing_io": 4,
+    "content_bearing": 2,
+    "success_only": 2,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": {
+    "sites": 5,
+    "issuing_io": 5,
+    "content_bearing": 3,
+    "success_only": 2,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/error.rs": {
+    "sites": 1,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 1,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/import/mod.rs": {
+    "sites": 6,
+    "issuing_io": 4,
+    "content_bearing": 4,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-verify/src/external_checker.rs": {
+    "sites": 7,
+    "issuing_io": 3,
+    "content_bearing": 3,
+    "success_only": 0,
+    "verdict_irrelevant": 4,
+    "declaration_only": false
+   }
+  },
+  "declaration_only_members": {
+   "what": "members whose every IO token hit is a declaration / error value / in-memory buffer: they are IO-BEARING in the token scan and issue no IO at all. This is the measured half of lane (b)'s 'decode-pure separated from read-IO' obligation that needs no refactor \u2014 the split is already there, it had just never been measured.",
+   "count": 3,
+   "members": [
+    "crates/clean-mathverse/src/error.rs",
+    "crates/clean-mathverse/src/hol/error.rs",
+    "crates/clean-olean/src/error.rs"
+   ]
+  }
+ },
+ "contracts": [
+  {
+   "id": "C-READ-BYTES",
+   "title": "the bytes read are the bytes the verdict was minted over",
+   "effects": [
+    "read-file"
+   ],
+   "dependence": "content-bearing",
+   "site_count": 41,
+   "member_count": 13,
+   "members": [
+    "crates/clean-mathverse/src/artifacts.rs",
+    "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "crates/clean-mathverse/src/authority_scope.rs",
+    "crates/clean-mathverse/src/drift.rs",
+    "crates/clean-mathverse/src/env_fingerprint.rs",
+    "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+    "crates/clean-mathverse/src/math_map/bundle.rs",
+    "crates/clean-mathverse/src/math_map/ingest.rs",
+    "crates/clean-mathverse/src/math_map/keys.rs",
+    "crates/clean-mathverse/src/math_map/policy.rs",
+    "crates/clean-mathverse/src/release.rs",
+    "crates/clean-mathverse/src/shard.rs",
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs"
+   ],
+   "statement": "Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+   "check_strength": "partial",
+   "checked_by": [
+    {
+     "file": "crates/clean-mathverse/src/shard.rs",
+     "pattern": "let actual_hash = blake3::hash\\(content\\);",
+     "lines": [
+      1215,
+      1634
+     ],
+     "what": "the EAGER shard readers (`ShardReader::from_bytes`, `ShardMmapReader::from_mmap`) recompute a whole-file blake3 and compare it to the footer, so on those two entry points corruption and truncation are caught"
+    }
+   ],
+   "holes": [
+    {
+     "file": "crates/clean-mathverse/src/shard.rs",
+     "pattern": "fn from_mmap_no_checksum",
+     "lines": [
+      1808
+     ],
+     "what": "`open_lazy` / `open_lazy_from_bytes` route through a reader that SKIPS the footer blake3 by design (demand paging: checking it would fault every page), so on the lazy path nothing verifies the bytes at all"
+    },
+    {
+     "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+     "pattern": "let data = std::fs::read_to_string\\(path\\)\\?;",
+     "lines": [
+      288
+     ],
+     "what": "the KernelVerified manifest is read back as authoritative JSON with no digest, no signature and no comparison to the run that wrote it"
+    }
+   ],
+   "why_unproved": "the footer digest travels INSIDE the file it certifies, so it detects corruption, not substitution; and the twelve members outside clean-mathverse's shard path read their inputs with no integrity check of any kind.",
+   "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+   "owning_job": "R2b-READ",
+   "sites_by_member": {
+    "crates/clean-mathverse/src/artifacts.rs": 1,
+    "crates/clean-mathverse/src/attempt_log/mod.rs": 3,
+    "crates/clean-mathverse/src/authority_scope.rs": 1,
+    "crates/clean-mathverse/src/drift.rs": 2,
+    "crates/clean-mathverse/src/env_fingerprint.rs": 7,
+    "crates/clean-mathverse/src/hol/isabelle/importer.rs": 2,
+    "crates/clean-mathverse/src/math_map/bundle.rs": 3,
+    "crates/clean-mathverse/src/math_map/ingest.rs": 2,
+    "crates/clean-mathverse/src/math_map/keys.rs": 2,
+    "crates/clean-mathverse/src/math_map/policy.rs": 2,
+    "crates/clean-mathverse/src/release.rs": 3,
+    "crates/clean-mathverse/src/shard.rs": 10,
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 3
+   }
+  },
+  {
+   "id": "C-READ-SET",
+   "title": "the enumerated entry set is the input set the verdict quantifies over",
+   "effects": [
+    "read-dir"
+   ],
+   "dependence": "content-bearing",
+   "site_count": 12,
+   "member_count": 7,
+   "members": [
+    "crates/clean-mathverse/src/artifacts.rs",
+    "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "crates/clean-mathverse/src/authority_scope.rs",
+    "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+    "crates/clean-mathverse/src/math_map/bundle.rs",
+    "crates/clean-mathverse/src/release.rs",
+    "crates/clean-mathverse/src/shard_verify/mod.rs"
+   ],
+   "statement": "A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+   "check_strength": "none",
+   "checked_by": [],
+   "holes": [
+    {
+     "file": "crates/clean-mathverse/src/shard_verify/mod.rs",
+     "pattern": "if let Ok\\(rd\\) = fs::read_dir\\(dir\\)",
+     "lines": [
+      291
+     ],
+     "what": "an unreadable directory is indistinguishable from an EMPTY one here: the `Err` arm is dropped, so 'nothing to verify' and 'could not look' produce the same verdict"
+    }
+   ],
+   "why_unproved": "nothing in lane (b) pins the entry set: no manifest lists the files a walk is expected to find, so a walk that returns a subset produces a verdict over a subset and says so nowhere.",
+   "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+   "owning_job": "R2b-SET",
+   "sites_by_member": {
+    "crates/clean-mathverse/src/artifacts.rs": 1,
+    "crates/clean-mathverse/src/attempt_log/mod.rs": 1,
+    "crates/clean-mathverse/src/authority_scope.rs": 1,
+    "crates/clean-mathverse/src/hol/isabelle/importer.rs": 2,
+    "crates/clean-mathverse/src/math_map/bundle.rs": 2,
+    "crates/clean-mathverse/src/release.rs": 4,
+    "crates/clean-mathverse/src/shard_verify/mod.rs": 1
+   },
+   "sites_discarding_the_error": 1
+  },
+  {
+   "id": "C-STAT-FRESH",
+   "title": "equal metadata implies equal content",
+   "effects": [
+    "stat-file"
+   ],
+   "dependence": "content-bearing",
+   "site_count": 4,
+   "member_count": 1,
+   "members": [
+    "crates/clean-olean/src/import/mod.rs"
+   ],
+   "statement": "When a cache returns a previously parsed module because the file's mtime equals the recorded mtime, the file's CONTENT equals the content that was parsed.",
+   "check_strength": "none",
+   "checked_by": [],
+   "holes": [
+    {
+     "file": "crates/clean-olean/src/import/mod.rs",
+     "pattern": "entry\\.mtime\\.is_some\\(\\) && entry\\.mtime == mtime",
+     "lines": [
+      450
+     ],
+     "what": "the module cache's hit condition IS the assumption: mtime equality is taken as content equality, and the hit returns an `Arc<ParsedModule>` that later feeds registration"
+    }
+   ],
+   "why_unproved": "mtime equality does not imply content equality \u2014 a same-second rewrite, an archive restore, a `touch -r`, or a coarse-granularity filesystem all produce equal mtimes over different bytes. (One direction IS fail-closed: a failed `stat` yields `None`, and the hit condition requires `is_some()`, so a stat failure misses rather than falsely hits.)",
+   "discharge": "key the cache on something that implies content equality \u2014 at minimum `(len, mtime_ns, dev, ino)` from the stat already being made, and a content digest on any path whose output is used to MINT a verdict rather than to serve a query.",
+   "owning_job": "R2b-STAT",
+   "sites_by_member": {
+    "crates/clean-olean/src/import/mod.rs": 4
+   }
+  },
+  {
+   "id": "C-ENV-NEUTRAL",
+   "title": "no environment variable can weaken a verdict",
+   "effects": [
+    "read-env"
+   ],
+   "dependence": "content-bearing",
+   "site_count": 14,
+   "member_count": 5,
+   "members": [
+    "crates/clean-mathverse/src/coq/alpha.rs",
+    "crates/clean-mathverse/src/coq/universe_releveling.rs",
+    "crates/clean-mathverse/src/inductive_replay.rs",
+    "crates/clean-mathverse/src/shard.rs",
+    "crates/clean-mathverse/src/verify/incremental/mod.rs"
+   ],
+   "statement": "The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+   "check_strength": "none",
+   "checked_by": [],
+   "holes": [
+    {
+     "file": "crates/clean-mathverse/src/coq/universe_releveling.rs",
+     "pattern": "std::env::var_os\\(\\\"CLEAN_COQ_VAR_RELEVEL\\\"\\)",
+     "lines": [
+      181
+     ],
+     "what": "a BEHAVIOUR-CHANGING variable on an import path: default ON, and `=0` turns the Coq `Var` universe re-leveling arm off \u2014 two runs of the same input under different environments are two different programs"
+    },
+    {
+     "file": "crates/clean-mathverse/src/shard.rs",
+     "pattern": "std::env::var\\(MAX_DECOMPRESS_BYTES_ENV\\)",
+     "lines": [
+      98
+     ],
+     "what": "a BEHAVIOUR-CHANGING variable: `MATHVERSE_MAX_DECOMPRESS_BYTES` moves the decompression bound a shard read is refused at"
+    }
+   ],
+   "why_unproved": "nothing enumerates these reads or pins their dispositions. In particular `data/env_bypass_census.json` + `scripts/check_env_bypass_census.py` do NOT cover them despite the name: that census watches the kernel `Environment` bypass surface (`extend_*_unchecked`, `add_decl_structural`), not `std::env` reads. Reading the name as coverage is the exact mistake this row exists to prevent.",
+   "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+   "owning_job": "R2b-ENV",
+   "sites_by_member": {
+    "crates/clean-mathverse/src/coq/alpha.rs": 5,
+    "crates/clean-mathverse/src/coq/universe_releveling.rs": 1,
+    "crates/clean-mathverse/src/inductive_replay.rs": 5,
+    "crates/clean-mathverse/src/shard.rs": 1,
+    "crates/clean-mathverse/src/verify/incremental/mod.rs": 2
+   },
+   "variables": {
+    "CLEAN_WS16_DEBUG": 6,
+    "COQ_MOTIVE_DEBUG": 4,
+    "CLEAN_COQ_VAR_RELEVEL": 1,
+    "CLEAN_DISC_FAIL_LOG": 1,
+    "CLEAN_SPECULATIVE_REJECT_LOG": 1,
+    "MATHVERSE_MAX_DECOMPRESS_BYTES": 1
+   }
+  },
+  {
+   "id": "C-SPAWN-IDENTITY",
+   "title": "the spawned process is the pinned binary",
+   "effects": [
+    "spawn-process"
+   ],
+   "dependence": "content-bearing",
+   "site_count": 23,
+   "member_count": 5,
+   "members": [
+    "crates/clean-mathverse/src/artifacts.rs",
+    "crates/clean-mathverse/src/env_fingerprint.rs",
+    "crates/clean-mathverse/src/math_map/ingest.rs",
+    "crates/clean-mathverse/src/release.rs",
+    "crates/clean-verify/src/external_checker.rs"
+   ],
+   "statement": "A spawned program is the pinned binary at the pinned version: the name resolves to one intended executable rather than the first PATH match, and the executable that actually ran is the one whose identity the verdict's provenance records.",
+   "check_strength": "partial",
+   "checked_by": [
+    {
+     "file": "crates/clean-mathverse/src/env_fingerprint.rs",
+     "pattern": "sha256_hex\\(&bytes\\)",
+     "lines": [
+      256
+     ],
+     "what": "`capture_solver_binary` RECORDS a spawned solver's `--version` output and the sha256 of its executable \u2014 the identity is measured, which is half the contract"
+    }
+   ],
+   "holes": [
+    {
+     "file": "crates/clean-mathverse/src/env_fingerprint.rs",
+     "pattern": "let output = Command::new\\(&spec\\.path\\)",
+     "lines": [
+      213
+     ],
+     "what": "the version spawn and the digest read are two SEPARATE resolutions of `spec.path`, and the recorded digest is compared to no pin \u2014 a fingerprint is provenance, not a gate"
+    }
+   ],
+   "why_unproved": "17 of the 23 spawn sites pass a BARE NAME resolved through `PATH` (`tar` x6, `gh` x4, `git` x3, `zstd` x2, `date`, `gzip`), 3 pass a caller-supplied path or variable, and 3 only configure stdio for a spawn started on another line \u2014 see this row's `spawned_programs` / `program_resolution` tallies, which are derived, not typed. Nothing resolves a bare name to an absolute path, records which executable answered, or compares it to anything. This is also where the network enters the surface: `std::net` has ZERO direct sites in lane (b), but `gh` is a network client spawned from the release/artifact path, so 'no sockets' is not 'no network'.",
+   "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
+   "owning_job": "R2b-SPAWN",
+   "sites_by_member": {
+    "crates/clean-mathverse/src/artifacts.rs": 7,
+    "crates/clean-mathverse/src/env_fingerprint.rs": 4,
+    "crates/clean-mathverse/src/math_map/ingest.rs": 1,
+    "crates/clean-mathverse/src/release.rs": 10,
+    "crates/clean-verify/src/external_checker.rs": 1
+   },
+   "spawned_programs": {
+    "tar": 6,
+    "gh": 4,
+    "<caller-supplied path or variable>": 3,
+    "<stdio configuration of a spawn started elsewhere>": 3,
+    "git": 3,
+    "zstd": 2,
+    "date": 1,
+    "gzip": 1
+   },
+   "program_resolution": {
+    "PATH lookup of a bare name": 17,
+    "caller-supplied path or variable": 3,
+    "stdio configuration of a spawn started elsewhere": 3
+   }
+  },
+  {
+   "id": "C-SPAWN-FAITHFUL",
+   "title": "a child's output is consumed faithfully, and never rounds up to a pass",
+   "effects": [
+    "process-stream"
+   ],
+   "dependence": "content-bearing",
+   "site_count": 2,
+   "member_count": 1,
+   "members": [
+    "crates/clean-verify/src/external_checker.rs"
+   ],
+   "statement": "A child process's verdict-bearing output is consumed faithfully: a non-zero exit, a killed or timed-out child, a truncated stream, or a short response is an error or an explicit non-pass \u2014 never silently a pass.",
+   "check_strength": "partial",
+   "checked_by": [
+    {
+     "file": "crates/clean-verify/src/external_checker.rs",
+     "pattern": "if !status\\.success\\(\\)",
+     "lines": [
+      176
+     ],
+     "what": "a non-zero exit becomes `CheckerError::Exit` carrying the code and stderr, not a verdict"
+    },
+    {
+     "file": "crates/clean-verify/src/external_checker.rs",
+     "pattern": "return Ok\\(vec!\\[CheckerVerdict::Timeout; batch\\.obligations\\.len\\(\\)\\]\\)",
+     "lines": [
+      162
+     ],
+     "what": "a child that outruns its deadline is killed and every obligation in the batch becomes `Timeout` \u2014 the timeout path cannot produce a pass"
+    },
+    {
+     "file": "crates/clean-verify/src/external_checker.rs",
+     "pattern": "response\\.verdicts\\.len\\(\\) != batch\\.obligations\\.len\\(\\)",
+     "lines": [
+      185
+     ],
+     "what": "a short response is a protocol error, so verdicts cannot silently be re-indexed onto the wrong obligations"
+    }
+   ],
+   "holes": [
+    {
+     "file": "crates/clean-verify/src/external_checker.rs",
+     "pattern": "stdout\\.read_to_string\\(&mut stdout_buf\\)\\?;",
+     "lines": [
+      173
+     ],
+     "what": "both streams are drained AFTER `child.wait()`, so a child that fills the pipe buffer blocks on write while the parent blocks on wait \u2014 a LIVENESS hazard (hang), not a soundness one, and worth separating from the rest of this row"
+    }
+   ],
+   "why_unproved": "the three checks cover how a FAILING child is reported; what they do not cover is the succeeding one \u2014 the checker's `Proved` verdicts are trusted by construction and are re-checked by nothing, so this contract's soundness rests entirely on whether the external program is in the TCB.",
+   "discharge": "either declare the external checker TCB with a pinned digest (C-SPAWN-IDENTITY) and say so in the trust register, or require every accepted verdict to carry a certificate the Clean kernel re-checks \u2014 the S&L \u00a70.6 'diverse re-check' posture.",
+   "owning_job": "R2b-CHILD",
+   "sites_by_member": {
+    "crates/clean-verify/src/external_checker.rs": 2
+   }
+  },
+  {
+   "id": "C-AMBIENT-NONCE",
+   "title": "ambient process state is a nonce, never a verdict input",
+   "effects": [
+    "read-ambient"
+   ],
+   "dependence": "content-bearing",
+   "site_count": 2,
+   "member_count": 2,
+   "members": [
+    "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "crates/clean-mathverse/src/release.rs"
+   ],
+   "statement": "`std::process::id()` is used only for uniqueness, so two runs over the same input that differ only in pid produce the same verdict.",
+   "check_strength": "none",
+   "checked_by": [],
+   "holes": [
+    {
+     "file": "crates/clean-mathverse/src/attempt_log/mod.rs",
+     "pattern": "hasher\\.update\\(&std::process::id\\(\\)\\.to_be_bytes\\(\\)\\);",
+     "lines": [
+      56
+     ],
+     "what": "the pid is hashed INTO an attempt identifier, so the identifier is not reproducible across runs \u2014 benign for a nonce, load-bearing if an identifier is ever compared"
+    }
+   ],
+   "why_unproved": "the nonce reading is by inspection of two sites; nothing enforces that a third site cannot let the pid reach a verdict.",
+   "discharge": "a determinism probe \u2014 mint the same verdict twice in one tree and diff \u2014 plus this enumeration held at exactly two sites by the gate.",
+   "owning_job": "R2b-AMBIENT",
+   "sites_by_member": {
+    "crates/clean-mathverse/src/attempt_log/mod.rs": 1,
+    "crates/clean-mathverse/src/release.rs": 1
+   }
+  },
+  {
+   "id": "C-WRITE-COMPLETE",
+   "title": "a write lands completely or reports an error (the CHEAP class)",
+   "effects": [
+    "write-file"
+   ],
+   "dependence": "success-only",
+   "site_count": 30,
+   "member_count": 8,
+   "members": [
+    "crates/clean-mathverse/src/artifacts.rs",
+    "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "crates/clean-mathverse/src/drift.rs",
+    "crates/clean-mathverse/src/release.rs",
+    "crates/clean-mathverse/src/shard.rs",
+    "crates/clean-mathverse/src/shard_verify/mod.rs",
+    "crates/clean-mathverse/src/verify/incremental/mod.rs",
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs"
+   ],
+   "statement": "Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+   "check_strength": "partial",
+   "checked_by": [
+    {
+     "file": "crates/clean-mathverse/src/attempt_log/mod.rs",
+     "pattern": "OpenOptions::new\\(\\)\\.write\\(true\\)\\.create_new\\(true\\)",
+     "lines": [
+      1120
+     ],
+     "what": "one record writer refuses to clobber an existing file (`create_new`), so a re-run cannot silently overwrite the record a previous verdict was minted against"
+    }
+   ],
+   "holes": [
+    {
+     "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+     "pattern": "std::fs::write\\(path, self\\.to_json\\(\\)\\?\\)\\?;",
+     "lines": [
+      279
+     ],
+     "what": "`fs::write` is not atomic: a crash or a full disk mid-write leaves a truncated JSON manifest that `from_file` will later read as authoritative"
+    },
+    {
+     "file": "crates/clean-mathverse/src/release.rs",
+     "pattern": "let _ = fs::remove_file\\(&index_path\\);",
+     "lines": [
+      366,
+      386
+     ],
+     "what": "the error is DISCARDED, so 'or reports an error' is simply false at this site and the two others shaped like it"
+    }
+   ],
+   "why_unproved": "no write in lane (b) is atomic \u2014 nothing writes to a temporary and renames, though `scripts/verdict_set.py` does exactly that two directories away \u2014 and several sites drop the error entirely.",
+   "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+   "owning_job": "R2b-WRITE",
+   "sites_by_member": {
+    "crates/clean-mathverse/src/artifacts.rs": 2,
+    "crates/clean-mathverse/src/attempt_log/mod.rs": 5,
+    "crates/clean-mathverse/src/drift.rs": 3,
+    "crates/clean-mathverse/src/release.rs": 10,
+    "crates/clean-mathverse/src/shard.rs": 5,
+    "crates/clean-mathverse/src/shard_verify/mod.rs": 1,
+    "crates/clean-mathverse/src/verify/incremental/mod.rs": 2,
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 2
+   },
+   "sites_discarding_the_error": 5
+  }
+ ],
+ "measured_absent": [
+  {
+   "id": "C-NET-DIRECT",
+   "title": "no verdict path opens a socket directly",
+   "effects": [
+    "network"
+   ],
+   "statement": "No member of lane (b) constructs a `std::net` socket type.",
+   "expected_sites": 0,
+   "caveat": "This is NOT 'lane (b) does not reach the network'. `gh` \u2014 the GitHub CLI, a network client \u2014 is spawned at four sites in `artifacts.rs` and `release.rs`. Network reachability lives in C-SPAWN-IDENTITY, not here.",
+   "measured_sites": 0
+  }
+ ],
+ "residue_class": {
+  "id": "C-NONE",
+  "title": "token hits that issue no syscall",
+  "effects": [
+   "declaration-import",
+   "declaration-type",
+   "error-value",
+   "in-memory-no-io"
+  ],
+  "statement": "These sites matched the IO token table but perform no IO: they import a module, name a type, construct or inspect an `io::Error` value, or wrap an in-memory buffer in an IO-shaped API. No verdict can turn on their result, so no contract is owed.",
+  "site_count": 83
+ },
+ "ledger": {
+  "what": "the \u00a73.6 assumption ledger for lane (b): one row per (contract x member) that nothing fully checks, plus the rows this MODEL itself stands on. Each row carries a statement, a probe command, a discharge condition, a date and an owning job.",
+  "pattern": "designs/2026-08-22-spine-and-lattice-program.md \u00a73.6",
+  "destination": "data/spine_assumption_ledger.json, when that file exists; until then these rows live here and scripts/verdict_gate.sh reads them from here",
+  "direction": "down",
+  "row_count": 44,
+  "rows_by_class": {
+   "content-bearing": 34,
+   "meta": 2,
+   "success-only": 8
+  },
+  "rows_by_contract": {
+   "*": 1,
+   "C-AMBIENT-NONCE": 2,
+   "C-ENV-NEUTRAL": 5,
+   "C-NONE": 1,
+   "C-READ-BYTES": 13,
+   "C-READ-SET": 7,
+   "C-SPAWN-FAITHFUL": 1,
+   "C-SPAWN-IDENTITY": 5,
+   "C-STAT-FRESH": 1,
+   "C-WRITE-COMPLETE": 8
+  },
+  "row_ratchet": {
+   "what": "assumption-ledger rows; may fall freely, may rise only through scripts/verdict_io_contracts.py --rebase-up '<reason>' (recorded below)",
+   "direction": "down",
+   "baseline_rows": 44,
+   "measured_rows": 44,
+   "minted_utc": "2026-08-26T19:26:29Z",
+   "rebases": []
+  },
+  "rows": [
+   {
+    "id": "L-READ-BYTES/clean-mathverse::artifacts",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/artifacts.rs",
+    "site_count": 1,
+    "lines": [
+     294
+    ],
+    "statement": "crates/clean-mathverse/src/artifacts.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/artifacts.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::attempt_log::mod",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "site_count": 3,
+    "lines": [
+     1045,
+     1045,
+     1162
+    ],
+    "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/attempt_log/mod.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::authority_scope",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/authority_scope.rs",
+    "site_count": 1,
+    "lines": [
+     34
+    ],
+    "statement": "crates/clean-mathverse/src/authority_scope.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/authority_scope.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::drift",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/drift.rs",
+    "site_count": 2,
+    "lines": [
+     636,
+     642
+    ],
+    "statement": "crates/clean-mathverse/src/drift.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/drift.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::env_fingerprint",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+    "site_count": 7,
+    "lines": [
+     245,
+     262,
+     262,
+     330,
+     330,
+     337,
+     337
+    ],
+    "statement": "crates/clean-mathverse/src/env_fingerprint.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/env_fingerprint.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::hol::isabelle::importer",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+    "site_count": 2,
+    "lines": [
+     465,
+     465
+    ],
+    "statement": "crates/clean-mathverse/src/hol/isabelle/importer.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/hol/isabelle/importer.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::math_map::bundle",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+    "site_count": 3,
+    "lines": [
+     240,
+     273,
+     273
+    ],
+    "statement": "crates/clean-mathverse/src/math_map/bundle.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/bundle.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::math_map::ingest",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+    "site_count": 2,
+    "lines": [
+     659,
+     659
+    ],
+    "statement": "crates/clean-mathverse/src/math_map/ingest.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/ingest.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::math_map::keys",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/math_map/keys.rs",
+    "site_count": 2,
+    "lines": [
+     411,
+     411
+    ],
+    "statement": "crates/clean-mathverse/src/math_map/keys.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/keys.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::math_map::policy",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/math_map/policy.rs",
+    "site_count": 2,
+    "lines": [
+     201,
+     201
+    ],
+    "statement": "crates/clean-mathverse/src/math_map/policy.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/policy.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::release",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/release.rs",
+    "site_count": 3,
+    "lines": [
+     145,
+     145,
+     182
+    ],
+    "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/release.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::shard",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/shard.rs",
+    "site_count": 10,
+    "lines": [
+     1184,
+     1184,
+     1600,
+     1600,
+     1600,
+     1604,
+     1759,
+     1759,
+     1759,
+     1764
+    ],
+    "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/shard.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::verify::kernel_verified_manifest",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+    "site_count": 3,
+    "lines": [
+     288,
+     288,
+     288
+    ],
+    "statement": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::artifacts",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/artifacts.rs",
+    "site_count": 1,
+    "lines": [
+     167
+    ],
+    "statement": "crates/clean-mathverse/src/artifacts.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/artifacts.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::attempt_log::mod",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "site_count": 1,
+    "lines": [
+     1036
+    ],
+    "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/attempt_log/mod.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::authority_scope",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/authority_scope.rs",
+    "site_count": 1,
+    "lines": [
+     79
+    ],
+    "statement": "crates/clean-mathverse/src/authority_scope.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/authority_scope.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::hol::isabelle::importer",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+    "site_count": 2,
+    "lines": [
+     484,
+     484
+    ],
+    "statement": "crates/clean-mathverse/src/hol/isabelle/importer.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/hol/isabelle/importer.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::math_map::bundle",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+    "site_count": 2,
+    "lines": [
+     196,
+     223
+    ],
+    "statement": "crates/clean-mathverse/src/math_map/bundle.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/math_map/bundle.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::release",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/release.rs",
+    "site_count": 4,
+    "lines": [
+     176,
+     475,
+     505,
+     517
+    ],
+    "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/release.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::shard_verify::mod",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/shard_verify/mod.rs",
+    "site_count": 1,
+    "lines": [
+     291
+    ],
+    "statement": "crates/clean-mathverse/src/shard_verify/mod.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/shard_verify/mod.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-STAT-FRESH/clean-olean::import::mod",
+    "contract": "C-STAT-FRESH",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/mod.rs",
+    "site_count": 4,
+    "lines": [
+     444,
+     444,
+     474,
+     474
+    ],
+    "statement": "crates/clean-olean/src/import/mod.rs assumes, without proof, that: When a cache returns a previously parsed module because the file's mtime equals the recorded mtime, the file's CONTENT equals the content that was parsed.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-STAT-FRESH --member crates/clean-olean/src/import/mod.rs",
+    "discharge": "key the cache on something that implies content equality \u2014 at minimum `(len, mtime_ns, dev, ino)` from the stat already being made, and a content digest on any path whose output is used to MINT a verdict rather than to serve a query.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-STAT"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-mathverse::coq::alpha",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/coq/alpha.rs",
+    "site_count": 5,
+    "lines": [
+     2880,
+     4347,
+     4353,
+     4363,
+     4505
+    ],
+    "statement": "crates/clean-mathverse/src/coq/alpha.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/coq/alpha.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-mathverse::coq::universe_releveling",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/coq/universe_releveling.rs",
+    "site_count": 1,
+    "lines": [
+     181
+    ],
+    "statement": "crates/clean-mathverse/src/coq/universe_releveling.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/coq/universe_releveling.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-mathverse::inductive_replay",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/inductive_replay.rs",
+    "site_count": 5,
+    "lines": [
+     38,
+     1004,
+     1050,
+     1067,
+     1147
+    ],
+    "statement": "crates/clean-mathverse/src/inductive_replay.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/inductive_replay.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-mathverse::shard",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/shard.rs",
+    "site_count": 1,
+    "lines": [
+     98
+    ],
+    "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/shard.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-mathverse::verify::incremental::mod",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+    "site_count": 2,
+    "lines": [
+     1149,
+     1681
+    ],
+    "statement": "crates/clean-mathverse/src/verify/incremental/mod.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/verify/incremental/mod.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-SPAWN-IDENTITY/clean-mathverse::artifacts",
+    "contract": "C-SPAWN-IDENTITY",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/artifacts.rs",
+    "site_count": 7,
+    "lines": [
+     79,
+     106,
+     140,
+     214,
+     226,
+     229,
+     234
+    ],
+    "statement": "crates/clean-mathverse/src/artifacts.rs assumes, without proof, that: A spawned program is the pinned binary at the pinned version: the name resolves to one intended executable rather than the first PATH match, and the executable that actually ran is the one whose identity the verdict's provenance records.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/artifacts.rs",
+    "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SPAWN"
+   },
+   {
+    "id": "L-SPAWN-IDENTITY/clean-mathverse::env_fingerprint",
+    "contract": "C-SPAWN-IDENTITY",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+    "site_count": 4,
+    "lines": [
+     185,
+     213,
+     270,
+     286
+    ],
+    "statement": "crates/clean-mathverse/src/env_fingerprint.rs assumes, without proof, that: A spawned program is the pinned binary at the pinned version: the name resolves to one intended executable rather than the first PATH match, and the executable that actually ran is the one whose identity the verdict's provenance records.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
+    "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/env_fingerprint.rs",
+    "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SPAWN"
+   },
+   {
+    "id": "L-SPAWN-IDENTITY/clean-mathverse::math_map::ingest",
+    "contract": "C-SPAWN-IDENTITY",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+    "site_count": 1,
+    "lines": [
+     2797
+    ],
+    "statement": "crates/clean-mathverse/src/math_map/ingest.rs assumes, without proof, that: A spawned program is the pinned binary at the pinned version: the name resolves to one intended executable rather than the first PATH match, and the executable that actually ran is the one whose identity the verdict's provenance records.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/math_map/ingest.rs",
+    "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SPAWN"
+   },
+   {
+    "id": "L-SPAWN-IDENTITY/clean-mathverse::release",
+    "contract": "C-SPAWN-IDENTITY",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/release.rs",
+    "site_count": 10,
+    "lines": [
+     203,
+     312,
+     321,
+     325,
+     330,
+     435,
+     543,
+     555,
+     558,
+     563
+    ],
+    "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: A spawned program is the pinned binary at the pinned version: the name resolves to one intended executable rather than the first PATH match, and the executable that actually ran is the one whose identity the verdict's provenance records.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/release.rs",
+    "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SPAWN"
+   },
+   {
+    "id": "L-SPAWN-IDENTITY/clean-verify::external_checker",
+    "contract": "C-SPAWN-IDENTITY",
+    "class": "content-bearing",
+    "member": "crates/clean-verify/src/external_checker.rs",
+    "site_count": 1,
+    "lines": [
+     126
+    ],
+    "statement": "crates/clean-verify/src/external_checker.rs assumes, without proof, that: A spawned program is the pinned binary at the pinned version: the name resolves to one intended executable rather than the first PATH match, and the executable that actually ran is the one whose identity the verdict's provenance records.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-verify/src/external_checker.rs",
+    "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-SPAWN"
+   },
+   {
+    "id": "L-SPAWN-FAITHFUL/clean-verify::external_checker",
+    "contract": "C-SPAWN-FAITHFUL",
+    "class": "content-bearing",
+    "member": "crates/clean-verify/src/external_checker.rs",
+    "site_count": 2,
+    "lines": [
+     173,
+     174
+    ],
+    "statement": "crates/clean-verify/src/external_checker.rs assumes, without proof, that: A child process's verdict-bearing output is consumed faithfully: a non-zero exit, a killed or timed-out child, a truncated stream, or a short response is an error or an explicit non-pass \u2014 never silently a pass.",
+    "checked": "PARTIAL \u2014 3 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
+    "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-FAITHFUL --member crates/clean-verify/src/external_checker.rs",
+    "discharge": "either declare the external checker TCB with a pinned digest (C-SPAWN-IDENTITY) and say so in the trust register, or require every accepted verdict to carry a certificate the Clean kernel re-checks \u2014 the S&L \u00a70.6 'diverse re-check' posture.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-CHILD"
+   },
+   {
+    "id": "L-AMBIENT-NONCE/clean-mathverse::attempt_log::mod",
+    "contract": "C-AMBIENT-NONCE",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "site_count": 1,
+    "lines": [
+     56
+    ],
+    "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: `std::process::id()` is used only for uniqueness, so two runs over the same input that differ only in pid produce the same verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-AMBIENT-NONCE --member crates/clean-mathverse/src/attempt_log/mod.rs",
+    "discharge": "a determinism probe \u2014 mint the same verdict twice in one tree and diff \u2014 plus this enumeration held at exactly two sites by the gate.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-AMBIENT"
+   },
+   {
+    "id": "L-AMBIENT-NONCE/clean-mathverse::release",
+    "contract": "C-AMBIENT-NONCE",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/release.rs",
+    "site_count": 1,
+    "lines": [
+     402
+    ],
+    "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: `std::process::id()` is used only for uniqueness, so two runs over the same input that differ only in pid produce the same verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-AMBIENT-NONCE --member crates/clean-mathverse/src/release.rs",
+    "discharge": "a determinism probe \u2014 mint the same verdict twice in one tree and diff \u2014 plus this enumeration held at exactly two sites by the gate.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-AMBIENT"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::artifacts",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/artifacts.rs",
+    "site_count": 2,
+    "lines": [
+     137,
+     211
+    ],
+    "statement": "crates/clean-mathverse/src/artifacts.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/artifacts.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::attempt_log::mod",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+    "site_count": 5,
+    "lines": [
+     942,
+     951,
+     1117,
+     1120,
+     1592
+    ],
+    "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/attempt_log/mod.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::drift",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/drift.rs",
+    "site_count": 3,
+    "lines": [
+     602,
+     609,
+     614
+    ],
+    "statement": "crates/clean-mathverse/src/drift.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/drift.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::release",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/release.rs",
+    "site_count": 10,
+    "lines": [
+     28,
+     164,
+     300,
+     366,
+     386,
+     403,
+     426,
+     523,
+     526,
+     540
+    ],
+    "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/release.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::shard",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/shard.rs",
+    "site_count": 5,
+    "lines": [
+     981,
+     981,
+     981,
+     982,
+     982
+    ],
+    "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/shard.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::shard_verify::mod",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/shard_verify/mod.rs",
+    "site_count": 1,
+    "lines": [
+     185
+    ],
+    "statement": "crates/clean-mathverse/src/shard_verify/mod.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/shard_verify/mod.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::verify::incremental::mod",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+    "site_count": 2,
+    "lines": [
+     1706,
+     1706
+    ],
+    "statement": "crates/clean-mathverse/src/verify/incremental/mod.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/verify/incremental/mod.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::verify::kernel_verified_manifest",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+    "site_count": 2,
+    "lines": [
+     279,
+     279
+    ],
+    "statement": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-08-26",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-LEX",
+    "contract": "C-NONE",
+    "class": "meta",
+    "statement": "The effect classification is LEXICAL: a site's class is decided from the single matched line, not from the program's semantics. Every site classified declaration-import / declaration-type / error-value / in-memory-no-io is asserted to issue no syscall on that evidence alone \u2014 a macro expansion, a type alias, or a `Deref` impl could hide an operation the matched line does not show.",
+    "probe": "scripts/verdict_io_contracts.py --sites C-NONE",
+    "discharge": "re-derive the classification from MIR/THIR rather than from source lines \u2014 the same whole-crate dump G-SPINE-SET waits on (data/spine_set.PENDING.md).",
+    "owning_job": "R2b-LEX",
+    "date": "2026-08-26",
+    "site_count": 83
+   },
+   {
+    "id": "L-DENOM",
+    "contract": "*",
+    "class": "meta",
+    "statement": "The site denominator is the IO_TOKENS table in scripts/verdict_set.py, so it is a LOWER bound on lane (b)'s IO surface: an IO call reached through an in-crate helper, through a dependency's API (`serde_json::from_reader`, `zstd::decode_all`, an HTTP client), or through a macro is not a site. The counts in this artifact are what that table can SEE, not what the surface does.",
+    "probe": "scripts/verdict_io_contracts.py --describe   # prints the borrowed token table",
+    "discharge": "derive sites from the call graph instead of from tokens; until then, every added token lands with a mutation arm proving the scan would have missed it before.",
+    "owning_job": "R2b-DENOM",
+    "date": "2026-08-26",
+    "site_count": 211
+   }
+  ]
+ },
+ "recommendations": [
+  {
+   "id": "REC-SOLVER-PIN",
+   "contract": "C-SPAWN-IDENTITY",
+   "cheap_because": "the digest is ALREADY COMPUTED on the same code path and thrown at a report",
+   "what": "`capture_solver_binary` (crates/clean-mathverse/src/env_fingerprint.rs) already runs `spec.path --version` and computes `sha256_hex` over the executable's bytes. Nothing compares that digest to a pin. Add a committed pin table and one equality check before the first verdict-bearing spawn.",
+   "cost": "one committed table + one string comparison per solver per run; ZERO new IO (the read and the hash already happen). Add an absolute-path resolution to close the TOCTOU between the version spawn and the digest read.",
+   "owner": "crates/clean-mathverse \u2014 NOT this lane"
+  },
+  {
+   "id": "REC-SHARD-FOOTER-ON-MINT",
+   "contract": "C-READ-BYTES",
+   "cheap_because": "the digest exists in the file and the checked reader is already written",
+   "what": "`ShardMmapReader::from_mmap` verifies the whole-file blake3 footer; `open_lazy` routes around it through `from_mmap_no_checksum` for demand paging. Require the checksummed reader whenever the run will MINT a KernelVerified verdict, and keep the lazy reader for serving.",
+   "cost": "one full-file blake3 per shard per MINT run \u2014 and a mint run materializes every constant anyway, so the pages it would fault are pages it faults regardless. No new algorithm, no new dependency; a mode flag on the open path.",
+   "owner": "crates/clean-mathverse \u2014 NOT this lane"
+  },
+  {
+   "id": "REC-ENV-TABLE",
+   "contract": "C-ENV-NEUTRAL",
+   "cheap_because": "the enumeration is already derived here; only the table is missing",
+   "what": "Commit the six variable names lane (b) reads with a declared disposition (diagnostic-only / behaviour-changing) and enforce it in THIS script, so an unlisted name aborts the mint and a diagnostic-only variable that grows teeth cannot do so silently.",
+   "cost": "~40 lines here plus a 6-row table; ~0.3 s per gate run; NO crate change \u2014 this one is inside this lane's ownership and is the cheapest real close in the model.",
+   "owner": "this lane (scripts/verdict_io_contracts.py)"
+  },
+  {
+   "id": "REC-TOOL-FINGERPRINT",
+   "contract": "C-SPAWN-IDENTITY",
+   "cheap_because": "reuses capture_solver_binary, which already exists and is already called",
+   "what": "Resolve the six bare-name tools (`gh`, `tar`, `zstd`, `gzip`, `git`, `date`) once to absolute paths and fingerprint them through the existing solver-binary machinery, so the provenance of a release artifact names the executables that built it.",
+   "cost": "one PATH resolution + one read + one sha256 per tool per run (six tools). Note this is also where the network enters: `gh` is a network client and `std::net` shows zero sites.",
+   "owner": "crates/clean-mathverse \u2014 NOT this lane"
+  },
+  {
+   "id": "REC-TMP-RENAME",
+   "contract": "C-WRITE-COMPLETE",
+   "cheap_because": "the pattern is already written two directories away, in verdict_set.py",
+   "what": "The two JSON artifacts that are written and later read back as authoritative \u2014 `kernel_verified_manifest.rs` (`fs::write` then `from_file`) and `release.rs` (`fs::write` then `read_to_string`) \u2014 should write to a temporary and rename, exactly as `scripts/verdict_set.py` does (`tmp.write_text(...); tmp.replace(out)`).",
+   "cost": "two extra lines per site and one rename syscall; removes the torn-artifact hole for precisely the writes whose output is read back.",
+   "owner": "crates/clean-mathverse \u2014 NOT this lane"
+  },
+  {
+   "id": "REC-CACHE-KEY",
+   "contract": "C-STAT-FRESH",
+   "cheap_because": "PARTLY \u2014 the cheap variant is free, the sound variant is not",
+   "what": "clean-olean's module cache keys on mtime alone. The FREE improvement is to key on `(len, mtime_ns, dev, ino)` from the `fs::metadata` call already being made, which closes the same-second rewrite and the archive-restore cases. The SOUND fix \u2014 a content digest \u2014 is NOT cheap and should be stated as such: it means reading the file the cache exists to avoid reading, so it belongs on mint paths only, never on the serve path.",
+   "cost": "cheap variant: zero new syscalls, a wider key struct. Sound variant: one full read + hash per cache probe \u2014 quote it honestly rather than calling the whole row cheap.",
+   "owner": "crates/clean-olean \u2014 NOT this lane"
+  }
+ ],
+ "sites": [
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 29,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 31,
+   "token": "std::process",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::process::Command;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 79,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let output = Command::new(    )",
+   "program_literal": "gh",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 93,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::Other,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 106,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let output = Command::new(    )",
+   "program_literal": "gh",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 111,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::Other,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 137,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(dest_dir)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 140,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let mut cmd = Command::new(    );",
+   "program_literal": "gh",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 150,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::Other,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 167,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(dir)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 199,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::InvalidInput,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 211,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(dest_dir)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 214,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let status = Command::new(     )",
+   "program_literal": "tar",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 226,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let gzip = Command::new(      )",
+   "program_literal": "gzip",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 229,
+   "token": "std::process",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": ".stdout(std::process::Stdio::piped())",
+   "program_literal": null,
+   "program_resolution": "stdio configuration of a spawn started elsewhere"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 233,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": ".ok_or_else(|| io_err(std::io::ErrorKind::BrokenPipe,                             ))?;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 234,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let tar = Command::new(     )",
+   "program_literal": "tar",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 242,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::Other,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 294,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = fs::read(&abs_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/artifacts.rs",
+   "line": 323,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::InvalidInput,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 12,
+   "token": "OpenOptions",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::{self, File, OpenOptions};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 12,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::{self, File, OpenOptions};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 13,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 13,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 56,
+   "token": "std::process",
+   "rule": "E-PID",
+   "effect": "read-ambient",
+   "dependence": "content-bearing",
+   "code": "hasher.update(&std::process::id().to_be_bytes());"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 942,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(attempts_dir)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 951,
+   "token": "OpenOptions",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut file = OpenOptions::new().create(true).append(true).open(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1036,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(dir)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1045,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let content = fs::read_to_string(&path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1045,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let content = fs::read_to_string(&path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1117,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(&dir)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1120,
+   "token": "OpenOptions",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "match OpenOptions::new().write(true).create_new(true).open(&path) {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1122,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists && path.is_file() => {}"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1162,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = fs::read(&path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 1592,
+   "token": "OpenOptions",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "Ok(OpenOptions::new()",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/authority_scope.rs",
+   "line": 7,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/authority_scope.rs",
+   "line": 34,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = fs::read(&file)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/authority_scope.rs",
+   "line": 79,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(dir)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/coq/alpha.rs",
+   "line": 2880,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var_os(                     ).is_none() {",
+   "env_name": "CLEAN_DISC_FAIL_LOG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/coq/alpha.rs",
+   "line": 4347,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var(                  ).is_ok() {",
+   "env_name": "COQ_MOTIVE_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/coq/alpha.rs",
+   "line": 4353,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var(                  ).is_ok() {",
+   "env_name": "COQ_MOTIVE_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/coq/alpha.rs",
+   "line": 4363,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if level.is_none() && std::env::var(                  ).is_ok() {",
+   "env_name": "COQ_MOTIVE_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/coq/alpha.rs",
+   "line": 4505,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var(                  ).is_ok() {",
+   "env_name": "COQ_MOTIVE_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/coq/universe_releveling.rs",
+   "line": 181,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "std::env::var_os(                       ).is_none_or(|v| v !=    )",
+   "env_name": "CLEAN_COQ_VAR_RELEVEL",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 27,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::{self, File};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 28,
+   "token": "BufReader",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::{BufReader, BufWriter, Write};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 28,
+   "token": "BufWriter",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::{BufReader, BufWriter, Write};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 28,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::{BufReader, BufWriter, Write};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 76,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 602,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(parent).map_err(|source| DriftSnapshotError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 609,
+   "token": "File::open/create",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let file = File::create(path).map_err(|source| DriftSnapshotError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 614,
+   "token": "BufWriter",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut writer = BufWriter::new(file);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 636,
+   "token": "File::open/create",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let file = File::open(path).map_err(|source| DriftSnapshotError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/drift.rs",
+   "line": 642,
+   "token": "BufReader",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "serde_json::from_reader(BufReader::new(file)).map_err(|source| {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 7,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 9,
+   "token": "std::process",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::process::Command;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 185,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let output = Command::new(     )",
+   "program_literal": "git",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 213,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let output = Command::new(&spec.path)",
+   "program_literal": null,
+   "program_resolution": "caller-supplied path or variable"
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 245,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = fs::read(&spec.path).map_err(|source| {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 262,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "fs::read_to_string(path)",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 262,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "fs::read_to_string(path)",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 270,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let output = Command::new(     )",
+   "program_literal": "git",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 286,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let output = Command::new(     )",
+   "program_literal": "git",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 330,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let lock_revision = fs::read_to_string(root.join(            ))",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 330,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let lock_revision = fs::read_to_string(root.join(            ))",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 337,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "fs::read_to_string(root.join(            ))",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/env_fingerprint.rs",
+   "line": 337,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "fs::read_to_string(root.join(            ))",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/error.rs",
+   "line": 92,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/error.rs",
+   "line": 109,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-mathverse/src/hol/error.rs",
+   "line": 23,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+   "line": 65,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+   "line": 96,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "fn io(path: &Path, source: std::io::Error) -> Self {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+   "line": 465,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(|e| IsabelleImportError::io(path, e))?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+   "line": 465,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(|e| IsabelleImportError::io(path, e))?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+   "line": 484,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "let entries = std::fs::read_dir(dir).map_err(|e| IsabelleImportError::io(dir, e))?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/hol/isabelle/importer.rs",
+   "line": 484,
+   "token": "std::fs",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "let entries = std::fs::read_dir(dir).map_err(|e| IsabelleImportError::io(dir, e))?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/inductive_replay.rs",
+   "line": 38,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "let Ok(filter) = std::env::var(                  ) else {",
+   "env_name": "CLEAN_WS16_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/inductive_replay.rs",
+   "line": 1004,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var(                  ).is_ok() {",
+   "env_name": "CLEAN_WS16_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/inductive_replay.rs",
+   "line": 1050,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var(                  ).is_ok() {",
+   "env_name": "CLEAN_WS16_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/inductive_replay.rs",
+   "line": 1067,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var(                  ).is_ok() {",
+   "env_name": "CLEAN_WS16_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/inductive_replay.rs",
+   "line": 1147,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if std::env::var(                  ).is_ok() {",
+   "env_name": "CLEAN_WS16_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 15,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 16,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Read;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 16,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Read;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 41,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 173,
+   "token": "std::io",
+   "rule": "E-NOIO",
+   "effect": "in-memory-no-io",
+   "dependence": "verdict-irrelevant",
+   "code": "let cursor = std::io::Cursor::new(compressed_or_tar.as_slice());"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 196,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(path).map_err(|source| BundleLoadError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 223,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(current).map_err(|source| BundleLoadError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 240,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = fs::read(&path).map_err(|source| BundleLoadError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 273,
+   "token": "File::open/create",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let mut file = fs::File::open(path).map_err(|source| BundleLoadError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/bundle.rs",
+   "line": 273,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let mut file = fs::File::open(path).map_err(|source| BundleLoadError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 29,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 30,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 30,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 32,
+   "token": "std::process",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::process::{Command, Stdio};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 460,
+   "token": "std::process",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "fn from_exit_status(status: std::process::ExitStatus) -> Self {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 509,
+   "token": "std::process",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "fn from_process_output(output: std::process::Output) -> Self {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 659,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let lake_toolchain = match fs::read_to_string(&toolchain_path) {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 659,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let lake_toolchain = match fs::read_to_string(&toolchain_path) {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 661,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "Err(err) if err.kind() == std::io::ErrorKind::NotFound => {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/ingest.rs",
+   "line": 2797,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let mut command = Command::new(program);",
+   "program_literal": null,
+   "program_resolution": "caller-supplied path or variable"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/keys.rs",
+   "line": 20,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/keys.rs",
+   "line": 95,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/keys.rs",
+   "line": 411,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let text = fs::read_to_string(path).map_err(|source| TrustedKeyRegistryError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/keys.rs",
+   "line": 411,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let text = fs::read_to_string(path).map_err(|source| TrustedKeyRegistryError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/policy.rs",
+   "line": 14,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/policy.rs",
+   "line": 77,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/policy.rs",
+   "line": 201,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let text = fs::read_to_string(path).map_err(|source| PolicyLoadError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/math_map/policy.rs",
+   "line": 201,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let text = fs::read_to_string(path).map_err(|source| PolicyLoadError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 14,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 15,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 15,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 17,
+   "token": "std::process",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::process::Command;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 28,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let _ = fs::remove_dir_all(&self.0);",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 33,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "pub(crate) fn io_err(kind: std::io::ErrorKind, msg: impl Into<String>) -> MathverseError {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 34,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "MathverseError::Io(std::io::Error::new(kind, msg.into()))"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 145,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let json = fs::read_to_string(path).map_err(|e| {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 145,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let json = fs::read_to_string(path).map_err(|e| {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 164,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::write(path, self.to_json()?)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 176,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(current_dir)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 182,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = fs::read(&path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 187,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": ".map_err(|e| io_err(std::io::ErrorKind::Other, e.to_string()))?"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 203,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "Command::new(      )",
+   "program_literal": "date",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 261,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::NotFound,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 300,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(output_dir)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 306,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": ".ok_or_else(|| io_err(std::io::ErrorKind::InvalidInput,                          ))?;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 309,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": ".ok_or_else(|| io_err(std::io::ErrorKind::InvalidInput,                        ))?;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 312,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let status = Command::new(     )",
+   "program_literal": "tar",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 321,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let tar = Command::new(     )",
+   "program_literal": "tar",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 325,
+   "token": "std::process",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": ".stdout(std::process::Stdio::piped())",
+   "program_literal": null,
+   "program_resolution": "stdio configuration of a spawn started elsewhere"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 329,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": ".ok_or_else(|| io_err(std::io::ErrorKind::BrokenPipe,                            ))?;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 330,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let zstd = Command::new(      )",
+   "program_literal": "zstd",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 336,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "return Err(io_err(std::io::ErrorKind::Other,                          ));"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 342,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::NotFound,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 366,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let _ = fs::remove_file(&index_path);",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 386,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let _ = fs::remove_file(&index_path);",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 402,
+   "token": "std::process",
+   "rule": "E-PID",
+   "effect": "read-ambient",
+   "dependence": "content-bearing",
+   "code": "let tmp = std::env::temp_dir().join(format!(                       , std::process::id()));"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 403,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(&tmp)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 418,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::InvalidData,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 426,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(&config.output_dir)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 435,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let output = Command::new(    )",
+   "program_literal": "gh",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 451,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::Other,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 461,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::NotFound,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 475,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(dir)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 486,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "std::io::ErrorKind::NotFound,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 505,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(dir)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 517,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in fs::read_dir(src)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 523,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(&dest_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 526,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::copy(&src_path, &dest_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 540,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::create_dir_all(dest_dir)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 543,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let status = Command::new(     )",
+   "program_literal": "tar",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 555,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let zstd = Command::new(      )",
+   "program_literal": "zstd",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 558,
+   "token": "std::process",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": ".stdout(std::process::Stdio::piped())",
+   "program_literal": null,
+   "program_resolution": "stdio configuration of a spawn started elsewhere"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 562,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": ".ok_or_else(|| io_err(std::io::ErrorKind::BrokenPipe,                             ))?;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 563,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let tar = Command::new(     )",
+   "program_literal": "tar",
+   "program_resolution": "PATH lookup of a bare name"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 570,
+   "token": "std::io",
+   "rule": "E-ERRVAL",
+   "effect": "error-value",
+   "dependence": "verdict-irrelevant",
+   "code": "return Err(io_err(std::io::ErrorKind::Other,                        ));"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 672,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": ") -> std::io::Result<()> {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 51,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 51,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 56,
+   "token": "mmap",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use memmap2::Mmap;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 98,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "std::env::var(MAX_DECOMPRESS_BYTES_ENV)",
+   "env_name": "MATHVERSE_MAX_DECOMPRESS_BYTES",
+   "env_name_via": "const in the same file"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 981,
+   "token": "File::open/create",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let file = std::fs::File::create(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 981,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let file = std::fs::File::create(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 981,
+   "token": "std::fs",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let file = std::fs::File::create(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 982,
+   "token": "BufWriter",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut writer = std::io::BufWriter::new(file);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 982,
+   "token": "std::io",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut writer = std::io::BufWriter::new(file);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1184,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read(path).map_err(|source| MathverseError::ShardFileUnreadable {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1184,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read(path).map_err(|source| MathverseError::ShardFileUnreadable {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1552,
+   "token": "mmap",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "mmap: Mmap,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1596,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "let unreadable = |source: std::io::Error| MathverseError::ShardFileUnreadable {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1600,
+   "token": "File::open/create",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let file = std::fs::File::open(path).map_err(unreadable)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1600,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let file = std::fs::File::open(path).map_err(unreadable)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1600,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let file = std::fs::File::open(path).map_err(unreadable)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1604,
+   "token": "mmap",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let mmap = unsafe { Mmap::map(&file).map_err(unreadable)? };",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1610,
+   "token": "mmap",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "pub(crate) fn from_mmap(mmap: Mmap) -> MathverseResult<Self> {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1755,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "let unreadable = |source: std::io::Error| MathverseError::ShardFileUnreadable {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1759,
+   "token": "File::open/create",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let file = std::fs::File::open(path).map_err(unreadable)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1759,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let file = std::fs::File::open(path).map_err(unreadable)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1759,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let file = std::fs::File::open(path).map_err(unreadable)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1764,
+   "token": "mmap",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let mmap = unsafe { Mmap::map(&file).map_err(unreadable)? };",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1782,
+   "token": "mmap",
+   "rule": "E-NOIO",
+   "effect": "in-memory-no-io",
+   "dependence": "verdict-irrelevant",
+   "code": "let mut anon = memmap2::MmapMut::map_anon(bytes.len())?;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard.rs",
+   "line": 1808,
+   "token": "mmap",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "fn from_mmap_no_checksum(mmap: Mmap) -> MathverseResult<Self> {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/mod.rs",
+   "line": 17,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/mod.rs",
+   "line": 107,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/mod.rs",
+   "line": 185,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "fs::write(output_path, json_str).map_err(|source| WriteResultsJsonError::Write {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/mod.rs",
+   "line": 291,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "if let Ok(rd) = fs::read_dir(dir) {",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+   "line": 1149,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if let Ok(filter) = std::env::var(                  ) {",
+   "env_name": "CLEAN_WS16_DEBUG",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+   "line": 1681,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "match std::env::var(SPECULATIVE_REJECT_LOG_ENV) {",
+   "env_name": "CLEAN_SPECULATIVE_REJECT_LOG",
+   "env_name_via": "const in the same file"
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+   "line": 1705,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write as _;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+   "line": 1705,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write as _;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+   "line": 1706,
+   "token": "OpenOptions",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "if let Ok(mut file) = std::fs::OpenOptions::new()",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+   "line": 1706,
+   "token": "std::fs",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "if let Ok(mut file) = std::fs::OpenOptions::new()",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 279,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "std::fs::write(path, self.to_json()?)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 279,
+   "token": "std::fs",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "std::fs::write(path, self.to_json()?)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 288,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read_to_string(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 288,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read_to_string(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 288,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read_to_string(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/error.rs",
+   "line": 44,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-olean/src/import/mod.rs",
+   "line": 120,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-olean/src/import/mod.rs",
+   "line": 136,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/mod.rs",
+   "line": 444,
+   "token": "fs::*",
+   "rule": "E-STAT",
+   "effect": "stat-file",
+   "dependence": "content-bearing",
+   "code": "let mtime = std::fs::metadata(path)"
+  },
+  {
+   "member": "crates/clean-olean/src/import/mod.rs",
+   "line": 444,
+   "token": "std::fs",
+   "rule": "E-STAT",
+   "effect": "stat-file",
+   "dependence": "content-bearing",
+   "code": "let mtime = std::fs::metadata(path)"
+  },
+  {
+   "member": "crates/clean-olean/src/import/mod.rs",
+   "line": 474,
+   "token": "fs::*",
+   "rule": "E-STAT",
+   "effect": "stat-file",
+   "dependence": "content-bearing",
+   "code": "let mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());"
+  },
+  {
+   "member": "crates/clean-olean/src/import/mod.rs",
+   "line": 474,
+   "token": "std::fs",
+   "rule": "E-STAT",
+   "effect": "stat-file",
+   "dependence": "content-bearing",
+   "code": "let mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());"
+  },
+  {
+   "member": "crates/clean-verify/src/external_checker.rs",
+   "line": 10,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::{Read, Write};"
+  },
+  {
+   "member": "crates/clean-verify/src/external_checker.rs",
+   "line": 12,
+   "token": "std::process",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::process::{Command, Stdio};"
+  },
+  {
+   "member": "crates/clean-verify/src/external_checker.rs",
+   "line": 54,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-verify/src/external_checker.rs",
+   "line": 58,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-verify/src/external_checker.rs",
+   "line": 126,
+   "token": "process::Command",
+   "rule": "E-SPAWN",
+   "effect": "spawn-process",
+   "dependence": "content-bearing",
+   "code": "let mut child = Command::new(&self.program)",
+   "program_literal": null,
+   "program_resolution": "caller-supplied path or variable"
+  },
+  {
+   "member": "crates/clean-verify/src/external_checker.rs",
+   "line": 173,
+   "token": "read_to_string",
+   "rule": "E-PIPE",
+   "effect": "process-stream",
+   "dependence": "content-bearing",
+   "code": "stdout.read_to_string(&mut stdout_buf)?;"
+  },
+  {
+   "member": "crates/clean-verify/src/external_checker.rs",
+   "line": 174,
+   "token": "read_to_string",
+   "rule": "E-PIPE",
+   "effect": "process-stream",
+   "dependence": "content-bearing",
+   "code": "stderr.read_to_string(&mut stderr_buf)?;"
+  }
+ ]
+}

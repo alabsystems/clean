@@ -36,7 +36,15 @@
 
 mod core_spec;
 
-pub use core_spec::{ir_h2_module_defs, ir_pv_module_defs, IR_FS_MODULE_DEFS, IR_KO_MODULE_DEFS};
+pub use core_spec::{
+    ir_br_module_defs, ir_fc_module_defs, ir_frm_module_defs, ir_frr_module_defs,
+    ir_frs_module_defs, ir_fs_module_defs, ir_fw_module_defs, ir_gc_module_defs, ir_h2_module_defs,
+    ir_hlb_module_defs, ir_ko_module_defs, ir_ni_module_defs, ir_pv_module_defs, ir_sm_module_defs,
+    ir_sm_semdiff_defs, ir_vc_module_defs, ir_w2a_ee_module_defs, ir_w2a_sel_module_defs,
+    ir_w2a_ud_module_defs, ir_w2a_uo_module_defs, ir_w2a_ur_module_defs, ir_w2b_al_module_defs,
+    ir_w2b_pd_module_defs, ir_w2b_pm_module_defs, ir_w2b_pp_module_defs, ir_w2c_ci_module_defs,
+    ir_w2c_ga_module_defs, ir_w3_os_module_defs, ir_w3_ou_module_defs, ir_w4_fc_module_defs,
+};
 mod declaration_registration;
 mod definition;
 mod definition_registration;

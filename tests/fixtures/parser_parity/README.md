@@ -9,7 +9,7 @@ replayed row-by-row, exact-match, with a pinned regeneration recipe.
 
 | file | role |
 |---|---|
-| `ground_truth.tsv` | 228 probes: `family · input · expected_kind · lean_tree · lean_value` |
+| `ground_truth.tsv` | 231 probes: `family · input · expected_kind · lean_tree · lean_value` |
 | `gen_ground_truth.lean` | regeneration recipe (pinned toolchain oracle queries) |
 | `README.md` | this file |
 
@@ -50,10 +50,10 @@ getelem        25      1          2     28
 monadic        31      3          0     34
 brace          25      1          2     28
 binder         38      0          2     40
-lowprec        24      5          0     29
+lowprec        24      8          0     32
 rewrite        13      3          5     21
 freqsweep      24      1          2     27
-TOTAL         185     15         28    228
+TOTAL         185     18         28    231
 ```
 
 Brick 3 (operator/notation coverage) originally took MATCH from 63 → 181 and
@@ -66,6 +66,22 @@ v4.30.0-rc2 toolchain), replacing the fixture's former prose placeholder.
 The remaining divergences are documented Mathlib-surface or parser/elaborator
 boundary choices, including `∑`/`∏` families, set-builders, `∃!`, `×ˢ`, the
 pattern-fun global-name rule, and postfix-whitespace leniency.
+
+### Prefix-`+` rows (2026-08-26, queue-B rank 2)
+
+Three `lowprec` rows — `+3`, `A →+ B`, `1 + + 2` — were added when the parser's
+no-op prefix-`+` arm was deleted. They are the rows that would have caught the
+only SILENT, kernel-accepted misparse the 2026-08 parser survey found: because
+`neg_expr` accepted `+e ≡ e`, Mathlib's `A →+ B` (`AddMonoidHom`, **996 lines
+across 285 files** of mathlib4 `43ad0e9d2`) parsed as `A → (+ B)` ≡ `A → B`, a
+plain function arrow, and the resulting term elaborated and kernel-verified
+against a different proposition. The pinned toolchain rejects all three at
+PARSE time with `unexpected token '+'; expected term`, so they are `ERROR`
+rows; clean now rejects them too, which classifies as LOUD (`lowprec` loud
+5 → 8, total 29 → 32). They cannot become MATCH — an `ERROR` row's only
+non-failing outcome is LOUD — so if `→+` is ever registered as the
+`infixr:25` Mathlib declares, the `A →+ B` row must move to a Mathlib-surface
+allowlist entry the same way `⨆`/`⨅` did, never be deleted.
 
 ### Fixture normalization corrections (2026-07-08, Brick 3)
 

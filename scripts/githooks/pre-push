@@ -1,0 +1,446 @@
+#!/usr/bin/env bash
+# Clean pre-push gate — the narrow, fast, fail-closed one.
+#
+# Author: Andrew Yates. Copyright 2026 Andrew Yates. License: Apache-2.0.
+#
+# WHY THIS DIRECTORY IS `githooks/` AND NOT `hooks/`
+# --------------------------------------------------
+# Because the directory name is the rollout boundary, and it had to be.
+#
+# `scripts/hooks/pre-push` was `exec local_gate.sh --fast`, and that one line is
+# why Clean had no push gate at all. The hook was correct, tracked, executable,
+# and pointed at a real gate -- and `core.hooksPath` in this repo was
+# `.git/hooks`, a directory holding fourteen `.sample` files and nothing else.
+# Every "wired to local_gate" claim in the tree was, mechanically, wired to a
+# script a human had to remember to run.
+#
+# Git resolves a RELATIVE `core.hooksPath` against the worktree the hook runs
+# in, which is the right semantics -- each worktree runs the gate at its own sha
+# -- and it is also why the obvious fix was an outage. Measured 2026-08-23: 59 of
+# this repo's 61 worktrees are pinned below this commit and carry the OLD
+# `scripts/hooks/pre-push`. Setting `core.hooksPath=scripts/hooks` would have
+# refused all 59 with a `ModuleNotFoundError: No module named 'tomllib'`
+# traceback out of the gate's first leg. Verified end-to-end in a throwaway
+# clone, not reasoned about.
+#
+# So the installed directory is a name those 59 worktrees do not have. They find
+# no hook, stay exactly as ungated as they are today, and nothing breaks; every
+# worktree that includes this commit is gated. The rollout is monotone and
+# completes on its own as lanes rebase. `scripts/hooks/pre-push` survives as a
+# three-line redirect here so that a clone configured the old way still lands on
+# this file.
+#
+# Measuring the gate the old hook pointed at showed why nobody ever finished
+# installing it. At 97efa0e6c on a pinned worktree, 2026-08-23:
+#
+#   * THREE of its 23 fast legs are cargo builds of the trusted kernel and the
+#     CLI -- minutes cold, and cold is the normal state on a box where a dozen
+#     lanes invalidate the shared target dir all day.
+#   * `paragon-ratchet` costs 21.54 s by itself, 3.6x the entire rest of the
+#     hook, and was RED at HEAD (clean-elab files_over_500 373 -> 374).
+#   * `trust-verify-soundness` costs 8.9 s, runs a Trust stage1 binary found
+#     OUTSIDE this repo, and was RED at HEAD (a genuinely-false `divzero`
+#     canary certified).
+#   * `dep-boundary`, the FIRST leg, had been RED for twelve days -- since
+#     3477dc787 on 2026-08-11 -- because its own self-test fed `tomllib` a
+#     multi-line inline table, which TOML 1.0 forbids. No pusher caused it and
+#     no pusher could have; the gate simply could not go green on any machine.
+#
+# Installing that as a blocking hook would have refused every push from every
+# lane on this machine on three conditions none of them caused. That is not a
+# gate, it is a `--no-verify` generator. So this hook runs a CURATED subset:
+# every leg measured green and cheap, ~6 s all in. The expensive legs did not
+# get weaker -- they still run, fail-closed, in `scripts/local_gate.sh`.
+#
+# CORRECTED 2026-08-25. That last sentence used to read "in
+# `scripts/local_gate.sh` (full mode), which is where a several-minute
+# measurement belongs", and the parenthesis was false for four of the six
+# excluded legs: soundness-cert, axiom-audit-consistency, cli-feature-coverage
+# and trust-verify-soundness all ran in `--fast` as well, because their
+# `# GATE-LEG:` markers sat outside every `GATE-FULL-ONLY` region. Excluding a
+# leg from THIS FILE and excluding it from `--fast` are different acts, and
+# gate-legs.txt now carries a separate MODE column for the second one, derived
+# from local_gate.sh rather than asserted here. `trust-verify-soundness` was the
+# one leg whose exclusion reason (it reaches a Trust toolchain OUTSIDE this
+# repo) applies to the fast path too, so it moved into a full-only region; the
+# three cargo legs did not move, because moving them would weaken `--fast`.
+#
+# The curation is not this file's private opinion. It lives in
+# `scripts/githooks/gate-legs.txt`, one reviewed row per leg, and
+# `scripts/check_hook_coverage.py` -- which runs first, below, and fails closed
+# -- refuses the push unless that table names EXACTLY the legs local_gate.sh's
+# fast path reaches and EXACTLY the legs this file declares. A new fast leg is
+# a refused push until somebody classifies it. That is the part a hand-curated
+# subset otherwise loses in a month.
+#
+# NEVER MUTATES -- WITH ONE MEASURED EXCEPTION, corrected here 2026-08-25 rather
+# than left as a sentence that was true once. No leg takes a lock and no leg
+# builds. But `extend-constants-ratchet` and `add-decl-ratchet` each run a
+# `--selftest` whose LAST arms write to the tracked file
+# `crates/clean-kernel/src/env/snapshot.rs` and restore it in a `finally`;
+# observed dirty within ~0.5 s of launch, restored on exit. One of the two
+# writes -- `pub fn smuggle(env: &mut E, d: D) { ... }` -- does not compile, so a
+# cargo build running in the same worktree during a push sees a broken kernel.
+# That is not theory: a `scripts/local_gate.sh --fast` run in a lane worktree
+# died with `error[E0425]: cannot find type `E` ... snapshot.rs:317` and printed
+# `LOCAL GATE: FAIL - soundness certificate` while a push was gating. The arms
+# are worth keeping (they are the falsification that justified the lexing
+# rewrite) and their meaning depends on the real file's CONTENT, not its PATH,
+# so the fix is to seed a temp tree with those bytes. Ledgered in
+# data/gate_registry.json on both rows until then.
+#
+# The escape hatch is git's own: `git push --no-verify`, which shows up in the
+# reflog rather than in a habit. There is no environment variable that skips a
+# leg, and `CLEAN_GATE_PYTHON` only chooses WHICH interpreter runs them.
+set -uo pipefail
+
+# pre-push is fed "<local-ref> <local-sha> <remote-ref> <remote-sha>" lines on
+# stdin. Drain every one so git never sees EPIPE. A push that only DELETES refs
+# has nothing to gate -- its local sha is all-zero -- and is let through.
+PUSHED_REFS="$(cat 2>/dev/null || true)"
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "clean pre-push: not inside a git worktree" >&2
+  exit 1
+}
+
+# Git exports repository-local variables (notably GIT_DIR) while a hook runs.
+# Leaving them set makes every nested `git` call inside a leg inspect THIS
+# repository's object store even when the leg meant to look elsewhere, and in a
+# linked worktree it makes `git rev-parse --show-toplevel` answer for the wrong
+# tree. Trust's hooks learned this the hard way; the unset is mandatory here.
+for git_local_var in $(git rev-parse --local-env-vars); do
+  unset "$git_local_var"
+done
+cd "$REPO_ROOT" || exit 1
+
+if [ -n "$PUSHED_REFS" ]; then
+  any_create_or_update=0
+  # "<remote-sha> <local-sha>" per updated ref, for legs that must judge exactly
+  # what is being pushed. Deletions carry an all-zero local sha and are dropped
+  # by the consumer.
+  CLEAN_PUSH_RANGES=""
+  while IFS=' ' read -r _lref lsha _rref _rsha; do
+    [ -z "${lsha:-}" ] && continue
+    case "$lsha" in
+      0000000000000000000000000000000000000000) ;;
+      *) any_create_or_update=1
+         CLEAN_PUSH_RANGES="${CLEAN_PUSH_RANGES}${_rsha:-0000000000000000000000000000000000000000} ${lsha}
+" ;;
+    esac
+  done <<<"$PUSHED_REFS"
+  export CLEAN_PUSH_RANGES
+  if [ "$any_create_or_update" -eq 0 ]; then
+    echo "clean pre-push: deletion-only push, nothing to gate."
+    exit 0
+  fi
+fi
+
+# ---------------------------------------------------------------- interpreter
+# `dep-boundary` parses Cargo.toml with `tomllib`, which is 3.11+. This machine's
+# default `python3` is Apple's 3.9.6 with neither `tomllib` nor `tomli`, so a
+# hook that just said `python3` would fail leg 1 on a missing pip module rather
+# than on a boundary violation -- the exact indistinguishable-red that gets a
+# gate uninstalled. Resolve once, loudly, and use the same interpreter for every
+# leg so the verdict is reproducible.
+pick_python() {
+  local cand
+  for cand in "${CLEAN_GATE_PYTHON:-}" python3 python3.14 python3.13 python3.12 python3.11 \
+              /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+    [ -z "$cand" ] && continue
+    command -v "$cand" >/dev/null 2>&1 || continue
+    if "$cand" -c 'import tomllib' >/dev/null 2>&1; then printf '%s' "$cand"; return 0; fi
+  done
+  return 1
+}
+PY="$(pick_python)" || {
+  echo "clean pre-push: no python3 with tomllib (3.11+) on PATH." >&2
+  echo "  Every gate leg is a python checker; without one the gate cannot run," >&2
+  echo "  and a gate that cannot run must not report a pass." >&2
+  echo "  Install python 3.11+ (brew install python@3.14) or set CLEAN_GATE_PYTHON." >&2
+  exit 1
+}
+
+# ----------------------------------------------------------------------- legs
+# One function per leg. The id is the function name with '-' for '_'; ids are
+# the join key between this file, gate-legs.txt and local_gate.sh's
+# `# GATE-LEG:` markers, and check_hook_coverage.py enforces that the three
+# agree. Anything with a shell metacharacter lives in a function precisely so
+# the table stays a table.
+leg_gate_registry() {
+  # The leg about the legs. Selftest first, same contract as add-decl-ratchet:
+  # 16 mutation arms on a synthetic repo, then the real check. ~0.2 s together.
+  "$PY" scripts/check_gate_registry.py --selftest || return 1
+  "$PY" scripts/check_gate_registry.py
+}
+leg_cargo_test_selectors() {
+  # The leg about whether a gate's `cargo test` SELECTS anything. A filter that
+  # matches nothing exits 0 -- measured on
+  # `cargo test -p clean-kernel axiom_refutation_gate`, whose gate is in
+  # clean-verify. Selftest first, same contract as the leg above. ~0.8 s.
+  "$PY" scripts/check_cargo_test_selectors.py --selftest || return 1
+  "$PY" scripts/check_cargo_test_selectors.py
+}
+leg_doc_claims() {
+  # The leg about whether the PROSE is true. The two legs above check that the
+  # GATES are honest; nothing checked that CLAUDE.md still describes this tree,
+  # and four of its claims were proved false by measurement in a single day.
+  # Re-derives every `<!-- claim: figure -->` from its JSON artifact and refuses
+  # a governed doc citing a repo path that is not there. Markdown and JSON only
+  # -- no cargo, no git. Selftest first, same contract as the two above. ~0.06 s.
+  "$PY" scripts/check_doc_claims.py --selftest || return 1
+  "$PY" scripts/check_doc_claims.py
+}
+leg_suite_journal() {
+  # The suite runner's durable record. `data/suite_state/` is git-tracked AND is
+  # runner output that changes without a commit, so a checkout over it reverts
+  # verdicts with exit code 0 -- that is how a complete 14.33-hour sweep was
+  # destroyed. Records are now written THROUGH an append-only journal outside
+  # the working tree; this leg re-derives that wiring rather than trusting it,
+  # because the fix has exactly one failure mode and it is silent until the next
+  # checkout. 16 mutation arms first, then the real check.
+  "$PY" scripts/check_suite_journal.py --selftest || return 1
+  "$PY" scripts/check_suite_journal.py
+}
+leg_dep_boundary()            { "$PY" scripts/check_workspace_dependency_boundary.py; }
+leg_lint_coverage()           { "$PY" scripts/check_lint_coverage.py; }
+leg_fmt_changed() {
+  # Selftest first, same contract as add-decl-ratchet and env-bypass-census.
+  # CLEAN_PUSH_RANGES is exported above from the refs git handed this hook, so
+  # the leg judges exactly the commits being pushed -- not the branch, and not
+  # the working tree's relationship to some other base.
+  "$PY" scripts/check_fmt_changed.py --selftest || return 1
+  "$PY" scripts/check_fmt_changed.py
+}
+leg_no_ignored_tests() {
+  # git grep exits 1 for "no match", which is the GREEN case here: a hit is an
+  # ignored first-party test or doctest, which the org rule forbids outright.
+  local hits status
+  hits="$(git grep --line-number --extended-regexp \
+    '(^[[:space:]]*#[[:space:]]*!?[[:space:]]*\[[[:space:]]*(ignore([[:space:]]*=|[[:space:]]*\])|cfg_attr\([^]]*,[[:space:]]*ignore([[:space:]]*=|[[:space:]]*[,)])))|(^[[:space:]]*(///|//!|\*)[[:space:]]*```([^`,[:space:]]+,)?ignore([,[:space:]]|$))' \
+    -- '*.rs' ':(exclude)vendor/**' ':(exclude)third_party/**' ':(exclude)reference/**')"
+  status=$?
+  if [ "$status" -eq 0 ]; then printf '%s\n' "$hits"; return 1; fi
+  [ "$status" -eq 1 ] && return 0
+  echo "the #[ignore] scanner itself failed with status $status"; return 1
+}
+leg_ratchet_surfaces() {
+  "$PY" - <<'PYEOF'
+import json, sys
+r = json.load(open('data/unchecked_decl_ratchet.json'))
+tcb = json.load(open('data/soundness_tcb.json'))
+audit = json.load(open('data/axiom_audit.json'))
+mirror = audit.get('soundness_tcb_mirror', {})
+print(f"  unchecked-decl call sites: structural={r.get('structural_call_sites', r.get('add_decl_structural', 'n/a'))} "
+      f"unchecked={r.get('unchecked_call_sites', r.get('add_decl_unchecked', 'n/a'))}")
+print(f"  TCB axioms: {tcb.get('axiom_count', 'n/a')} "
+      f"(foundational={tcb.get('foundational_count', 'n/a')}, "
+      f"domain={tcb.get('admitted_domain_count', 0) + tcb.get('other_admitted_count', 0)})")
+print(f"  axiom_audit.json mirror: domain_axiom_count={mirror.get('domain_axiom_count', 'MISSING')}")
+PYEOF
+}
+leg_extend_constants_ratchet() {
+  # The self-test FIRST: it is what makes the measurement below mean anything,
+  # and one of its arms is the `// SOUNDNESS:` comment that used to redden this
+  # gate (lane ANTICORR, 2026-08-25).
+  "$PY" scripts/check_extend_constants_ratchet.py --selftest || return 1
+  "$PY" scripts/check_extend_constants_ratchet.py
+}
+leg_add_decl_ratchet() {
+  # The selftest arm runs first and on every run: a ratchet whose own mutation
+  # arms have stopped firing is a green that means nothing.
+  "$PY" scripts/check_add_decl_ratchet.py --selftest || return 1
+  "$PY" scripts/check_add_decl_ratchet.py
+}
+leg_env_bypass_census() {
+  # Same contract as add-decl-ratchet: the selftest arm runs first and on
+  # every run, so a green measure is backed by a gate proven able to fail.
+  "$PY" scripts/check_env_bypass_census.py --selftest || return 1
+  "$PY" scripts/check_env_bypass_census.py
+}
+# G-SCORE direction ratchet against the committed scoreboard baseline.
+# `--ratchet` is READ-ONLY by its own self-tested contract (caf6dad89
+# follow-up): green touches nothing, a violation exits 1 naming the row and
+# leaves the baseline alone, and a missing/unreadable baseline fails closed
+# (only `--refresh` writes) — so the save/restore wrapper this leg once
+# carried is gone and the hook's NEVER-MUTATES rule holds with a plain call.
+leg_spine_scoreboard_ratchet()          { "$PY" scripts/spine_scoreboard.py --ratchet; }
+leg_trust_verdict_emitters()            { "$PY" scripts/check_trust_verdict_emitters.py; }
+leg_tcb_target_ratchet()                { "$PY" scripts/tcb_target_ratchet.py; }
+leg_prelude_collision_ratchet()         { "$PY" scripts/check_prelude_collision_ratchet.py; }
+leg_prelude_instance_priority_ratchet() { "$PY" scripts/check_prelude_instance_priority_ratchet.py; }
+leg_source_elab_ratchet_artifact()      { scripts/source_elab_gate.sh --check-artifact; }
+leg_silent_tactic_ratchet()             { "$PY" scripts/check_silent_tactic_ratchet.py; }
+leg_g_auto_static()                     { "$PY" scripts/tactic_parity/family_gate.py --family g_auto --static; }
+leg_g_simp_static()                     { "$PY" scripts/tactic_parity/family_gate.py --family g_simp --static; }
+leg_trustcore_evidence_staleness()      { "$PY" scripts/check_trustcore_evidence_staleness.py; }
+leg_crystal_revalidation_scope()        { "$PY" scripts/crystal_freshness_scope.py; }
+leg_crystal_enum_tag_pin()              { "$PY" scripts/check_enum_tag_pin.py; }
+leg_a0a6_probe_transcription()          { "$PY" scripts/check_a0a6_probe_transcription.py; }
+leg_paragon_ratchet()                   { scripts/paragon_ratchet.sh; }
+leg_isabelle_ops_portability()          { "$PY" scripts/test_isabelle_ops_portability.py; }
+leg_aristotle_corpus_static()           { "$PY" scripts/aristotle_corpus_gate.py --fast; }
+leg_trust_ir_axes_selftest()            { "$PY" scripts/trust_ir_axes.py selftest; }
+
+# Declared leg order. check_hook_coverage.py reads this block by its markers,
+# so keep the two `# HOOK-LEGS` lines exactly as they are.
+# HOOK-LEGS BEGIN
+HOOK_LEGS="
+gate-registry
+cargo-test-selectors
+doc-claims
+suite-journal
+dep-boundary
+lint-coverage
+fmt-changed
+no-ignored-tests
+ratchet-surfaces
+extend-constants-ratchet
+add-decl-ratchet
+env-bypass-census
+spine-scoreboard-ratchet
+trust-verdict-emitters
+tcb-target-ratchet
+prelude-collision-ratchet
+prelude-instance-priority-ratchet
+source-elab-ratchet-artifact
+silent-tactic-ratchet
+g-auto-static
+g-simp-static
+trustcore-evidence-staleness
+crystal-revalidation-scope
+crystal-enum-tag-pin
+a0a6-probe-transcription
+paragon-ratchet
+isabelle-ops-portability
+aristotle-corpus-static
+trust-ir-axes-selftest
+"
+# HOOK-LEGS END
+
+# ------------------------------------------------------- leg 0: the anti-drift
+# First, and fail-closed, because everything below is only as trustworthy as the
+# claim that it still covers what it says it covers. A missing checker is a
+# state in which the subset could silently shrink to nothing, so it is a refusal
+# and not a shrug.
+COVERAGE_CHECKER="scripts/check_hook_coverage.py"
+echo "=== clean pre-push (narrow gate; no cargo, no build) ==="
+if [ -f "$COVERAGE_CHECKER" ]; then
+  cov_out="$("$PY" "$COVERAGE_CHECKER" 2>&1)"; cov_rc=$?
+else
+  cov_out="clean pre-push: $COVERAGE_CHECKER is missing -- the hook can no longer prove it covers the gate"
+  cov_rc=1
+fi
+if [ "$cov_rc" -ne 0 ]; then
+  printf '%s\n' "$cov_out" >&2
+  echo >&2
+  echo "PRE-PUSH: RED (hook coverage)." >&2
+  exit 1
+fi
+printf '%s\n' "$cov_out"
+
+# ------------------------------------------------------------ waiver table read
+TODAY="$(date -u +%Y-%m-%d)"
+POLICY="scripts/githooks/gate-legs.txt"
+waived_status_of() {  # id -> "expires|owner|reason" for a WAIVED row, else empty
+  # Six fields since 2026-08-25: <status> | <mode> | <leg-id> | <owner> |
+  # <expires> | <reason>. MODE (both|full) is the local_gate.sh axis and is
+  # re-derived by check_hook_coverage.py; this hook only needs STATUS and the
+  # waiver fields, but it must count columns correctly or every WAIVED row
+  # silently stops being found -- which would turn a printed, owned, expiring
+  # red back into an invisible one.
+  awk -F'|' -v want="$1" '
+    { line=$0; sub(/^[ \t]+/,"",line) }
+    line ~ /^#/ || line == "" { next }
+    NF < 6 { next }
+    { s=$1; id=$3; o=$4; e=$5; r=$6
+      gsub(/^[ \t]+|[ \t]+$/,"",s); gsub(/^[ \t]+|[ \t]+$/,"",id)
+      gsub(/^[ \t]+|[ \t]+$/,"",o); gsub(/^[ \t]+|[ \t]+$/,"",e)
+      gsub(/^[ \t]+|[ \t]+$/,"",r)
+      if (s == "WAIVED" && id == want) { print e "|" o "|" r; exit } }
+  ' "$POLICY" 2>/dev/null
+}
+
+# ------------------------------------------------------------------- run them
+BLOCKING=""
+WAIVED_RED=""
+STALE_WAIVERS=""
+T0="$("$PY" -c 'import time;print(time.time())')"
+ls0="$T0"
+for leg in $HOOK_LEGS; do
+  fn="leg_${leg//-/_}"
+  if ! type "$fn" >/dev/null 2>&1; then
+    BLOCKING="${BLOCKING}
+  x ${leg}: declared in HOOK_LEGS but no ${fn}() exists"
+    continue
+  fi
+  # ls0 is the previous leg's end stamp, so each leg costs ONE `python -c`
+  # rather than two. Twenty legs, twenty interpreter starts saved -- about a
+  # second of the hook's own budget, which a gate has no business spending on
+  # measuring itself.
+  out="$("$fn" 2>&1)"; rc=$?
+  ls1="$("$PY" -c 'import time;print(time.time())')"
+  secs="$("$PY" -c "print(f'{$ls1-$ls0:.2f}')")"
+  ls0="$ls1"
+  wrow="$(waived_status_of "$leg")"
+  if [ "$rc" -eq 0 ]; then
+    printf '  ok   %-34s %6ss\n' "$leg" "$secs"
+    if [ -n "$wrow" ]; then
+      exp="${wrow%%|*}"
+      if [ -n "$exp" ] && [[ ! "$exp" < "$TODAY" ]]; then
+        STALE_WAIVERS="${STALE_WAIVERS}
+  x ${leg} passes again -- delete its WAIVED row from ${POLICY}"
+      fi
+    fi
+    continue
+  fi
+  if [ -n "$wrow" ]; then
+    exp="${wrow%%|*}"; rest="${wrow#*|}"; own="${rest%%|*}"; rea="${rest#*|}"
+    if [ -n "$exp" ] && [[ ! "$exp" < "$TODAY" ]]; then
+      printf '  ~    %-34s %6ss  WAIVED until %s by %s\n' "$leg" "$secs" "$exp" "$own"
+      WAIVED_RED="${WAIVED_RED}
+  ~ ${leg} (until ${exp}, ${own}): ${rea}
+$(printf '%s\n' "$out" | sed 's/^/      | /')"
+      continue
+    fi
+    printf '  FAIL %-34s %6ss  waiver EXPIRED %s\n' "$leg" "$secs" "${exp:-<no date>}"
+    BLOCKING="${BLOCKING}
+  x ${leg}: its waiver EXPIRED on ${exp:-<no date>} (owner ${own}) and no longer applies
+$(printf '%s\n' "$out" | sed 's/^/      | /')"
+    continue
+  fi
+  printf '  FAIL %-34s %6ss\n' "$leg" "$secs"
+  BLOCKING="${BLOCKING}
+  x ${leg}
+$(printf '%s\n' "$out" | sed 's/^/      | /')"
+done
+T1="$("$PY" -c 'import time;print(time.time())')"
+TOTAL="$("$PY" -c "print(f'{$T1-$T0:.2f}')")"
+
+if [ -n "$WAIVED_RED" ]; then
+  echo
+  echo "WAIVED -- red, but owned and expiring, and this push did not cause it:"
+  printf '%s\n' "$WAIVED_RED"
+fi
+if [ -n "$STALE_WAIVERS" ]; then
+  echo
+  echo "FAIL: a waiver is no longer needed."
+  printf '%s\n' "$STALE_WAIVERS"
+fi
+if [ -n "$BLOCKING" ]; then
+  echo
+  echo "FAIL: a fail-closed gate leg refused this tree."
+  printf '%s\n' "$BLOCKING"
+fi
+
+if [ -z "$BLOCKING" ] && [ -z "$STALE_WAIVERS" ]; then
+  echo
+  echo "PRE-PUSH: GREEN in ${TOTAL}s (${PY}). Legs excluded on cost still run in"
+  echo "  scripts/local_gate.sh -- four of them in --fast too; each row's MODE"
+  echo "  column says which. See ${POLICY}."
+  exit 0
+fi
+echo
+echo "PRE-PUSH: RED in ${TOTAL}s."
+echo "'git push --no-verify' skips this hook and leaves no record of why."
+exit 1

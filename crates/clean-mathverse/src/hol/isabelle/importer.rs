@@ -380,7 +380,7 @@ impl IsabelleImporter {
     ///
     /// Returns `IsabelleImportError` if `continue_on_error` is `false` and
     /// any theorem translation fails.
-    pub fn import_theory(
+    pub(crate) fn import_theory(
         &self,
         export: &IsaTheoryExport,
     ) -> Result<IsabelleImportResult, IsabelleImportError> {
@@ -477,7 +477,7 @@ impl IsabelleImporter {
     /// Returns `IsabelleImportError` if the directory cannot be read, or if
     /// no `.yxml` files are found, or if `continue_on_error` is false and
     /// any file fails.
-    pub fn import_directory(
+    pub(crate) fn import_directory(
         &self,
         dir: &Path,
     ) -> Result<IsabelleImportResult, IsabelleImportError> {

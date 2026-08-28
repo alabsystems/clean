@@ -24,6 +24,46 @@ use std::time::{Duration, Instant};
 /// - failed: List of (module_name, error_message) for failed builds
 type BuildModulesResult = (Vec<String>, Vec<String>, Vec<(String, String)>);
 
+/// A build directory that exists only for the duration of one check-only
+/// build and is removed when this value is dropped.
+///
+/// Not `tempfile::TempDir`: `tempfile` is a dev-dependency here, and a
+/// check-only build must work in a shipped binary, not just under `cargo
+/// test`. The name carries the pid and a per-process counter so concurrent
+/// checks — several lanes, or one process checking several targets — never
+/// share a directory.
+#[derive(Debug)]
+struct ScratchBuildDir {
+    path: std::path::PathBuf,
+}
+
+impl ScratchBuildDir {
+    fn create() -> LakeResult<Self> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let path = std::env::temp_dir().join(format!(
+            "clean-lake-check-{}-{nanos}-{}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&path)?;
+        Ok(Self { path })
+    }
+}
+
+impl Drop for ScratchBuildDir {
+    fn drop(&mut self) {
+        // Best effort: a check-only build must not fail because its scratch
+        // could not be removed, and the path is unique per run so a leftover
+        // cannot poison the next one.
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 /// Build context for a workspace
 pub struct BuildContext {
     /// The workspace being built
@@ -44,7 +84,35 @@ pub struct BuildOptions {
     pub verbose: bool,
     /// Force rebuild all
     pub force: bool,
-    /// Only check types, don't generate code
+    /// Check the project without touching its build outputs.
+    ///
+    /// A check-only build elaborates and kernel-checks every module in
+    /// dependency order into a SCRATCH build directory that is deleted when
+    /// the build returns. The project's own `.lake/build` is neither read nor
+    /// written, so:
+    ///
+    /// - no `.olean` / `.olean.server` / `.olean.private` artifact is left
+    ///   behind, and none that already existed is overwritten;
+    /// - nothing is skipped as "up to date", because the check does not
+    ///   consult the project's artifact timestamps at all.
+    ///
+    /// That second property is the point. Measured 2026-08-27 while this flag
+    /// was still inert: `clean lake check-build` on a project whose source had
+    /// been replaced with syntactically invalid Lean printed
+    /// "Build check passed." — the modules were skipped against a newer
+    /// `.olean`, so the verdict came from the cache rather than from the
+    /// source. A check that can pass without reading the source is a vacuous
+    /// green.
+    ///
+    /// The redirection (rather than a guard around the export) is what keeps
+    /// inter-module imports working: `build_module` resolves a module's
+    /// imports by loading `.olean` files from disk
+    /// (`clean_olean::load_module_with_deps`), and under check-only those
+    /// files are the ones this same run just wrote into the scratch
+    /// directory.
+    ///
+    /// Cost: a check-only build never reuses previous work, so it is a full
+    /// elaboration every time.
     pub check_only: bool,
     /// Warn and continue when a stdlib or local-dependency `.olean` import
     /// fails to load, instead of failing the module build (fail-closed default)
@@ -154,8 +222,50 @@ impl BuildContext {
         &self.workspace
     }
 
+    /// Point the workspace at a scratch build directory when
+    /// [`BuildOptions::check_only`] is set, so the check neither reads nor
+    /// writes the project's artifacts.
+    ///
+    /// Returns the scratch directory, which must be handed back to
+    /// [`Self::end_check_only`] when the build finishes — dropping it removes
+    /// the directory.
+    fn begin_check_only(&mut self) -> LakeResult<Option<ScratchBuildDir>> {
+        if !self.options.check_only {
+            return Ok(None);
+        }
+        let scratch = ScratchBuildDir::create()?;
+        if self.options.verbose {
+            eprintln!(
+                "Check-only build: writing throwaway artifacts to {}",
+                scratch.path.display()
+            );
+        }
+        self.workspace
+            .set_build_dir_override(Some(scratch.path.clone()));
+        Ok(Some(scratch))
+    }
+
+    /// Restore the project's own build directory and delete the scratch one.
+    ///
+    /// Runs on every exit path, including a failed build: leaving the override
+    /// in place would silently redirect a later build on the same context to a
+    /// directory that no longer exists.
+    fn end_check_only(&mut self, scratch: Option<ScratchBuildDir>) {
+        if scratch.is_some() {
+            self.workspace.set_build_dir_override(None);
+        }
+        drop(scratch);
+    }
+
     /// Build all targets
     pub fn build_all(&mut self) -> LakeResult<BuildResult> {
+        let scratch = self.begin_check_only()?;
+        let result = self.build_all_inner();
+        self.end_check_only(scratch);
+        result
+    }
+
+    fn build_all_inner(&mut self) -> LakeResult<BuildResult> {
         let start = Instant::now();
 
         // Create output directories
@@ -181,6 +291,13 @@ impl BuildContext {
 
     /// Build a specific target (library, executable, or test)
     pub fn build_target(&mut self, target: &str) -> LakeResult<BuildResult> {
+        let scratch = self.begin_check_only()?;
+        let result = self.build_target_inner(target);
+        self.end_check_only(scratch);
+        result
+    }
+
+    fn build_target_inner(&mut self, target: &str) -> LakeResult<BuildResult> {
         let start = Instant::now();
 
         // Create output directories
@@ -233,6 +350,57 @@ impl BuildContext {
         })
     }
 
+    /// Build the named source **modules** and their local dependency closure.
+    ///
+    /// The module-granular counterpart of [`Self::build_target`], which
+    /// resolves a lakefile *target* name (a `lean_lib` / `lean_exe` /
+    /// `lean_test` entry). Lean's own Lake accepts either spelling on the
+    /// command line (`lake build Foo.Bar` builds a module), and Clean's
+    /// project manager declares its work as a `modules` list rather than a
+    /// target list — so a module-name entry point is what a native
+    /// `cake build` needs in order to stop shelling out to `lake`.
+    ///
+    /// **Fail-closed.** A name the workspace cannot resolve to a source file
+    /// is [`LakeError::ModuleNotFound`], never a silent skip: reporting
+    /// "0 built, 0 failed" for a typo'd module would let a caller record a
+    /// successful build of nothing.
+    pub fn build_modules_named(&mut self, modules: &[String]) -> LakeResult<BuildResult> {
+        let scratch = self.begin_check_only()?;
+        let result = self.build_modules_named_inner(modules);
+        self.end_check_only(scratch);
+        result
+    }
+
+    fn build_modules_named_inner(&mut self, modules: &[String]) -> LakeResult<BuildResult> {
+        let start = Instant::now();
+
+        // Create output directories
+        self.workspace.validate_dependencies()?;
+        self.workspace.create_dirs()?;
+
+        // Resolve every requested name BEFORE building anything, so a bad
+        // name in the list cannot half-build the good ones.
+        for module in modules {
+            if self.workspace.find_module(module).is_none() {
+                return Err(LakeError::ModuleNotFound(module.clone()));
+            }
+        }
+        for module in modules {
+            self.discover_module_deps(module)?;
+        }
+
+        // Build in dependency order
+        let ordered = self.topological_sort_subset(modules)?;
+        let result = self.build_modules(&ordered);
+
+        Ok(BuildResult {
+            built: result.0,
+            skipped: result.1,
+            failed: result.2,
+            duration: start.elapsed(),
+        })
+    }
+
     /// Discover all module dependencies
     fn discover_dependencies(&mut self) -> LakeResult<()> {
         self.deps.clear();
@@ -257,7 +425,7 @@ impl BuildContext {
         };
 
         let content = std::fs::read_to_string(&src_path)?;
-        let imports = Self::extract_imports(&content);
+        let imports = self.extract_imports(&content);
 
         // Recursively discover deps for imported modules
         for imp in &imports {
@@ -272,10 +440,10 @@ impl BuildContext {
 
     /// Extract import statements from Lean source (for local dependency tracking)
     /// This filters out stdlib imports since they don't need to be built locally.
-    fn extract_imports(content: &str) -> Vec<String> {
+    fn extract_imports(&self, content: &str) -> Vec<String> {
         Self::extract_all_imports(content)
             .into_iter()
-            .filter(|m| !Self::is_stdlib_import(m))
+            .filter(|m| !self.is_stdlib_import(m))
             .collect()
     }
 
@@ -311,13 +479,37 @@ impl BuildContext {
         imports
     }
 
-    /// Check if a module is a standard library import
-    fn is_stdlib_import(module: &str) -> bool {
+    /// Does `module` carry one of the toolchain's reserved name prefixes?
+    ///
+    /// This is a NAME test only — it says nothing about who provides the
+    /// module. Use [`Self::is_stdlib_import`] for the routing decision.
+    fn has_stdlib_prefix(module: &str) -> bool {
         module.starts_with("Init")
             || module.starts_with("Std")
             || module.starts_with("Lean")
             || module.starts_with("Lake")
             || module.starts_with("Mathlib")
+    }
+
+    /// Check if a module must be loaded from the Lean toolchain rather than
+    /// built here.
+    ///
+    /// A module the WORKSPACE can provide is local, whatever its name. The
+    /// name prefix alone is not the answer: `Init`, `Std`, `Lean`, `Lake` and
+    /// `Mathlib` are ordinary identifiers a package is free to declare
+    /// (`lean_lib Std` with `Std/Mine.lean` is a legal Lake project, and
+    /// batteries/std4/mathlib4 themselves are exactly such projects — the
+    /// repos the drop-in goal is defined by).
+    ///
+    /// Consulting the workspace first closes a measured WRONG BUILD: a package
+    /// declaring `lean_lib Std` built `Std.Mine`, then failed `Std.User` with
+    /// `failed to load stdlib import 'Std.Mine' … not found in [elan
+    /// toolchain]`, ignoring the artifact it had just produced. The silent face
+    /// of the same bug is worse — under `--permissive-imports`, or wherever a
+    /// same-named toolchain `.olean` exists, the project's own module is
+    /// replaced by Lean's with no diagnostic at all.
+    fn is_stdlib_import(&self, module: &str) -> bool {
+        Self::has_stdlib_prefix(module) && self.workspace.find_module(module).is_none()
     }
 
     /// Topological sort of all modules
@@ -561,7 +753,7 @@ impl BuildContext {
         // Load stdlib imports from the Lean toolchain
         let stdlib_imports: Vec<_> = all_imports
             .iter()
-            .filter(|m| Self::is_stdlib_import(m))
+            .filter(|m| self.is_stdlib_import(m))
             .collect();
 
         if !stdlib_imports.is_empty() {
@@ -609,15 +801,31 @@ impl BuildContext {
         // Collect local import names for .olean export
         let import_names: Vec<String> = self.deps.get(module).cloned().unwrap_or_default();
 
-        // Load local project dependencies from .olean files
+        // Load local project dependencies from .olean files — with their
+        // TRANSITIVE import closure, exactly as the stdlib branch above does.
+        // Loading only the direct dep's single .olean was a measured WRONG
+        // BUILD: in an A→B→C require chain, A's environment held B's
+        // constants but never C's, so any A-value reaching through B to C was
+        // definitionally stuck (`theorem a_eq : a = 5 := rfl` failed while
+        // `clean lake build` reported success on every module). The closure
+        // loader walks each dep's imports through the workspace lib dir
+        // (every package's modules land there) and falls back to the stdlib
+        // search paths for deps that import Init/Std.
+        let mut dep_search_paths = vec![self.workspace.lib_dir()];
+        dep_search_paths.extend(clean_olean::default_search_paths());
         for dep in &import_names {
             let olean_path = self.workspace.olean_path(dep);
             if olean_path.exists() {
-                // Load the dependency's .olean into the environment
-                match clean_olean::load_olean_file(&mut env, &olean_path) {
-                    Ok(summary) => {
+                match clean_olean::load_module_with_deps(&mut env, dep, &dep_search_paths) {
+                    Ok(summaries) => {
                         if self.options.verbose {
-                            eprintln!("  Loaded {} ({} constants)", dep, summary.added_constants);
+                            let total: usize = summaries.iter().map(|s| s.added_constants).sum();
+                            eprintln!(
+                                "  Loaded {} (+{} modules, {} constants)",
+                                dep,
+                                summaries.len().saturating_sub(1),
+                                total
+                            );
                         }
                     }
                     Err(e) => {
@@ -1056,8 +1264,15 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    /// A build context over an EMPTY workspace: it provides no modules, so
+    /// [`BuildContext::is_stdlib_import`] reduces to the bare name-prefix test.
+    fn empty_ctx(tmp: &TempDir) -> BuildContext {
+        BuildContext::new(Workspace::new(tmp.path(), "test"))
+    }
+
     #[test]
     fn test_extract_imports() {
+        let tmp = TempDir::new().unwrap();
         let content = r"
 import MyLib.Core
 import MyLib.Utils
@@ -1067,20 +1282,50 @@ open MyLib
 
 def foo := 1
 ";
-        let imports = BuildContext::extract_imports(content);
+        let imports = empty_ctx(&tmp).extract_imports(content);
         assert_eq!(imports, vec!["MyLib.Core", "MyLib.Utils"]);
     }
 
     #[test]
     fn test_extract_imports_filters_stdlib() {
+        let tmp = TempDir::new().unwrap();
         let content = r"
 import Init.Core
 import Std.Data.List
 import Lean.Elab
 import MyProject.Core
 ";
-        let imports = BuildContext::extract_imports(content);
+        let imports = empty_ctx(&tmp).extract_imports(content);
         assert_eq!(imports, vec!["MyProject.Core"]);
+    }
+
+    #[test]
+    fn test_extract_imports_keeps_workspace_provided_stdlib_names() {
+        // A module the workspace itself provides is LOCAL, whatever its name:
+        // `Std.Mine` is kept as a build dependency while its unprovided
+        // sibling `Std.Data.List` still routes to the toolchain.
+        let tmp = TempDir::new().unwrap();
+        std::fs::write(
+            tmp.path().join("lakefile.toml"),
+            "name = \"stdshadow\"\n\n[[lean_lib]]\nname = \"Std\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tmp.path().join("Std")).unwrap();
+        std::fs::write(tmp.path().join("Std/Mine.lean"), "def mineVal : Nat := 4\n").unwrap();
+
+        let ws = Workspace::load(tmp.path()).expect("workspace loads");
+        let ctx = BuildContext::new(ws);
+        assert!(
+            !ctx.is_stdlib_import("Std.Mine"),
+            "a workspace-provided module is never a stdlib import"
+        );
+        assert!(
+            ctx.is_stdlib_import("Std.Data.List"),
+            "an unprovided module still routes to the toolchain"
+        );
+
+        let imports = ctx.extract_imports("import Std.Mine\nimport Std.Data.List\n");
+        assert_eq!(imports, vec!["Std.Mine"]);
     }
 
     #[test]
@@ -1204,6 +1449,64 @@ import MyProject.Core
         assert!(levels[1].contains(&"C".to_string()));
     }
 
+    /// Two-hop transitive closure through module imports: the root proves a
+    /// value BY RFL through both hops, which is exactly what the single-olean
+    /// dep loading missed (A held B's constants but never C's, so the rfl was
+    /// defeq-stuck while the build reported success — the 2026-08-21 Lake
+    /// pillar audit's wrong-build repro, mechanized).
+    #[test]
+    fn test_build_transitive_dep_closure_rfl() {
+        use std::fs;
+        use std::io::Write;
+
+        let tmp = TempDir::new().unwrap();
+        let mut lakefile = fs::File::create(tmp.path().join("lakefile.lean")).unwrap();
+        writeln!(
+            lakefile,
+            r#"
+package chain where
+  name := "chain"
+  version := "0.1.0"
+
+lean_lib Chain where
+  roots := #[`Chain]
+"#
+        )
+        .unwrap();
+
+        fs::create_dir_all(tmp.path().join("Chain")).unwrap();
+        let mut c = fs::File::create(tmp.path().join("Chain/C.lean")).unwrap();
+        writeln!(c, "def cVal : Nat := 5").unwrap();
+        let mut b = fs::File::create(tmp.path().join("Chain/B.lean")).unwrap();
+        writeln!(
+            b,
+            "import Chain.C
+def bVal : Nat := cVal"
+        )
+        .unwrap();
+        let mut a = fs::File::create(tmp.path().join("Chain/A.lean")).unwrap();
+        writeln!(
+            a,
+            "import Chain.B
+def aVal : Nat := bVal
+theorem a_eq : aVal = 5 := rfl"
+        )
+        .unwrap();
+
+        let ws = Workspace::load(tmp.path()).unwrap();
+        let mut ctx = BuildContext::new(ws).with_options(BuildOptions {
+            verbose: true,
+            ..BuildOptions::default()
+        });
+        let report = ctx.build_all().expect("two-hop chain should build");
+        assert!(
+            report.failed.is_empty(),
+            "the rfl through BOTH hops must kernel-verify (closure loading): {:?}",
+            report.failed
+        );
+        assert_eq!(report.built.len(), 3, "all three chain modules build");
+    }
+
     #[test]
     fn test_build_with_dependencies() {
         use std::fs;
@@ -1303,6 +1606,145 @@ def mainVal : Type 1 := baseVal"
         assert!(
             load_env.get_const(&main_const).is_some(),
             "mainVal should be loaded from payload"
+        );
+    }
+
+    /// Write a two-module project whose `Main` imports `Core`, and return its
+    /// temp dir. Used by the check-only tests below.
+    fn write_two_module_project() -> TempDir {
+        use std::fs;
+
+        let tmp = TempDir::new().expect("tempdir");
+        fs::write(
+            tmp.path().join("lakefile.lean"),
+            "package myproject\n\nlean_lib MyProject where\n  roots := #[`MyProject]\n",
+        )
+        .expect("write lakefile");
+        fs::create_dir_all(tmp.path().join("MyProject")).expect("create src dir");
+        fs::write(
+            tmp.path().join("MyProject/Core.lean"),
+            "def baseVal : Type 1 := Type\n",
+        )
+        .expect("write Core");
+        fs::write(
+            tmp.path().join("MyProject/Main.lean"),
+            "import MyProject.Core\ndef mainVal : Type 1 := baseVal\n",
+        )
+        .expect("write Main");
+        tmp
+    }
+
+    /// Back-date a file so the freshness check reads it as older than any
+    /// artifact built from it.
+    fn back_date(path: &std::path::Path) {
+        let old = std::time::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let file = std::fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("open for set_times");
+        file.set_times(
+            std::fs::FileTimes::new()
+                .set_accessed(old)
+                .set_modified(old),
+        )
+        .expect("set_times");
+    }
+
+    /// A check-only build writes NOTHING into the project — and still
+    /// resolves the import chain, because its modules' `.olean` files land in
+    /// the scratch directory the same run created.
+    #[test]
+    fn test_check_only_build_leaves_no_artifacts_but_still_resolves_imports() {
+        let tmp = write_two_module_project();
+        let ws = Workspace::load(tmp.path()).expect("workspace loads");
+        let mut ctx = BuildContext::new(ws).with_options(BuildOptions {
+            check_only: true,
+            ..Default::default()
+        });
+
+        let result = ctx.build_all().expect("check-only build should run");
+        assert!(
+            result.failed.is_empty(),
+            "the import chain must still resolve under check_only: {:?}",
+            result.failed
+        );
+        assert_eq!(
+            result.built.len(),
+            2,
+            "both modules are checked, not skipped: {result:?}"
+        );
+
+        assert!(
+            !tmp.path().join(".lake/build").exists(),
+            "a check-only build must leave the project's build directory alone; found {:?}",
+            std::fs::read_dir(tmp.path().join(".lake/build")).map(|d| d
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .collect::<Vec<_>>())
+        );
+        // `Workspace::load` canonicalizes its root, so compare against the
+        // workspace's own root rather than the raw temp path.
+        assert_eq!(
+            ctx.workspace().build_dir(),
+            ctx.workspace().root().join(".lake/build"),
+            "the workspace's build directory is restored when the check returns"
+        );
+    }
+
+    /// A check-only build must never inherit a verdict from an artifact.
+    ///
+    /// Measured 2026-08-27 while `check_only` was inert: `clean lake
+    /// check-build` printed "Build check passed." for a project whose source
+    /// no longer compiled, because every module was skipped against a newer
+    /// `.olean`. The ordinary build below is the CONTROL — it still skips and
+    /// still reports success, which is exactly why the check must not.
+    #[test]
+    fn test_check_only_build_does_not_inherit_a_pass_from_stale_artifacts() {
+        let tmp = write_two_module_project();
+
+        // Build once, so both artifacts exist and are newer than the sources.
+        let ws = Workspace::load(tmp.path()).expect("workspace loads");
+        let mut ctx = BuildContext::new(ws);
+        let first = ctx.build_all().expect("initial build");
+        assert!(first.failed.is_empty(), "setup build: {:?}", first.failed);
+
+        // Break `Main` at the source level: `baseVal` is gone from `Core`.
+        // Back-date both sources so the freshness check sees them as stale.
+        let core = tmp.path().join("MyProject/Core.lean");
+        std::fs::write(&core, "def renamedVal : Type 1 := Type\n").expect("rewrite Core");
+        back_date(&core);
+        back_date(&tmp.path().join("MyProject/Main.lean"));
+
+        // CONTROL: the ordinary build reports success without reading either
+        // source — this is the state the check has to see through.
+        let ws = Workspace::load(tmp.path()).expect("workspace loads");
+        let mut ctx = BuildContext::new(ws);
+        let control = ctx.build_all().expect("control build");
+        assert!(
+            control.failed.is_empty() && control.built.is_empty(),
+            "control: the ordinary build must skip everything here, got {control:?}"
+        );
+
+        // The check must fail: `Main` no longer elaborates against `Core`.
+        let ws = Workspace::load(tmp.path()).expect("workspace loads");
+        let mut ctx = BuildContext::new(ws).with_options(BuildOptions {
+            check_only: true,
+            ..Default::default()
+        });
+        let checked = ctx.build_all().expect("check-only build should run");
+        assert!(
+            checked
+                .failed
+                .iter()
+                .any(|(module, _)| module == "MyProject.Main"),
+            "check_only must re-elaborate from source and report the break, got {checked:?}"
+        );
+
+        // And it still must not have touched the project's artifacts.
+        let core_olean = tmp.path().join(".lake/build/lib/MyProject/Core.olean");
+        assert!(
+            core_olean.exists(),
+            "the pre-existing artifact must survive a check-only build"
         );
     }
 

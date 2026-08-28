@@ -1,0 +1,88 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 2) (load (enum 0) 0 false))
+            (node (results 3) (extractfield (uint 8) 2 0))
+            (node (results) (switch 3 11 (args) (cases (case 0 1 (args)) (case 1 2 (args)) (case 2 3 (args)) (case 3 4 (args)) (case 4 5 (args)) (case 5 6 (args)) (case 6 7 (args)) (case 7 8 (args)) (case 8 9 (args)) (case 9 10 (args))) false))
+          ))
+        (block 1
+          (params)
+          (nodes
+            (node (results 4) (const (enum 0) (agg (int 0))))
+            (node (results) (br 12 (args 4)))
+          ))
+        (block 2
+          (params)
+          (nodes
+            (node (results 5) (const (enum 0) (agg (int 1))))
+            (node (results) (br 12 (args 5)))
+          ))
+        (block 3
+          (params)
+          (nodes
+            (node (results 6) (const (enum 0) (agg (int 2))))
+            (node (results) (br 12 (args 6)))
+          ))
+        (block 4
+          (params)
+          (nodes
+            (node (results 7) (const (enum 0) (agg (int 3))))
+            (node (results) (br 12 (args 7)))
+          ))
+        (block 5
+          (params)
+          (nodes
+            (node (results 8) (const (enum 0) (agg (int 4))))
+            (node (results) (br 12 (args 8)))
+          ))
+        (block 6
+          (params)
+          (nodes
+            (node (results 9) (const (enum 0) (agg (int 5))))
+            (node (results) (br 12 (args 9)))
+          ))
+        (block 7
+          (params)
+          (nodes
+            (node (results 10) (const (enum 0) (agg (int 6))))
+            (node (results) (br 12 (args 10)))
+          ))
+        (block 8
+          (params)
+          (nodes
+            (node (results 11) (const (enum 0) (agg (int 7))))
+            (node (results) (br 12 (args 11)))
+          ))
+        (block 9
+          (params)
+          (nodes
+            (node (results 12) (const (enum 0) (agg (int 8))))
+            (node (results) (br 12 (args 12)))
+          ))
+        (block 10
+          (params)
+          (nodes
+            (node (results 13) (const (enum 0) (agg (int 9))))
+            (node (results) (br 12 (args 13)))
+          ))
+        (block 11
+          (params)
+          (nodes
+            (node (results 14) (const (enum 0) (agg (int 10))))
+            (node (results) (br 12 (args 14)))
+          ))
+        (block 12
+          (params 1)
+          (nodes
+            (node (results) (ret (vals 1)))
+          ))
+      ))
+  )
+  (globals)
+)

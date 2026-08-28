@@ -98,9 +98,12 @@ fn closure_key(import_paths: &[Vec<String>], file_path: Option<&Path>) -> Import
 }
 
 /// Load a closure for `key`: prelude base, then the whole import batch through
-/// the shared `.olean` loader (which itself falls back to Clean's built-in
-/// stub preludes per module when no `.olean` is discoverable, mirroring the
-/// `clean check` frontend).
+/// the shared `.olean` loader (which itself falls back to Clean's built-in stub
+/// prelude for a module a provider names verbatim, and otherwise FAILS CLOSED —
+/// mirroring the `clean check` frontend, whose default is
+/// [`clean_elab::ImportPolicy::FailClosed`]). An unresolvable import therefore
+/// surfaces in the editor as a diagnostic naming the module, instead of the
+/// document quietly elaborating against a fabricated environment.
 fn load_import_closure(key: &ImportClosureKey) -> ImportClosureOutcome {
     let mut env = clean_kernel::Environment::try_with_prelude()
         .map_err(|e| format!("prelude initialization failed: {e}"))?;

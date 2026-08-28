@@ -77,7 +77,7 @@ impl ServerMetrics {
     }
 
     /// Record a request
-    pub fn record_request(&self, method: &str, success: bool, duration_us: u64) {
+    pub(crate) fn record_request(&self, method: &str, success: bool, duration_us: u64) {
         self.total_requests.fetch_add(1, Ordering::Relaxed);
         if success {
             self.successful_requests.fetch_add(1, Ordering::Relaxed);
@@ -124,7 +124,7 @@ impl ServerMetrics {
     }
 
     /// Record batch items processed
-    pub fn record_batch_items(&self, count: u64) {
+    pub(crate) fn record_batch_items(&self, count: u64) {
         self.batch_items_processed
             .fetch_add(count, Ordering::Relaxed);
     }
@@ -158,7 +158,7 @@ impl ServerMetrics {
     }
 
     /// Get average request latency in microseconds
-    pub fn avg_latency_us(&self) -> u64 {
+    pub(crate) fn avg_latency_us(&self) -> u64 {
         let total = self.total_requests.load(Ordering::Relaxed);
         if total == 0 {
             return 0;
@@ -392,7 +392,7 @@ impl ServerState {
 
     /// Get the resolved toolchain version from `lean-toolchain`, if present.
     #[must_use]
-    pub fn lean_toolchain_version(&self) -> Option<&str> {
+    pub(crate) fn lean_toolchain_version(&self) -> Option<&str> {
         self.lean_toolchain_version.as_deref()
     }
 

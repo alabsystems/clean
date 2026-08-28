@@ -1,0 +1,66 @@
+{
+ "chain": "ir_ep",
+ "body": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first: WHICH aggregate slot a body reads is a property of the BODY and lives in the core module as a canonical first-use index; WHICH crate table entry the artifact named is a property of the BUILD and lives here. This chain's enum is the ORIGINAL specimen of the drift class -- `expr_path_step_clone`'s id is the one docs/CRYSTAL_STATUS.md and the M6/M7 gate docs cite as having moved 181 -> 176 over the producer A/B record's three dumps with not one instruction changed, and it has now been observed at FOUR distinct values across six dumps (181, 181, 176, 182, and the fixture-era 184 this table pins). It sits OUTSIDE the ir_d0..ir_d16 atom pool, so the minted alias spells it as the literal `184`, the ir_pv_tprio arm of `mint::interning_id`.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_ep_tstep` alias (`IRTy.enum_ 184`) that `ir_ep_b0`'s load and all eleven arm constants name, so the REGISTERED term carries the crate id exactly as the 2026-08-19 load-type correction requires. `ir_mint::decode` reads it in the other direction and REFUSES an id the table does not list.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Read `ir_h2.tags.json`'s `interface_what`. The sharp slots: the receiver (`ptr` vs `Rc<enum.184>`: the entry `load` reads the discriminant through one and the refcount header through the other, and the two are ONE core module) and the join TYPE (`bb12(%1: enum.184)` -- the first chained join that binds an AGGREGATE: every earlier join carries a bool or an integer, and the eleven arm constants funnel a whole enum value through this slot).",
+ "interface_producer_invariance": "`ty` is the CANONICAL form -- `enum.184` resolves through this table to the same `enum#0` the core module carries -- and `observed_ty` is the verbatim token, RECORDED, NEVER COMPARED, because it moves: this join bound `%1: enum.181` under two producers of the A/B record and `%1: enum.176` under the third, which is the measured sentence in Tags::canon_ty's own doc. Reader A's record on the laneREG wc-REG dump_O3 2026-08-21 dump: `param_tys_erased: [\"Ptr\"]`, `block_param_tys_erased: [\"bb12:Enum(EnumId(182))\"]`, `aligns_erased: [\"load:None\"]`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 859,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The producer A/B record has this index at 1094/1091/857 over its three dumps and reader A's 2026-08-21 laneREG dump says 856 -- four dumps, four values, the recorded whole-crate drift class at its most mobile. The pin compares reader B's header against the FIXTURE-ERA 859; reader A's value is RECORDED in ir_ep.mint.json, NEVER COMPARED, like observed_ty.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&tc::expr_location::ExprPathStep",
+    "note": "The receiver. The entry `load` reads the whole enum value through it, the extractfield takes the discriminant, and NOTHING else is read -- which is what lets the representation premise stay payload-agnostic."
+   }
+  ],
+  "block_params": [
+   {
+    "block": 12,
+    "index": 0,
+    "ssa": 1,
+    "ty": "enum#0",
+    "observed_ty": "enum.184",
+    "note": "The join, and the first chained join to bind an AGGREGATE. The canonical form is what makes this row producer-invariant: the raw token has been observed at enum.181, enum.176, enum.182 and enum.184 across six dumps of an unchanged body."
+   }
+  ],
+  "aligns": [
+   "load:None"
+  ],
+  "aligns_note": "ONE entry, for the one memory instruction in the body -- the entry load of the receiver. Reader A wrote it in its own spelling (`format!(\"load:{align:?}\")`), so the two records compare directly.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 184,
+   "alias": "ir_ep_tstep",
+   "rust_type": "tc::expr_location::ExprPathStep",
+   "observed_crate_id_by_producer": {
+    "wave-tr-fix-2026-08-12": 181,
+    "mfclose-2026-08-13": 181,
+    "lane2rv-2026-08-19": 176,
+    "laneREG-2026-08-21": 182
+   },
+   "note": "The pinned 184 is the FIXTURE-ERA id -- the value the committed emitted text (tests/fixtures/expr_path_step_clone.trust-ir.txt) and the registered ir_ep_tstep both carry -- and it does not appear in the four artifact observations at left, because every one of those dumps postdates or predates the fixture's producer. That disagreement is the M7 bargain working as designed: the fixture is pinned verbatim (crystal_fixture_freshness), reader B and reader C are compared against the fixture-era id, and reader A's value is RECORDED per dump in ir_ep.mint.json, never compared. Five observed values for one unchanged body is the strongest evidence in the repository that a crate id must never sit in a module's identity."
+  }
+ ],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `ExprPathStep::clone` calls NOTHING -- all eleven variants are fieldless, so Clone is a discriminant dispatch with no recursive clone: reader A's `crate_func_ids_seen` is the single entry [6303] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`; `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`."
+}

@@ -420,3 +420,65 @@ fn test_reduce_nat_applied_to_literal() {
         assert_eq!(n.to_u64(), Some(42));
     }
 }
+
+// ============================================================================
+// ESTABLISHED: whnf DOES consult native reducers for a NULLARY constant.
+//
+// Written to test the hypothesis that the `reduce_native` pre-check in
+// `tc/whnf.rs` — which lives inside the `App` branch — leaves nullary constants
+// unreachable. IT DOES NOT: this test passes. Nullary reduction works, so that
+// hypothesis is refuted and the `Int32.minValue` blowup is NOT a missing
+// consult here. Keep this test: it pins the behaviour the next investigation
+// would otherwise re-suspect.
+//
+// This matters because `Int32.minValue` is exactly such a constant, and its
+// failure to reduce to a literal is what makes `import Init.GrindInstances`
+// cost 12 GB+: the kernel falls back to unfolding `Int32.ofInt` and iterating
+// `Nat.rec` unarily over ~2^31.
+//
+// The reducer below deliberately returns a value DIFFERENT from the
+// definition, so the assertion discriminates cleanly:
+//   42 => the native reducer fired
+//    7 => delta-unfolding won and the reducer was never consulted
+// ============================================================================
+
+fn nullary_probe_reducer(args: &[&Expr]) -> Option<Expr> {
+    if !args.is_empty() {
+        return None;
+    }
+    Some(Expr::nat_lit(42))
+}
+
+#[test]
+fn test_whnf_consults_native_reducer_for_nullary_const() {
+    let mut env = Environment::new();
+    env.init_native_reducers();
+
+    // `ZeroAry.k : Nat := 7`, with a native reducer claiming 42.
+    add_def(
+        &mut env,
+        "ZeroAry.k",
+        Expr::const_(Name::from_string("Nat"), vec![]),
+        Expr::nat_lit(7),
+    );
+    env.register_native_reducer(
+        Name::from_string("ZeroAry.k"),
+        nullary_probe_reducer as fn(args: &[&Expr]) -> Option<Expr>,
+    );
+
+    let tc = TypeChecker::new(&env);
+    let bare = Expr::const_(Name::from_string("ZeroAry.k"), vec![]);
+    let reduced = tc.whnf(&bare);
+
+    match reduced.kind() {
+        ExprKind::Lit(Literal::Nat(n)) => {
+            assert_eq!(
+                n.to_u64(),
+                Some(42),
+                "whnf of a nullary Const returned {n:?}: 7 means delta won and the \
+                 native reducer was never consulted, which is the Int32.minValue bug"
+            );
+        }
+        other => panic!("expected a Nat literal from whnf, got {other:?}"),
+    }
+}

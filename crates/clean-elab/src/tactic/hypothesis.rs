@@ -166,8 +166,8 @@ pub fn specialize(state: &mut ProofState, hyp_name: &str, arg: Expr) -> TacticRe
             let arg_ty = state.infer_type(&goal, &arg)?;
             if !state.is_def_eq(&goal, &arg_ty, domain) {
                 return Err(TacticError::TypeMismatch {
-                    expected: format!("{domain:?}"),
-                    actual: format!("{arg_ty:?}"),
+                    expected: format!("{domain}"),
+                    actual: format!("{arg_ty}"),
                 });
             }
 

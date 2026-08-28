@@ -42,6 +42,15 @@ pub(in crate::tactic::smt) fn validate_proof_term(
     let inferred_type = tc.infer_type(&instantiated_proof).map_err(|e| {
         TacticError::TypeCheckFailed(format!("proof term failed type inference: {e:?}"))
     })?;
+    // `infer_type` runs infer-only (application arguments are NOT checked
+    // against binder domains), so an ill-typed bridge term such as
+    // `@Eq.refl testA Int` can "infer" a type. Re-run the FULL kernel check
+    // (`infer_only = false`) against the inferred type so every application
+    // argument is validated before the term can close a goal.
+    tc.check_type(&instantiated_proof, &inferred_type)
+        .map_err(|e| {
+            TacticError::TypeCheckFailed(format!("proof term failed full kernel check: {e:?}"))
+        })?;
 
     // Normalize both sides through typeclass projections before comparing.
     // Arithmetic bridge proofs often infer direct `Nat.le` / `Nat.lt` types
@@ -57,8 +66,8 @@ pub(in crate::tactic::smt) fn validate_proof_term(
         Ok(instantiated_proof)
     } else {
         Err(TacticError::TypeMismatch {
-            expected: format!("{instantiated_expected:?}"),
-            actual: format!("{inferred_type:?}"),
+            expected: format!("{instantiated_expected}"),
+            actual: format!("{inferred_type}"),
         })
     }
 }

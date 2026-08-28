@@ -98,6 +98,12 @@ pub(super) fn parse(r: &mut EmittedReader, s: &str) -> R {
     if let Some(rest) = s.strip_prefix("volatile load ") {
         return load(r, rest, "true");
     }
+    if let Some(rest) = s.strip_prefix("store ") {
+        return store(r, rest, "false");
+    }
+    if let Some(rest) = s.strip_prefix("volatile store ") {
+        return store(r, rest, "true");
+    }
     if let Some(rest) = s.strip_prefix("extractfield ") {
         let (ty, tail) = split1(r, rest)?;
         let (agg, field) = tail
@@ -110,6 +116,31 @@ pub(super) fn parse(r: &mut EmittedReader, s: &str) -> R {
         return Ok(Sx::tag(
             "extractfield",
             vec![r.r_ty(&ty)?, num(r.r_val(agg)?), Sx::a(f.to_string())],
+        ));
+    }
+    if let Some(rest) = s.strip_prefix("insertfield ") {
+        // `insertfield <ty> <agg>, <field>, <value>` — the WRITE dual of
+        // `extractfield`, first reached by the `FlatFlags::with` chain
+        // (2026-08-21). Until then this arm did not exist and reader B
+        // REFUSED the fixture by name, which is the recorded posture for a
+        // mnemonic outside the fragment: fail closed, never approximate.
+        let (ty, tail) = split1(r, rest)?;
+        let parts: Vec<&str> = tail.split(", ").collect();
+        if parts.len() != 3 {
+            return Err(r.e_syn("insertfield needs an aggregate, a field and a value".into()));
+        }
+        let f: u128 = parts[1]
+            .trim()
+            .parse()
+            .map_err(|_| r.e_syn(format!("field `{}` is not a number", parts[1])))?;
+        return Ok(Sx::tag(
+            "insertfield",
+            vec![
+                r.r_ty(&ty)?,
+                num(r.r_val(parts[0])?),
+                Sx::a(f.to_string()),
+                num(r.r_val(parts[2])?),
+            ],
         ));
     }
     if let Some(rest) = s.strip_prefix("select ") {
@@ -237,6 +268,52 @@ fn load(r: &mut EmittedReader, rest: &str, volatile: &str) -> R {
     Ok(Sx::tag(
         "load",
         vec![r.r_ty(ty)?, num(ptr), Sx::a(volatile)],
+    ))
+}
+
+/// `store <ty> <value>, ptr %p[, align N]` — the WRITE dual of `load`, first
+/// reached by the `set_lean4_core_strict_monads` chain (2026-08-22). Until
+/// then this arm did not exist and reader B REFUSED the fixture by name — the
+/// recorded posture for a mnemonic outside the fragment. The printed order is
+/// value-then-pointer; the core order is the specification's
+/// `IRInst.store ty ptr value volatile`, the same one reader A emits.
+fn store(r: &mut EmittedReader, rest: &str, volatile: &str) -> R {
+    let (head, tail) = rest
+        .split_once(", ptr ")
+        .ok_or_else(|| r.e_syn("store needs `, ptr %p`".into()))?;
+    let (ty, value) = split1(r, head)?;
+    let mut parts = tail.split(',').map(str::trim);
+    let ptr = parts
+        .next()
+        .ok_or_else(|| r.e_syn("store needs a pointer operand".into()))?;
+    let ptr = r.r_val(ptr)?;
+    let mut align: Option<u64> = None;
+    for extra in parts.filter(|p| !p.is_empty()) {
+        let n = extra.strip_prefix("align ").ok_or_else(|| {
+            r.e_syn(format!(
+                "`{extra}` is not an operand this reader knows on a `store`. The only trailing \
+                 operand trust-ir's printer emits is `align N`; an unrecognised one is refused \
+                 rather than dropped"
+            ))
+        })?;
+        if align.is_some() {
+            return Err(r.e_syn("a store carries two `align` operands".into()));
+        }
+        align = Some(
+            n.trim()
+                .parse()
+                .map_err(|_| r.e_syn(format!("alignment `{n}` is not a number")))?,
+        );
+    }
+    r.r_align(format!("store:{align:?}"));
+    Ok(Sx::tag(
+        "store",
+        vec![
+            r.r_ty(&ty)?,
+            num(ptr),
+            num(r.r_val(&value)?),
+            Sx::a(volatile),
+        ],
     ))
 }
 

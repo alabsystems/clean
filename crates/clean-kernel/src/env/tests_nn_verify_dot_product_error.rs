@@ -16,9 +16,32 @@
 
 use crate::env::types::ConstantKind;
 use crate::env::Environment;
-use crate::expr::Expr;
+use crate::expr::{Expr, ExprKind};
 use crate::name::Name;
 use crate::tc::TypeChecker;
+
+/// Structural search for a `Const` by name.
+///
+/// The fifth instance of the class 2084866a5 closed in the two sibling files:
+/// a claim about a term's SHAPE that was written as a string match on the
+/// pretty-printer. `Display for Expr` learned Lean notation in 6d1663115 and
+/// began printing `≤` where the assertion looked for the head name `Rat.le`,
+/// so the test went red while the term it checks was exactly right. Ask the
+/// term, not the renderer.
+fn mentions_const(e: &Expr, name: &str) -> bool {
+    match e.kind() {
+        ExprKind::Const(n, _) => n.to_string() == name,
+        ExprKind::App(f, a) => mentions_const(f, name) || mentions_const(a, name),
+        ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
+            mentions_const(t, name) || mentions_const(b, name)
+        }
+        ExprKind::Let(_, t, v, b, _) => {
+            mentions_const(t, name) || mentions_const(v, name) || mentions_const(b, name)
+        }
+        ExprKind::Proj(_, _, sub) => mentions_const(sub, name),
+        _ => false,
+    }
+}
 
 fn make_prelude_env() -> Environment {
     let mut env = Environment::with_prelude();
@@ -184,9 +207,19 @@ fn test_error_accum_step_instantiates() {
     let ty = tc
         .infer_type(&applied)
         .expect("error_accum_step 0 0 0 0 must type-infer");
-    let s = format!("{ty}");
+    // A chain of implications is a Pi whose body is itself a Pi, and the
+    // relation being chained is `Rat.le` (or the `LE.le` class projection).
+    // Both halves are read off the TERM: the printer renders this type as
+    // `Rat.abs Rat.zero ≤ Rat.zero -> …`, which contains neither head name.
+    let ExprKind::Pi(_, first_hyp, rest) = ty.kind() else {
+        panic!("applied step type must be an implication chain, got {ty}");
+    };
     assert!(
-        s.contains("Rat.le") || s.contains("LE.le"),
-        "applied step type must be a chain of Rat.le implications: {s}"
+        matches!(rest.kind(), ExprKind::Pi(..)),
+        "applied step type must chain at least two hypotheses: {ty}"
+    );
+    assert!(
+        mentions_const(first_hyp, "Rat.le") || mentions_const(first_hyp, "LE.le"),
+        "applied step type must be a chain of Rat.le implications: {ty}"
     );
 }

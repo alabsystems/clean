@@ -191,11 +191,18 @@ fn the_switch_exhaustiveness_flag_is_uncomparable_and_says_so() {
 /// end.
 #[test]
 fn the_dead_parameter_type_alias_is_pinned_against_the_fixture() {
-    let src = spec_source("eval_ir_contains.rs");
+    // MINTED (2026-08-21): the alias line now lives in the generated script
+    // the spec replays, emitted from the tag table's interface-only struct
+    // row — same declaration, one fewer transcription. This pin is now the
+    // THIRD witness on the slot (tag table, `crystal_a2_mint_fc`'s M10, and
+    // this direct fixture-header comparison).
+    let src = spec_source("generated/ir_fc.defs.txt");
     let decl = src
         .lines()
         .find(|l| l.contains("def ir_fc_tflags : IRTy :="))
-        .unwrap_or_else(|| panic!("ir_fc_tflags must still be declared in eval_ir_contains.rs"));
+        .unwrap_or_else(|| {
+            panic!("ir_fc_tflags must still be declared in generated/ir_fc.defs.txt")
+        });
     assert!(
         decl.contains("IRTy.struct_ 1017"),
         "ir_fc_tflags's declaration moved: {decl}"
@@ -209,6 +216,126 @@ fn the_dead_parameter_type_alias_is_pinned_against_the_fixture() {
     assert_eq!(
         header, "bb0(%0: struct.1017, %1: struct.1017):",
         "the emitted PARAMETER TYPE of FlatFlags::contains moved. `ir_fc_tflags` was transcribed          from exactly this header and reaches no instruction, so nothing else in this gate — not          one lane of `Cfg` — would have noticed."
+    );
+}
+
+/// One whole source file of THIS crate, for pins on the mint reader rather
+/// than on the registered spec.
+fn crate_source(rel: &str) -> String {
+    let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{} must be readable ({e})", p.display()))
+}
+
+/// **The alignment operand: read fail-closed at the mint, erased before the
+/// machine — the W5 audit-pin (plan §4(c) option (ii), adopted 2026-08-25).**
+///
+/// `align : Option<u64>` is the one trust-ir instruction field with NO
+/// `IRInst` slot at all (load/store/alloca), so unlike the dropped-but-bound
+/// operands it can have no `ir_exec_*_irrelevant` theorem — there is nothing
+/// registered to quantify over. The honest closure is the option (ii) route
+/// the plan recommends: pin that the printed slot REACHES the mint fail-closed
+/// (read, recorded in the `aligns` lane, an unrecognised trailing operand
+/// refused — the class that killed the pre-2026-08-20 `split(',').next()`
+/// discard), and that its absence from the machine is a stated, dated model
+/// boundary rather than silence. In a cell-addressed model a misaligned
+/// access is not observable, and that unobservability IS the adequacy
+/// statement; retain-as-inert (option (i)) stays the recorded fallback if a
+/// chained body's alignment ever becomes observable.
+///
+/// The R8 ledger row is `data/crystal_mint_blind_slots.json` slot `align`
+/// (kind `compared`, HALF-CLOSED 2026-08-20); the grid rows are the three
+/// `audit-pin` entries of `data/evalir_adequacy_grid.json`
+/// (`scripts/evalir_adequacy_grid.py`), which anchor back to the same source
+/// lines this test pins.
+#[test]
+fn the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned() {
+    // 1. The mint READS the slot, fail-closed, and records it — for both
+    //    memory instructions the fragment contains.
+    let mint = crate_source("src/ir_mint/emitted_inst.rs");
+    for needle in [
+        "r.r_align(format!(\"load:{align:?}\"));",
+        "r.r_align(format!(\"store:{align:?}\"));",
+        "is not an operand this reader knows on a `load`",
+        "is not an operand this reader knows on a `store`",
+    ] {
+        assert!(
+            mint.contains(needle),
+            "the mint's fail-closed align lane moved: `{needle}` is gone from \
+             emitted_inst.rs. If the lane was closed or renamed, re-derive the audit-pin \
+             rows (scripts/evalir_adequacy_grid.py) rather than deleting this pin."
+        );
+    }
+    // `alloca` has NO reader arm at all: an emitted alloca falls through to
+    // the fail-closed NoImage refusal, so its align slot (like the whole
+    // instruction) is refused by name, never dropped unread.
+    assert!(
+        !mint.contains("alloca"),
+        "emitted_inst.rs now mentions `alloca`. The audit-pin claims the reader refuses \
+         the mnemonic wholesale; if an alloca arm exists now, it must read the align slot \
+         fail-closed like load/store, and the grid's alloca.align row must be re-derived."
+    );
+    assert!(
+        mint.contains("CoreError::NoImage(format!(\"printed instruction"),
+        "the reader's fail-closed NoImage fall-through moved; it is what refuses an \
+         emitted alloca by name."
+    );
+
+    // 2. The Clean shapes really have no align slot to put the value in.
+    let syntax = spec_source("eval_ir_syntax.rs");
+    for decl in [
+        "| load : IRTy → Nat → Bool → IRInst",
+        "| store : IRTy → Nat → Nat → Bool → IRInst",
+        "| alloca : IRTy → IROption Nat → IRInst",
+    ] {
+        assert!(
+            syntax.contains(decl),
+            "an IRInst memory-constructor shape moved ({decl}). If it GAINED an align \
+             slot, the correct response is the option (i) retain-as-inert route — an \
+             ir_exec_*_align_irrelevant theorem — not updating this string."
+        );
+    }
+    assert!(
+        syntax.contains("`align : Option<u64>` is ERASED from load/store/alloca"),
+        "the dated erasure statement left eval_ir_syntax.rs; the boundary must stay \
+         stated where the shapes are declared."
+    );
+
+    // 3. The machine consults no alignment: the three dispatch arms verbatim.
+    let machine = spec_source("eval_ir_machine.rs");
+    for arm in [
+        "| IRInst.load t p vol => ir_bind_result s rs (ir_load_eval s (ir_getd s p))",
+        "| IRInst.store t p v vol => ir_store_exec s (ir_getd s p) (ir_getd s v)",
+        "| IRInst.alloca t c => ir_alloca_exec s rs c",
+    ] {
+        assert!(
+            machine.contains(arm),
+            "a memory dispatch arm moved ({arm}); re-derive the adequacy grid and \
+             re-check that no alignment notion entered the machine."
+        );
+    }
+
+    // 4. The R8 ledger row stands, and the grid carries the audit-pin rows.
+    let ledger: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../data/crystal_mint_blind_slots.json"
+    ))
+    .expect("the blind-slot ledger must be valid JSON");
+    let align = ledger["slots"]
+        .as_array()
+        .expect("`slots` must be an array")
+        .iter()
+        .find(|s| s["id"] == "align")
+        .expect("the ledger must keep its `align` row — the R8 row this pin cites");
+    assert_eq!(
+        align["kind"], "compared",
+        "the ledger's align row changed kind; the audit-pin rows cite it as `compared` \
+         (recorded on both readers, erased before the module)."
+    );
+    let grid = include_str!("../../../../data/evalir_adequacy_grid.json");
+    assert_eq!(
+        grid.matches("\"state\": \"audit-pin\"").count(),
+        3,
+        "data/evalir_adequacy_grid.json must carry exactly the three align audit-pin \
+         rows (load/store/alloca); regenerate with scripts/evalir_adequacy_grid.py."
     );
 }
 

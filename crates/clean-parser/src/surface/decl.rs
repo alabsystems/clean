@@ -322,6 +322,27 @@ pub enum SurfaceDecl {
         binders: Vec<SurfaceBinder>,
     },
 
+    /// `include x y …` — force section variables into following signatures.
+    ///
+    /// Lean 4 includes a section `variable` in a declaration only when the
+    /// declaration MENTIONS it. `include x` overrides that for every
+    /// declaration that follows it in the same scope: the variable is added to
+    /// their signatures whether mentioned or not. This is how
+    /// `Function.Involutive.injective` receives `(h : Involutive f)` even
+    /// though its statement never names `h`.
+    ///
+    /// Scoped exactly like `variable`: a `section` / `namespace` boundary
+    /// restores the enclosing inclusion set. Cancelled by [`Self::OmitVars`].
+    IncludeVars { span: Span, names: Vec<String> },
+
+    /// `omit x y …` — cancel a preceding [`Self::IncludeVars`], restoring
+    /// mention-based inclusion for those names.
+    ///
+    /// Only the NAME form is modelled. Lean also accepts bracketed instance
+    /// binders (`omit [Foo α]`), which select by TYPE; that shape is refused
+    /// by name rather than guessed at.
+    OmitVars { span: Span, names: Vec<String> },
+
     /// Open command: `open Nat in ...` or `open Nat (add mul)` (multiple paths allowed)
     /// Also handles `open scoped X` which imports only notations/syntax from namespace X.
     Open {
@@ -547,6 +568,8 @@ impl SurfaceDecl {
             | SurfaceDecl::Section { span, .. }
             | SurfaceDecl::UniverseDecl { span, .. }
             | SurfaceDecl::Variable { span, .. }
+            | SurfaceDecl::IncludeVars { span, .. }
+            | SurfaceDecl::OmitVars { span, .. }
             | SurfaceDecl::Open { span, .. }
             | SurfaceDecl::Export { span, .. }
             | SurfaceDecl::DerivingInstance { span, .. }

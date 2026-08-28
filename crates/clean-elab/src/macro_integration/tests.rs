@@ -2477,3 +2477,56 @@ fn test_macro_rules_computed_throw_error_pattern_var_interpolation_defers() {
         );
     }
 }
+
+// ===========================================================================
+// `(cat| …)` quotation category heads (tactic-position macro routing)
+// ===========================================================================
+
+#[test]
+fn test_quotation_category_recognizes_category_heads() {
+    use super::registration::quotation_category;
+    assert_eq!(quotation_category("(tactic| rfl)"), SyntaxKind::tactic());
+    assert_eq!(
+        quotation_category("(command| #check x)"),
+        SyntaxKind::command()
+    );
+    assert_eq!(quotation_category("(conv| lhs)"), SyntaxKind::app("conv"));
+    assert_eq!(quotation_category("(term| x + y)"), SyntaxKind::term());
+}
+
+#[test]
+fn test_quotation_category_head_ignores_ordinary_parens() {
+    use super::registration::{quotation_category, quotation_category_head};
+    // `|`/`||` inside ordinary parenthesized terms must never be read as a
+    // category head — that would silently re-categorize a term template.
+    assert_eq!(quotation_category("(a || b)"), SyntaxKind::term());
+    assert_eq!(quotation_category("(p | q)"), SyntaxKind::term());
+    assert!(quotation_category_head("($x + $x)").is_none());
+    // The legacy delimiter forms keep their meaning.
+    assert_eq!(quotation_category("[intro h]"), SyntaxKind::tactic());
+    assert_eq!(quotation_category("{ #eval x }"), SyntaxKind::command());
+}
+
+#[test]
+fn test_surface_quote_tactic_head_lowers_body_with_tactic_category() {
+    use super::registration::surface_expr_to_syntax_quote;
+    let expr = SurfaceExpr::SyntaxQuote(Span::dummy(), "(tactic| exact hP)".to_string());
+    let quote = surface_expr_to_syntax_quote(&expr).expect("tactic-headed quotation should lower");
+    assert_eq!(quote.category, SyntaxKind::tactic());
+    // The body is the parsed application `exact hP`, not a raw/truncated token.
+    assert_eq!(quote.syntax.kind(), Some(&SyntaxKind::app_kind()));
+}
+
+#[test]
+fn test_surface_quote_tactic_head_unparseable_body_errors_loudly() {
+    use super::registration::surface_expr_to_syntax_quote;
+    // An explicitly tactic-categorized quotation whose body the quotation
+    // grammar cannot parse must be a LOUD registration error, never a silent
+    // fall-back to a term template that could never fire.
+    let expr = SurfaceExpr::SyntaxQuote(Span::dummy(), "(tactic| =>)".to_string());
+    let result = surface_expr_to_syntax_quote(&expr);
+    assert!(
+        matches!(result, Err(MacroRegistrationError::QuotationParse(_))),
+        "unparseable `(tactic| …)` body must error loudly, got {result:?}"
+    );
+}

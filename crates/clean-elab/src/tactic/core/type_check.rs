@@ -47,19 +47,38 @@ pub(crate) fn set_speculative_tc_budget(budget: u32) -> u32 {
 }
 
 impl ProofState {
+    /// U2 stage 1b — resolve BOTH expression metavariables and universe-level
+    /// constraints before an expression is handed to the kernel
+    /// (docs/analysis/u2-implementation-plan-2026-08-24.md §3, stage 1b).
+    ///
+    /// `MetaState::instantiate` substitutes assigned expression metas only; it
+    /// never resolves a `Level::Param`. The kernel has no level union-find
+    /// (and, unlike `ElabCtx::make_tc`, `with_tc` installs no level-eq
+    /// override), so a check that received raw params compared two levels the
+    /// tactic's own unifier had already recorded equal as DISTINCT opaque
+    /// names — the measured sub-class A rejection
+    /// (`TypeMismatch { expected: Sort(Param(u_X)), inferred: Sort(Param(u_0)) }`).
+    /// This is the read-side analog of Lean's `instantiateMVars`, which covers
+    /// level mvars; `instantiate_levels` is a no-op clone when no level
+    /// constraint exists and skips param-free subtrees in O(1).
+    pub(crate) fn instantiate_for_kernel(&self, expr: &Expr) -> Expr {
+        self.metas.instantiate_levels(&self.metas.instantiate(expr))
+    }
+
     /// Build a kernel LocalContext from a goal's local context.
     ///
     /// REQUIRES: `goal.local_ctx` contains valid local declarations.
     ///   `self.elab_locals` and `self.metas` are consistent with the current state.
     /// ENSURES: Returns a LocalContext containing all elaborator-scope locals,
     ///   goal-scope locals, and metavariable-as-FVar entries. Types are
-    ///   instantiated through `self.metas`.
+    ///   instantiated through `self.metas` (expression metas AND solved
+    ///   universe levels — U2 stage 1b).
     pub(crate) fn build_local_ctx(&self, goal: &Goal) -> LocalContext {
         let push_decl = |ctx: &mut LocalContext, decl: &super::LocalDecl| {
             let name = Name::from_string(&decl.name);
-            let ty = self.metas.instantiate(&decl.ty);
+            let ty = self.instantiate_for_kernel(&decl.ty);
             if let Some(value) = &decl.value {
-                ctx.push_let_with_id(decl.fvar, name, ty, self.metas.instantiate(value));
+                ctx.push_let_with_id(decl.fvar, name, ty, self.instantiate_for_kernel(value));
             } else {
                 ctx.push_with_id(decl.fvar, name, ty, BinderInfo::Default);
             }
@@ -89,7 +108,7 @@ impl ProofState {
             ctx.push_with_id(
                 MetaState::to_fvar(meta_id),
                 name,
-                self.metas.instantiate(&meta.ty),
+                self.instantiate_for_kernel(&meta.ty),
                 BinderInfo::Implicit,
             );
             seen.insert(MetaState::to_fvar(meta_id));
@@ -261,8 +280,8 @@ impl ProofState {
         expr: &Expr,
         expected: &Expr,
     ) -> Result<(), TacticError> {
-        let inst_expr = self.metas.instantiate(expr);
-        let inst_expected = self.metas.instantiate(expected);
+        let inst_expr = self.instantiate_for_kernel(expr);
+        let inst_expected = self.instantiate_for_kernel(expected);
         self.with_tc(goal, |tc| {
             tc.check_type(&inst_expr, &inst_expected)
                 .map_err(|e| TacticError::TypeCheckFailed(format!("{e:?}")))
@@ -286,13 +305,13 @@ impl ProofState {
     /// ENSURES: On Err(TypeCheckFailed), the kernel rejected the term under
     ///   full checking (App-arg mismatch, bad domain sort, …).
     pub fn infer_type_strict(&self, goal: &Goal, expr: &Expr) -> Result<Expr, TacticError> {
-        let instantiated = self.metas.instantiate(expr);
+        let instantiated = self.instantiate_for_kernel(expr);
         let is_lambda = matches!(instantiated.kind(), ExprKind::Lam(..));
         self.with_tc(goal, |tc| {
             let ty = tc
                 .infer_type_full(&instantiated)
                 .map_err(|e| TacticError::TypeCheckFailed(format!("{e:?}")))?;
-            let ty = self.metas.instantiate(&ty);
+            let ty = self.instantiate_for_kernel(&ty);
             if is_lambda {
                 self.fix_pi_leaked_fvars(goal, &ty)
             } else {
@@ -308,13 +327,13 @@ impl ProofState {
     ///   For Lambda expressions, applies `fix_pi_leaked_fvars` to abstract
     ///   leaked tactic-context FVars back to BVars in the resulting Pi type.
     pub fn infer_type(&self, goal: &Goal, expr: &Expr) -> Result<Expr, TacticError> {
-        let instantiated = self.metas.instantiate(expr);
+        let instantiated = self.instantiate_for_kernel(expr);
         let is_lambda = matches!(instantiated.kind(), ExprKind::Lam(..));
         self.with_tc(goal, |tc| {
             let ty = tc
                 .infer_type(&instantiated)
                 .map_err(|e| TacticError::TypeCheckFailed(format!("{e:?}")))?;
-            let ty = self.metas.instantiate(&ty);
+            let ty = self.instantiate_for_kernel(&ty);
             if is_lambda {
                 self.fix_pi_leaked_fvars(goal, &ty)
             } else {
@@ -414,8 +433,16 @@ impl ProofState {
     /// REQUIRES: `a` and `b` are meaningful in `goal`'s local context.
     /// ENSURES: Returns `true` iff the instantiated expressions are definitionally equal under the kernel checker.
     pub fn is_def_eq(&self, goal: &Goal, a: &Expr, b: &Expr) -> bool {
-        let a_inst = self.metas.instantiate(a);
-        let b_inst = self.metas.instantiate(b);
+        // U2 stage 1b (build item found by the stage-0 probe): resolve solved
+        // LEVELS too, not just expression metas. `close_goal` compares the
+        // (already level-canonicalized) inferred proof type against the raw
+        // goal target here; when a tactic had recorded `u_N := u` in
+        // `self.metas` only, the kernel — which has no level union-find — was
+        // handed `Param(u_N)` vs `Param(u)` and correctly said "not equal".
+        // Canonicalizing both sides can only merge levels this state itself
+        // recorded equal; a genuine conflict still compares unequal.
+        let a_inst = self.instantiate_for_kernel(a);
+        let b_inst = self.instantiate_for_kernel(b);
         self.with_tc(goal, |tc| tc.is_def_eq(&a_inst, &b_inst))
     }
 
@@ -727,8 +754,8 @@ impl ProofState {
         // Check that inferred type matches goal target
         if !self.is_def_eq(goal, &inferred_ty, &goal.target) {
             return Err(TacticError::TypeMismatch {
-                expected: format!("{:?}", goal.target),
-                actual: format!("{inferred_ty:?}"),
+                expected: format!("{}", goal.target),
+                actual: format!("{inferred_ty}"),
             });
         }
 

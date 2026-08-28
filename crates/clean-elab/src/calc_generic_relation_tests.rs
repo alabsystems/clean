@@ -239,3 +239,35 @@ mod decomposition {
         assert_eq!(head.to_string(), "MyRel");
     }
 }
+
+/// REGRESSION (r97 `calcblk_simp_identity_steps`): the `_` chain placeholder
+/// must be assigned the previous RHS **as written**, not its WHNF.
+///
+/// The chaining unification used the default `unify`, whose eager initial
+/// WHNF reduced `n * 1` to its ι-stepped `Nat.rec` tower before the
+/// placeholder meta was assigned — so the second step's goal became
+/// `Nat.rec … = n`, a spelling `simp` has no lemma for, while the standalone
+/// `n * 1 = n := by simp` proved fine. `unify_no_initial_whnf` keeps the
+/// middle term syntactic (Lean's `isDefEqGuarded` behavior); internal
+/// whnf-on-disagreement still connects def-eq-but-not-syntactic chains.
+#[test]
+fn test_calc_underscore_receives_syntactic_prev_rhs_not_whnf() {
+    let mut env = Environment::with_prelude();
+    let src = "theorem calc_id_steps (n : Nat) : (n + 0) * 1 = n :=\n  calc (n + 0) * 1 = n * 1 := by simp\n    _ = n := by simp";
+    let decl = parse_decl(src).expect("parse");
+    elaborate_decl_and_register(&mut env, &decl)
+        .expect("the second calc step's goal must be the syntactic `n * 1 = n`");
+}
+
+/// The other direction the same unification serves: an EXPLICIT middle term
+/// that is def-eq (but not syntactically equal) to the previous RHS must
+/// still connect — `unify_no_initial_whnf` reduces internally on shape
+/// disagreement, so dropping the eager WHNF must not break these chains.
+#[test]
+fn test_calc_defeq_middle_term_still_connects() {
+    let mut env = Environment::with_prelude();
+    let src = "theorem calc_defeq_mid (n : Nat) : 0 + n = n :=\n  calc 0 + n = Nat.add 0 n := rfl\n    Nat.add 0 n = n := by simp";
+    let decl = parse_decl(src).expect("parse");
+    elaborate_decl_and_register(&mut env, &decl)
+        .expect("a def-eq middle term must still connect the chain");
+}

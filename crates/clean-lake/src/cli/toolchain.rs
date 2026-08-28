@@ -10,6 +10,14 @@ use semver::Version;
 
 use crate::error::{LakeError, LakeResult};
 
+/// The toolchain identifier written into a freshly scaffolded project.
+///
+/// Public so `clean lake new` / `clean lake init` — which live in `clean-cli`,
+/// not here — write the SAME value the library scaffold writes. A second
+/// spelling in the CLI is how the two `init` implementations drifted apart in
+/// the first place.
+pub const DEFAULT_CLEAN_TOOLCHAIN: &str = "clean:stable\n";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LoadedToolchain {
     pub(crate) identifier: String,

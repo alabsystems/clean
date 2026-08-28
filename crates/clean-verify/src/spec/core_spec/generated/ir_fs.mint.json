@@ -1,0 +1,45 @@
+{
+ "prefix": "ir_fs",
+ "body": "mode::CleanMode::from_source_system",
+ "core_digest": "391084975f38ea81d1f70a8c5e8de2b04aa8ec5509263f64c9ac481a02ed9320",
+ "defs_digest": "5530520168257bd479bf087e4c297965f08eda27090622d4f0e2b8d74ba829c6",
+ "def_count": 18,
+ "def_count_note": "SIXTEEN module definitions (fourteen blocks, the func, the module) plus TWO aliases: ir_fs_tmode (the result enum the arms materialise) and ir_fs_tsrc (the argument enum, INTERFACE-ONLY -- registered so the SourceSystem pin is an elaborated term, named by nothing in the module; see the tag table's canonical-1 row).",
+ "artifact_core_digest": "dc7f19f6b3f8d755784cc60d0ed179ece25d4b14afa74934d6061d9f26b89055",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the from_source_system row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 4177,
+  "artifact_func_id": 4177,
+  "artifact_functy_id": 551,
+  "artifact_functy_note": "551 on the dump this migration was revalidated against, where the COMMITTED fixture says 554 and the producer A/B record says 732/732/552: the whole-crate function-TYPE index moves under a producer re-interning with zero instructions changed, exactly like func_id (4177 here, after 5243/5243/4175 -- the same drift class). The interface pin compares reader B's header against the fixture-era 554; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [
+   13
+  ],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [
+   4177
+  ],
+  "crate_func_names_seen": [
+   "mode::CleanMode::from_source_system"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [
+   "Enum(EnumId(176))"
+  ],
+  "param_tys_erased_note": "The SourceSystem argument, BY VALUE. 176 on this dump where the committed fixture prints enum.178 -- the crate-level drift class, observed ON THE PARAMETER-TYPE SLOT itself, which is why the tag table's interface pin is the canonicalized `enum#1` (resolved through the SourceSystem row) and never the verbatim token.",
+  "block_param_tys_erased": [
+   "bb13:Enum(EnumId(13))"
+  ]
+ },
+ "text_unwitnessed": [
+  { "slot": "bb0#1 switch arg4", "why": "trust-ir Display never prints Switch.exhaustive_enum_unreachable" }
+ ],
+ "text_unwitnessed_note": "ONE entry, like ir_ko's: the body dispatches, so the one field trust-ir's Display never prints occurs exactly once. M2 is therefore an exact comparison under the declared mask, and the flag has exactly one in-repo witness -- reader A, whose committed core carries the measured `false` (the DEFAULT EDGE is the reachable PVS arm, not a trap).",
+ "producer_dumps_observed": 4,
+ "producer_dumps_note": "The three dumps of generated/ir_mint.producer_ab.json (trust wave-tr-fix 2026-08-12 v36, mfclose 2026-08-13 v36, lane2rv 2026-08-19 v37) plus the laneREG wc-REG dump_O3 2026-08-21 projection this migration ran (recorded verbatim under reader_a above). All four project to the byte-identical committed core text: func_id moved on two of the four boundaries, functy on three, the SourceSystem param enum on at least one (178 fixture-era -> 176), enum.13 never moved, and no core digest moved."
+}

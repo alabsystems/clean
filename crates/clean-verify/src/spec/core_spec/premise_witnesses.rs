@@ -185,6 +185,43 @@ const SIMPLE: &[(&str, &str, &str, &str)] = &[
          switch's DEFAULT edge rather than one with an explicit case, so the witness names the \
          arm a case-table transcription is most likely to lose.",
     ),
+    // The ELEVENTH chain's reflected argument type — the first with a
+    // PAYLOAD-carrying variant. Witnessed at `custom 7`, the very value the
+    // chain's own gate witnesses run the machine on through the gep, so the
+    // inhabitant lands on the arm the chain exists for rather than the
+    // fieldless default.
+    (
+        "simppriorityr_witness",
+        "SimpPriorityR",
+        "SimpPriorityR.custom ir_d7",
+        "SimpPriorityR IS INHABITED, at `custom 7` — the payload-carrying variant, which is \
+         the whole reason the eleventh chain's body geps, and the same value its gate \
+         witnesses execute the emitted module on.",
+    ),
+    // The reflected argument types of the WIDTH tranche (NodeIdR, chains
+    // 15-17) and the first call-bearing chain (ExprMetaR, chain 18). Both are
+    // Nat-carrying newtypes whose Encodes* relation IS witnessed beside the
+    // chain (`encodes_node_id_inhabited` / `encodes_expr_meta_inhabited` --
+    // the SourceSystemR lesson, half-learned), but the bare type is concluded
+    // by nothing, and the chains' A4s quantify `(i : NodeIdR)` /
+    // `(m : ExprMetaR)` directly: an uninhabited reflected type vacuates them
+    // as surely as an unsatisfiable representation premise.
+    (
+        "nodeidr_witness",
+        "NodeIdR",
+        "NodeIdR.mk 4294967295",
+        "NodeIdR IS INHABITED, at `mk u32::MAX` -- the exact bit pattern the chain's own \
+         machine-sound witness executes, the last value the emitted body's u32 truncation \
+         keeps whole.",
+    ),
+    (
+        "exprmetar_witness",
+        "ExprMetaR",
+        "ExprMetaR.mk 17592186044416",
+        "ExprMetaR IS INHABITED, at `mk 2^44` -- the eighteenth chain's boundary bit pattern, \
+         the value both of its machine-sound witnesses run the emitted module on, where \
+         has_loose_bvars flips true and loose_bvar_range reads 1.",
+    ),
 ];
 
 impl Specification {
@@ -428,6 +465,60 @@ impl Specification {
                 "ir_var".to_string(),
                 "clean_mode_tag".to_string(),
                 "ir_mem_lookup".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // ── the ELEVENTH chain's TWO-CELL representation premise ────────────
+        //
+        // The first Encodes* premise to constrain memory TWICE: `custom`
+        // demands the tag cell AND a second live cell at `Nat.add a ir_pv_off`
+        // — the address the emitted body computes with a gep and then
+        // dereferences. The witness is at the Custom arm on purpose: Default
+        // is satisfiable by one cell and would leave the load-bearing second
+        // equation unexercised. Both heap equations are discharged by
+        // `Eq.refl`, so the kernel runs `ir_mem_lookup` over the two-cell heap
+        // — including the defeq step `Nat.add ir_d0 ir_pv_off ≡ ir_d4` — and
+        // compares; nothing is asserted.
+        let prio_mem = "(ir_cell ir_d0 (ir_var ir_d1 ir_sp0) \
+                        (ir_cell ir_d4 (IRScalar.int_ ir_d7) ir_mem0))";
+        self.add_definition(SpecDefinition {
+            name: "encodessimppriority_witness".to_string(),
+            type_src: format!(
+                "EncodesSimpPriority {prio_mem} (IRScalar.ptr_ ir_d0) \
+                 (SimpPriorityR.custom ir_d7)"
+            ),
+            value_src: Some(format!(
+                "EncodesSimpPriority.custom {prio_mem} ir_d0 ir_sp0 ir_d7 \
+                 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot \
+                 (IRMemSlot.mk ir_d0 (ir_var ir_d1 ir_sp0) Bool.true))) \
+                 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot \
+                 (IRMemSlot.mk ir_d4 (IRScalar.int_ ir_d7) Bool.true)))"
+            )),
+            is_axiom: false,
+            description: concat!(
+                "EncodesSimpPriority IS INHABITED, at the CUSTOM arm — the two-cell one, whose ",
+                "second equation pins the payload cell at the gep'd address `a + ir_pv_off`. ",
+                "The eleventh chain's theorems (ir_pv_correct, ir_pv_machine_sound, ",
+                "ir_pv_never_faults) are all conditional on this premise, so nothing ",
+                "inhabiting it would make them claims about a machine state that cannot ",
+                "exist. The witness heap is the smallest Custom state: the tag cell at ",
+                "address 0 and the payload cell at address 4, both LIVE. Both lookup ",
+                "equations close by Eq.refl — the kernel computes `ir_mem_lookup` over the ",
+                "heap, reducing `Nat.add ir_d0 ir_pv_off` to `ir_d4` on the way. ",
+                "Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "EncodesSimpPriority.custom".to_string(),
+                "ir_cell".to_string(),
+                "ir_var".to_string(),
+                "ir_mem_lookup".to_string(),
+                "ir_pv_off".to_string(),
             ])),
             axiom_deps: HashSet::new(),
         })?;

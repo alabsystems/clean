@@ -11,6 +11,19 @@ use crate::lexer::TokenKind;
 use crate::surface::*;
 use crate::ParseError;
 
+/// Which Lean precedence level a full-expression parse slot opens.
+///
+/// Only `↔` (`infix:20`) distinguishes the two: it is the sole operator in this
+/// chain that binds LOOSER than `→` (`infixr:25`), so it is the sole operator an
+/// arrow codomain must refuse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ExprSlot {
+    /// Lean `term` (level 0): every operator, `↔` included.
+    Term,
+    /// Lean `term:25`: the codomain of a `→`, which stops before `↔` (20).
+    ArrowCodomain,
+}
+
 impl Parser {
     /// Maximum expression nesting depth before returning an error.
     /// Each nesting level produces ~17 stack frames (operator precedence chain).
@@ -23,8 +36,49 @@ impl Parser {
     const EXPR_STACK_RED_ZONE: usize = 512 * 1024;
     const EXPR_STACK_GROW_SIZE: usize = 8 * 1024 * 1024;
 
-    /// Parse an expression
+    /// Parse an expression at full precedence (Lean `term`, level 0).
+    ///
+    /// A full-expression position also RESETS the slot to
+    /// [`ExprSlot::Term`]: parentheses, quantifier/lambda bodies, tactic
+    /// arguments and every other caller of `expr()` open a fresh `term` slot in
+    /// which `↔` binds normally, even when they sit lexically inside an arrow
+    /// codomain (`a → (b ↔ c)`, `a → ∀ x, p x ↔ q x`).
     pub(super) fn expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.expr_in_slot(ExprSlot::Term)
+    }
+
+    /// Parse the codomain of a `→` (Lean `term:25`).
+    ///
+    /// Identical to [`Self::expr`] except that `↔` (`infix:20`, LOOSER than
+    /// `→`) is left for the enclosing `iff_expr`, so `a → b ↔ c` groups as
+    /// `(a → b) ↔ c` the way Lean groups it. Everything at level ≥ 25 — a
+    /// further right-associative `→`, `∨`, `∧`, `=`, arithmetic, custom
+    /// notation — is still consumed here.
+    fn arrow_codomain_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.expr_in_slot(ExprSlot::ArrowCodomain)
+    }
+
+    /// Run `f` in a fresh Lean `term` slot (level 0), restoring the caller's
+    /// slot afterwards.
+    ///
+    /// For full-`term` sub-positions that deliberately enter the operator chain
+    /// BELOW [`Self::expr`] — currently the shared type annotation of a
+    /// quantifier binder run, which Lean parses with `termParser`. Without it a
+    /// binder type parsed while the ambient slot is [`ExprSlot::ArrowCodomain`]
+    /// (`a → ∀ h : p ↔ q, r h`) would leave its own `↔` for an enclosing
+    /// `iff_expr` that does not exist.
+    pub(super) fn with_term_slot<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = self.expr_slot;
+        self.expr_slot = ExprSlot::Term;
+        let out = f(self);
+        self.expr_slot = saved;
+        out
+    }
+
+    /// Shared body of [`Self::expr`] and [`Self::arrow_codomain_expr`]; holds
+    /// the single copy of the depth guard, the stack growth and the
+    /// custom-operator floor reset so the two entry points cannot drift.
+    fn expr_in_slot(&mut self, slot: ExprSlot) -> Result<SurfaceExpr, ParseError> {
         // Grow the stack on demand so deeply nested inputs hit the
         // MAX_EXPR_DEPTH guard instead of aborting with SIGABRT.
         stacker::maybe_grow(
@@ -45,10 +99,18 @@ impl Parser {
                 // level to the ambient floor (parenthesized subexpressions,
                 // statement bodies, arrow codomains all accept any modeled
                 // custom operator). See `custom_notation.rs` (B100).
-                let result = self.with_custom_min_prec(
-                    super::custom_notation::CUSTOM_PREC_FLOOR,
-                    Self::hom_expr,
-                );
+                let saved_slot = self.expr_slot;
+                self.expr_slot = slot;
+                // Lean's `term` parser is `term:0`; an arrow codomain is
+                // `term:25` (`→` is `infixr:25`), so a custom operator LOOSER
+                // than 25 may not be consumed inside one — `A → B ~10~ C` is
+                // `(A → B) ~10~ C`, not `A → (B ~10~ C)`.
+                let ambient = match slot {
+                    ExprSlot::Term => super::custom_notation::CUSTOM_PREC_FLOOR,
+                    ExprSlot::ArrowCodomain => super::custom_notation::ARROW_LEVEL,
+                };
+                let result = self.with_custom_min_prec(ambient, Self::very_low_custom_infix_expr);
+                self.expr_slot = saved_slot;
                 self.expr_depth -= 1;
                 result
             },
@@ -140,7 +202,7 @@ impl Parser {
     /// `binop_lazy%` (`Lean/Elab/Extra.lean:92`, `f a (fun () => b)`), whose
     /// load-bearing part for a single monad is exactly this RHS unit-thunk
     /// (Brick 3, `docs/plans/ELAB_ARMS_AUDIT_2026-07-08.md` §3(a)).
-    fn orelse_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+    pub(super) fn orelse_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         let left = self.iff_expr()?;
         if self.eat(&TokenKind::OrElse) {
             let lspan = left.span();
@@ -188,7 +250,8 @@ impl Parser {
     /// This sits *below* backward pipe `<|` in the precedence chain (Lean: `<|`
     /// is looser than `|>`) and *above* `iff_expr`.
     fn fpipe_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.orelse_expr()?;
+        // The 11–20 custom-infix band sits between `|>` (10) and `<|>`/`↔` (20).
+        let mut left = self.pipe_custom_infix_expr()?;
 
         while self.eat(&TokenKind::ForwardPipe) {
             if self.check(&TokenKind::Dot) {
@@ -301,7 +364,9 @@ impl Parser {
     /// connective is built directly. This mirrors the existing arrow-splitting
     /// re-association already done for `=` in [`Self::cmp_expr`].
     ///
-    /// `op_name` is the connective's head constant (`And`/`Or`/`Iff`).
+    /// `op_name` is the connective's head constant (`And`/`Or`). `↔` is NOT a
+    /// caller: at precedence 20 it binds LOOSER than `→`, so its right operand
+    /// keeps the arrow (`a ↔ b → c` is `a ↔ (b → c)`). See [`Self::iff_expr`].
     fn build_connective_arrow_aware(
         op_name: &str,
         left: SurfaceExpr,
@@ -335,15 +400,38 @@ impl Parser {
         }
     }
 
-    /// Iff expressions: A ↔ B (precedence 20)
+    /// Iff expressions: `A ↔ B` (Lean `infix:20`).
+    ///
+    /// `↔` is the LOOSEST operator in this chain — looser than `→` (25) — which
+    /// makes it the one connective here that must NOT use
+    /// [`Self::build_connective_arrow_aware`]:
+    ///
+    /// * right operand — `a ↔ b → c` is `a ↔ (b → c)`; the arrow stays inside,
+    ///   so the connective is built directly;
+    /// * left operand — `a → b ↔ c` is `(a → b) ↔ c`. `arrow_expr` sits BELOW
+    ///   this level and parses its codomain through
+    ///   [`Self::arrow_codomain_expr`], which stops at the `↔` and leaves it
+    ///   here.
     pub(super) fn iff_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.or_expr()?;
+        // The 21–30 custom-infix band — Mathlib's hom-arrow family (`→+`, `↪`,
+        // `≃`, `⥤`, …) — sits between `↔` (20) and `∨` (30).
+        let mut left = self.iff_custom_infix_expr()?;
+
+        // Inside an arrow codomain (`term:25`) a `↔` binds looser than the
+        // enclosing `→` and belongs to the `iff_expr` above that arrow.
+        if self.expr_slot == ExprSlot::ArrowCodomain {
+            return Ok(left);
+        }
 
         while self.eat(&TokenKind::Iff) {
-            let right = self.or_expr()?;
-            // `↔` binds looser than `→` (20 < 25), so a right operand of the form
-            // `b → c` re-associates to `(a ↔ b) → c`.
-            left = Self::build_connective_arrow_aware("Iff", left, right);
+            let right = self.iff_custom_infix_expr()?;
+            let span = left.span().merge(right.span());
+            let op_span = left.span();
+            left = SurfaceExpr::App(
+                span,
+                Box::new(SurfaceExpr::Ident(op_span, "Iff".to_string())),
+                vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
+            );
         }
 
         Ok(left)
@@ -357,7 +445,8 @@ impl Parser {
     /// rather than folding left. Right-nesting is what `rcases`/`obtain` Or-pattern
     /// alternation relies on for `rcases h with hp | hq | hr` on `p ∨ q ∨ r`.
     pub(super) fn or_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let left = self.and_expr()?;
+        // The 31–35 custom-infix band sits between `∨` (30) and `∧` (35).
+        let left = self.or_custom_infix_expr()?;
         let span = left.span();
 
         if self.eat(&TokenKind::Or) {
@@ -392,9 +481,9 @@ impl Parser {
     /// on `a ∧ b ∧ c` destructs the left field then recurses into the `b ∧ c`
     /// right field.
     pub(super) fn and_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        // The low custom-infix band owns levels 45–50 (notably the canonical
-        // temporal `⊨` and `~>` relations). It wraps comparisons and remains
-        // inside level-35 conjunction, preserving Lean's binding order.
+        // The 36–50 custom-infix band (notably the canonical temporal `⊨` and
+        // `~>` relations). It wraps comparisons and remains inside level-35
+        // conjunction, preserving Lean's binding order.
         let left = self.low_custom_infix_expr()?;
         let span = left.span();
 
@@ -568,17 +657,29 @@ impl Parser {
                 // (no dependence on a `bne` constant being in the prelude).
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                let s = span.merge(end_span);
+                // Arrow-tail split, as in the `==` arm below: `!=` is `infix:50`
+                // and binds TIGHTER than `→` (25), but `bind_expr` descends into
+                // `arrow_expr` and swallows the arrow into the RHS. Probed with
+                // `x != y → c` (`x y : Nat`): without the split the operand type
+                // `Nat` reaches ExpectedSort, with it the `Bool` result does.
+                let (right, arrow_tail) = Self::split_arrow_tail(right);
+                let s = span.merge(right.span());
                 let beq = SurfaceExpr::App(
                     s,
                     Box::new(SurfaceExpr::Ident(span, "BEq.beq".to_string())),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
-                left = SurfaceExpr::App(
+                let bne = SurfaceExpr::App(
                     s,
                     Box::new(SurfaceExpr::Ident(span, "Bool.not".to_string())),
                     vec![SurfaceArg::positional(beq)],
                 );
+                left = match arrow_tail {
+                    Some(codomain) => {
+                        SurfaceExpr::Arrow(span.merge(end_span), Box::new(bne), codomain)
+                    }
+                    None => bne,
+                };
             } else if self.eat(&TokenKind::Lt) {
                 let right = self.bind_expr()?;
                 let end_span = right.span();
@@ -596,26 +697,22 @@ impl Parser {
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "GE.ge", left, right, end_span);
             } else if self.eat(&TokenKind::HEq) {
-                // Heterogeneous equality: a ≍ b
+                // Heterogeneous equality: `a ≍ b` (`Init/Core.lean`:
+                // `infix:50 " ≍ " => HEq`). Arrow-tail split as for the other
+                // 50-class arms: `u ≍ v → c` is `(u ≍ v) → c`.
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HEq".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "HEq", left, right, end_span);
             } else if self.eat(&TokenKind::Approx) {
                 // Setoid / quotient equivalence: `a ≈ b` → `HasEquiv.Equiv a b`
                 // (Lean `Init/Core.lean`: `infix:50 " ≈ " => HasEquiv.Equiv`).
                 // A non-chaining `infix:50` op like the others here, so it falls
-                // through to the `saw_comparison` guard (no `continue`).
+                // through to the `saw_comparison` guard (no `continue`), and it
+                // takes the same arrow-tail split: `s ≈ t → c` is `(s ≈ t) → c`,
+                // the `Quotient.lift` hypothesis shape.
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HasEquiv.Equiv".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                left = Self::cmp_with_arrow_tail(span, "HasEquiv.Equiv", left, right, end_span);
             } else if self.eat(&TokenKind::Equiv) {
                 // Check for typed equivalence notation: ≃ₐ[R] (AlgEquiv)
                 if let TokenKind::Ident(subscript) = self.current_kind().clone() {
@@ -629,14 +726,20 @@ impl Parser {
 
                         let right = self.bind_expr()?;
                         let end_span = right.span();
+                        // Mathlib declares the typed equivalences at `notation:25`
+                        // (`≃ₐ[R]`, `≃ₗ[R]`, …), so `→` (`infixr:25`) does NOT
+                        // belong to the right operand: `A ≃ₐ[R] B → c` is
+                        // `(A ≃ₐ[R] B) → c`. Split the arrow tail off before
+                        // building the three-argument application.
+                        let (right, arrow_tail) = Self::split_arrow_tail(right);
 
                         // Map subscript to type constructor
                         let constructor = typed_equiv_constructor(&subscript);
 
                         // Build: Constructor param left right
                         // e.g., AlgEquiv R A B for A ≃ₐ[R] B
-                        left = SurfaceExpr::App(
-                            span.merge(end_span),
+                        let equiv = SurfaceExpr::App(
+                            span.merge(right.span()),
                             Box::new(SurfaceExpr::Ident(span, constructor.to_string())),
                             vec![
                                 SurfaceArg::positional(param),
@@ -644,6 +747,12 @@ impl Parser {
                                 SurfaceArg::positional(right),
                             ],
                         );
+                        left = match arrow_tail {
+                            Some(codomain) => {
+                                SurfaceExpr::Arrow(span.merge(end_span), Box::new(equiv), codomain)
+                            }
+                            None => equiv,
+                        };
                         continue;
                     }
                 }
@@ -655,11 +764,11 @@ impl Parser {
                 // comparison keeps its historical behavior.
                 let right = self.bind_expr()?;
                 let end_span = right.span();
-                left = SurfaceExpr::App(
-                    span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "Equiv".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                // `Mathlib/Logic/Equiv/Defs.lean:82` declares `infixl:25 " ≃ "`.
+                // At level 25 the left operand of a following `→` (`infixr:25`,
+                // `checkPrec 25`) is exactly this node, so `a ≃ b → c` is
+                // `(a ≃ b) → c` — the `Equiv.trans`/`Cardinal.map` shape.
+                left = Self::cmp_with_arrow_tail(span, "Equiv", left, right, end_span);
                 continue;
             } else if self.eat(&TokenKind::DoubleEq) {
                 // BEq equality check: a == b
@@ -742,7 +851,16 @@ impl Parser {
     ///
     /// Desugars to `Bind.bind m f` — the same head the `do`-notation desugarer
     /// emits — so the existing monad-instance resolution path applies unchanged.
+    ///
+    /// The 51–59 custom-infix band sits immediately outside this level, so
+    /// every caller that wants "a comparison operand" gets the band; the
+    /// builtin bind itself is [`Self::bind_core_expr`].
     pub(super) fn bind_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.mid_custom_infix_expr()
+    }
+
+    /// The builtin monadic-bind level itself, without the 51–59 custom band.
+    pub(super) fn bind_core_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         let mut left = self.seq_expr()?;
         // Tracks whether a left-associative `>>=` (infixl:55) was consumed at
         // this level. The infixr:55 operators (`=<<`, `>=>`, `<=<`) require a
@@ -992,7 +1110,16 @@ impl Parser {
 
         let mut left = self.sum_expr()?;
 
-        while self.eat(&TokenKind::Arrow) {
+        // MAXIMAL MUNCH before the arrow: Mathlib's hom arrows are declared as
+        // symbols whose FIRST token is this very `→` — `→+` lexes to
+        // `[Arrow, Plus]`, `→*` to `[Arrow, Star]`, `→+*` to
+        // `[Arrow, Plus, Star]` (789 / 426 / 577 Mathlib files). Consuming the
+        // arrow here would strand the rest of the symbol and turn
+        // `M →+ N` into a function type over a broken codomain — which is
+        // exactly the silent degradation the no-op unary `+` used to hide.
+        // Lean resolves these from its token table by longest match, so a
+        // registered operator that matches at the cursor wins.
+        while !self.starts_custom_infix_or_postfix_at(0) && self.eat(&TokenKind::Arrow) {
             // Check for typed morphism notation: →ₗ[R], →ₐ[R], ≃ₐ[R]
             // Pattern: Arrow + subscript identifier + [ + param + ]
             if let TokenKind::Ident(subscript) = self.current_kind().clone() {
@@ -1027,15 +1154,19 @@ impl Parser {
 
             // Normal arrow type: A → B.
             //
-            // `→` is the loosest right-associative operator in Lean (prec 25),
-            // so its codomain must parse at FULL expression precedence — it may
-            // contain `=`, `∧`, `∨`, etc. Parsing the codomain with `expr()`
-            // (rather than the tighter `arrow_expr`) makes `A → B = C` parse as
-            // `A → (B = C)` and `A → B ∧ C` as `A → (B ∧ C)`, matching Lean.
-            // Right-associativity is preserved because `expr()` descends back
-            // into `arrow_expr` for any further `→`. (The companion `A = B → C`
-            // case is handled by the arrow-splitting hack in `cmp_expr`.)
-            let right = self.expr()?; // Right associative, full-precedence codomain
+            // `→` is `infixr:25`, so its codomain is `term:25`: everything that
+            // binds at least as tightly — `=`, `∧`, `∨`, arithmetic, a further
+            // right-associative `→` — belongs to the codomain, and
+            // `arrow_codomain_expr` descends the whole chain to collect it
+            // (`A → B = C` is `A → (B = C)`, `A → B ∧ C` is `A → (B ∧ C)`).
+            // The one operator it must NOT swallow is `↔` (`infix:20`, LOOSER
+            // than `→`): `A → B ↔ C` is `(A → B) ↔ C`, so `arrow_codomain_expr`
+            // stops there and the enclosing `iff_expr` takes the `↔` with THIS
+            // arrow as its left operand. A plain `expr()` here mis-grouped
+            // every unparenthesized `… → … ↔ …` statement. (The companion
+            // `A = B → C` case is handled by the arrow-splitting hack in
+            // `cmp_expr`.)
+            let right = self.arrow_codomain_expr()?; // Right associative, `term:25`
             let span = left.span().merge(right.span());
             left = SurfaceExpr::Arrow(span, Box::new(left), Box::new(right));
         }
@@ -1468,7 +1599,7 @@ impl Parser {
         Ok(left)
     }
 
-    /// Prefix unary minus `-a` (`Neg.neg`) and no-op unary plus `+a`.
+    /// Prefix unary minus `-a` (`Neg.neg`). There is **no prefix `+`**.
     ///
     /// Lean declares `-` as `prefix:75` (`Init/Notation.lean:293`): it binds
     /// LOOSER than `^` (`infixr:80`, `Init/Notation.lean:291`) but TIGHTER than
@@ -1487,6 +1618,28 @@ impl Parser {
     /// `pow_expr` (not into `neg_expr` again), a bare `-` in a `^`/`∘` right
     /// operand — `2 ^ -3` — stays a loud error, matching Lean's rejection
     /// (`2 ^ -3`: "unexpected token at this precedence level"; use `2 ^ (-3)`).
+    ///
+    /// **A prefix `+` is REJECTED, and re-accepting one is a soundness
+    /// regression.** Lean declares no `prefix "+"` anywhere in `Init`, and the
+    /// pinned v4.30.0-rc2 toolchain rejects `+ B` with
+    /// `unexpected token '+'; expected term`. This parser used to accept a
+    /// prefix `+` as the identity ("unary plus is a no-op"), which looks
+    /// harmless in isolation and is not: it made Mathlib's `→+`
+    /// (`AddMonoidHom`, **996 lines across 285 files** of mathlib4
+    /// `43ad0e9d2`) parse as `A → (+ B)` ≡ `A → B`, a *plain function arrow*.
+    /// That is the only SILENT, kernel-accepted misparse the 2026-08 parser
+    /// survey found: a theorem stated about a bundled `AddMonoidHom`
+    /// elaborated and kernel-verified against a different proposition, with no
+    /// diagnostic anywhere. Every sibling in the family (`→+*`, `→*`, `→₀`,
+    /// `→ₗ`, `→ₐ`, `≃o`, `≃*`, `≃+`) already failed loudly; only `→+` was
+    /// silent, because only `+` had a prefix rule.
+    ///
+    /// The `Plus` arm is kept solely to name the gap: without it the token
+    /// still fails (a leading `+` reaches no accepting production — `+` is a
+    /// builtin operator token, so a user notation cannot claim it either), but
+    /// with the generic `unexpected token: Plus`. `→+` stays a loud gap until
+    /// the custom-infix precedence bands below 45 are opened and it can be
+    /// registered as the `infixr:25` Mathlib declares.
     pub(super) fn neg_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         match self.current_kind() {
             TokenKind::Minus => {
@@ -1501,12 +1654,17 @@ impl Parser {
                     vec![SurfaceArg::positional(inner)],
                 ))
             }
-            TokenKind::Plus => {
-                // Unary plus is a no-op; consume and parse the operand
-                // (prefix:75, like unary minus above).
-                self.advance();
-                self.with_custom_min_prec(75, Self::neg_expr)
-            }
+            // Lean has no prefix `+`. See this function's doc comment: the
+            // former "no-op" arm here silently turned `A →+ B` into `A → B`.
+            TokenKind::Plus => Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current_span().start,
+                message: "unexpected token '+'; expected term — Lean has no \
+                          prefix '+'. If this is a bundled-hom arrow such as \
+                          `→+` (`AddMonoidHom`), that notation is not \
+                          registered yet; it is NOT a plain function arrow"
+                    .to_string(),
+            }),
             _ => self.pow_expr(),
         }
     }

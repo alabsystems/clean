@@ -66,6 +66,7 @@ run_clean_olean_test_write_lane() {
         log "clean-olean slow lane attempt=${attempt}: cargo test --locked --message-format=short -j $CARGO_BUILD_JOBS -p clean-olean test_write"
         if CLEAN_OLEAN_TEST_WRITE_LANE=1 \
             CLEAN_OLEAN_TEST_WRITE_RERUN="${attempt}" \
+            scripts/cargo_test_nonvacuous.sh olean-test-write -- \
             cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-olean test_write; then
             log "clean-olean slow lane passed on attempt=${attempt}"
             return 0

@@ -35,13 +35,13 @@ impl Environment {
     ///
     /// Also registers the `repr` convenience function
     /// (`repr a := Repr.reprPrec a 0`) and core instances for `Nat`, `String`,
-    /// `Bool`, and `List`.
+    /// `Bool`, `Int`, and `List`.
     ///
     /// # Contract
     ///
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.repr_init == true`
-    /// ENSURES: On success, required dependencies (`nat`, `string`, `bool`, `list`) are initialized
+    /// ENSURES: On success, required dependencies (`nat`, `string`, `bool`, `int`, `list`) are initialized
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
     pub(crate) fn init_repr(&mut self) -> Result<(), EnvError> {
         if self.repr_init {
@@ -52,6 +52,7 @@ impl Environment {
         self.init_nat()?;
         self.init_string()?;
         self.init_bool()?;
+        self.init_int()?;
         self.init_list()?;
 
         let u = Name::from_string("u");
@@ -244,6 +245,8 @@ impl Environment {
         self.add_repr_const_instance("instReprString", &string_const, Level::zero())?;
         let bool_const = Expr::const_(Name::from_string("Bool"), vec![]);
         self.add_repr_const_instance("instReprBool", &bool_const, Level::zero())?;
+        let int_const = Expr::const_(Name::from_string("Int"), vec![]);
+        self.add_repr_const_instance("instReprInt", &int_const, Level::zero())?;
 
         // instReprList : {α : Type u} → [Repr α] → Repr (List α)
         self.add_repr_list_instance(&u, &u_level, &type_u)?;
@@ -756,6 +759,7 @@ mod tests {
             "instReprNat",
             "instReprString",
             "instReprBool",
+            "instReprInt",
             "instToStringNat",
             "instToStringString",
             "instToStringBool",
@@ -818,6 +822,7 @@ mod tests {
             "instReprNat",
             "instReprString",
             "instReprBool",
+            "instReprInt",
             "instReprList",
             "instToStringNat",
             "instToStringString",

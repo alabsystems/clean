@@ -9094,6 +9094,11 @@ example : (⟨1, 2⟩ : MixedPoint) ≠ ⟨2, 1⟩ := by decide
 "####,
         ),
         (
+            // AMENDED 2026-08-23: the reconstructed (2026-08-10) nil arm was
+            // `rfl`, which demands `0 + n = n` definitionally — false in Lean 4
+            // too (Nat.add recurses on its 2nd argument; upstream rejects the
+            // same `rfl`). The def-eq engine refusing it was CORRECT; the body
+            // was the bug. Nil arm now mirrors the cons arm's own style.
             "data_sum-append",
             r####"def data_listSum : List Nat → Nat
   | [] => 0
@@ -9102,7 +9107,7 @@ example : (⟨1, 2⟩ : MixedPoint) ≠ ⟨2, 1⟩ := by decide
 theorem data_sum_append (xs ys : List Nat) :
     data_listSum (xs ++ ys) = data_listSum xs + data_listSum ys := by
   induction xs with
-  | nil => rfl
+  | nil => simp only [List.nil_append, data_listSum, Nat.zero_add]
   | cons x xs ih =>
     simp only [List.cons_append, data_listSum, ih]
     omega
@@ -9288,6 +9293,244 @@ example : data_firstOrZero [] = 0 := rfl
     ]
 }
 
+// ---------------------------------------------------------------------------
+// B7 — recursive defs with leading IMPLICIT binders.
+//
+// Decreasing-argument positions live in CALL-ARGUMENT space (a self-call
+// passes only the explicit binders, positionally), but `setup_recursion`
+// resolved them against the FULL binder list, so any recursive def with a
+// leading `{α : Type}` binder picked the type binder as "decreasing" and the
+// self-call died `RecursionOutsideFragment`. The single-arg equation-form
+// lift additionally bailed outright on ANY leading declaration binders.
+// Both fixed in `elab_decl_value.rs` (`normalize_equation_def` recursion-gated
+// lift; `setup_recursion` explicit-position translation). These pin the
+// repaired shapes end to end (parse → elaborate → kernel registration); the
+// monomorphic controls in the R100 battery (`data_listSum`, `Tree.mirror`)
+// were never affected.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// B7 — `List.reverse_reverse` / `List.map_map` default-simp lemmas.
+//
+// `data_reverse-reverse` and `data_map-map-fusion` failed because the two
+// lemmas existed NOWHERE in the workspace — bare `simp` correctly had nothing
+// to rewrite with. Both are now genuine kernel-proved `List.rec` theorems
+// (`clean-kernel` `data_list_reverse_map_lemmas.rs`, checked `add_decl`,
+// 0-axiom closure) registered in the default simp set
+// (`simp/lemmas_builtin.rs::collect_list_lemmas`). `List.map_map`'s fused
+// function is the raw lambda `fun x => g (f x)` — exactly what Clean's `∘`
+// desugar produces — so the rewrite lands syntactically on the goal's RHS.
+// These pin the two battery snippets end to end by name, so the pin cannot
+// drift from the battery's own body.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_b7_list_reverse_reverse_and_map_map_simp_close() {
+    for name in ["data_reverse-reverse", "data_map-map-fusion"] {
+        let (_, code) = r100_reconstructed_snippets()
+            .iter()
+            .find(|(n, _)| *n == name)
+            .unwrap_or_else(|| panic!("battery snippet `{name}` must exist"));
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(name, code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "B7 List-simp snippet `{name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+}
+
+#[test]
+fn test_b7_recursive_def_leading_implicit_binders_kernel_checks() {
+    let shapes: &[(&str, &'static str)] = &[
+        // Equation form + nested tuple sub-pattern (R100 `mixed_swap_pairs_nested`).
+        (
+            "swap_pairs_poly_eqn",
+            r####"def swapPairs {α β : Type} : List (α × β) → List (β × α)
+  | [] => []
+  | (a, b) :: rest => (b, a) :: swapPairs rest
+
+example : swapPairs [(1, 2), (3, 4)] = [(2, 1), (4, 3)] := rfl
+"####,
+        ),
+        // Equation form, single arg.
+        (
+            "len_poly_eqn",
+            r####"def lenL {α : Type} : List α → Nat
+  | [] => 0
+  | _ :: xs => 1 + lenL xs
+"####,
+        ),
+        // Named-binder match form (no equation lift involved — isolates the
+        // position-space translation).
+        (
+            "len_poly_named",
+            r####"def lenM {α : Type} (xs : List α) : Nat :=
+  match xs with
+  | [] => 0
+  | _ :: ys => 1 + lenM ys
+"####,
+        ),
+        // Multi-discriminant equation form + method-dot self-call over a
+        // parametric user inductive (the def of R100
+        // `mixed_mylist_append_assoc`; its THEOREM decl still fails in the
+        // separate simp-vs-`.rec`-iota class and is not pinned here).
+        (
+            "mylist_append_poly_multiarg",
+            r####"inductive MyList (α : Type) where
+  | nil
+  | cons : α → MyList α → MyList α
+
+def MyList.append {α : Type} : MyList α → MyList α → MyList α
+  | .nil, ys => ys
+  | .cons x xs, ys => .cons x (xs.append ys)
+"####,
+        ),
+    ];
+    for (name, code) in shapes {
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(name, code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "B7 shape `{name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// B7 triage — the `α → Option α` coercion lift (R100 `mixed_coe_nat_option`).
+//
+// `def mixed_toOpt (n : Nat) : Option Nat := n` failed `TypeMismatch {
+// expected: "Option {0} Nat", actual: "Nat" }`: `try_coerce` had Coe-instance,
+// subtype-val, builtin Nat→Int and container/aux steps but no `α → Option α`
+// lift (Lean's `instCoeSome`, `↑a = some a`). The fix is Step 1b4 in
+// `infer/coercion.rs::try_coerce` — `try_coerce_option_some`, emitting
+// `@Option.some.{u} α expr` with `u` taken from the target's own `Option.{u}`
+// head and the element type unified (scoped) against the source type.
+//
+// Position coverage, measured 2026-08-23 pre-fix: the def-ascription shape
+// failed in `try_coerce` (TypeMismatch above); the LET-ascription shape leaked
+// the raw `Nat` term past elaboration and died at kernel re-check
+// (`KernelCheckFailed … heads: Option vs Nat`); the application-argument shape
+// failed as a unifier shape mismatch (`Discriminant(3) vs Discriminant(4)`).
+// All three route through the lift post-fix, so all three are pinned pass.
+// The negative shape pins that the lift is not over-broad: a `Bool` against
+// `Option Nat` must unify-fail the element check and keep the honest
+// TypeMismatch.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_b7_option_some_coercion_lift_kernel_checks() {
+    let pass_shapes: &[(&str, &'static str)] = &[
+        // The recorded R100 snippet: def-ascription position + rfl example.
+        (
+            "coe_opt_def_ascription",
+            r####"def mixed_toOpt (n : Nat) : Option Nat := n
+
+example : mixed_toOpt 5 = some 5 := rfl
+"####,
+        ),
+        // Let-ascription position (pre-fix: KernelCheckFailed, not TypeMismatch
+        // — the let-value position leaked the uncoerced term to the kernel).
+        (
+            "coe_opt_let_ascription",
+            r####"def letOpt (n : Nat) : Option Nat :=
+  let o : Option Nat := n
+  o
+"####,
+        ),
+        // Application-argument position (pre-fix: unifier shape mismatch).
+        (
+            "coe_opt_app_argument",
+            r####"def useOpt (o : Option Nat) : Nat := 0
+
+def callIt (n : Nat) : Nat := useOpt n
+"####,
+        ),
+    ];
+    for (name, code) in pass_shapes {
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(name, code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "B7 Option-lift shape `{name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+
+    // Over-broadness control: an `Option Nat` expected type with a `Bool`
+    // actual must STILL fail — the lift's element-type unification declines,
+    // so the honest TypeMismatch is preserved (never `some (b : Bool)`).
+    let (verdict, err, _elapsed) = run_everyday_snippet_bounded(
+        "coe_opt_bool_must_fail",
+        r####"def badOpt (b : Bool) : Option Nat := b
+"####,
+    );
+    assert_eq!(
+        verdict,
+        "elab_error",
+        "B7 Option-lift must NOT coerce Bool into Option Nat (got verdict `{verdict}`: {})",
+        err.as_deref().unwrap_or("")
+    );
+    let err_text = err.unwrap_or_default();
+    assert!(
+        err_text.contains("TypeMismatch"),
+        "Bool vs Option Nat must stay an honest TypeMismatch, got: {err_text}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// B7 triage — `deriving Repr` over a struct with an `Int` field.
+//
+// The prelude registered `Repr` const-instances only for Nat/String/Bool
+// (plus the parametric List chain), so the derive handler's fail-loud gate
+// (`ensure_field_repr`) rejected any `deriving Repr` structure with an `Int`
+// field — "cannot synthesize Repr for field `x`" (R100
+// `class_point-add-instance`). Fixed in the kernel prelude
+// (`clean-kernel/src/env/data_typeclasses_repr.rs`): `instReprInt` now
+// registers beside instReprNat/String/Bool in the identical const-instance
+// shape (axiom-free Definition, placeholder String body — the same trust
+// level as its siblings). These pin the repaired class end to end (parse →
+// elaborate → derive → kernel registration); the Nat/Bool-field deriving
+// snippets in the locked battery were never affected and stay its controls.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_b7_derive_repr_int_field_kernel_checks() {
+    // The battery snippet itself, pulled by name so this pin cannot drift
+    // from the battery's byte content.
+    let &(battery_name, battery_code) = r100_reconstructed_snippets()
+        .iter()
+        .find(|(n, _)| *n == "class_point-add-instance")
+        .expect("battery snippet class_point-add-instance exists");
+    let shapes: &[(&str, &str)] = &[
+        (battery_name, battery_code),
+        // Minimal isolation: the Repr-Int field synthesis alone, without the
+        // snippet's Add-instance and projection machinery.
+        (
+            "derive_repr_int_field_minimal",
+            "structure Cell where\n  val : Int\n  deriving Repr\n",
+        ),
+        // Instance chaining: `List Int` resolves instReprList over the new
+        // instReprInt.
+        (
+            "derive_repr_list_int_field",
+            "structure Bag where\n  items : List Int\n  deriving Repr\n",
+        ),
+    ];
+    for (name, code) in shapes {
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(name, code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "B7 Repr-Int shape `{name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+}
+
 const EVERYDAY_UPDATE_ENV_VAR: &str = "CLEAN_EVERYDAY_UPDATE";
 const EVERYDAY_REPORT_REL: &str = "reports/everyday-battery.json";
 const EVERYDAY_LOCKED_PROVENANCE: &str = "locked-2026-07-20";
@@ -9319,7 +9562,9 @@ fn everyday_repo_root() -> std::path::PathBuf {
 /// (fresh prelude env, parse -> preprocess -> elaborate+register per decl),
 /// catching panics so one crashing snippet cannot take down the battery.
 /// Returns `(verdict, first_error)` with verdict one of
-/// `pass` / `parse_error` / `elab_error` / `panic`.
+/// `pass` / `parse_error` / `elab_error` / `panic` (the battery loop adds
+/// `diverged` via `run_everyday_snippet_bounded` when a snippet exceeds its
+/// wall-clock budget).
 fn run_everyday_snippet(code: &str) -> (&'static str, Option<String>) {
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let decls = match parse_file(code) {
@@ -9347,6 +9592,69 @@ fn run_everyday_snippet(code: &str) -> (&'static str, Option<String>) {
                 .or_else(|| payload.downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "non-string panic payload".to_string());
             ("panic", Some(msg))
+        }
+    }
+}
+
+/// Per-snippet wall-clock budget for the battery. Every well-behaved snippet
+/// completes in ~11 s at HEAD (prelude construction dominates); a snippet that
+/// is still running after this budget is DIVERGING (observed 2026-08-21:
+/// `data_tree-mirror-size` spent 50+ min / 30+ GB inside exponential
+/// `ProofCert` materialization — see
+/// `docs/issues/2026-08-21-cert-clone-exponential-tree-mirror.md`), and
+/// without a bound one such snippet makes the whole 63-snippet measurement
+/// unrunnable — exactly how the 2026-07-20 number went stale.
+const EVERYDAY_SNIPPET_BUDGET_SECS: u64 = 300;
+
+/// Run one snippet on a watchdog thread with `EVERYDAY_SNIPPET_BUDGET_SECS`.
+///
+/// On budget expiry the verdict is `diverged` — recorded LOUDLY, never folded
+/// into pass or elab_error. The runaway worker thread cannot be killed, so it
+/// is leaked until process exit; the battery keeps measuring the remaining
+/// snippets instead of hanging forever.
+fn run_everyday_snippet_bounded(
+    name: &str,
+    code: &'static str,
+) -> (&'static str, Option<String>, f64) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let start = std::time::Instant::now();
+    let handle = std::thread::Builder::new()
+        .name(format!("everyday-{name}"))
+        .spawn(move || {
+            // Verdict-or-nothing: a send failure just means the watchdog
+            // already timed out and dropped the receiver.
+            let _ = tx.send(run_everyday_snippet(code));
+        })
+        .expect("spawning an everyday-battery worker thread must succeed");
+    match rx.recv_timeout(std::time::Duration::from_secs(EVERYDAY_SNIPPET_BUDGET_SECS)) {
+        Ok((verdict, first_error)) => {
+            let _ = handle.join();
+            (verdict, first_error, start.elapsed().as_secs_f64())
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            eprintln!(
+                "everyday battery: {name} DIVERGED — exceeded the \
+                 {EVERYDAY_SNIPPET_BUDGET_SECS}s snippet budget; worker thread \
+                 leaked until process exit"
+            );
+            drop(handle);
+            (
+                "diverged",
+                Some(format!(
+                    "exceeded the {EVERYDAY_SNIPPET_BUDGET_SECS}s per-snippet \
+                     budget (runaway elaboration/certification; worker thread \
+                     leaked until process exit)"
+                )),
+                start.elapsed().as_secs_f64(),
+            )
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            let _ = handle.join();
+            (
+                "panic",
+                Some("snippet worker thread exited without a verdict".to_owned()),
+                start.elapsed().as_secs_f64(),
+            )
         }
     }
 }
@@ -9403,7 +9711,9 @@ fn test_r100_everyday_battery_full() {
     let mut fresh: Vec<(&str, &'static str)> = Vec::new();
     let mut passed = 0usize;
     for (name, code, provenance) in &battery {
-        let (verdict, first_error) = run_everyday_snippet(code);
+        eprintln!("everyday battery: running {name}");
+        let (verdict, first_error, elapsed) = run_everyday_snippet_bounded(name, code);
+        eprintln!("everyday battery: {name} -> {verdict} in {elapsed:.1}s");
         if verdict == "pass" {
             passed += 1;
         } else if *provenance == EVERYDAY_LOCKED_PROVENANCE {
@@ -10388,6 +10698,182 @@ theorem b119_reg : m4 = 14 := rfl
         &elab_file_prelude(code).1,
         "macro_rules regression after B119",
     );
+}
+
+#[test]
+fn test_tactic_macro_expands_at_tactic_position() {
+    // Tactic-position macro expansion (pillar probes e1/e3): a one-line
+    // `macro … : tactic` command and a `syntax` + `macro_rules` pair with
+    // `(tactic| …)` quotations must register AND expand at tactic position —
+    // `by triv2` / `by solve_refl` run `rfl` and the proofs kernel-check.
+    // Two distinct goals guard against a stub.
+    let code = r#"
+macro "triv2" : tactic => `(tactic| rfl)
+example : 1 = 1 := by triv2
+syntax "solve_refl" : tactic
+macro_rules | `(tactic| solve_refl) => `(tactic| rfl)
+example : 2 = 2 := by solve_refl
+"#;
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "tactic-position macro expansion",
+    );
+}
+
+#[test]
+fn test_tactic_macro_wrong_goal_rejected() {
+    // SOUNDNESS: the macro genuinely delegates to `rfl`, so a goal `rfl`
+    // cannot close must be rejected — never accepted by a lax registration.
+    let code = r#"
+macro "triv2" : tactic => `(tactic| rfl)
+example : 1 = 2 := by triv2
+"#;
+    assert!(
+        elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+        "tactic macro must not close `1 = 2` via rfl"
+    );
+}
+
+#[test]
+fn test_conv_macro_expands_in_conv_block() {
+    // Conv-position macro expansion: a nullary `macro … : conv` with a
+    // `(conv| …)` body must register AND expand inside a `conv` block —
+    // `to_lhs` runs `arg -2` (focus the equation's lhs), the following
+    // `rw [h]` rewrites inside that focus only, and the lifted whole-target
+    // equality kernel-checks. Discrimination: if `to_lhs` were a no-op the
+    // un-navigated `conv => rw [h]` body closes its own sub-goal and the conv
+    // silently drops it, leaving `a + a = b + b` for `rfl` to refuse; if it
+    // navigated to the rhs instead, `rw [h]` finds no `a` and fails loudly.
+    let code = r#"
+macro "to_lhs" : conv => `(conv| arg -2)
+theorem tconv_nullary (a b : Nat) (h : a = b) : a + a = b + b := by
+  conv => to_lhs; rw [h]
+  rfl
+"#;
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "conv-position macro expansion (nullary)",
+    );
+}
+
+#[test]
+fn test_conv_macro_multi_step_script_with_argument() {
+    // Argument-taking conv macro whose script is multi-step: the call-site
+    // term `h` substitutes into the `rw [$r]` rule (the `Rw` substitution arm)
+    // and the script's own `arg -2` navigation still applies — lhs-only
+    // rewrite, then `rfl` closes. An unsubstituted rule name would fail
+    // loudly (`r` names nothing at the call site).
+    let code = r#"
+macro "under_lhs" r:term : conv => `(conv| arg -2; rw [$r])
+theorem tconv_arg (a b : Nat) (h : a = b) : a + a = b + b := by
+  conv => under_lhs h
+  rfl
+"#;
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "conv macro argument substitution into rw",
+    );
+}
+
+#[test]
+fn test_conv_macro_rules_arm_expands() {
+    // A conv-headed `macro_rules` arm (`syntax … : conv` + arm) registers
+    // through the same conv bridge and expands with a substituted argument.
+    let code = r#"
+syntax "crw" term : conv
+macro_rules | `(conv| crw $r) => `(conv| arg -2; rw [$r])
+theorem tconv_rules (a b : Nat) (h : a = b) : a + a = b + b := by
+  conv => crw h
+  rfl
+"#;
+    assert_all_ok(&elab_file_prelude(code).1, "conv macro_rules arm expansion");
+}
+
+#[test]
+fn test_conv_macro_at_hypothesis() {
+    // The expanded conv macro must also work through the `conv at h` boundary
+    // (hypothesis-side proof carry: lifted equality + kernel-checked cast).
+    let code = r#"
+macro "to_lhs5" : conv => `(conv| arg -2)
+theorem tconv_at_hyp (a b c : Nat) (h : a = b) (h2 : a + c = c) : b + c = c := by
+  conv at h2 => to_lhs5; rw [h]
+  exact h2
+"#;
+    assert_all_ok(&elab_file_prelude(code).1, "conv macro inside `conv at h`");
+}
+
+#[test]
+fn test_conv_macro_wrong_goal_rejected() {
+    // SOUNDNESS: the expanded script genuinely delegates — after the lhs-only
+    // rewrite the goal is `b + b = b + a`, which `rfl` must refuse. A lax
+    // bridge that rewrote the whole target (or fabricated the conv equality)
+    // would accept this wrong proof.
+    let code = r#"
+macro "to_lhs6" : conv => `(conv| arg -2)
+example (a b : Nat) (h : a = b) : a + a = b + a := by
+  conv => to_lhs6; rw [h]
+  rfl
+"#;
+    assert!(
+        elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+        "conv macro must not close `a + a = b + a` via an lhs-only rewrite + rfl"
+    );
+}
+
+#[test]
+fn test_conv_macro_outside_conv_block_rejected() {
+    // FAIL CLOSED: a conv macro dispatched at ordinary tactic position must
+    // refuse to run — its navigation script has no reconstruction boundary
+    // against a real goal. The macro declaration itself must register fine.
+    let code = r#"
+macro "to_lhs7" : conv => `(conv| arg -2)
+example : 1 = 1 := by to_lhs7
+"#;
+    let results = elab_file_prelude(code).1;
+    assert!(
+        results.first().is_some_and(|r| r.is_ok()),
+        "the conv macro declaration itself must register: {:?}",
+        results.first()
+    );
+    assert!(
+        results.last().is_some_and(|r| r.is_err()),
+        "a conv macro at tactic position must be rejected, got {:?}",
+        results.last()
+    );
+}
+
+#[test]
+fn test_conv_macro_fail_closed_rejections() {
+    // Registration-time fail-closed guards, each as its own one-decl file:
+    // (1) a keyword colliding with an existing tactic (`rw` — the registry is
+    //     category-flat, shadowing is rejected);
+    // (2) an antiquotation the pattern does not bind;
+    // (3) an argument-taking macro whose script has a tactic shape argument
+    //     substitution cannot reach (`simp`);
+    // (4) a conv macro with a `(tactic| …)` body (category mismatch).
+    for (code, what) in [
+        (
+            r#"macro "rw" : conv => `(conv| arg -2)"#,
+            "tactic-name collision",
+        ),
+        (
+            r#"macro "badconv1" : conv => `(conv| rw [$nope])"#,
+            "unbound antiquotation",
+        ),
+        (
+            r#"macro "badconv2" r:term : conv => `(conv| simp [$r])"#,
+            "substitution-unreachable script shape",
+        ),
+        (
+            r#"macro "badconv3" : conv => `(tactic| rfl)"#,
+            "category-mismatched expansion head",
+        ),
+    ] {
+        assert!(
+            elab_file_prelude(code).1.iter().any(|r| r.is_err()),
+            "conv macro registration must reject ({what}): {code}"
+        );
+    }
 }
 
 #[test]
@@ -12607,4 +13093,602 @@ theorem hyg_nested_wrong : nested = 3 := rfl
         elab_file_prelude(code).1.iter().any(Result::is_err),
         "the captured nested value (nested = 3) must be rejected"
     );
+}
+
+// ---------------------------------------------------------------------------
+// B7 — the arithmetic-replay class: mint over the goal's own surface spine.
+//
+// `arith-int-bound` and `arith-double-eq-induction` failed for ONE root cause
+// in two sorts: the certified FM/mathverse replay proved the right linear FACT
+// but minted its kernel statement over a spine the goal does not have, and
+// `close_goal`'s def-eq re-check (correctly, fail-closed) rejected it:
+//
+//   * `arith-int-bound` (Int): from `h : a ≤ b`, the goal `a - 1 < b + 1`
+//     unfolds to `Int.le ((a-1)+1) (b+1)`, but the single-hyp replay lane
+//     returned the raw hypothesis `h : a ≤ b` — a different proposition
+//     (`(a-1)+1 ≡ a` is NOT definitional; it needs `Int.add_assoc`). Fixed by
+//     `arith_linarith_int_eq::try_prove_int_shifted_le_from_hyp`: a general
+//     ground-shifted weakening (`a ± dl <|≤ b ± dr` valid iff
+//     `dl (+1 if strict) ≤ dr`) built from `Int.add_le_add_right`/`_left`,
+//     `Int.le_trans`, a ground `Int.NonNeg.mk` slack witness, and an
+//     `Eq.mpr ∘ congrArg (Int.add_assoc / Int.add_zero)` cast back onto the
+//     goal's own `a - dl` spine.
+//   * `arith-double-eq-induction` (Nat): the post-`simp only` succ-case goal
+//     `Nat.succ (Nat.succ (k + k)) = 2 * Nat.succ k` is a linear IDENTITY, but
+//     the canonical additive normalizer treated the succ-spined LHS as one
+//     opaque leaf, and the replay fell back to minting the ih statement
+//     `k + k = 2 * k` — again a different (non-def-eq) proposition. Fixed by a
+//     succ-elimination pre-pass in
+//     `arith_linarith_nat_eq::try_prove_nat_equality_direct`
+//     (`eliminate_succ_nodes`): every `Nat.succ t` in the additive/lit-mul
+//     structure becomes `Nat.add t 1` — definitional, carried by one re-typed
+//     `Eq.refl` — so both sides flatten to the same canonical leaf multiset
+//     and the minted chain starts and ends at the goal's own sides.
+//
+// Both lanes stay fail-closed: FALSE shifts (`a + 1 < b + 1`, `a - 1 < b - 1`)
+// and FALSE identities (`succ (succ (k+k)) = 2*k`) yield `None`/reject before
+// or at `close_goal`, and every candidate is kernel-re-checked.
+//
+// `data_sum-append` is deliberately NOT in this pin: it is NOT this class. Its
+// nil arm `rfl` needs `data_listSum ([] ++ ys) = data_listSum [] + data_listSum ys`
+// to be DEFINITIONAL, i.e. `data_listSum ys ≡ 0 + data_listSum ys` — false in
+// Clean and in Lean 4 alike (`Nat.add` recurses on its SECOND argument, so
+// `0 + x` is stuck at `Nat.rec` for symbolic `x`; `example (n : Nat) :
+// 0 + n = n := rfl` fails in Lean 4 too). The `List.rec`-iota half reduces
+// fine (`([] : List Nat) ++ ys = ys := rfl` passes through
+// instHAppendListList — measured 2026-08-23), and the cons-case assoc residual
+// closes via omega; the "rigid head/arity mismatch: List.rec vs Nat.rec" face
+// is the def-eq engine CORRECTLY comparing the two stuck recursors. The 2026-08-10
+// reconstruction body is simply not Lean-4-valid (its lost 2026-07-20 original
+// recorded a different failure, "could not extract linear constraints"); the
+// honest close is a snippet-side `simp [Nat.zero_add]`-shaped nil arm, not an
+// engine change that would make `rfl` prove non-definitional equalities.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_b7_arith_replay_surface_spine_close() {
+    for name in ["arith-int-bound", "arith-double-eq-induction"] {
+        let (_, code) = r100_reconstructed_snippets()
+            .iter()
+            .find(|(n, _)| *n == name)
+            .unwrap_or_else(|| panic!("battery snippet `{name}` must exist"));
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(name, code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "B7 arith-replay snippet `{name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+}
+
+/// B7 rewrite-unification pin (battery row `arith-vec2-add-comm`).
+///
+/// `rw [Int.add_comm]` must match a goal whose `Int.add` sits behind a
+/// user-structure instance chain: the surface goal holds
+/// `Proj(arith_Vec2, 0, @HAdd.hAdd … (instHAdd … instAddarith_Vec2) u v)`, which
+/// only reaches `Int.add u.x v.x` definitionally (instHAdd → the user
+/// instance's field → `arith_Vec2.mk (u.x + v.x) …` → proj 0 → instAddInt).
+/// Pre-fix face (measured 2026-08-23): `RewriteNoMatch` — the matcher solved
+/// the pattern metas through the full unifier's whnf at the `Proj` node, but
+/// `find_defeq_subterm_with`'s head-keyed pre-filter refused every bare-`Proj`
+/// candidate (no const app-head), so the kernel def-eq oracle never ran and
+/// `finish_rewrite` could not locate the surface subterm.
+///
+/// The companion probe pins the fail-closed direction: the SAME structure/
+/// projection shape whose `Add` instance bottoms out at `Int.mul` — NOT
+/// `Int.add` — must still refuse with `RewriteNoMatch`. The bridge is gated on
+/// the kernel's definitional equality, so an instance chain ending at a
+/// different op can never be captured by the pattern.
+#[test]
+fn test_b7_rewrite_instance_projection_chain_vec2_add_comm() {
+    let name = "arith-vec2-add-comm";
+    let (_, code) = r100_reconstructed_snippets()
+        .iter()
+        .find(|(n, _)| *n == name)
+        .unwrap_or_else(|| panic!("battery snippet `{name}` must exist"));
+    let (verdict, err, _elapsed) = run_everyday_snippet_bounded(name, code);
+    assert_eq!(
+        verdict,
+        "pass",
+        "B7 rewrite-unification snippet `{name}` must elaborate and kernel-check: {}",
+        err.as_deref().unwrap_or("")
+    );
+
+    // Over-match guard: identical projection-over-instance shape, but the
+    // instance's op is `Int.mul`. `rw [Int.add_comm]` must refuse (the goal is
+    // even true — mul commutes — so only the rewrite face is being pinned).
+    let probe = r####"structure probe_MulWrap where
+  n : Int
+
+instance : Add probe_MulWrap where
+  add a b := ⟨a.n * b.n⟩
+
+theorem probe_mulwrap_add_comm (u v : probe_MulWrap) : (u + v).n = (v + u).n := by
+  rw [Int.add_comm]
+"####;
+    let (verdict, err, _elapsed) =
+        run_everyday_snippet_bounded("probe-vec2-add-comm-overmatch", probe);
+    assert_ne!(
+        verdict, "pass",
+        "over-match probe must refuse: its Add instance bottoms out at Int.mul, \
+         so `rw [Int.add_comm]` has nothing definitional to match"
+    );
+    let face = err.as_deref().unwrap_or("");
+    assert!(
+        face.contains("RewriteNoMatch"),
+        "over-match probe must refuse at the rewrite matcher (RewriteNoMatch), got: {face}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// B7 — the rec-iota simp class (`simp [f]` on a rec-compiled definition).
+//
+// `mixed_tree_mirror_involutive` and `mixed_mylist_append_assoc` (decl#2)
+// failed `UnsolvedGoals` for one root cause: `simp [Tree.mirror, ihl, ihr]`
+// DELTA-unfolded the def (its compiled value is a `T.rec` lambda), rewriting
+// the goal into a raw `T.rec … (T.ctor …)` application that simp's
+// definitional normalization (beta/eta only — no iota) could not reduce,
+// while the induction hypotheses still spoke in `f`-form Const applications —
+// so the IH rewrites could never match. Fixed Lean-style, at the lemma layer,
+// not the reducer: `simp/rec_equations.rs` synthesizes per-constructor
+// equational lemmas (`f … (c fields…) … = <arm>`, `Eq.refl` witness,
+// kernel-def-eq-checked at match time) for exactly the rec-compiled
+// definition class, and `resolve_unfold_defs` skips those names so the goal
+// stays in surface `f`-form end to end. Fail-closed: any def the synthesis
+// refuses (universe-polymorphic, indexed/mutual/nested/reflexive inductive,
+// non-trailing major, unfoldable recursive spine) keeps the historical
+// delta-unfold path.
+//
+// These pin the two battery snippets end to end by name, so the pin cannot
+// drift from the battery's own body.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_b7_rec_iota_simp_equations_close() {
+    for name in ["mixed_tree_mirror_involutive", "mixed_mylist_append_assoc"] {
+        let (_, code) = r100_reconstructed_snippets()
+            .iter()
+            .find(|(n, _)| *n == name)
+            .unwrap_or_else(|| panic!("battery snippet `{name}` must exist"));
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(name, code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "B7 rec-iota snippet `{name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+}
+// ---------------------------------------------------------------------------
+// B7 — ordered rewriting for permutative simp lemmas (battery row
+// `data_tree-mirror-size`).
+//
+// The row's decl#3 node arm ends in
+// `simp [data_Tree.mirror, data_Tree.size, ihl, ihr, Nat.add_comm]`, whose
+// residue after the mirror/size equations and both IHs is the add-commutation
+// shape `size r + size l = size l + size r`. Lean 4 closes that script:
+// simp marks `Nat.add_comm` permutative (`isPerm`) and applies it under
+// ordered rewriting, so both sides canonicalize to one operand order.
+// Clean fired permutative lemmas unconditionally: the lemma matches its own
+// output, the main loop flipped the SAME node for all 1000 steps, and the
+// top-level flip ran before child recursion so the IH rewrites were starved
+// for the whole run (pre-fix face: `UnsolvedGoals { count: 1 }` with the
+// mirror applications still un-rewritten in the recorded goal).
+//
+// Fixed at the single rewrite choke point (`simp/expr.rs`,
+// `try_apply_simp_lemma_with_proof`) with `simp/perm.rs`: a lemma whose two
+// sides are equal up to a bijective pattern-variable permutation is applied
+// only when the instantiated RHS orders strictly below the instantiated LHS
+// pattern in a fixed total order. The comparison runs over the PATTERN's own
+// spelling — never the goal subterm's — because a ι-collapsed star pattern
+// (`Nat.sub ?n 0` ⇒ bare `?n`, B102) legally rewrites `Nat.add a b` to its
+// stuck `Nat.rec` WHNF, and goal-side comparison then re-arms the flip on
+// every spelling round-trip (measured 4-cycle: unfold → flip → unfold →
+// flip, all 1000 steps, net parity zero).
+//
+// The pins: the battery row end to end by name, plus the two pure Lean-4
+// capability witnesses (`simp [Nat.add_comm]` alone closing `a + b = b + a`
+// in surface and bare-`Nat.add` spelling). The guard probes pin fail-closed:
+// a goal commutativity does NOT prove must still refuse — as an honest
+// `UnsolvedGoals`/`NoProgress` face, never a divergence — and the node arm
+// WITHOUT `Nat.add_comm` in its simp set must refuse exactly like upstream
+// (ordered rewriting adds no rewrite any listed lemma does not justify).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_b7_permutative_simp_ordered_rewriting_closes() {
+    let name = "data_tree-mirror-size";
+    let (_, code) = r100_reconstructed_snippets()
+        .iter()
+        .find(|(n, _)| *n == name)
+        .unwrap_or_else(|| panic!("battery snippet `{name}` must exist"));
+    let shapes: &[(&str, &str)] = &[
+        (name, code),
+        // Pure capability witness, surface `+` spelling (Lean 4 closes this).
+        (
+            "perm-ordered-add-comm-surface",
+            "theorem perm_probe_surface (a b : Nat) : a + b = b + a := by\n  simp [Nat.add_comm]\n",
+        ),
+        // Same witness over bare `Nat.add` applications.
+        (
+            "perm-ordered-add-comm-bare",
+            "theorem perm_probe_bare (a b : Nat) : Nat.add a b = Nat.add b a := by\n  simp [Nat.add_comm]\n",
+        ),
+    ];
+    for (shape_name, shape_code) in shapes {
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(shape_name, shape_code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "B7 permutative-simp shape `{shape_name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+}
+
+#[test]
+fn test_b7_permutative_simp_ordered_rewriting_fail_closed() {
+    // Over-breadth guard: commutativity proves no unbalanced equation.
+    // The refusal face must be an honest tactic failure — and specifically
+    // NOT `diverged`, which is what the pre-fix unconditional flip loop
+    // produced on this class before the step budget was exhausted.
+    let probe =
+        "theorem perm_probe_overbreadth (a b : Nat) : a + b = b := by\n  simp [Nat.add_comm]\n";
+    let (verdict, err, _elapsed) = run_everyday_snippet_bounded("perm-overbreadth", probe);
+    assert_eq!(
+        verdict,
+        "elab_error",
+        "over-breadth probe must refuse as an ordinary tactic failure: {}",
+        err.as_deref().unwrap_or("")
+    );
+    let face = err.as_deref().unwrap_or("");
+    assert!(
+        face.contains("UnsolvedGoals") || face.contains("NoProgress"),
+        "over-breadth probe must surface an unsolved-goal face, got: {face}"
+    );
+
+    // No-comm-lemma control: the battery row's node arm WITHOUT
+    // `Nat.add_comm` leaves the commutation residue open, exactly as Lean 4
+    // does — ordered rewriting must not smuggle in a rewrite no listed lemma
+    // justifies.
+    let no_comm = r####"inductive perm_Tree where
+  | leaf
+  | node : perm_Tree → perm_Tree → perm_Tree
+
+def perm_Tree.size : perm_Tree → Nat
+  | .leaf => 1
+  | .node l r => l.size + r.size
+
+def perm_Tree.mirror : perm_Tree → perm_Tree
+  | .leaf => .leaf
+  | .node l r => .node r.mirror l.mirror
+
+theorem perm_tree_mirror_size (t : perm_Tree) : t.mirror.size = t.size := by
+  induction t with
+  | leaf => rfl
+  | node l r ihl ihr => simp [perm_Tree.mirror, perm_Tree.size, ihl, ihr]
+"####;
+    let (verdict, err, _elapsed) = run_everyday_snippet_bounded("perm-no-comm-control", no_comm);
+    assert_eq!(
+        verdict,
+        "elab_error",
+        "no-comm control must refuse (the commutation residue needs Nat.add_comm): {}",
+        err.as_deref().unwrap_or("")
+    );
+    assert!(
+        err.as_deref().unwrap_or("").contains("UnsolvedGoals"),
+        "no-comm control must surface UnsolvedGoals, got: {}",
+        err.as_deref().unwrap_or("")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Star-pattern whnf-rewrite noise guard — the residue the B7 perm commit
+// filed as its own lane, now closed at match time (`simp/expr.rs`,
+// `star_noise_head_guard_refuses` + `binding_is_whnf_absorption`).
+//
+// Measured mechanism (squeeze-tracked): the star-keyed `Nat.sub_zero`
+// (`Nat.sub ?n 0`, pattern ι-collapses to bare `?n`) legally matched an
+// ARBITRARY subterm via def-eq and "rewrote" `Nat.add a b` to its stuck
+// `Nat.rec` WHNF — sound, kernel-accepted, unreadable, and the source of the
+// spelling round-trips the B7 ordered-rewriting guard had to be immunized
+// against. The guard refuses (a) a Const-headed pattern against a subterm
+// whose normalized head is a DIFFERENT non-hetero constant, and (b) a match
+// whose pattern variable absorbed a REDUCTION of the target instead of a
+// syntactic position of it. Unit-level pins:
+// `test_simp_star_noise_guard_*` in `tactic/tests/simp.rs`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_star_noise_guard_sub_zero_spellings_still_rewrite() {
+    // POSITIVE: every genuine zero-subtraction spelling keeps rewriting —
+    // surface `-` (HSub projection, peeled to `Nat.sub` by the matcher's
+    // instance-chain normalization) and bare `Nat.sub` application.
+    let shapes: &[(&str, &'static str)] = &[
+        (
+            "star-noise-sub-zero-surface",
+            "theorem star_noise_sub_zero_surface (a : Nat) : a - 0 = a := by\n  simp\n",
+        ),
+        (
+            "star-noise-sub-zero-bare",
+            "theorem star_noise_sub_zero_bare (a : Nat) : Nat.sub a 0 = a := by\n  simp\n",
+        ),
+    ];
+    for (shape_name, shape_code) in shapes {
+        let (verdict, err, _elapsed) = run_everyday_snippet_bounded(shape_name, shape_code);
+        assert_eq!(
+            verdict,
+            "pass",
+            "star-noise guard positive `{shape_name}` must elaborate and kernel-check: {}",
+            err.as_deref().unwrap_or("")
+        );
+    }
+}
+
+#[test]
+fn test_star_noise_guard_unrelated_add_keeps_readable_goal() {
+    // NEGATIVE: plain `simp` on an unprovable add equation must refuse
+    // HONESTLY — and the refusal face must keep the goal's readable surface
+    // spelling. Pre-guard, `Nat.sub_zero` re-spelled `a + b` into its stuck
+    // `Nat.rec` WHNF, so the recorded unsolved goal carried `Nat.rec` noise.
+    let probe = "theorem star_noise_add_readable (a b : Nat) : a + b = b := by\n  simp\n";
+    let (verdict, err, _elapsed) = run_everyday_snippet_bounded("star-noise-add-readable", probe);
+    assert_eq!(
+        verdict,
+        "elab_error",
+        "unprovable add equation must refuse as an ordinary tactic failure: {}",
+        err.as_deref().unwrap_or("")
+    );
+    let face = err.as_deref().unwrap_or("");
+    assert!(
+        face.contains("UnsolvedGoals") || face.contains("NoProgress"),
+        "the refusal must be an honest unsolved/no-progress face, got: {face}"
+    );
+    assert!(
+        !face.contains("Nat.rec") && !face.contains("\"rec\""),
+        "the recorded goal must keep its readable spelling (no `Nat.rec` \
+         re-spell); face: {face}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Rank 9 (BRICK_QUEUE_2026-08-26): `theorem`/`lemma` with a structure-instance
+// `where` body.
+//
+// Two halves, and the queue only named the first:
+//
+//  1. PARSER. `theorem_decl_with_mods` accepted `:=` or a `|` match body and
+//     raised `expected := or |` on `where`, while the `def` path in the same
+//     file had carried the three-way `where` branch since B90. Lean's
+//     `Command.declValStruct` belongs to every `declVal`, not to `def` alone.
+//     A hard parse failure costs two rows per site (the recovery row and the
+//     raw-declaration row) plus its recovery fallout.
+//
+//  2. ELABORATOR. Lifting the branch alone is NOT enough for the idiom the
+//     queue names. `elab_struct_lit` hardcoded `<Struct>.mk` as the
+//     constructor, so the `↔`-proved-by-`mp`/`mpr` form — 159 of the 585
+//     Mathlib sites — died one step later on `struct constructor Iff.mk`:
+//     `Iff` is written `intro :: (mp) (mpr)` and has no `.mk`. `.mk` is still
+//     tried first, so a structure that has one is unchanged.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_r9_theorem_where_struct_instance() {
+    let code = "structure TWPair (a b : Nat) : Prop where\n  l : a = a\n  r : b = b\n\
+        theorem twOk (a b : Nat) : TWPair a b where\n  l := rfl\n  r := rfl\n";
+    assert_all_ok(&elab_file_prelude(code).1, "theorem-where struct instance");
+}
+
+#[test]
+fn test_r9_theorem_where_wrong_field_rejected() {
+    // Soundness twin: the `where` body is really elaborated at the annotated
+    // type, so a field that does NOT hold must be refused. Without this the
+    // test above is satisfied by anything that merely parses.
+    let code = "structure TWEq (a b : Nat) : Prop where\n  proof : a = b\n\
+        theorem twBad (a b : Nat) : TWEq a b where\n  proof := rfl\n";
+    let (env, results) = elab_file_prelude(code);
+    assert!(
+        results.last().expect("twBad should have a result").is_err(),
+        "a `where` field proving the wrong equation must be refused, got: {:?}",
+        results.last()
+    );
+    assert!(
+        env.get_const(&Name::from_string("twBad")).is_none(),
+        "twBad must not be registered"
+    );
+}
+
+#[test]
+fn test_r9_theorem_where_named_ctor_iff_shape() {
+    // The `mp`/`mpr` shape, at a structure written with a NAMED constructor
+    // (`intro ::`) — so there is no `<Struct>.mk` and this is the test that
+    // actually exercises the sole-constructor fallback. It needs BOTH halves:
+    // the parser branch to reach the elaborator at all, and the real
+    // constructor name to build the term.
+    let code = "structure MyIff (a b : Prop) : Prop where\n  intro ::\n\
+        \x20 mp : a \u{2192} b\n  mpr : b \u{2192} a\n\
+        theorem twMyIff (x y : Nat) (h : x = y) : MyIff (x = y) (y = x) where\n\
+        \x20 mp _ := h.symm\n  mpr _ := h\n";
+    assert_all_ok(
+        &elab_file_prelude(code).1,
+        "theorem-where named-ctor mp/mpr",
+    );
+}
+
+#[test]
+fn test_r9_theorem_where_named_ctor_swapped_fields_rejected() {
+    // Soundness twin: fields must land in their DECLARED slots.
+    // `mp : (x = y) → (y = x)` cannot be inhabited by `h : x = y`. Without
+    // this, the test above is satisfied by any assignment that type-checks
+    // somewhere.
+    let code = "structure MyIff2 (a b : Prop) : Prop where\n  intro ::\n\
+        \x20 mp : a \u{2192} b\n  mpr : b \u{2192} a\n\
+        theorem twMyIffBad (x y : Nat) (h : x = y) : MyIff2 (x = y) (y = x) where\n\
+        \x20 mp _ := h\n  mpr _ := h\n";
+    let (env, results) = elab_file_prelude(code);
+    assert!(
+        results
+            .last()
+            .expect("twMyIffBad should have a result")
+            .is_err(),
+        "a `where` body with the wrong field types must be refused, got: {:?}",
+        results.last()
+    );
+    assert!(
+        env.get_const(&Name::from_string("twMyIffBad")).is_none(),
+        "twMyIffBad must not be registered"
+    );
+}
+
+#[test]
+fn test_r9_core_iff_where_residue_closed() {
+    // WAS `test_r9_core_iff_where_residue_pinned` — the FACE test that pinned
+    // this fixture's third-layer failure, `UnknownStructureField
+    // { struct_name: Iff, field: "mp" }`. It was written to go red the day the
+    // residue closed instead of going quietly green, and it did.
+    //
+    // The cause was that Clean's builtin prelude never called
+    // `register_structure_fields` for `Iff` (`clean-kernel/src/env/logic_iff.rs`)
+    // while `Iff.mp` is built from `Iff.rec` — so `struct_field_index`'s
+    // imported-structure fallback, which reads the index out of a projection
+    // function whose body is `Proj(S, i, _)`, had no `Proj` to read. `And` was
+    // never affected: its projections ARE `Proj`-based.
+    //
+    // `Iff` now registers `mp`/`mpr` as its fields, which is what Lean 4 itself
+    // does (`structure Iff (a b : Prop) : Prop where intro :: mp …; mpr …`), so
+    // the fixture elaborates. The deliberate second consequence — `h.mp` is now
+    // `Proj(Iff, 0, h)` rather than the constant application `Iff.mp h` — is
+    // pinned by `test_r9_core_iff_dot_mp_is_a_kernel_projection` below.
+    let code = "theorem twIff (a b : Nat) (h : a = b) : a = b \u{2194} b = a where\n\
+        \x20 mp _ := h.symm\n  mpr _ := h\n";
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "core-`Iff` `where` body");
+    assert!(
+        env.get_const(&Name::from_string("twIff")).is_some(),
+        "twIff must be registered"
+    );
+}
+
+#[test]
+fn test_r9_core_iff_where_swapped_fields_rejected() {
+    // SOUNDNESS TWIN of the test above. Without it, "the fixture elaborates"
+    // is satisfied by any `where` body that type-checks in SOME slot: the two
+    // `Iff` fields have swapped types (`mp : (a = b) → (b = a)`,
+    // `mpr : (b = a) → (a = b)`), so `h : a = b` inhabits `mpr`'s codomain and
+    // not `mp`'s. Assigning `h` to `mp` must be refused, and nothing may be
+    // registered.
+    let code = "theorem twIffBad (a b : Nat) (h : a = b) : a = b \u{2194} b = a where\n\
+        \x20 mp _ := h\n  mpr _ := h\n";
+    let (env, results) = elab_file_prelude(code);
+    let err = format!(
+        "{:?}",
+        results
+            .last()
+            .expect("twIffBad should have a result")
+            .as_ref()
+            .err()
+    );
+    assert!(
+        results
+            .last()
+            .expect("twIffBad should have a result")
+            .is_err(),
+        "an `Iff` `where` body whose `mp` proves the wrong direction must be \
+         refused, got: {:?}",
+        results.last()
+    );
+    // AND FOR THE RIGHT REASON. Before `Iff`'s fields were registered this
+    // fixture also failed — with `UnknownStructureField` — so an `is_err()`
+    // check alone would pass whether or not the field table exists, and would
+    // not go red if the registration were reverted. Requiring the failure to be
+    // a real elaboration/type failure makes this twin measure the field slots.
+    assert!(
+        !err.contains("UnknownStructureField"),
+        "twIffBad must be refused by TYPE, not by a missing `Iff` field table \
+         — the registration in `logic_iff.rs` has gone; got: {err}"
+    );
+    assert!(
+        env.get_const(&Name::from_string("twIffBad")).is_none(),
+        "twIffBad must not be registered"
+    );
+}
+
+#[test]
+fn test_r9_core_iff_dot_mp_is_a_kernel_projection() {
+    // THE OTHER HALF OF THE PRELUDE CHANGE, pinned so it cannot drift back
+    // silently. Registering `Iff`'s fields makes `resolve_projection_target`
+    // report `Iff` as a structure, which routes `h.mp` down `elab_proj`'s named
+    // projection arm instead of falling through to dot-notation. The emitted
+    // term is therefore the kernel projection `Proj(Iff, 0, h)`, not the
+    // constant application `Iff.mp h` — matching Lean 4, where `mp` is a field.
+    //
+    // `Proj(Iff, i, _)` is not a new shape for the kernel: the numeric path
+    // (`h.1`, and `try_index_proj_through_implicits` for `not_and_or.1`) has
+    // emitted it all along, and the whole declaration below is kernel-checked
+    // before it is registered.
+    let code = "theorem twIffMp (a b : Prop) (h : a \u{2194} b) (ha : a) : b := h.mp ha\n";
+    let (env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "`h.mp` on a core `Iff`");
+    let value = env
+        .get_const(&Name::from_string("twIffMp"))
+        .and_then(|info| info.value.clone())
+        .expect("twIffMp should be registered with a value");
+
+    let iff = Name::from_string("Iff");
+    let mut saw_proj = false;
+    let mut saw_iff_mp_const = false;
+    let mut stack = vec![value.clone()];
+    while let Some(e) = stack.pop() {
+        match e.kind() {
+            clean_kernel::ExprKind::Proj(name, idx, inner) => {
+                if name == &iff && *idx == 0 {
+                    saw_proj = true;
+                }
+                stack.push(inner.as_ref().clone());
+            }
+            clean_kernel::ExprKind::Const(name, _) => {
+                if name == &Name::from_string("Iff.mp") {
+                    saw_iff_mp_const = true;
+                }
+            }
+            clean_kernel::ExprKind::App(f, a) => {
+                stack.push(f.as_ref().clone());
+                stack.push(a.as_ref().clone());
+            }
+            clean_kernel::ExprKind::Lam(_, ty, body) | clean_kernel::ExprKind::Pi(_, ty, body) => {
+                stack.push(ty.as_ref().clone());
+                stack.push(body.as_ref().clone());
+            }
+            clean_kernel::ExprKind::MData(_, inner) => stack.push(inner.as_ref().clone()),
+            _ => {}
+        }
+    }
+    assert!(
+        saw_proj,
+        "`h.mp` must elaborate to `Proj(Iff, 0, h)`; value was {value:?}"
+    );
+    assert!(
+        !saw_iff_mp_const,
+        "`h.mp` must no longer go through the `Iff.mp` constant; value was {value:?}"
+    );
+}
+
+#[test]
+fn test_r9_def_where_struct_control() {
+    // CONTROL: the `def` branch the theorem branch was lifted from is
+    // unchanged, and so is the `.mk`-named constructor path it uses.
+    let code = "structure TWCfg where\n  lvl : Nat\n  tag : Nat\n\
+        def twCfg : TWCfg where\n  lvl := 2\n  tag := 7\n\
+        theorem twCfgOk : twCfg.lvl = 2 \u{2227} twCfg.tag = 7 := \u{27e8}rfl, rfl\u{27e9}\n";
+    assert_all_ok(&elab_file_prelude(code).1, "def-where struct control");
+}
+
+#[test]
+fn test_r9_theorem_where_match_body_control() {
+    // CONTROL: `where | pattern => e` — the OTHER `where` sub-case — reaches
+    // the match body, not the struct-instance branch. Rules out "the lift
+    // routes every `where` to a struct literal".
+    let code = "theorem twMatch : \u{2200} (n : Nat), n = n where\n  | 0 => rfl\n  | _ => rfl\n";
+    assert_all_ok(&elab_file_prelude(code).1, "theorem-where match body");
 }

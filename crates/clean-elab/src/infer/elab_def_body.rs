@@ -267,8 +267,8 @@ impl<'a> ElabCtx<'a> {
             clean_kernel::TypeChecker::with_context(self.env, ctx).is_def_eq(&val_ty, &ty);
         if blind_ok {
             return Err(ElabError::TypeMismatch {
-                expected: format!("{ty:?}"),
-                actual: format!("{val_ty:?}"),
+                expected: format!("{ty}"),
+                actual: format!("{val_ty}"),
             });
         }
         Ok(())

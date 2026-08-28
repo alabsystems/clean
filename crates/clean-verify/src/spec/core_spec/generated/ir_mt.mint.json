@@ -1,0 +1,36 @@
+{
+ "prefix": "ir_mt",
+ "body": "tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}",
+ "core_digest": "724cf5fc6108322cb7b427dbc86e47a22fc5a03e9955d6d778e9cabc7c2baaab",
+ "defs_digest": "3d15de3a1d4473a6fc123b3d5ccc97da5685fcedba6ad404c117bdecdc77706c",
+ "def_count": 3,
+ "artifact_core_digest": "1fea11273666057bb523785d4a854a5b21c10ec6dc9c19c078ea96844a196a8f",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the meta_tag_shl row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 4633,
+  "artifact_func_id": 4633,
+  "artifact_functy_id": 118,
+  "artifact_functy_note": "118 on the dump this migration was revalidated against -- EQUAL to the committed fixture's 118 for the first time on any migrated chain, after the producer A/B record's 130/130/119: a coincidence of this dump, not an invariance, exactly as func_id's own drift (4633 here, after 5756/5756/4631) shows. The interface pin compares reader B's header against the fixture-era 118; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [
+   4633
+  ],
+  "crate_func_names_seen": [
+   "tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [],
+  "block_param_tys_erased": []
+ },
+ "text_unwitnessed": [
+ ],
+ "text_unwitnessed_note": "EMPTY: this body carries no `switch`, so the one field trust-ir's Display never prints does not occur and the emitted text fully determines the core module. M2 is an exact comparison with no mask -- and the `assert` node, the first the mint covers, IS fully printed (its `#proof` clause is an annotation KIND the interface pins, not an operand).",
+ "producer_dumps_observed": 4,
+ "producer_dumps_note": "The three dumps of generated/ir_mint.producer_ab.json (trust wave-tr-fix 2026-08-12 v36, mfclose 2026-08-13 v36, lane2rv 2026-08-19 v37) plus the laneREG wc-REG dump_O3 2026-08-21 projection this migration ran (recorded verbatim under reader_a above). All four project to the byte-identical committed core text: func_id moved on two of the four boundaries and functy on two, and no core digest moved -- the drift class the core form exists to absorb, re-observed on the freshest dump on this machine."
+}

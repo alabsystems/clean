@@ -54,7 +54,6 @@ clean-server.workspace = true
 clean-c-sem.workspace = true
 clean-rust-sem = { workspace = true, features = ["cli"] }
 clean-auto = { workspace = true, features = ["cli"] }
-clean-tla = { workspace = true, features = ["cli"] }
 clean-compiler = { workspace = true, features = ["cli"] }
 clean-runtime.workspace = true
 clean-lake.workspace = true

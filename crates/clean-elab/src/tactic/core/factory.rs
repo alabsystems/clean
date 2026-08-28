@@ -144,27 +144,35 @@ impl ProofState {
         self.goal_fvar_base(goal).max(scope_floor)
     }
 
-    /// Create a fresh universe parameter level.
+    /// Create a fresh universe METAVARIABLE level.
     ///
-    /// Generates a new universe parameter name like `u_0`, `u_1`, etc.
-    /// and returns a `Level::Param` with that name. Skips names already
-    /// in `universe_params` to avoid collisions.
-    /// Part of #1828.
+    /// Generates a new name in the reserved
+    /// [`crate::level_mint::MINT_PREFIX`] space (`?u_0`, `?u_1`, …) and
+    /// returns a `Level::Param` with that name. Part of #1828.
+    ///
+    /// The id comes from [`crate::level_mint::LevelMint`], SHARED with the
+    /// enclosing `ElabCtx` (and with any parent proof state) — U2 stage 3 —
+    /// so no two mints can draw the same id. The reserved spelling (2026-08-26b)
+    /// additionally makes a collision with a name the USER wrote impossible,
+    /// which is what the skip loop below used to be the only guard against;
+    /// it is now unreachable and kept as a backstop. See
+    /// [`ElabCtx::fresh_universe_param`] for the whole story.
+    ///
+    /// [`ElabCtx::fresh_universe_param`]: crate::infer::ElabCtx::fresh_universe_param
     ///
     /// ENSURES: Returned `Level` is `Level::Param` with a unique name
     /// ENSURES: The name is added to `self.universe_params`
-    /// ENSURES: No collision with previously generated universe params
+    /// ENSURES: No collision with ANY param minted from the shared counter
+    /// ENSURES: The name is not writable in surface syntax
     pub(crate) fn fresh_universe_param(&mut self) -> Level {
-        let mut id = self.next_universe;
         let name = loop {
-            let candidate = format!("u_{id}");
-            id += 1;
+            let candidate = self.level_mint.next_name();
             if !self.universe_params.contains(&candidate) {
                 break candidate;
             }
         };
-        self.next_universe = id;
         self.universe_params.push(name.clone());
+        crate::u2_histogram::u2_mint_trace("proofstate", &name);
         Level::param(Name::from_string(&name))
     }
 

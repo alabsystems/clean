@@ -49,14 +49,22 @@ impl MintedScript {
 /// # Errors
 /// Returns [`MintError`] on a malformed core module, a construct outside the
 /// Clean fragment, an unwitnessed flag, an aggregate absent from `tags`, or a
-/// numeral outside the registered `ir_d0..ir_d16` atom pool.
+/// numeral outside the registered `ir_d0..ir_d63` atom pool.
 pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintError> {
     let body = core.tagged("module")?;
     let funcs = body[0].tagged("funcs")?;
-    if funcs.len() != 1 {
+    // The module's function list must be EXACTLY the bodies the tag table
+    // declares, in order. One body is the default and needs no lane; a second
+    // one is a reviewed row, never something a core module can introduce on
+    // its own.
+    let declared = tags.body_canonicals();
+    if funcs.len() != declared.len() {
         return Err(CoreError::Shape(format!(
-            "a chain module carries exactly one function, found {}",
-            funcs.len()
+            "this module carries {} function(s) and the chain's tag table declares {} \
+             ({declared:?}). A body the table does not declare has no pinned interface and no \
+             name prefix, so minting it would invent both",
+            funcs.len(),
+            declared.len()
         ))
         .into());
     }
@@ -68,34 +76,57 @@ pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintEr
         )
         .into());
     }
-    let f = funcs[0].tagged("func")?;
-    check_func_namespace(core, f, tags)?;
+    let parsed: Vec<&[Sx]> = funcs
+        .iter()
+        .map(|f| f.tagged("func"))
+        .collect::<Result<_, _>>()?;
+    check_func_namespace(core, &parsed, tags)?;
     let mut lines = tags.alias_defs();
-    let mut block_names = Vec::new();
-    for b in f[3].tagged("blocks")? {
-        let bi = b.tagged("block")?;
-        let name = format!("{prefix}_b{}", bi[0].atom()?);
-        let params = nat_list(bi[1].tagged("params")?)?;
-        let nodes = node_list(bi[2].tagged("nodes")?, tags)?;
+    let mut func_names = Vec::new();
+    for (f, canonical) in parsed.iter().zip(&declared) {
+        let own = u32::try_from(f[0].num()?)
+            .map_err(|_| CoreError::Shape("a function id does not fit u32".into()))?;
+        if own != *canonical {
+            return Err(CoreError::Shape(format!(
+                "the module's function list is out of order: position for canonical index \
+                 {canonical} carries `(func {own} …)`. The list order IS the order \
+                 `ir_func_find` walks, so it is a fact about the module"
+            ))
+            .into());
+        }
+        let fp = tags.body_prefix(*canonical, prefix);
+        let mut block_names = Vec::new();
+        for b in f[3].tagged("blocks")? {
+            let bi = b.tagged("block")?;
+            let name = format!("{fp}_b{}", bi[0].atom()?);
+            let params = nat_list(bi[1].tagged("params")?)?;
+            let nodes = node_list(bi[2].tagged("nodes")?, tags)?;
+            lines.push(format!(
+                "def {name} : IRBlock := IRBlock.mk {} {params} {nodes}",
+                nat(bi[0].num()?)?
+            ));
+            block_names.push(name);
+        }
+        let mut blocks = String::from("ir_blk0");
+        for n in block_names.iter().rev() {
+            blocks = format!("(ir_blk {n} {blocks})");
+        }
         lines.push(format!(
-            "def {name} : IRBlock := IRBlock.mk {} {params} {nodes}",
-            nat(bi[0].num()?)?
+            "def {fp}_func : IRFunc := IRFunc.mk {} {} {} {blocks}",
+            nat(f[0].num()?)?,
+            nat_list(f[1].tagged("params")?)?,
+            nat(f[2].tagged("entry")?[0].num()?)?
         ));
-        block_names.push(name);
+        func_names.push(format!("{fp}_func"));
     }
-    let mut blocks = String::from("ir_blk0");
-    for n in block_names.iter().rev() {
-        blocks = format!("(ir_blk {n} {blocks})");
+    let mut list = String::from("(IRList.nil IRFunc)");
+    for n in func_names.iter().rev() {
+        list = format!("(IRList.cons IRFunc {n} {list})");
     }
+    // The list is already parenthesised, which is what every chain before this
+    // lane minted and what `IRModule.mk`'s first argument position needs.
     lines.push(format!(
-        "def {prefix}_func : IRFunc := IRFunc.mk {} {} {} {blocks}",
-        nat(f[0].num()?)?,
-        nat_list(f[1].tagged("params")?)?,
-        nat(f[2].tagged("entry")?[0].num()?)?
-    ));
-    lines.push(format!(
-        "def {prefix}_module : IRModule := IRModule.mk (IRList.cons IRFunc {prefix}_func \
-         (IRList.nil IRFunc)) (IRList.nil IRGlobal)"
+        "def {prefix}_module : IRModule := IRModule.mk {list} (IRList.nil IRGlobal)"
     ));
     Ok(MintedScript { lines })
 }
@@ -112,12 +143,15 @@ pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintEr
 /// nothing: an EMPTY `funcs` lane is consistent only with a module containing
 /// no `call`. A body that calls anything must pin the whole namespace, its own
 /// entry included.
-fn check_func_namespace(core: &Sx, f: &[Sx], tags: &Tags) -> Result<(), MintError> {
-    let own = f
-        .first()
-        .ok_or_else(|| CoreError::Shape("(func …) carries no id".into()))?
-        .num()?;
-    let mut used: Vec<u128> = vec![own];
+fn check_func_namespace(core: &Sx, fs: &[&[Sx]], tags: &Tags) -> Result<(), MintError> {
+    let mut used: Vec<u128> = Vec::new();
+    for f in fs {
+        used.push(
+            f.first()
+                .ok_or_else(|| CoreError::Shape("(func …) carries no id".into()))?
+                .num()?,
+        );
+    }
     for_each_inst(core, |block, node, inst| {
         let l = inst.list()?;
         if l.first().and_then(|h| h.atom().ok()) == Some("call") {
@@ -154,13 +188,20 @@ fn check_func_namespace(core: &Sx, f: &[Sx], tags: &Tags) -> Result<(), MintErro
 /// A STRUCTURAL INDEX: `ir_dN`, or a refusal naming the numeral the atom pool
 /// lacks.
 ///
+/// The pool is `ir_d0..ir_d63` since 2026-08-22 (the designated target's SSA
+/// ids reach 20; the spec registers the atoms in `eval_ir_crystal.rs`). The
+/// DATA pool cutoff in [`nat_data`] deliberately stays at 16: widening it
+/// would respell data slots of already-minted artifacts (`(IRConst.int_ 63)`
+/// in the meta_tag chain would become `ir_d63`), and byte-identity of every
+/// landed artifact is the widening's own regression gate.
+///
 /// Every slot that reaches here names a position in this module — an SSA id, a
-/// block id, a field index, a function id, an aggregate interning id — and the
+/// block id, a function id, an aggregate interning id — and the
 /// refusal is the point: a `(func 20 …)` minted as a bare `20` would register a
 /// module naming a numeral the specification never introduced, and nothing
 /// downstream would say so.
 fn nat(n: u128) -> Result<String, MintError> {
-    if n <= 16 {
+    if n <= 63 {
         Ok(format!("ir_d{n}"))
     } else {
         Err(MintError::Numeral(n))

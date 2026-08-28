@@ -1887,9 +1887,9 @@ impl TacticApiError {
             code: TacticErrorCode::UnknownTactic,
             message: format!("unknown tactic: {}", name),
             details: None,
-            suggestions: vec![format!(
-                "Available tactics: intro, exact, apply, rfl, simp, ring, omega, aesop"
-            )],
+            suggestions: vec![
+                "Available tactics: intro, exact, apply, rfl, simp, ring, omega, aesop".to_string(),
+            ],
         }
     }
 
@@ -2137,7 +2137,7 @@ fn pp_binder_info(bi: BinderInfo) -> &'static str {
 // ============================================================================
 
 /// Convert internal goals to API goals
-pub fn convert_goals(state: &InternalProofState, env: &Environment) -> Vec<ApiGoal> {
+pub(crate) fn convert_goals(state: &InternalProofState, env: &Environment) -> Vec<ApiGoal> {
     state
         .goals()
         .iter()
@@ -2400,7 +2400,7 @@ pub fn to_api_state(
 /// gate. When no corpus is loaded (corpus-less deployment) this returns an empty
 /// list. Both Task C's freshly-added session declarations (once the session env
 /// is folded into the corpus) and the on-disk corpus become visible here.
-pub fn mathverse_candidates_for_state(
+pub(crate) fn mathverse_candidates_for_state(
     state: &InternalProofState,
     env: &Environment,
 ) -> Vec<MathverseCandidate> {

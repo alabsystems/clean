@@ -75,46 +75,48 @@ fn test_elab_calc_empty_steps_returns_error() {
     );
 }
 
-/// Two-step calc block chains via Trans.trans.
+/// Two-step calc block chains through `mk_calc_trans`.
 ///
 /// `calc Type = Type := rfl; _ = Type := rfl`
 ///
-/// With two steps, elab_calc calls mk_calc_trans to build:
-///   Trans.trans proof1 proof2
-/// We verify:
-///   1. Elaboration succeeds
-///   2. Result contains a Trans.trans application (the head is Trans.trans)
+/// With two steps, `elab_calc` calls `mk_calc_trans`; for an eq/eq chain the
+/// `Trans Eq Eq` instance is `Eq.trans`, which is what the dispatch test above
+/// pins and what this chain must produce. We verify:
+///   1. Elaboration succeeds (see the note in the body — it did not, before
+///      the 2026-08-22 hole-universe repair)
+///   2. The head of the result is `Eq.trans`
 #[test]
 fn test_elab_calc_two_step_trans_chain() {
     let env = Environment::with_prelude();
     let result = elab_with_env(&env, "calc Type = Type := rfl; _ = Type := rfl");
-    // Two-step calc should elaborate. The result is Trans.trans applied to
-    // the two proofs. Even if type inference is incomplete, the application
-    // structure should be present.
-    match result {
-        Ok(expr) => {
-            assert_eq!(
-                const_head_name(&expr).as_deref(),
-                Some("Trans.trans"),
-                "two-step calc should produce a Trans.trans chain, got {expr:?}"
-            );
-        }
-        Err(e) => {
-            // Two-step calc requires Trans.trans with correct universe levels.
-            // A TypeMismatch (universe level conflict) or unresolved constant
-            // is acceptable — the test exercises the two-step code path through
-            // mk_calc_trans even when it fails at type inference.
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("Trans")
-                    || msg.contains("trans")
-                    || msg.contains("unknown")
-                    || msg.contains("TypeMismatch")
-                    || msg.contains("universe"),
-                "unexpected error for two-step calc: {msg}"
-            );
-        }
-    }
+    // UPDATED 2026-08-22 (U2 hole-universe repair). This test used to accept an
+    // error branch too, on the stated grounds that "two-step calc requires
+    // Trans.trans with correct universe levels [and] a TypeMismatch (universe
+    // level conflict) ... is acceptable". Measured at origin/main `51c893ce5`,
+    // that is the branch it was passing on:
+    //
+    //     Err(TypeMismatch { expected: "FVar(9223372036854775811)",
+    //                        actual: "universe level conflict: 0 vs 2" })
+    //
+    // and the conflict was not intrinsic to `calc` at all — it was the `_` in
+    // the second step meeting `elab_hole`'s hardcoded `Sort 1` hole type, the
+    // same defect as `tests/fixtures/universes/p37_hole_universe_polymorphic.lean`
+    // wearing a third face. With that literal replaced by a fresh level
+    // metavariable the chain elaborates, so the error branch is now
+    // unreachable and accepting it would only re-hide the bug.
+    //
+    // The head is `Eq.trans`, not `Trans.trans`, and that is correct rather
+    // than a near miss: `Trans Eq Eq` reduces to `Eq.trans` in Lean, and
+    // Clean's own dispatch table says so — `test_calc_elab_dispatch_eq_eq_to_eq_trans`
+    // above pins eq+eq to `Eq.trans`. This test asserted the generic head only
+    // because it never got far enough to produce one.
+    let expr = result
+        .expect("two-step eq/eq calc must elaborate; it failed only on the hole-universe bug");
+    assert_eq!(
+        const_head_name(&expr).as_deref(),
+        Some("Eq.trans"),
+        "two-step eq/eq calc should produce an Eq.trans chain, got {expr:?}"
+    );
 }
 
 #[test]

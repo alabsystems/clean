@@ -61,7 +61,9 @@ fn float_sub_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_named_const_source("eval_ir_float_sub.rs", "SRC_IR_FS2_B0"),
+        // The registered blocks are the MINTED script (crystal A2, `src/ir_mint`),
+        // so the gate reads the SAME lines the specification registers.
+        &clean_block_sources("generated/ir_fs2.defs.txt", "def ir_fs2_b"),
         "def ir_fs2_b",
     );
 
@@ -126,9 +128,12 @@ fn float_sub_proved_module_matches_the_emitted_artifact() {
         text.contains("bb0(%0: ptr, %1: f64, %2: f64):"),
         "THREE parameters: the closure environment pointer and the two f64 operands"
     );
-    let func = clean_block_sources("eval_ir_float_sub.rs", "const SRC_IR_FS2_FUNC");
+    let func = clean_block_sources("generated/ir_fs2.defs.txt", "def ir_fs2_func");
     assert!(
-        func.contains("IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0"),
+        func.contains(
+            "IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat \
+             ir_d2 (IRList.nil Nat)))) ir_d0"
+        ),
         "the registered IRFunc must bind the same three parameter ids in the same order: {func}"
     );
 
@@ -176,7 +181,7 @@ fn float_sub_proved_module_matches_the_emitted_artifact() {
     // registered `IRFunc`. Not in `Cfg` — Clean's entry `IRBlock` carries `ir_nl0`.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_float_sub.rs", "const SRC_IR_FS2_FUNC"),
+        &clean_block_sources("generated/ir_fs2.defs.txt", "def ir_fs2_func"),
         "float_sub",
     );
     assert_lanes(&emitted, &clean, "float_sub");

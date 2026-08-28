@@ -1,0 +1,48 @@
+-- p15 — THIRD MASK, FIRED (2026-08-26), NAMED (2026-08-27). Unresolved head in
+-- a BINDER TYPE.
+--
+-- PROVES: the mask documented at `infer/elab_core.rs` (auto-implicit binds an
+-- unresolved head as a fresh `Sort u`-typed fvar; applying arguments to it then
+-- fails over-applied) is reachable from a builtin prelude, in three source
+-- words — and that the report now NAMES the identifier that was swallowed.
+--
+--   before (2026-08-26, stage 0 pinned it and deliberately did not repair it):
+--     TooManyArguments { func_type: "Sort(Param(u_0))", remaining_args: 2 }
+--   after (2026-08-27):
+--     Unknown identifier: nosuchpred; auto-bound implicit of type `Sort ?u_0`
+--     in a signature position, then applied to 2 argument(s) it cannot take.
+--     Define `nosuchpred`, or `set_option autoImplicit false` so an unresolved
+--     name in a signature is a hard error
+--
+-- `nosuchpred` had been deleted from the report exactly as `get_type_name`
+-- deleted the dot target in class II. This is the shape of the 17-entry
+-- Order/Basic row in the 2026-08-25 artifact.
+--
+-- THE VERDICT DID NOT MOVE. `ElabError::AutoBoundHeadOverApplied` is raised at
+-- the same three live `TooManyArguments` sites, on the same `?` path, for the
+-- same declarations: 0 passed / 1 failed before and after. What moved is the
+-- MESSAGE, and — deliberately, and reported — the class both censuses file it
+-- under: `scripts/srcelab_classify.py` reads the leading `Unknown identifier:`
+-- and files it there instead of the residual `other` bucket, and
+-- `ElabFailureTracker::categorize` follows, out of `TypeMismatch`. That is the
+-- recon's §2.6 mask hypothesis converted from a guess into a measurement.
+--
+-- CORRECTION TO THE RECON: `docs/analysis/frontier-next-class-2026-08-25.md`
+-- §2.6 and §7.5 record that a naive probe did NOT fire this face and leave the
+-- class unattributed, needing "the corpus lines that trigger auto-implicit in
+-- that position". It does not need them. The recon's probe (p14 here) put the
+-- unresolved head in a theorem BODY, where auto-implicit is switched off by
+-- design; the trigger is a SIGNATURE position. No corpus is required to
+-- attribute this class.
+--
+-- CORRECTION TO STAGE 0: there are FIVE `TooManyArguments` raise sites but only
+-- THREE can fire during elaboration. `implicit_args.rs::insert_implicits` and
+-- `implicit_args_ext.rs::insert_implicits_ext` have no caller outside their own
+-- unit tests (measured 2026-08-27, whole-crate grep), so the repair reaches
+-- every live site by touching three.
+--
+-- CONTROLS: p14 (same head, value position, correct error) fixes the boundary
+-- as auto-implicit and nothing else; p30 (a REAL binder over-applied) fixes the
+-- other boundary — the untouched `TooManyArguments` message — so this probe
+-- cannot be satisfied by "name every over-applied head".
+theorem probe_sorthead_binder_type (a : Nat) (h : nosuchpred a a) : True := trivial

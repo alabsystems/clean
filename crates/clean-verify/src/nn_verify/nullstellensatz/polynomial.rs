@@ -206,9 +206,7 @@ fn apply_activation_pattern(
             NeuronPattern::Inactive => {
                 // Zero out this neuron's row in the weight matrix and bias
                 if neuron_idx < weights.len() {
-                    for w in &mut weights[neuron_idx] {
-                        *w = zero;
-                    }
+                    weights[neuron_idx].fill(zero);
                 }
                 if neuron_idx < bias.len() {
                     bias[neuron_idx] = zero;

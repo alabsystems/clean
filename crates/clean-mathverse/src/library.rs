@@ -295,7 +295,7 @@ impl MathverseLibrary {
     }
 
     /// Rebuild the BM25 semantic search index from all loaded constants.
-    pub fn build_search_index(&mut self) {
+    pub(crate) fn build_search_index(&mut self) {
         *self.bm25_index.borrow_mut() =
             build_search_index(&self.constants, &self.strings, &self.exprs);
         self.search_dirty.set(false);
@@ -316,7 +316,7 @@ impl MathverseLibrary {
     }
 
     /// Explain a semantic search: returns per-result token-level score breakdowns.
-    pub fn search_explain(
+    pub(crate) fn search_explain(
         &self,
         query: &str,
         max_results: usize,
@@ -410,7 +410,7 @@ impl MathverseLibrary {
     }
 
     /// Add a node to the knowledge graph. Returns the node index.
-    pub fn add_graph_node(&mut self, node: ConceptNode) -> usize {
+    pub(crate) fn add_graph_node(&mut self, node: ConceptNode) -> usize {
         let idx = self.graph_nodes.len();
         self.graph_nodes.push(node);
         idx
@@ -563,7 +563,7 @@ impl MathverseLibrary {
     /// reconstructed (name-only / mode-extension exprs) — exactly the constants
     /// the `.mvix` builder skips, so a `None` query here can never spuriously hit.
     #[must_use]
-    pub fn structural_rewrite_digest_of(&self, idx: ConstantIdx) -> Option<String> {
+    pub(crate) fn structural_rewrite_digest_of(&self, idx: ConstantIdx) -> Option<String> {
         let header = self.constants.get(idx as usize)?;
         let expr = crate::shard_reconstruct::reconstruct_single_subdag(
             &self.exprs,
@@ -685,7 +685,7 @@ impl MathverseLibrary {
     /// central declaration, and is the impact signal used to rank
     /// reverse-dependency hits.
     #[must_use]
-    pub fn reverse_in_degree(&self, idx: ConstantIdx) -> usize {
+    pub(crate) fn reverse_in_degree(&self, idx: ConstantIdx) -> usize {
         self.ensure_reverse_deps();
         self.reverse_deps_cache
             .borrow()
@@ -706,7 +706,7 @@ impl MathverseLibrary {
     /// highest-impact users surface first; ties break by shallower depth, then
     /// by index. Returns `(constant_idx, depth)` pairs.
     #[must_use]
-    pub fn reverse_deps_bounded(
+    pub(crate) fn reverse_deps_bounded(
         &self,
         root: ConstantIdx,
         transitive: bool,
@@ -767,7 +767,7 @@ impl MathverseLibrary {
     /// at every tier. Returns the resolved global index, or `None` if nothing
     /// matches.
     #[must_use]
-    pub fn resolve_name_loose(&self, query: &str) -> Option<ConstantIdx> {
+    pub(crate) fn resolve_name_loose(&self, query: &str) -> Option<ConstantIdx> {
         if let Some(idx) = self.lookup_constant_idx(query) {
             return Some(idx);
         }

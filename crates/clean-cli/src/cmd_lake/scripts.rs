@@ -112,6 +112,24 @@ pub(super) fn lake_script_run(
             )
         })?;
 
+    // FAIL CLOSED ON AN EMPTY BODY.
+    //
+    // An empty body lowers to `def main : IO Unit := pure ()`, which builds,
+    // prints nothing and exits 0 — a vacuous green: a report of success for
+    // work that never happened. A script with no body is a declaration this
+    // parser did not understand, never a script that legitimately does
+    // nothing, so refuse it and name the spellings that do parse.
+    if script.body.trim().is_empty() {
+        anyhow::bail!(
+            "clean lake script run is fail-closed for script '{name}': its body is empty, which \
+             means the lakefile declaration was not understood — running it would report success \
+             for work that never happened.\n\
+             The declarative lakefile parser understands `script <name> [(args)] do`, \
+             `script <name> := <body>` and `script <name> where`, with the body on the following \
+             indented lines."
+        );
+    }
+
     // Lower the script body into a synthetic `main : IO Unit` module placed in the
     // package source directory so the workspace module resolver can find it.
     let module_stem = format!(
@@ -152,12 +170,24 @@ pub(super) fn lake_script_run(
         if super::native_executable_exit_code(&err).is_some() {
             return err;
         }
+        // A declared argument binder is parsed and reported, but the synthetic
+        // entry point is `main : IO Unit` — the only shape the native bridge
+        // accepts — so the binder is NOT in scope in the lowered module. Say
+        // that here rather than leaving the user with a bare
+        // "unknown identifier" for a name their lakefile plainly declares.
+        let binder_note = script.args.as_ref().map_or_else(String::new, |binder| {
+            format!(
+                "\nNote: this script declares the argument binder `{binder}`, which is not bound \
+                 in the synthetic `main : IO Unit` entry point — a body that reads `{binder}` \
+                 cannot be lowered yet. Trailing arguments are still forwarded to the process."
+            )
+        });
         anyhow::anyhow!(
             "clean lake script run is fail-closed for script '{name}': clean lowered the script \
              body into a synthetic `main : IO Unit` module but could not build and execute it \
              through the native bridge. The native bridge currently supports the bounded stdout \
              IO subset (IO.print/IO.println and do-sequencing). Refusing to delegate to external \
-             `lean --run`.\nNative blocker: {err:#}"
+             `lean --run`.{binder_note}\nNative blocker: {err:#}"
         )
     })
 }
@@ -286,6 +316,82 @@ mod tests {
         assert!(
             msg.contains("clean lake script list"),
             "diagnostic should suggest listing available scripts: {msg}"
+        );
+    }
+
+    /// A script whose body really is empty must be REFUSED, not silently
+    /// reported as a success.
+    ///
+    /// An empty body lowers to `def main : IO Unit := pure ()`, which builds,
+    /// prints zero bytes and exits 0 — a vacuous green. This is the residual
+    /// guard now that the `do` form parses: the only way to reach it is a
+    /// declaration with no body at all.
+    #[test]
+    fn test_lake_script_run_empty_body_is_refused_not_silently_ok() {
+        let dir = write_script_project(
+            "import Lake\nopen Lake DSL\n\npackage demo\n\nscript blank where\n",
+        );
+
+        let err = lake_script_run("blank", &[], Some(dir.path().to_path_buf()))
+            .expect_err("a script with an empty body must not report success");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("body is empty"),
+            "diagnostic should say the body is empty: {msg}"
+        );
+        assert!(
+            msg.contains("script <name> [(args)] do"),
+            "diagnostic should name the spellings that DO parse: {msg}"
+        );
+    }
+
+    /// Lean's `script <name> do` form resolves under its BARE name.
+    ///
+    /// Measured 2026-08-27 against the shipped binary before the parser fix:
+    /// `clean lake script list` printed `plain do`, `script doc "plain do"`
+    /// printed an empty body, and `script run "plain do"` was refused as
+    /// unparsed. The name below is the bare one — it did not resolve at all
+    /// before the fix, so this test is red without it.
+    #[test]
+    fn test_lake_script_run_resolves_do_form_under_its_bare_name() {
+        let dir = write_script_project(
+            "import Lake\nopen Lake DSL\n\npackage demo\n\nscript plain do\n  IO.println \"plain script\"\n",
+        );
+
+        // Not `expect`: the native bridge may refuse the body for its own
+        // reasons on some hosts. What must NOT happen is a resolution or
+        // empty-body failure, which is what the mis-parse produced.
+        if let Err(err) = lake_script_run("plain", &[], Some(dir.path().to_path_buf())) {
+            let msg = format!("{err:#}");
+            assert!(
+                !msg.contains("not found in lakefile.lean"),
+                "a `do`-form script must resolve under its bare name: {msg}"
+            );
+            assert!(
+                !msg.contains("body is empty"),
+                "a `do`-form script body must be collected, not dropped: {msg}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_lake_script_run_executes_do_form_script_body() {
+        let dir = write_script_project(
+            "import Lake\nopen Lake DSL\n\npackage demo\n\nscript plain do\n  IO.println \"do-form executed\"\n",
+        );
+
+        lake_script_run("plain", &[], Some(dir.path().to_path_buf()))
+            .expect("a `do`-form script body should build and execute through the native bridge");
+
+        let artifact = dir.path().join(".lake/build/bin/CleanLakeScript_plain");
+        let output = std::process::Command::new(&artifact)
+            .output()
+            .expect("linked script artifact should execute");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "do-form executed\n",
+            "the `do`-form body must be what runs"
         );
     }
 

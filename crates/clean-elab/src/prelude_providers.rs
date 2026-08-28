@@ -500,6 +500,28 @@ static PRELUDE_PROVIDERS: &[Provider] = &[
 /// duplicate declaration errors from multiple `import Mathlib.*` lines.
 static MATHLIB_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Whether Clean *declares* a hand-written prelude for `module` by name.
+///
+/// This is the fail-closed half of [`init_prelude_for_module`]. It returns
+/// `true` only for a module listed verbatim in [`PRELUDE_PROVIDERS`], or for the
+/// Clean-native metaprogramming shim (`Lean` / `Lean.*`, plan decision 1).
+///
+/// It deliberately returns `false` for the `Mathlib.` **prefix wildcard** below.
+/// That wildcard accepts every name that has ever been typed — `import
+/// Mathlib.Utterly.Fake.Nonsense` included — so treating it as a resolution
+/// meant a nonexistent module was silently replaced by ~30 hand-written
+/// structures and the file reported green. A stand-in Clean names on purpose is
+/// an accountable substitution; a stand-in minted for an arbitrary string is a
+/// fabrication. See [`crate::imports::ImportPolicy`].
+#[must_use]
+pub fn has_declared_prelude(module: &str) -> bool {
+    PRELUDE_PROVIDERS
+        .iter()
+        .any(|provider| provider.provides().contains(&module))
+        || module == "Lean"
+        || module.starts_with("Lean.")
+}
+
 pub fn init_prelude_for_module(env: &mut Environment, module: &str) -> Result<bool, ElabError> {
     // Try exact match first
     for provider in PRELUDE_PROVIDERS {

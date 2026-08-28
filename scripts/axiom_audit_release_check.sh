@@ -42,7 +42,10 @@ write_evidence() {
 import hashlib
 import json
 import os
-from datetime import UTC, datetime
+# `datetime.UTC` is 3.11+ and THIS HEREDOC RUNS UNDER THE AMBIENT `python3`, which is
+# 3.9.6 on macOS CommandLineTools -- so the import raised, `set -e` killed the script,
+# and the gate's own PASS/FAILED line was unreachable. `timezone.utc` is 3.9-safe.
+from datetime import datetime, timezone
 from pathlib import Path
 
 SCHEMA_VERSION = os.environ["AXIOM_AUDIT_EVIDENCE_SCHEMA_VERSION"]
@@ -75,7 +78,7 @@ expected_steps = int(os.environ["AXIOM_AUDIT_EXPECTED_STEPS"])
 artifact = {
     "schema_version": SCHEMA_VERSION,
     "generated_by": "./scripts/axiom_audit_release_check.sh",
-    "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "gate_command": "./scripts/axiom_audit_release_check.sh",
     "status": os.environ["AXIOM_AUDIT_GATE_STATUS"],
     "summary": {

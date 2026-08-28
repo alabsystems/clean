@@ -163,6 +163,17 @@ pub enum TacticError {
 
     #[error("{tactic}: parse error: {detail}")]
     ParseFailed { tactic: String, detail: String },
+
+    /// A tactic refused a goal because it exceeded its work/growth budget.
+    ///
+    /// Raised by `simp` when one `simp_expr` traversal spends its fuel or
+    /// grows a term past the size limit (`simp/budget.rs`). It is a REFUSAL:
+    /// the goal is left exactly as the tactic found it, no partial rewrite is
+    /// kept, and no proof term is produced — the alternative (answering with
+    /// whatever the runaway had built so far) would hand the kernel a term the
+    /// tactic could not justify.
+    #[error("{tactic}: {detail}")]
+    BudgetExceeded { tactic: String, detail: String },
 }
 
 impl TacticError {
@@ -178,6 +189,7 @@ impl TacticError {
                 | Self::AllTacticsFailed { .. }
                 | Self::UnsolvedGoals { .. }
                 | Self::DepthExceeded { .. }
+                | Self::BudgetExceeded { .. }
                 | Self::SearchExhausted { .. }
                 | Self::SmtFailed { .. }
                 | Self::BridgeFailed { .. }

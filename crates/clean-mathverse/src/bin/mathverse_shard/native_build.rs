@@ -80,6 +80,16 @@ pub fn cmd_build_native(args: &[String]) {
             );
             println!("  Elapsed:                {} ms", result.elapsed_ms);
 
+            // Optional: dump the FULL axiom closure of every ACCEPTED
+            // declaration, so a `ProofQuality::Constructive` verdict can be
+            // adjudicated on the trust it actually consumes rather than on
+            // its name. Symmetric with `MATHVERSE_DUMP_REJECTS` below, and
+            // like it, off unless explicitly requested — the default build
+            // path is byte-identical without the variable.
+            if let Ok(path) = std::env::var("MATHVERSE_DUMP_ACCEPTED_CLOSURE") {
+                dump_accepted_closure(&env, &result, &PathBuf::from(path));
+            }
+
             // Optional: dump per-reject classification for triage
             // (#3551 Tier D axiom-reject whitelisting work).
             if std::env::var("MATHVERSE_DUMP_REJECTS").is_ok() {
@@ -99,5 +109,76 @@ pub fn cmd_build_native(args: &[String]) {
             eprintln!("Build failed: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+/// Write `{name -> closure evidence}` for every ACCEPTED declaration.
+///
+/// The evidence per name is deliberately the four facts a reviewer needs to
+/// either ratify or reject the shard's `Constructive` label, and no summary
+/// on top of them:
+///
+/// * `kind` / `has_value` — a `Theorem` carrying a proof term. `proof_quality`
+///   classifies a value-less theorem `Unchecked`, so both are load-bearing.
+/// * `domain_axiom_closure` — MUST be empty; this is the predicate the shard
+///   actually filters on.
+/// * `foundational_axiom_closure` — the half `axiom_deps` throws away. This is
+///   where `Classical.choice` shows up, and it is the difference between
+///   "reaches nothing" and "reaches classical choice" — two very different
+///   theorems that an empty `domain_axiom_closure` reports identically.
+/// * `declaration_verification` — `FullKernelCheck` vs `StructuralOnly`.
+///   `Environment::proof_quality` documents that it CANNOT see this
+///   distinction: a structurally-added theorem still carries its value and is
+///   labelled `Constructive` by its axiom closure exactly like a checked one.
+///   `None` is recorded verbatim as unknown and never read as a pass.
+fn dump_accepted_closure(
+    env: &Environment,
+    result: &clean_mathverse::build_library_native::CleanNativeBuildResult,
+    path: &PathBuf,
+) {
+    use clean_kernel::Name;
+
+    let mut rows = Vec::new();
+    for d in &result.decisions {
+        if !d.accepted {
+            continue;
+        }
+        let name = Name::from_string(&d.name);
+        let info = env.get_const(&name);
+        let mut foundational: Vec<String> = env
+            .foundational_axiom_deps(&name)
+            .map(|s| s.into_iter().map(|n| n.to_string()).collect())
+            .unwrap_or_default();
+        foundational.sort();
+        let mut domain: Vec<String> = env
+            .axiom_deps(&name)
+            .map(|s| s.into_iter().map(|n| n.to_string()).collect())
+            .unwrap_or_default();
+        domain.sort();
+        rows.push(serde_json::json!({
+            "name": d.name,
+            "kind": info.map(|i| format!("{:?}", i.kind)),
+            "has_value": info.map(|i| i.value.is_some()),
+            "domain_axiom_closure": domain,
+            "foundational_axiom_closure": foundational,
+            "declaration_verification": env
+                .declaration_verification(&name)
+                .map(|v| format!("{v:?}")),
+        }));
+    }
+
+    let payload = serde_json::json!({
+        "accepted_count": rows.len(),
+        "declarations": rows,
+    });
+    match serde_json::to_string_pretty(&payload) {
+        Ok(text) => {
+            if let Err(e) = fs::write(path, text + "\n") {
+                eprintln!("Warning: accepted-closure dump failed: {e}");
+            } else {
+                println!("  Accepted-closure dump: {}", path.display());
+            }
+        }
+        Err(e) => eprintln!("Warning: accepted-closure dump serialize failed: {e}"),
     }
 }

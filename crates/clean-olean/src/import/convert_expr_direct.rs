@@ -18,13 +18,99 @@ use crate::expr::{ParsedBinderInfo, ParsedLiteral, EXPR_DATA_SCALAR_BYTES};
 use crate::region::{is_ptr, is_scalar, unbox_scalar, CompactedRegion};
 use clean_kernel::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, LevelVec, Literal, MDataMap};
 use clean_kernel::name::Name;
+use hashbrown::HashMap;
 use smallvec::SmallVec;
 use std::sync::Arc;
+
+/// Memo of already-converted expression nodes, keyed by their pointer INSIDE
+/// ONE compacted region (#import-dag-memo).
+///
+/// A `.olean` compacted region stores `Expr` as a shared DAG: Lean hash-conses
+/// every subterm, so a single node is typically referenced from many parents.
+/// [`read_and_convert_expr`] walks that DAG as a TREE — it re-reads, re-decodes
+/// and re-interns a shared subterm once per PATH that reaches it — so its work
+/// is proportional to the number of root-to-node paths, not to the number of
+/// nodes. Measured on Lean v4.30.0-rc2 `Init` (64-module sample): 978_138
+/// distinct nodes but 48_876_364 memo-less node visits (~50x); the `.olean.private`
+/// proof-body regions alone amplify 56.7x on average and
+/// `Init/Data/BitVec/Lemmas.olean.private` amplifies 165x (373_990 nodes ->
+/// 61_758_674 visits). This memo collapses that back to one visit per node.
+///
+/// SOUNDNESS: conversion is a PURE function of `(region, ptr)` — `name` is used
+/// only to label error messages, and nothing else in [`parse_ptr`] reads mutable
+/// state that could make the same pointer decode differently. Reusing the first
+/// result for a repeated pointer therefore yields the byte-identical `Expr` the
+/// unmemoized walk would have built, so the kernel sees exactly the same
+/// constants. Failures are NOT memoized: a pointer that errors is re-walked and
+/// re-reported under the next constant's name, preserving today's diagnostics.
+///
+/// REGION SCOPING (the one way this could go wrong): keys are region-relative
+/// pointers, so a cache MUST NOT outlive the `CompactedRegion` it was filled
+/// from — two different regions can hand out the same pointer value for
+/// different nodes. The type therefore carries no `Default`: a cache is built by
+/// [`RegionPtrCache::for_region`] next to the region it belongs to, or by
+/// [`RegionPtrCache::disabled`] for callers that keep the historical
+/// unmemoized behavior.
+pub(crate) struct RegionPtrCache {
+    map: HashMap<u64, Arc<Expr>>,
+    enabled: bool,
+}
+
+impl RegionPtrCache {
+    /// A live memo for exactly one [`CompactedRegion`]. The caller must drop it
+    /// before the region it was filled from goes away or is replaced.
+    pub(crate) fn for_region() -> Self {
+        Self {
+            map: HashMap::new(),
+            enabled: true,
+        }
+    }
+
+    /// A memo that never stores or serves anything, so the conversion walk is
+    /// bit-for-bit the historical one (same visit order, same intern-call and
+    /// cache-hit statistics).
+    ///
+    /// This is the DIFFERENTIAL ORACLE for the memo, not a production mode: no
+    /// shipping caller wants the 49.97x-amplified walk back. Its whole job is to
+    /// let a test convert the same region twice — once disabled, once enabled —
+    /// and assert the two `Expr`s are identical, which is the evidence that
+    /// memoizing changed only the cost and not the output. Test-only so the
+    /// slow path cannot be reached by accident from a shipping code path.
+    #[cfg(test)]
+    pub(crate) fn disabled() -> Self {
+        Self {
+            map: HashMap::new(),
+            enabled: false,
+        }
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn get(&self, ptr: u64) -> Option<Arc<Expr>> {
+        if self.enabled {
+            self.map.get(&ptr).map(Arc::clone)
+        } else {
+            None
+        }
+    }
+
+    fn insert(&mut self, ptr: u64, expr: &Arc<Expr>) {
+        if self.enabled {
+            self.map.insert(ptr, Arc::clone(expr));
+        }
+    }
+}
 
 /// Work item for direct binary-to-kernel expression conversion.
 enum DirectConvertWork {
     /// Read binary data at this pointer and produce kernel Expr
     Parse(u64),
+    /// Record the just-built result on top of `results` as the conversion of
+    /// this region pointer. Pushed BEFORE the matching `Build*` item so it pops
+    /// AFTER it, when the parent node exists.
+    Memo(u64),
     /// Build App from top 2 results
     BuildApp,
     /// Build Lam from top 2 results
@@ -43,11 +129,44 @@ enum DirectConvertWork {
 ///
 /// The `intern` cache is shared across all constants in a module for
 /// cross-constant expression deduplication (#2383).
+///
+/// Test-only, and paired with [`RegionPtrCache::disabled`]: every shipping
+/// caller now goes through [`read_and_convert_expr_with_memo`] with a live
+/// region-scoped memo. This 4-argument form is retained purely as the
+/// unmemoized reference walk that the memo is differentially checked against.
+#[cfg(test)]
 pub(crate) fn read_and_convert_expr(
     region: &CompactedRegion<'_>,
     initial_ptr: u64,
     name: &str,
     intern: &mut ExprInternCache,
+) -> Result<(Expr, ExprSharingStats), ImportError> {
+    read_and_convert_expr_with_memo(
+        region,
+        initial_ptr,
+        name,
+        intern,
+        &mut RegionPtrCache::disabled(),
+    )
+}
+
+/// [`read_and_convert_expr`] with a caller-owned region-pointer memo, so a
+/// shared subterm is decoded ONCE per region instead of once per path that
+/// reaches it (#import-dag-memo).
+///
+/// # REQUIRES
+/// - `memo` was filled only from THIS `region` (see [`RegionPtrCache`]).
+///
+/// # ENSURES
+/// - Returns the same `Expr` the unmemoized walk returns, for every input.
+/// - `ExprSharingStats` counts only the intern calls actually performed, so a
+///   memo hit is not double-counted as a hash-cons hit.
+pub(crate) fn read_and_convert_expr_with_memo(
+    region: &CompactedRegion<'_>,
+    initial_ptr: u64,
+    name: &str,
+    intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
 ) -> Result<(Expr, ExprSharingStats), ImportError> {
     let mut work: Vec<DirectConvertWork> = vec![DirectConvertWork::Parse(initial_ptr)];
     let mut results: SmallVec<[Arc<Expr>; 32]> = SmallVec::new();
@@ -80,16 +199,30 @@ pub(crate) fn read_and_convert_expr(
 
         match item {
             DirectConvertWork::Parse(ptr) => {
+                // Already decoded under this region: reuse it instead of
+                // re-walking the whole subtree hanging off `ptr`.
+                if let Some(hit) = memo.get(ptr) {
+                    results.push(hit);
+                    continue;
+                }
                 parse_ptr(
                     region,
                     ptr,
                     name,
                     intern,
+                    memo,
                     &mut work,
                     &mut results,
                     &mut total_intern_calls,
                     &mut cache_hits,
                 )?;
+            }
+            DirectConvertWork::Memo(ptr) => {
+                // The matching `Build*` item ran immediately before this one, so
+                // the node for `ptr` is on top of `results`.
+                if let Some(top) = results.last() {
+                    memo.insert(ptr, top);
+                }
             }
             DirectConvertWork::BuildApp => {
                 let arg = results.pop().expect("stack balance invariant");
@@ -158,6 +291,7 @@ fn parse_ptr(
     ptr: u64,
     name: &str,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
     work: &mut Vec<DirectConvertWork>,
     results: &mut SmallVec<[Arc<Expr>; 32]>,
     total_intern_calls: &mut u64,
@@ -197,7 +331,15 @@ fn parse_ptr(
     let field_base = offset + 8;
     let scalar_base = field_base + header.other as usize * 8;
 
-    match header.tag {
+    // Nodes whose whole result is pushed to `results` by this call (no `Build*`
+    // step follows) are memoized here; interior nodes push a `Memo(ptr)` item
+    // that fires once their `Build*` step has produced them.
+    let is_leaf = matches!(
+        header.tag,
+        expr_tags::BVAR | expr_tags::FVAR | expr_tags::SORT | expr_tags::CONST | expr_tags::LIT
+    );
+
+    let parsed = match header.tag {
         expr_tags::BVAR => parse_bvar(
             region,
             field_base,
@@ -244,6 +386,9 @@ fn parse_ptr(
         expr_tags::APP => {
             let fn_ptr = region.read_u64_at(field_base)?;
             let arg_ptr = region.read_u64_at(field_base + 8)?;
+            if memo.is_enabled() {
+                work.push(DirectConvertWork::Memo(ptr));
+            }
             work.push(DirectConvertWork::BuildApp);
             work.push(DirectConvertWork::Parse(arg_ptr));
             work.push(DirectConvertWork::Parse(fn_ptr));
@@ -262,6 +407,9 @@ fn parse_ptr(
             let bi = convert_binder_info(ParsedBinderInfo::from_u8(
                 region.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0],
             ));
+            if memo.is_enabled() {
+                work.push(DirectConvertWork::Memo(ptr));
+            }
             work.push(DirectConvertWork::BuildLam(bi));
             work.push(DirectConvertWork::Parse(body_ptr));
             work.push(DirectConvertWork::Parse(type_ptr));
@@ -274,6 +422,9 @@ fn parse_ptr(
             let bi = convert_binder_info(ParsedBinderInfo::from_u8(
                 region.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0],
             ));
+            if memo.is_enabled() {
+                work.push(DirectConvertWork::Memo(ptr));
+            }
             work.push(DirectConvertWork::BuildPi(bi));
             work.push(DirectConvertWork::Parse(body_ptr));
             work.push(DirectConvertWork::Parse(type_ptr));
@@ -288,6 +439,9 @@ fn parse_ptr(
             // Like binderInfo above, `nondep` follows the cached Expr.Data
             // word. Reading the hash byte made nearly every let look nondep.
             let nondep = region.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0] != 0;
+            if memo.is_enabled() {
+                work.push(DirectConvertWork::Memo(ptr));
+            }
             work.push(DirectConvertWork::BuildLet(
                 Name::from_string(&decl_name_str),
                 nondep,
@@ -299,16 +453,33 @@ fn parse_ptr(
         }
         expr_tags::MDATA => {
             let expr_ptr = region.read_u64_at(field_base + 8)?;
+            if memo.is_enabled() {
+                work.push(DirectConvertWork::Memo(ptr));
+            }
             work.push(DirectConvertWork::BuildMData);
             work.push(DirectConvertWork::Parse(expr_ptr));
             Ok(())
         }
-        expr_tags::PROJ => parse_proj(region, field_base, name, work),
+        expr_tags::PROJ => {
+            if memo.is_enabled() {
+                work.push(DirectConvertWork::Memo(ptr));
+            }
+            parse_proj(region, field_base, name, work)
+        }
         _ => Err(ImportError::Parse(OleanError::InvalidObjectTag {
             tag: header.tag,
             offset,
         })),
+    };
+
+    // Leaves are complete the moment their branch returns, so memoize them here.
+    // Errors are deliberately NOT memoized (see `RegionPtrCache`).
+    if parsed.is_ok() && is_leaf {
+        if let Some(top) = results.last() {
+            memo.insert(ptr, top);
+        }
     }
+    parsed
 }
 
 fn parse_bvar(
@@ -504,6 +675,82 @@ mod tests {
         assert!(
             matches!(expr.kind(), ExprKind::Let(_, _, _, _, false)),
             "cached Expr.Data must not be decoded as nondep: {expr:?}"
+        );
+    }
+
+    /// Build `App(App(s, s), App(s, s))` where every inner `App` is the SAME
+    /// region object, so the node is reachable by four distinct paths. This is
+    /// the shape the memo exists for (#import-dag-memo).
+    fn shared_dag_region() -> (Vec<u8>, usize) {
+        let mut data = vec![0u8; 256];
+        let leaf = 64; // Expr.bvar 0
+        write_header(&mut data, leaf, 1, expr_tags::BVAR);
+        data[leaf + 8..leaf + 16].copy_from_slice(&boxed_scalar(0).to_le_bytes());
+
+        let shared = 96; // App(leaf, leaf) — referenced twice by `root`
+        write_header(&mut data, shared, 2, expr_tags::APP);
+        let leaf_ptr = TEST_BASE_ADDR + leaf as u64;
+        data[shared + 8..shared + 16].copy_from_slice(&leaf_ptr.to_le_bytes());
+        data[shared + 16..shared + 24].copy_from_slice(&leaf_ptr.to_le_bytes());
+
+        let root = 128; // App(shared, shared)
+        write_header(&mut data, root, 2, expr_tags::APP);
+        let shared_ptr = TEST_BASE_ADDR + shared as u64;
+        data[root + 8..root + 16].copy_from_slice(&shared_ptr.to_le_bytes());
+        data[root + 16..root + 24].copy_from_slice(&shared_ptr.to_le_bytes());
+        (data, root)
+    }
+
+    #[test]
+    fn test_ptr_memo_shared_dag_matches_unmemoized_conversion() {
+        let (data, root) = shared_dag_region();
+        let region = CompactedRegion::new(&data, TEST_BASE_ADDR);
+        let ptr = region.offset_to_ptr(root);
+
+        let mut plain_cache = ExprInternCache::default();
+        let (plain, _) = read_and_convert_expr(&region, ptr, "dag", &mut plain_cache)
+            .expect("unmemoized conversion must succeed");
+
+        let mut memo_cache = ExprInternCache::default();
+        let mut memo = RegionPtrCache::for_region();
+        let (memoized, _) =
+            read_and_convert_expr_with_memo(&region, ptr, "dag", &mut memo_cache, &mut memo)
+                .expect("memoized conversion must succeed");
+
+        assert_eq!(
+            plain, memoized,
+            "the region-pointer memo must not change the converted Expr"
+        );
+    }
+
+    #[test]
+    fn test_ptr_memo_visits_each_shared_node_once() {
+        let (data, root) = shared_dag_region();
+        let region = CompactedRegion::new(&data, TEST_BASE_ADDR);
+        let ptr = region.offset_to_ptr(root);
+
+        // Without the memo the shared `App` (and both its leaves) are rebuilt
+        // once per path, so more intern calls are made than there are nodes.
+        let mut plain_cache = ExprInternCache::default();
+        let (_, plain_stats) = read_and_convert_expr(&region, ptr, "dag", &mut plain_cache)
+            .expect("unmemoized conversion must succeed");
+
+        let mut memo_cache = ExprInternCache::default();
+        let mut memo = RegionPtrCache::for_region();
+        let (_, memo_stats) =
+            read_and_convert_expr_with_memo(&region, ptr, "dag", &mut memo_cache, &mut memo)
+                .expect("memoized conversion must succeed");
+
+        assert!(
+            memo_stats.total_intern_calls < plain_stats.total_intern_calls,
+            "memo must remove repeated visits: {} vs {}",
+            memo_stats.total_intern_calls,
+            plain_stats.total_intern_calls
+        );
+        // 3 distinct nodes: bvar leaf, shared App, root App.
+        assert_eq!(
+            memo_stats.total_intern_calls, 3,
+            "each distinct region node must be converted exactly once"
         );
     }
 }

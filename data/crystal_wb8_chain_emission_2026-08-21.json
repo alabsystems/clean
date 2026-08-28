@@ -1,0 +1,139 @@
+{
+ "schema": "clean.crystal.wb8_chain_emission/1",
+ "date": "2026-08-21",
+ "lane": "LANE WB8 \u2014 the chain-shape emission: wall-B's S1 single-block call-chain becomes the ELEVENTH whole-body marker plan; four S1 bodies reach -O3; the d3 spelling and S2/S3 stay refused, measured not assumed",
+ "question": "Wave-EM deferred the WB-8 as chain shapes outside the CF plan's grammar, with their built models measured (crystal_cf_str_emission_2026-08-21.json wb8_chain_shapes). Emit S1's LIFO-region model fail-closed: what do the 8 bodies do at both levels?",
+ "method": "Detached trust worktrees at origin/main acb08e7616 (laneWB8/wt subject, laneWB8/wt-base control) \u2014 the newest LOCK-CONSISTENT origin/main state: the 28220d5879 merge pins first-party/ay at f289e7c856 (workspace version 0.10.0) while trust-mc 9aa35ad10 and ty 23e9daf3 manifests require ay-* ^0.13 from the git URL, so every root [patch] goes unused, the root Cargo.lock cannot resolve under --locked, and a TIP driver cannot build at all (measured, cargo metadata --locked: 'patch ay-encode v0.10.0 was not used in the crate graph' + 'cannot update the lock file'). clean submodule b4808f00c, sysroot-v13 (4-fact sysrootcheck OK both drivers), METADATA_VERSION 13. CONTROL sealed from the pristine tree; SUBJECT = control + (1) the chain-forward plan (plan_chain_fwd_markers/MfChainFwdPlan: Place/ByValue/Reborrow slots, the reborrow bit derived from typeck adjustments in chain_fwd_source_admits \u2014 HIR and trust-ir must independently witness the same skeleton), (2) its whole-body predicted walk predict_chain_fwd (the LIFO-region model as a closed form), (3) the emitter pre-step/operand-replacement/successor work in the Inst::Call arm (fail-closed: any plan/emitter disagreement is unsup and the body ships built's MIR), (4) the transit-pair admission in gate_derived_body (transit_pair_temps: pair-linked single-def / mentions==2 on BOTH locals), (5) the chain-ret-order SAT control (SatPerturb::ChainRetOrder \u2014 swaps the FINAL retirement's two runs through the sealed plan, so both sides of the marker law move together and only the frozen ORACLE can refuse).",
+ "subject_blobs": {
+  "flip.rs": "e4edf6a384965c61c03fff8b91d996609554cab8",
+  "to_mir.rs": "297522020deeea87a0e52dc000112789de0d763a",
+  "mir_differential.rs (frozen 709a7794)": "13cd4f258683fdede1877d194d674910fb6366a9"
+ },
+ "probes_em3": {
+  "fixture": "probes/em3.rs \u2014 the REAL source spellings of the 8 bodies, isolated on custom types (d1 needs_recheck, d2 LevelArc::eq, d3 LevelArc::fmt, d4 AxiomId/CleanMode::fmt, d5 arc_eq, d6 is_unpinned_olean_import, d7 BinderData::default)",
+  "control_O3": "d1/d2/d4 agreed + derived `<end>` (markers_exact false); d3/d5/d6/d7 the same; 4 flip events (the two nullary defaults, the CF_STR literal fmt, Ot::is_unpinned)",
+  "subject_O3": "d1 markers_exact TRUE '4 marker line(s) identical'; d2 TRUE '12'; d4 TRUE '8'; ALL THREE FLIP (events 4 -> 7: +d2_eq, +Ax::fmt, +Co::needs_recheck); d3 stays derived `<end>` (the chain_inner_admits refusal, fail-closed \u2014 NOT a mispredict); d5/d6/d7 stay `<end>` \u2014 the class boundary, checked",
+  "subject_O0": "d1/d2/d4 markers_exact TRUE at -O0 too; 11 flip events; d3 `<end>`",
+  "subject_O3_noflip": "0 flip events"
+ },
+ "whole_crate_subject_vs_control": {
+  "base": "$HOME/trust/scratchpad/laneWB8/wc-base",
+  "subject": "$HOME/trust/scratchpad/laneWB8/wc-subj",
+  "O3": {
+   "codegen_base": 525,
+   "codegen_subject": 529,
+   "ctfe_base": 41,
+   "ctfe_subject": 41,
+   "gained": 4,
+   "lost": 0,
+   "gained_names": [
+    "env::origin::ConstantOrigin::needs_recheck",
+    "<level::LevelArc as std::cmp::PartialEq>::eq",
+    "<mode::AxiomId as std::fmt::Display>::fmt",
+    "<mode::CleanMode as std::fmt::Display>::fmt"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 614,
+   "codegen_subject": 614,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 4
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "env::origin::ConstantOrigin::needs_recheck",
+   "<level::LevelArc as std::cmp::PartialEq>::eq",
+   "<mode::AxiomId as std::fmt::Display>::fmt",
+   "<mode::CleanMode as std::fmt::Display>::fmt"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1559,
+   "subject_agreed": 1559,
+   "base_markers_exact": 1469,
+   "subject_markers_exact": 1473
+  }
+ },
+ "whole_crate_perturbation_O3": {
+  "codegen_base": 525,
+  "codegen_subject": 529,
+  "codegen_perturbed": 526,
+  "lost_vs_subject_names": [
+   "<level::LevelArc as std::cmp::PartialEq>::eq (17051)",
+   "<mode::AxiomId as std::fmt::Display>::fmt (17992)",
+   "<mode::CleanMode as std::fmt::Display>::fmt (17994)"
+  ],
+  "kept_vs_base": "env::origin::ConstantOrigin::needs_recheck (3061) \u2014 ByValue-only chain: one retirement run, the swap is inert BY CONSTRUCTION (ret_swap is only set when an in-transit local exists) and is not counted as an application",
+  "regressed_vs_base": [],
+  "applications": "exactly 3, one per reborrow-carrying body (pert_check.py asserts the set equality and each count == 1)",
+  "probe_divergence": "probe em3 under the flag: flips 7 -> 5; La::d2_eq markers differ at line 8 (`dead s3` displaced), Ax::fmt at line 5: built `mk b2.0:dead s1:opaque:Ref{Str}` vs derived `mk b2.0:dead s2:opaque:Ref{Str}` \u2014 the swapped retirement run betrayed by first-appearance alpha numbering; the marker LAW stayed green, only the ORACLE refused"
+ },
+ "sealed_drivers": {
+  "control": "seal-base librustc_driver_base.dylib sha256 9ce7f9399f5c8236fdfa84aa633f10262c15e609abb886a1a1483460a450aa8f, rev acb08e7616 TREE clean",
+  "subject": "seal-subj librustc_driver_subj.dylib sha256 bfaf69baea0be8ac212de69fc49f774e8e66a1667e7d775d15f29cc0d8cd7adf, rev acb08e7616 TREE dirty (the five subject files; blobs above)",
+  "sysroot": "laneREG/sysroot-v13, sysrootcheck OK (4 facts incl. MIR decode) on every seal"
+ },
+ "marker_line_counts_per_converted_body": {
+  "env::origin::ConstantOrigin::needs_recheck (3061)": "4 marker line(s) identical (ByValue pair 2 + inner-arg pair 2)",
+  "<level::LevelArc as std::cmp::PartialEq>::eq (17051)": "12 marker line(s) identical (2 x [arg 2 + in-transit 2 + inner-arg 2])",
+  "<mode::AxiomId as std::fmt::Display>::fmt (17992)": "8 marker line(s) identical (Place pair 2 + arg 2 + in-transit 2 + inner-arg 2)",
+  "<mode::CleanMode as std::fmt::Display>::fmt (17994)": "8 marker line(s) identical (same shape)",
+  "NOT 0-vs-0": "verified per body from the subject whole-crate coverage rows (expect_check.py)"
+ },
+ "mutation_mcor": {
+  "mutations": [
+   "transit_pair_admits: t_mentions == 2 weakened to t_mentions <= 3",
+   "transit_pair_admits: u_calldest_defs == 1 clause deleted"
+  ],
+  "unit_test_kill": "on the M-COR tree flip::w3_regression_tests::wb8_any_forbidden_transit_pair_shape_is_refused FAILS at the third-mention assert (flip.rs:3842; 735 passed / 1 failed); on the subject tree 736/736 pass",
+  "whole_crate": {
+   "base": "$HOME/trust/scratchpad/laneWB8/wc-subj",
+   "subject": "$HOME/trust/scratchpad/laneWB8/wc-mcor",
+   "O3": {
+    "codegen_base": 529,
+    "codegen_subject": 529,
+    "ctfe_base": 41,
+    "ctfe_subject": 41,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "O0": {
+    "codegen_base": 614,
+    "codegen_subject": 614,
+    "ctfe_base": 42,
+    "ctfe_subject": 42,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "channel_moves": {},
+   "verdict_regressions": [],
+   "markers_gained": [],
+   "markers_lost": [],
+   "totals": {
+    "base_agreed": 1559,
+    "subject_agreed": 1559,
+    "base_markers_exact": 1473,
+    "subject_markers_exact": 1473
+   }
+  }
+ },
+ "oracle_and_controls": "mir_differential frozen (pin 709a7794; blob identical control<->subject, recorded in both seals); O3_noflip: 0 flip events; the chain-ret-order control moves BOTH sides of the marker law through the one sealed-plan bit, so the marker LAW stays green and only canon_markers-vs-built refuses \u2014 the cf-lit-order/mc-plan design; ret_swap is set only when the plan carries an in-transit local (a ByValue-only chain has one retirement run \u2014 the swap would be inert and is not counted as an application).",
+ "wb8_disposition": {
+  "S1_single_block_call_chain_x5": "FOUR CONVERTED (needs_recheck, LevelArc::eq, AxiomId::fmt, CleanMode::fmt \u2014 named in whole_crate_subject_vs_control.O3.gained_names, marker line counts below). The fifth, <LevelArc as Debug>::fmt, is REFUSED at chain_inner_admits, measured not assumed (-Zdump-mir=built, probes/em3.rs d3): its explicit `&**self` spelling mints a THREE-local chain (`_4 = &(*_5); _3 = &(*_4)`) and retires the inner argument temp BEFORE the bridge assigns (`bb1: StorageDead(_6); _4 = &(*_5); _3 = &(*_4)`) \u2014 a different successor discipline than the adjustment-minted two-local shape (d2/d4: bridge at position 0, THEN the dead). Claiming it would predict a sequence built refutes and convert nothing; refusing keeps the body marker-free with its -O0 flip intact (whole-crate O0 row-exact: 0 lost). Its emission is a next-wave slot kind, modelled from the recorded dump. NOTE: wave-EM's wb8_chain_shapes S1 grouped all five under the two-local model; the d3 dump CORRECTS that classification.",
+  "S2_branch_with_chains_x2": "REFUSED, measured not assumed (-Zdump-mir=built, probes/em3.rs d5/d6, this lane): (a) d5_arc_eq \u2014 the `||` short-circuit is a multi-block switchInt body; the LHS call's argument temps retire PER-ARM (duplicated `StorageDead(_5); StorageDead(_4)` in BOTH the true arm and the RHS arm), the condition temp `_3` spans the whole branch and retires at the JOIN block, and the RHS chain's own final retirement is PAIRWISE per slot reversed (`D10 D9 D7 D6` \u2014 transit,arg per slot), NOT the S1 statement-form two-run discipline (`D9 D6 D10 D7` would be args-reversed-then-transits): the S2 tail-expression chain follows a DIFFERENT measured retirement law than the S1 class, so extending the S1 plan to own it would predict a wrong sequence and LOSE the -O0 flip the body has today; (b) is_unpinned_olean_import \u2014 the match desugar mints PlaceMention/FakeRead/falseEdge/unreachable statements and a discriminant switch before the `&&` condbr; every one is a statement shape outside all eleven plans. Both bodies keep their wave-WB -O0 flips (whole-crate O0 row-exact: 0 lost). Their emission needs a branch-plan x chain composition with per-arm regions and join-block retirement \u2014 a next wave, modelled from these dumps.",
+  "S3_aggregate_of_call_results_x1": "REFUSED this wave \u2014 BinderData::default's model is fully measured (probes/em3.rs d7: `bb0: live(_1); _1 = default() -> bb1; bb1: live(_2); _2 = default() -> bb2; bb2: _0 = Bd { info: move _1, mult: move _2 }; dead(_2); dead(_1); return` \u2014 one live per call destination at its own block head, the aggregate assign consumes them, reverse-creation-order retirement AFTER the assign) and a twelfth plan (MfAggCallPlan) is drafted in this lane's scratchpad (s3_plan/s3_predict/s3_gate_methods/s3_return_arm), but its Return-arm integration (the Const(Aggregate)/InsertField collapse must consume the planned temps) was not completed and validated inside this lane's window; landing it half-validated risks the body's existing -O0 flip, so it stays refused \u2014 the body keeps its wave-WB -O0 flip (whole-crate O0 row-exact: 0 lost)."
+ },
+ "landed_as": "trust 54fa5a0174d7d0d8a0dbb1e6bed240336f71d24a (parent 5e99e9a47b, origin/main) \u2014 measured at acb08e7616 (the newest lock-consistent state; the five subject files unchanged between acb08e7616 and the landing parent, checked file-by-file; options.rs/lib.rs merged onto the moved tip with the sibling's orthogonal hunks kept)"
+}

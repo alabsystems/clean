@@ -31,9 +31,6 @@ pub(crate) fn all_features() -> Vec<&'static FeatureDescriptor> {
     // `clean auto prove` so sibling verbs (`auto premise`, `auto smt`, …)
     // can drop in without reshaping the top-level clap tree.
     v.extend(clean_auto::cli::FEATURES);
-    // #3452: TLA+ obligation verification verb (Experimental). Nested under
-    // `clean verify tla` next to `verify rust`.
-    v.extend(clean_tla::cli::FEATURES);
     v.extend(clean_server::cli::FEATURES);
     v.extend(clean_fold::cli::FEATURES);
     // `commit` verbs live in clean-fold's absorbed `commit` module
@@ -88,9 +85,6 @@ pub(crate) fn all_features() -> Vec<&'static FeatureDescriptor> {
     v.extend(crate::cmd_audit::FEATURES);
     // Phase 3 — absorbed orphan binaries
     v.extend(clean_discovery::cli::FEATURES);
-    // `tlaps` verbs live in clean-tla's absorbed `bench::cli` module
-    // (ex clean-tlaps-bench; rearch stage 9 facade consolidation).
-    v.extend(clean_tla::bench::cli::FEATURES);
     v.extend(clean_mathverse::cli::FEATURES);
     // Phase 3.5 (#3512) — browse-oriented mathverse verbs absorbed into the
     // unified `clean mathverse <verb>` tree (list / sample / deps / version).

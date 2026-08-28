@@ -14,40 +14,53 @@
 
 use super::*;
 
+/// The minted `def` line for one name, from the committed script.
+fn minted_line(name: &str) -> &'static str {
+    let prefix = format!("def {name} ");
+    ir_br_module_defs()
+        .iter()
+        .find(|l| l.starts_with(&prefix))
+        .unwrap_or_else(|| panic!("the minted script must define {name}"))
+}
+
 /// Two `condbr`s with the emitted targets. Exchanging either pair negates
 /// what the body computes.
 #[test]
 fn test_two_condbrs_with_the_emitted_targets() {
-    assert!(SRC_IR_BR_B0.contains("IRInst.condbr ir_d6 ir_d1 ir_nl0 ir_d2 ir_nl0"));
-    assert!(SRC_IR_BR_B2.contains("IRInst.condbr ir_d8 ir_d4 ir_nl0 ir_d5 ir_nl0"));
+    assert!(minted_line("ir_br_b0").contains("IRInst.condbr ir_d6 ir_d1 ir_nl0 ir_d2 ir_nl0"));
+    assert!(minted_line("ir_br_b2").contains("IRInst.condbr ir_d8 ir_d4 ir_nl0 ir_d5 ir_nl0"));
     assert!(
-        !SRC_IR_BR_B0.contains("IRInst.switch") && !SRC_IR_BR_B2.contains("IRInst.switch"),
+        !minted_line("ir_br_b0").contains("IRInst.switch")
+            && !minted_line("ir_br_b2").contains("IRInst.switch"),
         "this body dispatches with condbr, not with a switch"
     );
     // Neither condbr passes block arguments: the joins are fed by `br`.
-    assert_eq!(SRC_IR_BR_B0.matches("ir_nl0").count(), 3);
+    assert_eq!(minted_line("ir_br_b0").matches("ir_nl0").count(), 3);
 }
 
 /// The two `icmp uge` are SEPARATE instructions in separate blocks binding
 /// separate SSA ids. Sharing one would be a smaller CFG.
 #[test]
 fn test_the_lower_bound_is_computed_twice() {
-    assert!(SRC_IR_BR_B1.contains("IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d0 ir_d1) ir_d7"));
-    assert!(SRC_IR_BR_B2.contains("IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d0 ir_d1) ir_d8"));
-    assert!(SRC_IR_BR_B4.contains("IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d0 ir_d2) ir_d9"));
+    assert!(minted_line("ir_br_b1")
+        .contains("IRInst.icmp IRICmpOp.uge (IRTy.uint_ 32) ir_d0 ir_d1) ir_d7"));
+    assert!(minted_line("ir_br_b2")
+        .contains("IRInst.icmp IRICmpOp.uge (IRTy.uint_ 32) ir_d0 ir_d1) ir_d8"));
+    assert!(minted_line("ir_br_b4")
+        .contains("IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d0 ir_d2) ir_d9"));
 }
 
 /// Two join blocks, and the inner one branches into the outer one.
 #[test]
 fn test_two_join_blocks_chained() {
-    assert!(SRC_IR_BR_B3.contains("IRBlock.mk ir_d3 (ir_nl1 ir_d3)"));
-    assert!(SRC_IR_BR_B6.contains("IRBlock.mk ir_d6 (ir_nl1 ir_d4)"));
+    assert!(minted_line("ir_br_b3").contains("IRBlock.mk ir_d3 (ir_nl1 ir_d3)"));
+    assert!(minted_line("ir_br_b6").contains("IRBlock.mk ir_d6 (ir_nl1 ir_d4)"));
     assert!(
-        SRC_IR_BR_B6.contains("IRInst.br ir_d3 (ir_nl1 ir_d4)"),
+        minted_line("ir_br_b6").contains("IRInst.br ir_d3 (ir_nl1 ir_d4)"),
         "the inner join forwards its parameter to the outer join"
     );
     assert!(
-        SRC_IR_BR_B3.contains("IRInst.ret"),
+        minted_line("ir_br_b3").contains("IRInst.ret"),
         "only the outer join returns"
     );
 }

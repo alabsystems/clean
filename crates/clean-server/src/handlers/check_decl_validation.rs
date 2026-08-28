@@ -566,6 +566,8 @@ inductive Bad : Base → Prop
             )],
             derived_instances: vec![],
             wants_deep_induction: false,
+            wants_container_map: false,
+            wants_container_rel: false,
             modifiers: clean_parser::DeclModifiers::default(),
         };
 
@@ -762,6 +764,8 @@ inductive Bad : Base → Prop
             ],
             derived_instances: vec![],
             wants_deep_induction: false,
+            wants_container_map: false,
+            wants_container_rel: false,
             modifiers: clean_parser::DeclModifiers::default(),
         };
 

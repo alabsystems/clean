@@ -1607,7 +1607,7 @@ impl<'a> ElabCtx<'a> {
                     expected: format!(
                         "registered inductive scrutinee for eliminator `{elim_name}`"
                     ),
-                    actual: format!("{scrutinee_ty_whnf:?}"),
+                    actual: format!("{scrutinee_ty_whnf}"),
                 });
             }
         };
@@ -1757,7 +1757,7 @@ impl<'a> ElabCtx<'a> {
         let ExprKind::Const(ind_name, _) = head.kind() else {
             return Err(ElabError::TypeMismatch {
                 expected: "fully applied registered inductive scrutinee".to_string(),
-                actual: format!("{scrutinee_ty:?}"),
+                actual: format!("{scrutinee_ty}"),
             });
         };
         let ind_info = self.authenticate_inductive_metadata(ind_name)?;

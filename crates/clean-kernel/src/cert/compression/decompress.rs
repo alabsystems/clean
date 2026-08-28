@@ -259,9 +259,9 @@ impl<'a> DecompressionState<'a> {
                 arg_cert,
                 result_type,
             } => Ok(ProofCert::App {
-                fn_cert: Box::new(self.decompress_cert(*fn_cert)?),
+                fn_cert: Arc::new(self.decompress_cert(*fn_cert)?),
                 fn_type: Box::new(self.decompress_expr(*fn_type)?),
-                arg_cert: Box::new(self.decompress_cert(*arg_cert)?),
+                arg_cert: Arc::new(self.decompress_cert(*arg_cert)?),
                 result_type: Box::new(self.decompress_expr(*result_type)?),
             }),
             CompressedCertNode::Lam {
@@ -271,8 +271,8 @@ impl<'a> DecompressionState<'a> {
                 result_type,
             } => Ok(ProofCert::Lam {
                 binder_info: *binder_info,
-                arg_type_cert: Box::new(self.decompress_cert(*arg_type_cert)?),
-                body_cert: Box::new(self.decompress_cert(*body_cert)?),
+                arg_type_cert: Arc::new(self.decompress_cert(*arg_type_cert)?),
+                body_cert: Arc::new(self.decompress_cert(*body_cert)?),
                 result_type: Box::new(self.decompress_expr(*result_type)?),
             }),
             _ => self.decompress_cert_compound(node),
@@ -293,9 +293,9 @@ impl<'a> DecompressionState<'a> {
                 body_level,
             } => Ok(ProofCert::Pi {
                 binder_info: *binder_info,
-                arg_type_cert: Box::new(self.decompress_cert(*arg_type_cert)?),
+                arg_type_cert: Arc::new(self.decompress_cert(*arg_type_cert)?),
                 arg_level: self.decompress_level(*arg_level)?,
-                body_type_cert: Box::new(self.decompress_cert(*body_type_cert)?),
+                body_type_cert: Arc::new(self.decompress_cert(*body_type_cert)?),
                 body_level: self.decompress_level(*body_level)?,
             }),
             CompressedCertNode::Let {
@@ -304,9 +304,9 @@ impl<'a> DecompressionState<'a> {
                 body_cert,
                 result_type,
             } => Ok(ProofCert::Let {
-                type_cert: Box::new(self.decompress_cert(*type_cert)?),
-                value_cert: Box::new(self.decompress_cert(*value_cert)?),
-                body_cert: Box::new(self.decompress_cert(*body_cert)?),
+                type_cert: Arc::new(self.decompress_cert(*type_cert)?),
+                value_cert: Arc::new(self.decompress_cert(*value_cert)?),
+                body_cert: Arc::new(self.decompress_cert(*body_cert)?),
                 result_type: Box::new(self.decompress_expr(*result_type)?),
             }),
             CompressedCertNode::Lit { lit, type_ } => Ok(ProofCert::Lit {
@@ -319,7 +319,7 @@ impl<'a> DecompressionState<'a> {
                 actual_type,
                 eq_steps,
             } => Ok(ProofCert::DefEq {
-                inner: Box::new(self.decompress_cert(*inner)?),
+                inner: Arc::new(self.decompress_cert(*inner)?),
                 expected_type: Box::new(self.decompress_expr(*expected_type)?),
                 actual_type: Box::new(self.decompress_expr(*actual_type)?),
                 eq_steps: eq_steps.clone(),
@@ -330,7 +330,7 @@ impl<'a> DecompressionState<'a> {
                 result_type,
             } => Ok(ProofCert::MData {
                 metadata: metadata.clone(),
-                inner_cert: Box::new(self.decompress_cert(*inner_cert)?),
+                inner_cert: Arc::new(self.decompress_cert(*inner_cert)?),
                 result_type: Box::new(self.decompress_expr(*result_type)?),
             }),
             CompressedCertNode::Proj {
@@ -342,7 +342,7 @@ impl<'a> DecompressionState<'a> {
             } => Ok(ProofCert::Proj {
                 struct_name: struct_name.clone(),
                 idx: *idx,
-                expr_cert: Box::new(self.decompress_cert(*expr_cert)?),
+                expr_cert: Arc::new(self.decompress_cert(*expr_cert)?),
                 expr_type: Box::new(self.decompress_expr(*expr_type)?),
                 field_type: Box::new(self.decompress_expr(*field_type)?),
             }),

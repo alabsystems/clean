@@ -210,124 +210,10 @@ pub enum LiaDetail {
     FarkasOnly,
 }
 
-/// Alethe rule kind classification.
-///
-/// Covers the Alethe proof format rules. Not all are semantically checked
-/// in Phase 1; unchecked rules are structurally accepted or trusted.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum AletheRuleKind {
-    // Boolean rules
-    True,
-    False,
-    NotTrue,
-    NotFalse,
-    AndPos(u32),
-    AndNeg,
-    OrPos,
-    OrNeg(u32),
-    ImpliesPos,
-    ImpliesNeg1,
-    ImpliesNeg2,
-    EquivPos1,
-    EquivPos2,
-    EquivNeg1,
-    EquivNeg2,
-    ItePos1,
-    ItePos2,
-    IteNeg1,
-    IteNeg2,
-    Contraction,
-
-    // Resolution
-    Resolution,
-    ThResolution,
-
-    // EUF step rules
-    Refl,
-    Symm,
-    Trans,
-    Cong,
-
-    // EUF theory lemma step rules
-    EqReflexive,
-    EqTransitive,
-    EqCongruent,
-    EqCongruentPred,
-
-    // LRA rules
-    LaGeneric,
-    LaTautology,
-    LaDisequality,
-    LaTotality,
-
-    // LIA
-    LiaGeneric,
-
-    // BV
-    BvBitblast,
-
-    // Array
-    ReadOverWritePos,
-    ReadOverWriteNeg,
-    Extensionality,
-
-    // FP
-    FpToBv,
-
-    // String
-    StringLength,
-    StringDecompose,
-    StringCodeInj,
-
-    // Quantifier
-    ForallInst,
-    Skolem,
-
-    // Subproof
-    Subproof,
-    Bind,
-
-    // Simplification (structural)
-    AllSimplify,
-    BoolSimplify,
-    ArithSimplify,
-
-    // Trust / hole
-    Trust,
-    Hole,
-
-    // DRUP
-    Drup,
-
-    /// Unknown or user-defined rule.
-    Other(String),
-}
-
-impl std::fmt::Display for AletheRuleKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AletheRuleKind::True => write!(f, "true"),
-            AletheRuleKind::False => write!(f, "false"),
-            AletheRuleKind::Resolution => write!(f, "resolution"),
-            AletheRuleKind::ThResolution => write!(f, "th_resolution"),
-            AletheRuleKind::Refl => write!(f, "refl"),
-            AletheRuleKind::Symm => write!(f, "symm"),
-            AletheRuleKind::Trans => write!(f, "trans"),
-            AletheRuleKind::Cong => write!(f, "cong"),
-            AletheRuleKind::EqReflexive => write!(f, "eq_reflexive"),
-            AletheRuleKind::EqTransitive => write!(f, "eq_transitive"),
-            AletheRuleKind::EqCongruent => write!(f, "eq_congruent"),
-            AletheRuleKind::EqCongruentPred => write!(f, "eq_congruent_pred"),
-            AletheRuleKind::LaGeneric => write!(f, "la_generic"),
-            AletheRuleKind::LaTautology => write!(f, "la_tautology"),
-            AletheRuleKind::Trust => write!(f, "trust"),
-            AletheRuleKind::Hole => write!(f, "hole"),
-            AletheRuleKind::Other(name) => write!(f, "{name}"),
-            _ => write!(f, "{self:?}"),
-        }
-    }
-}
+/// Alethe rule kind classification (defined in
+/// [`crate::smt_verify::alethe_rule_kind`], re-exported here so the historical
+/// `smt_verify::dag::AletheRuleKind` path keeps resolving).
+pub use crate::smt_verify::alethe_rule_kind::AletheRuleKind;
 
 /// The complete proof DAG.
 #[derive(Debug, Clone)]
@@ -410,7 +296,7 @@ impl SmtProofDag {
     ///
     /// Returns `true` if one is `Not(other)` or they are `Bool(true)` vs `Bool(false)`.
     #[must_use]
-    pub fn are_complementary(&self, a: SmtTermId, b: SmtTermId) -> bool {
+    pub(crate) fn are_complementary(&self, a: SmtTermId, b: SmtTermId) -> bool {
         let term_a = match self.term(a) {
             Some(t) => t,
             None => return false,
@@ -445,7 +331,7 @@ impl SmtProofDag {
     ///
     /// Returns `Some((lhs, rhs))` if so.
     #[must_use]
-    pub fn as_negated_equality(&self, id: SmtTermId) -> Option<(SmtTermId, SmtTermId)> {
+    pub(crate) fn as_negated_equality(&self, id: SmtTermId) -> Option<(SmtTermId, SmtTermId)> {
         match self.term(id)? {
             SmtTerm::Not(inner) => self.as_equality(*inner),
             _ => None,

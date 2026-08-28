@@ -333,17 +333,29 @@ impl<'env> MicroChecker<'env> {
                 }
                 // Fail-closed coverage check: the const MUST be modeled by the
                 // read-only env, else we cannot vouch for it.
-                if self.env.get(name).is_none() {
+                let Some(entry) = self.env.get(name) else {
                     return Err(MicroError::Unsupported(format!(
                         "Const {name:?} not in micro-env (cannot resolve)"
                     )));
+                };
+                // Cross-check the cert-carried type against the env's recorded
+                // type — the check this arm's contract always documented.
+                // Universe instantiation is still not re-derived (levels are
+                // intentionally erased for the monomorphic corpus, and
+                // universe-blind def_eq absorbs residual Sort-level
+                // differences), so what this rejects is exactly a STRUCTURAL
+                // forgery: a cert claiming an unrelated type for a known
+                // constant, which the previous presence-only gate let through.
+                let env_ty = entry.ty.clone();
+                if !self.def_eq_impl(ty, &env_ty)? {
+                    return Err(MicroError::TypeMismatch {
+                        expected: env_ty,
+                        actual: ty.as_ref().clone(),
+                    });
                 }
-                // Return the cert-carried INSTANTIATED type. We do not re-derive
-                // universe instantiation here (levels are intentionally erased
-                // for the monomorphic corpus); the diversity value lives in the
-                // App-rule type recomputation and the independent reduction
-                // re-check, both of which use this type. The env-presence gate
-                // above is what keeps this fail-closed.
+                // Return the cert-carried INSTANTIATED type; the diversity
+                // value lives in the App-rule type recomputation and the
+                // independent reduction re-check, both of which use this type.
                 Ok(ty.as_ref().clone())
             }
 

@@ -635,8 +635,29 @@ impl Environment {
                 // the proof) and ONLY pass-2-verified, dependency-closure-gated theorems
                 // are exported. An ill-formed type (a construction bug) would make the
                 // reusing proof FAIL pass-2 and the gate DROP it — never a false accept.
-                // Validated by count-equivalence (two-pass+gate == sequential). The flag
-                // is `false` for every non-two-pass caller, so this never runs elsewhere.
+                // The flag is `false` for every non-two-pass caller, so this never runs
+                // elsewhere.
+                //
+                // R1-MM (2026-08-27): the three mechanisms are now MECHANIZED, in
+                // crates/clean-olean/tests/mm_two_pass_theorem.rs — fail-closed entry,
+                // pass-1 reporting no verdict of any kind, a kernel-rejected proof never
+                // verified by any range, and the gate's fixpoint removal (including the
+                // cascade) — each with an adversarial arm. The blanket sentence this
+                // comment used to carry, "validated by count-equivalence (two-pass+gate ==
+                // sequential)", was NOT re-derivable from the control flow and is
+                // withdrawn: it holds on a clean corpus and when a dependency FAILS, but
+                // it is FALSE when a `$p` dependency verifies only on the GROUND
+                // (non-reusable) fallback path. Pass-1 puts that dependency's LIGHT
+                // SCHEMATIC type in the env and its label in `cache`/`sigs`
+                // unconditionally, so a worker whose pass-2 range excludes it accepts a
+                // dependent the sequential verifier SKIPS, and the gate keeps that
+                // dependent because its predicate is `D ∈ verified`, not "the type the
+                // dependent was checked against is the type D's own CHECKED add_decl
+                // registered". Measured, with a witness corpus, in
+                // `test_ground_fallback_dep_divergence_survives_the_gate_known_gap`;
+                // scope, consequences and the two candidate fixes are in
+                // docs/issues/2026-08-23-r1-mm-two-pass-theorem.md. Until that is closed
+                // this row stays at 1 — the exit theorem is not yet earned.
                 //
                 // G1 FAIL-CLOSE: the flag alone no longer authorizes dropping the proof.
                 // The caller must be provably inside a sanctioned two-pass scope (an
@@ -645,6 +666,28 @@ impl Environment {
                 // guard now fails closed here instead of registering an unchecked type —
                 // closing the "axiom-shaped smuggle" escape hatch. SOUNDNESS: this only
                 // ADDS a precondition to the skip path; the checked path is unaffected.
+                //
+                // G6 RATCHET ROW (2026-08-23). SOUNDNESS: this call is the ONE
+                // production `add_decl_unchecked` / `add_decl_structural` call site in
+                // `crates/**`, and until 2026-08-22 the ledger said there were none:
+                // `data/unchecked_decl_ratchet.json` declared 0/0 and its own note
+                // claimed "ALL remaining … call sites are TEST-only". Both were false,
+                // and nothing measured them — the gates read the JSON, never the tree.
+                // The site is now COUNTED (`add_decl_unchecked_count` 0 → 1) with the
+                // three-mechanism argument written out on its row: (1) the G1 sentinel
+                // above, (2) PASS-2 re-adding every in-range theorem through the CHECKED
+                // `add_decl`, and (3) `mm_gate`'s transitive `$p`-closure filter, so only
+                // theorems whose own type AND proof were kernel-checked, resting only on
+                // theorems that were, are ever exported. Correcting a count that was
+                // always wrong is not a ratchet regression: no bypass was added.
+                // Classified independently as `add_decl_mm_axiom_only`
+                // (asserts-own-authority) in `data/trust_verdict_emitters.json` and as
+                // G1 in `docs/PILLAR_1_TRUST_MAP.md`. Tracking record: audit finding 1 of
+                // commit `4d12619e8` (2026-08-22). ENFORCED, not asserted:
+                // `scripts/check_add_decl_ratchet.py` re-derives this site from source on
+                // every `scripts/local_gate.sh` run, requires this comment, and pins the
+                // sanctioned-site list IN CODE — moving, copying or adding a call here
+                // reddens the gate.
                 if !mm_two_pass_active() {
                     debug_assert!(
                         false,
@@ -982,11 +1025,14 @@ impl Environment {
     /// Upgrade an existing VALUE-FREE constant (an axiom stub) to a fully
     /// kernel-CHECKED value-bearing declaration of the same name and type.
     ///
-    /// This is the CHECKED counterpart of the trusted-import healing in
-    /// `upgrade_axiom_stubs` (registration.rs): where that path swaps the
-    /// value in UNCHECKED (acceptable only in the trusted `.olean` loader
-    /// lane), this one requires the incoming declaration to pass the exact
-    /// `add_decl` soundness gauntlet before the swap, so it is usable from
+    /// This is the STRICT single-record sibling of the import healing in
+    /// `upgrade_axiom_stubs_checked` (registration.rs): where that batch lane
+    /// runs the G4-precedent per-record checks (type anchor + `infer_sort` +
+    /// `check_type`, `UnknownConst`-tolerant for legitimate forward refs mid-
+    /// load — the old fully-UNCHECKED `upgrade_axiom_stubs` is test-gated
+    /// since R1-STUB, 2026-08-24), this one requires the incoming declaration
+    /// to pass the exact `add_decl` soundness gauntlet, with NO tolerance and
+    /// with the stub removed, before the swap — so it is usable from
     /// trust-sensitive lanes (e.g. the mathverse incremental verifier).
     ///
     /// Preconditions enforced (each with a typed error):

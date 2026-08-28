@@ -12,6 +12,7 @@ use crate::test_utils::run_with_stack;
 use crate::Name;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 const TINY_STACK: usize = 256 * 1024;
 
@@ -42,7 +43,7 @@ fn deep_def_eq_cert(depth: usize) -> ProofCert {
     let sort_type = Expr::from_kind(crate::expr::ExprKind::Sort(Level::succ(Level::zero())));
     for _ in 0..depth {
         cert = ProofCert::DefEq {
-            inner: Box::new(cert),
+            inner: Arc::new(cert),
             expected_type: Box::new(sort_type.clone()),
             actual_type: Box::new(sort_type.clone()),
             eq_steps: Vec::new(),
@@ -104,9 +105,9 @@ fn test_replay_cert_deep_sort_extraction_is_stack_safe() {
     let prop = Expr::from_kind(crate::expr::ExprKind::Sort(Level::zero()));
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(deep_def_eq_cert(10_000)),
+        arg_type_cert: Arc::new(deep_def_eq_cert(10_000)),
         arg_level: Level::succ(Level::zero()),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -249,7 +250,7 @@ fn bounded_debug_preserves_shallow_certificate_metadata() {
             Name::from_string("diagnostic.flag"),
             MDataValue::String("abcdefghijklmnopqrstuvwxyz0123456789-tail".into()),
         )],
-        inner_cert: Box::new(ProofCert::BVar {
+        inner_cert: Arc::new(ProofCert::BVar {
             idx: 7,
             expected_type: Box::new(Expr::prop()),
         }),

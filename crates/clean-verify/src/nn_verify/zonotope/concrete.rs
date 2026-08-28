@@ -77,7 +77,7 @@ impl ConcreteZonotope {
 
     /// Number of generators.
     #[must_use]
-    pub fn num_generators(&self) -> usize {
+    pub(crate) fn num_generators(&self) -> usize {
         self.generators.len()
     }
 
@@ -386,7 +386,7 @@ impl ConcreteZonotope {
     /// definition requires `|coeffs[i]| <= 1` for membership, but this
     /// method does not enforce that constraint -- callers may pass any
     /// coefficients for exploration.
-    pub fn sample_point(&self, coeffs: &[f64]) -> Result<Vec<f64>, ZonotopeError> {
+    pub(crate) fn sample_point(&self, coeffs: &[f64]) -> Result<Vec<f64>, ZonotopeError> {
         let n = self.num_generators();
         if coeffs.len() != n {
             return Err(ZonotopeError::InvalidCoefficients {

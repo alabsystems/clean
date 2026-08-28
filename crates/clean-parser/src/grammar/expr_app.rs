@@ -294,7 +294,17 @@ impl Parser {
             // Postfix `⁻¹` (group/field inverse `Inv.inv`). Attaches to the
             // immediately-preceding atom/application, exactly like the `!` bang
             // above. `x⁻¹` → `Inv.inv x` (Lean `postfix:max "⁻¹" => Inv.inv`).
-            if matches!(self.current_kind(), TokenKind::InvNotation) {
+            //
+            // MAXIMAL MUNCH: `⁻¹` is also the PREFIX of a longer declared
+            // symbol — `f ⁻¹' s` is `Set.preimage f s` (`infixl:80`,
+            // `Mathlib/Data/Set/Operations.lean`), whose token sequence starts
+            // with this very token. Lean resolves that from its token table by
+            // longest match; consuming the inverse here first would strand the
+            // trailing prime and lose the operator, so a registered operator
+            // that matches at the cursor wins.
+            if matches!(self.current_kind(), TokenKind::InvNotation)
+                && !self.starts_custom_infix_or_postfix_at(0)
+            {
                 let inv_span = self.current_span();
                 self.advance(); // consume ⁻¹
                 let target = if let Some(last_arg) = pending_args.pop() {
@@ -696,6 +706,53 @@ impl Parser {
         {
             return false;
         }
+        // SAME-LINE next field: `structure Point where x : Nat y : Nat`. At the
+        // TOP level of a field type a bare `ident :` cannot continue the current
+        // type (a naked ascription is not an expression outside delimiters), so
+        // it must be the next field's name — the newline requirement above was
+        // over-conservative and made single-line multi-field structures parse
+        // `Nat y` as an application (`TooManyArguments` + a parser-recovery raw
+        // decl; pinned by `test_issue173_simple_structure_still_works`). Gated
+        // on `field_delim_depth == 0` so everything the newline rule's comment
+        // protects — `(f x : T)` ascriptions, `(x y : T)` binder groups — stays
+        // inside its delimiter, where this arm never fires. `Colon` only:
+        // a same-line `ident :=` is a default value, not a field boundary.
+        if self.in_field_type
+            && self.field_delim_depth == 0
+            && matches!(current_kind, TokenKind::Ident(_))
+            && matches!(self.kind_at(offset + 1), Some(TokenKind::Colon))
+        {
+            return false;
+        }
+
+        // NEXT PAREN FIELD GROUP: inside a `where` block a NEWLINE-LEADING
+        // `(x… : T)` at the top level of a field type is the next
+        // parenthesized field-binder group (`structure P where a : Nat
+        // ⏎ (b c : Nat)`), not an application argument — the exact mirror of
+        // the newline-leading `ident :` arm above, for the group spelling.
+        // Without it the group is swallowed into the previous field's type as
+        // `Nat (b c : Nat)`. The newline gate keeps a same-line `(f x : T)`
+        // ascription argument intact; the depth gate keeps groups inside
+        // delimiters intact. (A newline-leading `(f x : T)` ascription used as
+        // a continuation argument is the shape Lean's colGt layout rule also
+        // refuses at field indentation, so the boundary reading is the
+        // Lean-faithful one.)
+        if self.in_field_type
+            && self.field_delim_depth == 0
+            && matches!(self.kind_at(offset), Some(TokenKind::LParen))
+            && self
+                .tokens
+                .get(self.pos + offset)
+                .is_some_and(|t| t.preceded_by_newline)
+        {
+            let mut j = offset + 1;
+            while matches!(self.kind_at(j), Some(TokenKind::Ident(_))) {
+                j += 1;
+            }
+            if j > offset + 1 && matches!(self.kind_at(j), Some(TokenKind::Colon)) {
+                return false;
+            }
+        }
 
         // A token that begins a user-declared infix/postfix operator (e.g. an
         // `Ident("~>")` symbol) is an operator, not an application argument.
@@ -1065,6 +1122,26 @@ impl Parser {
 
     /// Atomic expressions
     pub(super) fn atom_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        // Track delimiter depth within a structure-field TYPE: while this atom
+        // is a delimited group, the same-line next-field boundary in
+        // `can_start_arg` must not fire — `(f x : T)` / `(x y : T)` inside a
+        // field type are ascriptions/binder groups, not the next field.
+        let field_delim = self.in_field_type
+            && matches!(
+                self.current_kind(),
+                TokenKind::LParen | TokenKind::LAngle | TokenKind::LBrace | TokenKind::LBracket
+            );
+        if field_delim {
+            self.field_delim_depth += 1;
+        }
+        let result = self.atom_expr_inner();
+        if field_delim {
+            self.field_delim_depth -= 1;
+        }
+        result
+    }
+
+    fn atom_expr_inner(&mut self) -> Result<SurfaceExpr, ParseError> {
         // Applies to THIS atom only. Cleared immediately so a nested parse
         // (e.g. the `expr()` behind `(`) sees the ordinary `Type u` grammar.
         let type_atomic = self.type_atomic_in_arg;
@@ -1839,11 +1916,28 @@ impl Parser {
                         self.advance(); // consume lbrace
                         self.record_literal_body(span)
                     }
-                    other => Err(ParseError::UnexpectedToken {
-                        line: self.current_line(),
-                        col: self.current_span().start,
-                        message: format!("expected identifier after '.', got {other:?}"),
-                    }),
+                    // A KEYWORD token as a leading-dot name: `.rfl` lexes as
+                    // [Dot][Rfl] because `rfl` is a keyword, and this arm only
+                    // took Ident — while the projection postfix in this same
+                    // file already accepts every as_keyword_str token after an
+                    // adjacent dot. `ht v v .rfl` (Mathlib Logic/Basic:64) and
+                    // `.default` are the shapes. Mirrors the Ident arm minus
+                    // the nested-dot loop (a keyword constructor name is
+                    // always terminal: `.rfl.symm` projects off the result,
+                    // which the postfix path handles).
+                    other => {
+                        if let Some(kw) = other.as_keyword_str() {
+                            let end_span = self.current_span();
+                            self.advance();
+                            Ok(SurfaceExpr::Ident(span.merge(end_span), format!(".{kw}")))
+                        } else {
+                            Err(ParseError::UnexpectedToken {
+                                line: self.current_line(),
+                                col: self.current_span().start,
+                                message: format!("expected identifier after '.', got {other:?}"),
+                            })
+                        }
+                    }
                 }
             }
 

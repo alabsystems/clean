@@ -40,7 +40,7 @@
 
 use std::collections::HashMap;
 
-use clean_kernel::expr::ExprKind;
+use clean_kernel::expr::{BinderInfo, ExprKind};
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr};
@@ -494,6 +494,223 @@ fn orient_eq_to_ground(l: &Expr, r: &Expr, proof: &Expr) -> Option<(Expr, i64, E
 }
 
 // ===========================================================================
+// Shifted `Int` inequality from a single `≤` hypothesis.
+// ===========================================================================
+
+/// Prove a shifted `Int` inequality goal `GL REL GR` (`REL` ∈ {`<`, `≤`}) from a
+/// single hypothesis `h : a ≤ b`, where each goal side is the corresponding
+/// hypothesis side shifted by a GROUND literal offset:
+///
+/// ```text
+/// GL ∈ { a, a + dl, a - dl }   GR ∈ { b, b + dr, b - dr }   (dl, dr ground)
+/// (h : a ≤ b)  ⊢  a - 1 < b + 1     (the B7 `arith-int-bound` shape)
+/// (h : a ≤ b)  ⊢  a - 2 ≤ b
+/// (h : a ≤ b)  ⊢  a < b + 3
+/// ```
+///
+/// **Decision (fail closed).** With signed offsets `dl`, `dr` and
+/// `s = dl + (1 if strict else 0)`, `t = dr`, the goal follows from `a ≤ b`
+/// (uniformly in `a`, `b`) iff `s ≤ t`; any other shape or slack returns
+/// `None`, so FALSE goals (`a ≤ b ⊢ a + 1 ≤ b`) never get a candidate.
+///
+/// **Construction (all registered constructive prelude lemmas).**
+/// `Int.lt x y` is definitionally `Int.le (x + 1) y`, so the goal is
+/// `Int.le GL' GR` with `GL' = GL + 1` when strict. Build
+///
+/// 1. `p0 = @Int.add_le_add_right a b h s : a + s ≤ b + s`;
+/// 2. when `s < t`, `q = @Int.add_le_add_left s t w b : b + s ≤ b + t`, where
+///    `w = Int.NonNeg.mk (t - s)` is the ground witness of `s ≤ t`
+///    (`Int.le s t` unfolds to `Int.NonNeg (t - s)`, which ground-reduces to
+///    `Int.NonNeg (Int.ofNat (t - s))` — the constructor's type), and chain
+///    `p = @Int.le_trans (a+s) (b+s) (b+t) p0 q : a + s ≤ b + t`;
+/// 3. cast `a + s` back to the goal spine `GL'` via `Eq.mpr` over
+///    `congrArg (fun x => Int.le x (b+t))`: the only non-def-eq reassociation
+///    is `(a + dl) + 1 = a + s` (one `@Int.add_assoc a dl 1` instance, its
+///    ground tail folded definitionally) and `a = a + 0`
+///    (`Eq.symm (Int.add_zero a)`); the `b`-side spellings are def-eq as-is.
+///
+/// The result is a CANDIDATE only: the caller's `close_goal` re-checks it in
+/// the kernel (strict inference + `is_def_eq` against the goal), so a wrong
+/// offset split, lemma orientation, or non-reducing ground bridge is rejected,
+/// never trusted. Zero domain-specific axioms.
+pub(crate) fn try_prove_int_shifted_le_from_hyp(
+    goal_target: &Expr,
+    h_proof: &Expr,
+    hyp_ty: &Expr,
+) -> Option<Expr> {
+    // Hypothesis: a plain non-strict `≤`/`≥` over Int (GE is flipped by the
+    // matcher; its proposition is def-eq to the flipped `Int.le`).
+    let (a, b) = match_int_le(hyp_ty)?;
+
+    // Goal: `<` or `≤` over Int.
+    let head = goal_target.get_app_fn();
+    let ExprKind::Const(head_name, _) = head.kind() else {
+        return None;
+    };
+    let strict = match head_name.to_string().as_str() {
+        "LT.lt" | "Int.lt" => true,
+        "LE.le" | "Int.le" => false,
+        _ => return None,
+    };
+    let args = goal_target.get_app_args();
+    let (gl, gr) = if args.len() == 4 {
+        if !is_int_const(args[0]) {
+            return None;
+        }
+        (args[2].clone(), args[3].clone())
+    } else if args.len() == 2 && head_name.to_string().starts_with("Int.") {
+        (args[0].clone(), args[1].clone())
+    } else {
+        return None;
+    };
+
+    // Offset split against the hypothesis cores, then the slack decision.
+    let dl = split_int_core_offset(&gl, &a)?;
+    let dr = split_int_core_offset(&gr, &b)?;
+    let s = dl.checked_add(i64::from(strict))?;
+    let t = dr;
+    if s > t {
+        return None; // not implied by a uniform shift — fail closed.
+    }
+
+    let s_lit = int_const_lit(s);
+    let t_lit = int_const_lit(t);
+    let a_plus_s = mk_int_add(&a, &s_lit);
+    let b_plus_s = mk_int_add(&b, &s_lit);
+    let b_plus_t = mk_int_add(&b, &t_lit);
+
+    // p : Int.le (a + s) (b + t).
+    let p0 = Expr::apps(
+        Expr::const_(Name::from_string("Int.add_le_add_right"), vec![]),
+        [a.clone(), b.clone(), h_proof.clone(), s_lit.clone()],
+    );
+    let p = if s == t {
+        p0
+    } else {
+        // Ground witness `s ≤ t`: `Int.NonNeg.mk (t-s) : Int.NonNeg (ofNat (t-s))`,
+        // def-eq to `Int.le s t = Int.NonNeg (Int.sub t s)` (ground reduction).
+        // Checked: an i64-overflowing shift declines the lane (fail closed)
+        // instead of panicking in debug / minting a wrong witness in release.
+        let m = match t.checked_sub(s) {
+            Some(d) if d >= 0 => d as u64,
+            _ => return None,
+        };
+        let ground_le = Expr::app(
+            Expr::const_(Name::from_string("Int.NonNeg.mk"), vec![]),
+            Expr::nat_lit(m),
+        );
+        let q = Expr::apps(
+            Expr::const_(Name::from_string("Int.add_le_add_left"), vec![]),
+            [s_lit.clone(), t_lit.clone(), ground_le, b.clone()],
+        );
+        Expr::apps(
+            Expr::const_(Name::from_string("Int.le_trans"), vec![]),
+            [a_plus_s.clone(), b_plus_s.clone(), b_plus_t.clone(), p0, q],
+        )
+    };
+
+    // LHS cast: `eq_l : GL' = a + s` where `GL' = GL + 1` (strict) / `GL`.
+    let one = int_const_lit(1);
+    let (gl_prime, eq_l) = if strict {
+        let glp = mk_int_add(&gl, &one);
+        if dl == 0 {
+            // `GL + 1 = a + 1` is def-eq (GL == a, s == 1): no cast needed.
+            (glp, None)
+        } else {
+            // `(a + dl) + 1 = a + (dl + 1)`; the ground tail `dl + 1` is def-eq
+            // to `s`, so this single assoc instance is used at `GL' = a + s`.
+            let assoc = Expr::apps(
+                Expr::const_(Name::from_string("Int.add_assoc"), vec![]),
+                [a.clone(), int_const_lit(dl), one.clone()],
+            );
+            (glp, Some(assoc))
+        }
+    } else if dl == 0 {
+        // `GL = a`, target LHS `a + 0`: `Eq.symm (Int.add_zero a) : a = a + 0`.
+        let add_zero = Expr::app(
+            Expr::const_(Name::from_string("Int.add_zero"), vec![]),
+            a.clone(),
+        );
+        (gl.clone(), Some(mk_symm(&a_plus_s, &a, &add_zero)))
+    } else {
+        // `GL = a ± g` is def-eq to `a + s` as spelled: no cast needed.
+        (gl.clone(), None)
+    };
+
+    // RHS cast: only `GR == b` (t == 0) needs `b = b + 0`.
+    let eq_r = if dr == 0 {
+        let add_zero = Expr::app(
+            Expr::const_(Name::from_string("Int.add_zero"), vec![]),
+            b.clone(),
+        );
+        Some(mk_symm(&b_plus_t, &b, &add_zero))
+    } else {
+        None
+    };
+
+    // Assemble: cast the LHS, then the RHS, each via `Eq.mpr ∘ congrArg`.
+    let mut cur = p;
+    let mut cur_lhs = a_plus_s.clone();
+    if let Some(eq) = eq_l {
+        let motive = Expr::lam(
+            BinderInfo::Default,
+            int_ty(),
+            mk_int_le(&Expr::bvar(0), &b_plus_t),
+        );
+        let cong = mk_congr_arg_int_prop(&gl_prime, &a_plus_s, &motive, &eq);
+        cur = mk_eq_mpr(
+            &mk_int_le(&gl_prime, &b_plus_t),
+            &mk_int_le(&a_plus_s, &b_plus_t),
+            &cong,
+            &cur,
+        );
+        cur_lhs = gl_prime;
+    }
+    if let Some(eq) = eq_r {
+        let motive = Expr::lam(
+            BinderInfo::Default,
+            int_ty(),
+            mk_int_le(&cur_lhs, &Expr::bvar(0)),
+        );
+        let cong = mk_congr_arg_int_prop(&gr, &b_plus_t, &motive, &eq);
+        cur = mk_eq_mpr(
+            &mk_int_le(&cur_lhs, &gr),
+            &mk_int_le(&cur_lhs, &b_plus_t),
+            &cong,
+            &cur,
+        );
+    }
+    Some(cur)
+}
+
+/// Split `e` into a ground offset relative to `core`:
+/// `e == core` → `0`; `core + g` → `g`; `core - g` → `-g` (`g` ground).
+/// Any other shape → `None` (fail closed).
+fn split_int_core_offset(e: &Expr, core: &Expr) -> Option<i64> {
+    if e == core {
+        return Some(0);
+    }
+    let args = e.get_app_args();
+    if args.len() >= 2 {
+        if let ExprKind::Const(op, _) = e.get_app_fn().kind() {
+            let op_s = op.to_string();
+            let l = args[args.len() - 2];
+            let r = args[args.len() - 1];
+            if l != core {
+                return None;
+            }
+            if op_s == "Int.add" || op_s == "HAdd.hAdd" || op_s == "Add.add" {
+                return super::norm_num::eval_int_expr(r);
+            }
+            if op_s == "Int.sub" || op_s == "HSub.hSub" || op_s == "Sub.sub" {
+                return super::norm_num::eval_int_expr(r)?.checked_neg();
+            }
+        }
+    }
+    None
+}
+
+// ===========================================================================
 // Matchers.
 // ===========================================================================
 
@@ -602,5 +819,47 @@ fn mk_add_comm(a: &Expr, b: &Expr) -> Expr {
     Expr::apps(
         Expr::const_(Name::from_string("Int.add_comm"), vec![]),
         [a.clone(), b.clone()],
+    )
+}
+
+/// `Int.add a b`.
+fn mk_int_add(a: &Expr, b: &Expr) -> Expr {
+    Expr::apps(
+        Expr::const_(Name::from_string("Int.add"), vec![]),
+        [a.clone(), b.clone()],
+    )
+}
+
+/// `Int.le a b`.
+fn mk_int_le(a: &Expr, b: &Expr) -> Expr {
+    Expr::apps(
+        Expr::const_(Name::from_string("Int.le"), vec![]),
+        [a.clone(), b.clone()],
+    )
+}
+
+/// `@congrArg.{1,1} Int Prop x y f h : @Eq.{1} Prop (f x) (f y)` where
+/// `h : @Eq Int x y` and `f : Int → Prop`.
+fn mk_congr_arg_int_prop(x: &Expr, y: &Expr, f: &Expr, h: &Expr) -> Expr {
+    let u = Level::succ(Level::zero());
+    Expr::apps(
+        Expr::const_(Name::from_string("congrArg"), vec![u.clone(), u]),
+        [
+            int_ty(),
+            Expr::sort(Level::zero()),
+            x.clone(),
+            y.clone(),
+            f.clone(),
+            h.clone(),
+        ],
+    )
+}
+
+/// `@Eq.mpr.{0} a_prop b_prop h p : a_prop` where `h : a_prop = b_prop` and
+/// `p : b_prop`.
+fn mk_eq_mpr(a_prop: &Expr, b_prop: &Expr, h: &Expr, p: &Expr) -> Expr {
+    Expr::apps(
+        Expr::const_(Name::from_string("Eq.mpr"), vec![Level::zero()]),
+        [a_prop.clone(), b_prop.clone(), h.clone(), p.clone()],
     )
 }

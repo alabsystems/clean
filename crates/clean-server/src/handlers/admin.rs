@@ -7,7 +7,6 @@
 use super::state::ServerState;
 use super::types::*;
 use crate::rpc::{RequestId, Response, RpcError};
-use clean_kernel::env::TrustedEnvExt;
 use clean_kernel::name::NameInterner;
 use clean_kernel::Environment;
 use std::sync::atomic::Ordering;
@@ -211,6 +210,19 @@ pub async fn handle_load_environment(
     id: RequestId,
     params: LoadEnvironmentParams,
 ) -> Response {
+    // Pure request validation, before any file I/O: the acknowledgement flag
+    // is meaningless outside replace mode, and silently ignoring it would let
+    // a caller believe the merge path can skip re-checking (it never does).
+    if params.replace_unchecked && !params.replace {
+        return Response::error(
+            id,
+            RpcError::invalid_params(
+                "replace_unchecked only applies to replace mode (replace: true); \
+                 the merge path always re-checks every loaded declaration",
+            ),
+        );
+    }
+
     let path = std::path::Path::new(&params.path);
     let format = params.format.as_deref().unwrap_or("bincode");
 
@@ -233,84 +245,39 @@ pub async fn handle_load_environment(
             // Update the shared environment
             let mut env = state.env.write().await;
             if params.replace {
+                // Wholesale install of a deserialized environment: the loaded
+                // declarations carry NO provenance stamps
+                // (`declaration_verification` is `#[serde(skip)]`) and are NOT
+                // re-checked here. That door stays open only behind an explicit
+                // opt-in whose name says what it skips; it is ledgered as a
+                // structural door in data/env_bypass_census.json (row
+                // `env-serde-load`, disposition R1-SRV) with this flag as its
+                // guard.
+                if !params.replace_unchecked {
+                    return Response::error(
+                        id,
+                        RpcError::internal_error(
+                            "loadEnvironment replace mode installs a deserialized \
+                             environment wholesale, without kernel re-checking of the \
+                             loaded declarations. Pass replace_unchecked: true to accept \
+                             that explicitly, or use replace: false for the checked \
+                             merge path.",
+                        ),
+                    );
+                }
                 *env = new_env;
             } else {
-                // Merge: register inductives/constructors/recursors first (they
-                // create their own constants entries), then add remaining constants.
-                // For .olean-based merging with dependency resolution, use importModule.
-                for ind in new_env.inductives() {
-                    if env.get_const(&ind.name).is_none() {
-                        env.register_inductive(ind.clone());
-                    }
-                }
-                for ctor in new_env.constructors() {
-                    if env.get_const(&ctor.name).is_none() {
-                        env.register_constructor(ctor.clone());
-                    }
-                }
-                for rec in new_env.recursors() {
-                    if env.get_const(&rec.name).is_none() {
-                        env.register_recursor(rec.clone());
-                    }
-                }
-                // Add remaining constants (definitions, axioms, theorems, opaques)
-                // that weren't already added as part of inductive registration.
-                // Use ConstantKind to correctly reconstruct the Declaration variant.
-                for ci in new_env.constants() {
-                    if env.get_const(&ci.name).is_none() {
-                        let decl = match ci.kind {
-                            clean_kernel::ConstantKind::Theorem => {
-                                clean_kernel::Declaration::Theorem {
-                                    name: ci.name.clone(),
-                                    level_params: ci.level_params.clone(),
-                                    type_: ci.type_.clone(),
-                                    value: ci.value.clone().unwrap_or_else(|| ci.type_.clone()),
-                                }
-                            }
-                            clean_kernel::ConstantKind::Opaque => {
-                                clean_kernel::Declaration::Opaque {
-                                    name: ci.name.clone(),
-                                    level_params: ci.level_params.clone(),
-                                    type_: ci.type_.clone(),
-                                    value: ci.value.clone().unwrap_or_else(|| ci.type_.clone()),
-                                }
-                            }
-                            clean_kernel::ConstantKind::Axiom => clean_kernel::Declaration::Axiom {
-                                name: ci.name.clone(),
-                                level_params: ci.level_params.clone(),
-                                type_: ci.type_.clone(),
-                            },
-                            clean_kernel::ConstantKind::Definition => {
-                                let Some(value) = ci.value.clone() else {
-                                    return Response::error(
-                                        id,
-                                        RpcError::internal_error(format!(
-                                            "Cannot load value-less definition {}",
-                                            ci.name
-                                        )),
-                                    );
-                                };
-                                clean_kernel::Declaration::Definition {
-                                    name: ci.name.clone(),
-                                    level_params: ci.level_params.clone(),
-                                    type_: ci.type_.clone(),
-                                    value,
-                                    is_reducible: ci.is_reducible,
-                                }
-                            }
-                        };
-                        // Re-check imported constants before making them visible in
-                        // the server environment.  Uncheckable serialized constants
-                        // fail closed instead of entering via a trusted insertion path.
-                        if let Err(e) = env.add_decl(decl) {
-                            return Response::error(
-                                id,
-                                RpcError::internal_error(format!(
-                                    "Kernel validation failed for {}: {e}",
-                                    ci.name
-                                )),
-                            );
-                        }
+                // Merge mode: every loaded declaration is re-earned through the
+                // kernel's checked admission paths — inductive families through
+                // the full `add_inductive` replay, plain constants through
+                // `add_decl` (see `env_merge`). Computed on a clone and
+                // committed only on success, so a refused merge leaves the live
+                // environment untouched. For .olean-based merging with
+                // dependency resolution, use importModule.
+                match super::env_merge::checked_merge_loaded_env(&env, &new_env) {
+                    Ok(merged) => *env = merged,
+                    Err(message) => {
+                        return Response::error(id, RpcError::internal_error(message));
                     }
                 }
             }

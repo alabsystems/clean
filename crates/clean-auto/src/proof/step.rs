@@ -10,7 +10,7 @@ use clean_kernel::{Expr, FVarId, Level};
 /// Error type for proof reconstruction failures
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[non_exhaustive]
-pub enum ProofReconstructionError {
+pub(crate) enum ProofReconstructionError {
     /// Assertion has no hypothesis proof and terms are not definitionally equal
     #[cfg_attr(
         not(test),
@@ -78,12 +78,12 @@ pub enum ProofStep {
 
 impl ProofStep {
     /// Create a reflexivity proof step
-    pub fn refl(term: TermId) -> Self {
+    pub(crate) fn refl(term: TermId) -> Self {
         ProofStep::Refl(term)
     }
 
     /// Create a symmetry proof step
-    pub fn symm(proof: ProofStep) -> Self {
+    pub(crate) fn symm(proof: ProofStep) -> Self {
         // Optimize: symm(symm(p)) = p
         if let ProofStep::Symm(inner) = proof {
             return *inner;
@@ -96,7 +96,7 @@ impl ProofStep {
     }
 
     /// Create a transitivity proof step
-    pub fn trans(p1: ProofStep, p2: ProofStep) -> Self {
+    pub(crate) fn trans(p1: ProofStep, p2: ProofStep) -> Self {
         // Optimize: trans(refl, p) = p
         if matches!(&p1, ProofStep::Refl(_)) {
             return p2;
@@ -109,12 +109,12 @@ impl ProofStep {
     }
 
     /// Create a congruence proof step with a function expression
-    pub fn congr(func_expr: Expr, arg_proofs: Vec<ProofStep>) -> Self {
+    pub(crate) fn congr(func_expr: Expr, arg_proofs: Vec<ProofStep>) -> Self {
         ProofStep::Congr(func_expr, arg_proofs)
     }
 
     /// Create a hypothesis proof step
-    pub fn hypothesis(fvar: FVarId) -> Self {
+    pub(crate) fn hypothesis(fvar: FVarId) -> Self {
         ProofStep::Hypothesis(fvar)
     }
 }

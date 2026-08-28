@@ -396,6 +396,10 @@ impl Environment {
         self.init_true_false()?;
         self.init_irrefl()?;
         self.register_nat_lt_irrefl_theorem()?;
+        // #49: register the constructive `instIrreflNatLt` (`Irrefl.mk` over the
+        // theorem just registered) BEFORE the legacy Axiom below, which is now
+        // guarded by `get_const`. See `nat_irrefl_instance_proof.rs`.
+        self.register_nat_irrefl_instance()?;
 
         let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
         let false_const = Expr::const_(Name::from_string("False"), vec![]);
@@ -440,11 +444,18 @@ impl Environment {
             nat_lt_relation.clone(),
         );
 
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("instIrreflNatLt"),
-            level_params: vec![],
-            type_: inst_irrefl_nat_lt_type,
-        })?;
+        // #49: Guarded — skipped when the constructive Definition form is
+        // present (registered by `register_nat_irrefl_instance` above).
+        if self
+            .get_const(&Name::from_string("instIrreflNatLt"))
+            .is_none()
+        {
+            self.add_decl(Declaration::Axiom {
+                name: Name::from_string("instIrreflNatLt"),
+                level_params: vec![],
+                type_: inst_irrefl_nat_lt_type,
+            })?;
+        }
 
         self.nat_lt_irrefl_init = true;
         Ok(())

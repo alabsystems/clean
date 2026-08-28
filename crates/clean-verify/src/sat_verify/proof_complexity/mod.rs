@@ -25,6 +25,7 @@
 pub mod cutting_planes;
 pub mod encodings;
 pub(crate) mod kernel_proofs;
+pub(crate) mod lower_bound_certificates;
 pub mod lower_bounds;
 pub mod resolution;
 pub mod separations;

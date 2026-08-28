@@ -608,16 +608,41 @@ impl Parser {
         // Proof can be provided with:
         // - := expr
         // - | pattern => expr (pattern matching without :=)
+        // - where <field assigns> / where | pattern => expr
         let proof = if self.eat(&TokenKind::ColonEq) {
             self.expr()?
         } else if self.check(&TokenKind::Pipe) {
             // Pattern matching theorem: theorem foo : T | p1 => e1 | p2 => e2
             self.def_match_body(start_span)?
+        } else if self.eat(&TokenKind::Where) {
+            // `theorem`/`lemma` accepts the same three `where` bodies `def`
+            // does (`:64-83` in this file) — Lean's `Command.declValStruct` and
+            // `Command.whereStructInst` are shared by every `declVal`, not
+            // granted to `def` alone. The dominant Mathlib idiom is an `↔`
+            // statement proved by `mp`/`mpr` field assignments.
+            if self.check(&TokenKind::Pipe) {
+                self.def_match_body(start_span)?
+            } else if self.is_field_assign_start() {
+                // Structure-instance sugar: `theorem t : S where\n  f := v` is
+                // a struct literal `{ f := v }` elaborated at the annotated
+                // type, exactly as for `def`. A theorem's type is mandatory, so
+                // `struct_type: None` always has an expected type to resolve
+                // against.
+                let assigns = self.parse_where_field_assigns()?;
+                SurfaceExpr::StructLit {
+                    span: start_span,
+                    struct_type: None,
+                    base: None,
+                    fields: assigns,
+                }
+            } else {
+                self.def_match_body(start_span)?
+            }
         } else {
             return Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
                 col: self.current_span().start,
-                message: format!("expected := or |, got {:?}", self.current_kind()),
+                message: format!("expected :=, | or where, got {:?}", self.current_kind()),
             });
         };
 

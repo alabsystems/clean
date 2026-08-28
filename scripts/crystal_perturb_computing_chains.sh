@@ -18,10 +18,10 @@ OUT="$(mktemp)"; trap 'rm -f "$OUT"' EXIT
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 BIN="${CRYSTAL_BIN:?set CRYSTAL_BIN to the compiled crystal_a1_lineage test binary}"
 
-FC_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_contains.rs"
+FC_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_fc.defs.txt"
 FC_FIX="$REPO/crates/clean-verify/tests/fixtures/flat_flags_contains.trust-ir.txt"
 FC_JSON="$REPO/crates/clean-verify/tests/fixtures/flat_flags_contains.lineage.json"
-BR_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_bvar_range.rs"
+BR_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_br.defs.txt"
 BR_FIX="$REPO/crates/clean-verify/tests/fixtures/bvar_in_range.trust-ir.txt"
 BR_JSON="$REPO/crates/clean-verify/tests/fixtures/bvar_in_range.lineage.json"
 
@@ -51,20 +51,37 @@ reason() { awk '/panicked at/{f=1} f{print "     | " $0} /^note: run with/{exit}
 # make a MUTATED run look green - the exact false negative this script exists to
 # rule out - so the helper restricts .rs edits to lines beginning `const SRC_`
 # and fails loudly when an anchor does not match exactly one of them.
-sub() { python3 - "$1" "$2" "$3" <<'PY'
+sub() { python3 - "$1" "$2" "$3" "${4:-1}" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b, want = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 lines = open(p).read().split("\n")
 decl_only = p.endswith(".rs")
 hits = [i for i, l in enumerate(lines)
         if a in l and (not decl_only or l.startswith("const SRC_"))]
-assert len(hits) == 1, "anchor must match exactly one line, matched %d: %s" % (len(hits), a[:80])
-i = hits[0]
-assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
-lines[i] = lines[i].replace(a, b, 1)
+# `want` > 1 exists for ONE measured reason: the 2026-08-21 a152 rebaseline
+# (b03937e74) added a `current_source_bound_pin` stanza that RESTATES the
+# measured row's values, so those anchors now denote TWO lines that must move
+# together.  Still fail-closed: any other count aborts, naming pattern + count.
+assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+for i in hits:
+    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
-} || exit 9
+  rc=$?
+  # A FAILED substitution is the false negative this whole script exists to
+  # rule out: the file stays as it was, the next `expect` would run against an
+  # unchanged (or still-mutated) tree, and every case after it would be
+  # meaningless.  Abort loudly instead — the assertion above already named the
+  # pattern and the match count.  NOTE the binding: writing `|| exit 9` after
+  # the closing brace of the function DEFINITION binds to the (always-zero)
+  # definition itself, never to the calls — that construct let failed
+  # substitutions continue silently, which is why $? is captured HERE.
+  if [[ $rc -ne 0 ]]; then
+    echo "FATAL: substitution failed in $1 (anchor: $2)"
+    exit 9
+  fi
+}
 
 echo "== baseline =="
 expect PASS "baseline: all crystal_a1_lineage gates green"
@@ -74,30 +91,30 @@ FILTER=flat_flags_contains
 
 echo
 echo "== P1: the DUPLICATE field read =="
-sub "$FC_SPEC" "(IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d5)" "(IRInst.extractfield ir_tU8 ir_d0 ir_d0) ir_d5)"
+sub "$FC_SPEC" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d1 ir_d0) ir_d5)" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d0) ir_d5)"
 expect FAIL "P1 mutated: the second read of other.0 reads self.0 instead"; reason
-sub "$FC_SPEC" "(IRInst.extractfield ir_tU8 ir_d0 ir_d0) ir_d5)" "(IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d5)"
+sub "$FC_SPEC" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d0) ir_d5)" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d1 ir_d0) ir_d5)"
 expect PASS "P1 reverted"
 
 echo
 echo "== P2: the field INDEX =="
-sub "$FC_SPEC" "(IRInst.extractfield ir_tU8 ir_d0 ir_d0) ir_d2)" "(IRInst.extractfield ir_tU8 ir_d0 ir_d1) ir_d2)"
+sub "$FC_SPEC" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d0) ir_d2)" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d1) ir_d2)"
 expect FAIL "P2 mutated: self.0 becomes self.1"; reason
-sub "$FC_SPEC" "(IRInst.extractfield ir_tU8 ir_d0 ir_d1) ir_d2)" "(IRInst.extractfield ir_tU8 ir_d0 ir_d0) ir_d2)"
+sub "$FC_SPEC" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d1) ir_d2)" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d0) ir_d2)"
 expect PASS "P2 reverted"
 
 echo
 echo "== P3: the BINOP — and vs or =="
-sub "$FC_SPEC" "IRInst.binop IRBinOp.and_ ir_tU8 ir_d2 ir_d3" "IRInst.binop IRBinOp.or_ ir_tU8 ir_d2 ir_d3"
+sub "$FC_SPEC" "IRInst.binop IRBinOp.and_ (IRTy.uint_ ir_d8) ir_d2 ir_d3" "IRInst.binop IRBinOp.or_ (IRTy.uint_ ir_d8) ir_d2 ir_d3"
 expect FAIL "P3 mutated: the AND becomes an OR"; reason
-sub "$FC_SPEC" "IRInst.binop IRBinOp.or_ ir_tU8 ir_d2 ir_d3" "IRInst.binop IRBinOp.and_ ir_tU8 ir_d2 ir_d3"
+sub "$FC_SPEC" "IRInst.binop IRBinOp.or_ (IRTy.uint_ ir_d8) ir_d2 ir_d3" "IRInst.binop IRBinOp.and_ (IRTy.uint_ ir_d8) ir_d2 ir_d3"
 expect PASS "P3 reverted"
 
 echo
 echo "== P4: the ICMP operand — %5 (the duplicate read) vs %3 =="
-sub "$FC_SPEC" "IRInst.icmp IRICmpOp.eq_ ir_tU8 ir_d4 ir_d5" "IRInst.icmp IRICmpOp.eq_ ir_tU8 ir_d4 ir_d3"
+sub "$FC_SPEC" "IRInst.icmp IRICmpOp.eq_ (IRTy.uint_ ir_d8) ir_d4 ir_d5" "IRInst.icmp IRICmpOp.eq_ (IRTy.uint_ ir_d8) ir_d4 ir_d3"
 expect FAIL "P4 mutated: the comparison uses the FIRST read of other.0"; reason
-sub "$FC_SPEC" "IRInst.icmp IRICmpOp.eq_ ir_tU8 ir_d4 ir_d3" "IRInst.icmp IRICmpOp.eq_ ir_tU8 ir_d4 ir_d5"
+sub "$FC_SPEC" "IRInst.icmp IRICmpOp.eq_ (IRTy.uint_ ir_d8) ir_d4 ir_d3" "IRInst.icmp IRICmpOp.eq_ (IRTy.uint_ ir_d8) ir_d4 ir_d5"
 expect PASS "P4 reverted"
 
 echo
@@ -116,9 +133,10 @@ expect PASS "P6 reverted"
 
 echo
 echo "== P7: markers_exact NON-VACUITY =="
-sub "$FC_JSON" '"markers_detail": "8 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"'
+# trailing 2: the a152 pin stanza RESTATES this value — two lines move together
+sub "$FC_JSON" '"markers_detail": "8 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"' 2
 expect FAIL "P7 mutated: the marker sequence is empty, so markers_exact is vacuous here too"; reason
-sub "$FC_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "8 marker line(s) identical"'
+sub "$FC_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "8 marker line(s) identical"' 2
 expect PASS "P7 reverted"
 
 echo
@@ -158,16 +176,16 @@ expect PASS "P12 reverted"
 
 echo
 echo "== P13: uge vs ugt — the comparison operator at the closed end =="
-sub "$BR_SPEC" "IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d0 ir_d1) ir_d8" "IRInst.icmp IRICmpOp.ugt ir_br_tu32 ir_d0 ir_d1) ir_d8"
+sub "$BR_SPEC" "IRInst.icmp IRICmpOp.uge (IRTy.uint_ 32) ir_d0 ir_d1) ir_d8" "IRInst.icmp IRICmpOp.ugt (IRTy.uint_ 32) ir_d0 ir_d1) ir_d8"
 expect FAIL "P13 mutated: idx >= start becomes idx > start in the bounded arm"; reason
-sub "$BR_SPEC" "IRInst.icmp IRICmpOp.ugt ir_br_tu32 ir_d0 ir_d1) ir_d8" "IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d0 ir_d1) ir_d8"
+sub "$BR_SPEC" "IRInst.icmp IRICmpOp.ugt (IRTy.uint_ 32) ir_d0 ir_d1) ir_d8" "IRInst.icmp IRICmpOp.uge (IRTy.uint_ 32) ir_d0 ir_d1) ir_d8"
 expect PASS "P13 reverted"
 
 echo
 echo "== P14: ult vs ule — the comparison operator at the open end =="
-sub "$BR_SPEC" "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d0 ir_d2" "IRInst.icmp IRICmpOp.ule ir_br_tu32 ir_d0 ir_d2"
+sub "$BR_SPEC" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d0 ir_d2" "IRInst.icmp IRICmpOp.ule (IRTy.uint_ 32) ir_d0 ir_d2"
 expect FAIL "P14 mutated: idx < end becomes idx <= end"; reason
-sub "$BR_SPEC" "IRInst.icmp IRICmpOp.ule ir_br_tu32 ir_d0 ir_d2" "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d0 ir_d2"
+sub "$BR_SPEC" "IRInst.icmp IRICmpOp.ule (IRTy.uint_ 32) ir_d0 ir_d2" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d0 ir_d2"
 expect PASS "P14 reverted"
 
 echo
@@ -204,16 +222,16 @@ expect PASS "P18 reverted"
 
 echo
 echo "== P19: markers_exact NON-VACUITY =="
-sub "$BR_JSON" '"markers_detail": "21 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"'
+sub "$BR_JSON" '"markers_detail": "21 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"' 2
 expect FAIL "P19 mutated: the 21-line marker sequence becomes empty"; reason
-sub "$BR_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "21 marker line(s) identical"'
+sub "$BR_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "21 marker line(s) identical"' 2
 expect PASS "P19 reverted"
 
 echo
 echo "== P20: the interpreter differential's SAMPLE COUNT =="
-sub "$BR_JSON" '"samples": 125' '"samples": 0'
+sub "$BR_JSON" '"samples": 125' '"samples": 0' 2
 expect FAIL "P20 mutated: `agreed` on zero samples is a vacuous agreement"; reason
-sub "$BR_JSON" '"samples": 0' '"samples": 125'
+sub "$BR_JSON" '"samples": 0' '"samples": 125' 2
 expect PASS "P20 reverted"
 
 echo

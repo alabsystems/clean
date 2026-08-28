@@ -134,6 +134,54 @@ impl<'a> ElabCtx<'a> {
         self.auto_implicit_lookup.get(name).copied()
     }
 
+    /// Recover the source-level name of an application head that auto-bound
+    /// implicit insertion swallowed.
+    ///
+    /// Returns `Some(name)` only when the head of `head`'s application spine is
+    /// a free variable THIS declaration's auto-implicit table introduced — i.e.
+    /// an identifier that resolved to nothing in a signature position and was
+    /// silently generalized into a fresh binder. A user-written binder is a
+    /// local but never an auto-implicit, so over-applying one is a genuine
+    /// arity error and is deliberately left alone.
+    pub(in crate::infer) fn auto_bound_head_name(&self, head: &Expr) -> Option<String> {
+        let ExprKind::FVar(id) = head.get_app_fn().kind() else {
+            return None;
+        };
+        self.auto_implicits
+            .iter()
+            .find(|(_, fvar, _)| fvar == id)
+            .map(|(name, _, _)| name.clone())
+    }
+
+    /// Build the over-application error for `head`, naming the identifier when
+    /// auto-implicit swallowed it.
+    ///
+    /// This is the single constructor for the third mask
+    /// (`docs/analysis/frontier-next-class-2026-08-25.md` §2.6): every live
+    /// `TooManyArguments` raise site routes through it, so the name is carried
+    /// wherever the mask can fire and the message is byte-identical everywhere
+    /// else. Both arms describe the SAME failure with the same span and the
+    /// same verdict — only the message differs.
+    pub(in crate::infer) fn over_applied_head_error(
+        &self,
+        head: &Expr,
+        func_type: &Expr,
+        remaining_args: usize,
+    ) -> ElabError {
+        match self.auto_bound_head_name(head) {
+            Some(name) => ElabError::AutoBoundHeadOverApplied {
+                name,
+                // Pretty-printed, not dumped: see the variant's `func_type` doc.
+                func_type: func_type.to_string(),
+                remaining_args,
+            },
+            None => ElabError::TooManyArguments {
+                func_type: format!("{func_type:?}"),
+                remaining_args,
+            },
+        }
+    }
+
     /// Add a new auto-implicit binding
     pub(in crate::infer) fn add_auto_implicit(&mut self, name: String, ty: Expr) -> FVarId {
         let fvar = self.fresh_fvar();

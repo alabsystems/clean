@@ -9,6 +9,18 @@ use super::trace::RuleView;
 use super::{ReconstructResult, ReconstructionContext, ReconstructionError};
 use crate::bridge::ay_backend::reconstruction_quality::ResidualTrustSource;
 
+/// Arguments of an application spine in SOURCE order: for `f a₁ … aₙ` returns
+/// `[a₁, …, aₙ]`.
+///
+/// `Expr::get_app_args_iter` yields the spine in *application* order
+/// (`aₙ, …, a₁`), so indexing its output positionally as `[ty, lhs, rhs]`
+/// silently reads `[rhs, lhs, ty]` and produces ill-typed `Eq.*` terms that only
+/// a full `check_type` (not `infer_type`) rejects. Every positional decode in
+/// this module goes through this helper so that mistake cannot recur.
+fn app_args_in_source_order(e: &Expr) -> Vec<Expr> {
+    e.get_app_args().into_iter().cloned().collect()
+}
+
 impl<'a> ReconstructionContext<'a> {
     /// Reconstruct a generic Alethe-rule Step.
     ///
@@ -179,7 +191,7 @@ impl<'a> ReconstructionContext<'a> {
             },
             _ => return bail("eq_reflexive: clause literal is not an Eq application".into()),
         };
-        let args: Vec<Expr> = eq_expr.get_app_args_iter().cloned().collect();
+        let args: Vec<Expr> = app_args_in_source_order(&eq_expr);
         if args.len() != 3 {
             return bail(format!(
                 "eq_reflexive: Eq application expects 3 args (ty, lhs, rhs), got {}",
@@ -352,7 +364,7 @@ impl<'a> ReconstructionContext<'a> {
             },
             _ => return bail("symm: clause literal is not an Eq application".into()),
         };
-        let args: Vec<Expr> = eq_expr.get_app_args_iter().cloned().collect();
+        let args: Vec<Expr> = app_args_in_source_order(&eq_expr);
         if args.len() != 3 {
             return bail(format!(
                 "symm: Eq application expects 3 args (ty, b, a), got {}",
@@ -452,7 +464,7 @@ impl<'a> ReconstructionContext<'a> {
                         Some(l) => l.clone(),
                         None => return bail("trans: premise Eq carries no universe level".into()),
                     };
-                    let args: Vec<Expr> = e.get_app_args_iter().cloned().collect();
+                    let args: Vec<Expr> = app_args_in_source_order(&e);
                     if args.len() != 3 {
                         return bail(format!(
                             "trans: premise Eq expects 3 args, got {}",
@@ -556,7 +568,7 @@ impl<'a> ReconstructionContext<'a> {
             lit.get_app_fn().kind(),
             ExprKind::Const(n, _) if n.to_string() == "Not"
         );
-        let args: Vec<Expr> = lit.get_app_args_iter().cloned().collect();
+        let args: Vec<Expr> = app_args_in_source_order(&lit);
         let inner_is_false = args.len() == 1
             && matches!(args[0].kind(), ExprKind::Const(n, _) if n.to_string() == "False");
         if !(head_is_not && inner_is_false) {
@@ -872,7 +884,7 @@ impl<'a> ReconstructionContext<'a> {
             return Ok(Expr::const_(Name::from_string("True.intro"), vec![]));
         }
         // conc_expr = `@Eq.{u} ty (f ā) (f b̄)`: args = [ty, lhs, rhs].
-        let eq_args: Vec<Expr> = conc_expr.get_app_args_iter().cloned().collect();
+        let eq_args: Vec<Expr> = app_args_in_source_order(&conc_expr);
         if eq_args.len() != 3 {
             return bail(format!(
                 "cong: translated conclusion is not a 3-arg Eq application (got {})",
@@ -1657,6 +1669,21 @@ impl<'a> ReconstructionContext<'a> {
     }
 
     /// `implies`: from one implication premise derive its exact two disjuncts.
+    ///
+    /// ay's `mk_implies(a, b)` is `mk_or([not a, b])`, and `TermStore::mk_or`
+    /// sorts its arguments into canonical `TermId` order, so the stored premise
+    /// is EITHER `(or (not a) b)` OR `(or b (not a))`; imported Alethe may keep
+    /// a native `(=> a b)`. The step clause `[c₀, c₁]` translates to `Or c₀ c₁`
+    /// (clause order), so:
+    /// - desugared premise whose disjuncts are already in clause order → the
+    ///   premise proof (`: Or c₀ c₁`) is returned unchanged (identity, cf.
+    ///   `RuleView::Or`);
+    /// - desugared premise with swapped disjuncts → reordered with `Or.rec`
+    ///   (`implication_to_clause`, the `mk_or_swap` shape);
+    /// - native `=>` → `Classical.em` on the antecedent;
+    /// - anything else (arity mismatch, a clause that is not the premise's two
+    ///   disjuncts in some order) fails closed.
+    /// The kernel re-checks the returned term against the goal either way.
     fn reconstruct_implies(
         &mut self,
         clause: &[TermId],
@@ -1690,6 +1717,14 @@ impl<'a> ReconstructionContext<'a> {
                     description: "implies clause does not match its premise".to_string(),
                 }
             })?;
+        if matches!(shape.encoding, ImplicationEncoding::Desugared { .. })
+            && (first_idx, second_idx) == (0, 1)
+        {
+            // `premise_proof : Or left right` with `left == clause[0]` and
+            // `right == clause[1]` — exactly the clause disjunction, so the
+            // premise proof inhabits the goal as-is (no `Or.rec` detour).
+            return Ok(premise_proof);
+        }
         let props = self.translate_clause_props(clause)?;
         self.implication_to_clause(
             shape,
@@ -2070,7 +2105,9 @@ mod symm_trans_tests {
         let mut terms = TermStore::new();
         let a = terms.mk_var("a", Sort::Int);
         let b = terms.mk_var("b", Sort::Int);
-        // clause proves (= b a); the premise proves (= a b).
+        // clause proves (= b a); the premise proves (= a b). `mk_eq` may
+        // canonicalise the operand order, so the stored orientation is read
+        // back through the trace below.
         let eq_ba = terms.mk_eq(b, a);
 
         let mut map = VariableMapping::new();
@@ -2096,17 +2133,35 @@ mod symm_trans_tests {
             "expected head Eq.symm, got {:?}",
             proof.get_app_fn().kind()
         );
-        let args: Vec<Expr> = proof.get_app_args_iter().cloned().collect();
+        let args = super::app_args_in_source_order(&proof);
         assert_eq!(args.len(), 4, "Eq.symm should be applied to [ty, a, b, h]");
-        // Order-independent: the application carries the premise proof + the
-        // decomposed (ty, a, b) — `get_app_args_iter`'s readback order is not a
-        // simple left-to-right in this synthetic context, so check membership.
-        let _ = &premise;
+        // Exact source-order layout for a stored clause `(= x y)`:
+        // `@Eq.symm.{u} ty y x hyp_ab : Eq ty x y`.
+        let (x, y) = ctx
+            .trace
+            .as_ref()
+            .expect("trace")
+            .as_equality(eq_ba)
+            .expect("clause is an equality");
+        let name_of = |t| if t == a { "ca" } else { "cb" };
+        let is_const =
+            |e: &Expr, n: &str| matches!(e.kind(), ExprKind::Const(c, _) if c.to_string() == n);
         assert!(
-            args.iter().any(|a| matches!(a.kind(),
-                ExprKind::Const(n, _) if n.to_string() == "hyp_ab")),
-            "Eq.symm application must carry the premise proof `hyp_ab`"
+            is_const(&args[0], "Int"),
+            "arg 0 must be the operand type, got {:?}",
+            args[0]
         );
+        assert!(
+            is_const(&args[1], name_of(y)),
+            "arg 1 must be the clause rhs, got {:?}",
+            args[1]
+        );
+        assert!(
+            is_const(&args[2], name_of(x)),
+            "arg 2 must be the clause lhs, got {:?}",
+            args[2]
+        );
+        assert_eq!(args[3], premise, "arg 3 must be the premise proof");
     }
 
     /// `trans` on a reflexive goal `(= t t)` folds to `True`; proof is `True.intro`.

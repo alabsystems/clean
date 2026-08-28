@@ -79,5 +79,5 @@ CONSTANTS
 
 ## Related
 
-- `crates/clean-tla/` - TLA+ encoding for proof obligations and TLAPS benchmark runner
+- `crates/clean-tla/` - TLA+ encoding for proof obligations and TLAPS benchmark runner (omitted from the bootstrap projection)
 - `alabsystems/ty` - Rust TLA+ tooling

@@ -22,6 +22,10 @@ ROOT = Path(__file__).resolve().parent.parent
 ROOT_MANIFEST = ROOT / "Cargo.toml"
 ROOT_LOCK = ROOT / "Cargo.lock"
 CLI_RUNNER_LOCK = ROOT / "cli-runner/Cargo.lock"
+BENCH_RUNNER_LOCK = ROOT / "bench-runner/Cargo.lock"
+REALTELEM_HARNESS_LOCK = ROOT / "realtelem-harness/Cargo.lock"
+TELEMETRY_HARNESS_LOCK = ROOT / "telemetry-harness/Cargo.lock"
+REQUIRED_TY_LOCKS = (ROOT_LOCK, CLI_RUNNER_LOCK)
 AUTOFORM_MANIFEST = ROOT / "crates/clean-autoform/Cargo.toml"
 AUTOFORM_SOURCE = ROOT / "crates/clean-autoform/src"
 CRYSTAL_A2_MANIFEST = ROOT / "scripts/crystal_a2_project/Cargo.toml"
@@ -46,6 +50,56 @@ AY_DEPENDENCY_NAMES = (
     "ay-frontend",
     "ay-translate",
 )
+AY_ROOT_LOCK_PACKAGE_NAMES = frozenset(
+    {
+        "ay",
+        "ay-allsat",
+        "ay-arrays",
+        "ay-bv",
+        "ay-chc",
+        "ay-core",
+        "ay-count",
+        "ay-diff-logic",
+        "ay-dispatch",
+        "ay-dpll",
+        "ay-drat-check",
+        "ay-dt",
+        "ay-euf",
+        "ay-fp",
+        "ay-frontend",
+        "ay-intsat",
+        "ay-jit",
+        "ay-lean-bridge",
+        "ay-lia",
+        "ay-lra",
+        "ay-map",
+        "ay-milp",
+        "ay-model-check",
+        "ay-multiset",
+        "ay-nia",
+        "ay-nonlinear-common",
+        "ay-nra",
+        "ay-pb-core",
+        "ay-prefetch",
+        "ay-proof",
+        "ay-proof-common",
+        "ay-sat",
+        "ay-sat-congruence-core",
+        "ay-seq",
+        "ay-set",
+        "ay-strings",
+        "ay-sys",
+        "ay-translate",
+    }
+)
+AY_STANDALONE_LOCK_PACKAGE_NAMES = AY_ROOT_LOCK_PACKAGE_NAMES - {"ay-lean-bridge"}
+REQUIRED_AY_LOCK_INVENTORIES = {
+    ROOT_LOCK: AY_ROOT_LOCK_PACKAGE_NAMES,
+    CLI_RUNNER_LOCK: AY_STANDALONE_LOCK_PACKAGE_NAMES,
+    BENCH_RUNNER_LOCK: AY_STANDALONE_LOCK_PACKAGE_NAMES,
+    REALTELEM_HARNESS_LOCK: AY_STANDALONE_LOCK_PACKAGE_NAMES,
+    TELEMETRY_HARNESS_LOCK: AY_STANDALONE_LOCK_PACKAGE_NAMES,
+}
 AY_REPOSITORY = "https://github.com/alabsystems/ay.git"
 TY_DEPENDENCY_NAME = "tla-core"
 TY_REPOSITORY = "https://github.com/alabsystems/ty.git"
@@ -277,14 +331,24 @@ def check_first_party_manifest_pins(root_manifest: str) -> tuple[str, str, str]:
 
 def check_first_party_lock_inventory(
     lock_texts: dict[str, str],
-    required_contexts: set[str],
+    required_ay_inventories: dict[str, frozenset[str]],
+    required_ty_contexts: set[str],
     ay_version: str,
     ay_revision: str,
     ty_revision: str,
 ) -> str:
-    """Bind AY and Ty in every tracked lock to the root manifest's epoch."""
+    """Bind AY and Ty in every tracked lock to the root manifest's epoch.
 
-    missing = required_contexts.difference(lock_texts)
+    Every standalone consumer resolves AY without ay-lean-bridge; the root
+    resolves the complete AY graph. The root and CLI consumer also resolve Ty,
+    unlike the standalone clean-auto harnesses. Require each authority-bearing
+    lock's exact AY package roster while still rejecting stale first-party
+    sources in every tracked lock.
+    """
+
+    missing = (set(required_ay_inventories) | required_ty_contexts).difference(
+        lock_texts
+    )
     if missing:
         raise BoundaryViolation(
             "required first-party locks are not tracked: " + ", ".join(sorted(missing))
@@ -304,10 +368,20 @@ def check_first_party_lock_inventory(
         for package in packages:
             if not isinstance(package, dict):
                 continue
+            name = package.get("name")
             source = package.get("source")
-            if not isinstance(source, str):
-                continue
-            if source.startswith(f"git+{AY_REPOSITORY}"):
+            is_ay_package = isinstance(name, str) and (
+                name == "ay" or name.startswith("ay-")
+            )
+            is_ay_source = isinstance(source, str) and source.startswith(
+                f"git+{AY_REPOSITORY}"
+            )
+            if is_ay_package != is_ay_source:
+                raise BoundaryViolation(
+                    f"{context} package {name or '<unknown>'} does not use the "
+                    "canonical AY Git source"
+                )
+            if is_ay_source:
                 match = AY_LOCK_SOURCE.fullmatch(source)
                 if match is None or match.group(1) != match.group(2):
                     raise BoundaryViolation(
@@ -320,7 +394,9 @@ def check_first_party_lock_inventory(
                         f"workspace revision {ay_revision}"
                     )
                 ay_packages.append(package)
-            elif source.startswith(f"git+{TY_REPOSITORY}"):
+            elif isinstance(source, str) and source.startswith(
+                f"git+{TY_REPOSITORY}"
+            ):
                 match = TY_LOCK_SOURCE.fullmatch(source)
                 if match is None or match.group(1) != match.group(2):
                     raise BoundaryViolation(
@@ -334,8 +410,23 @@ def check_first_party_lock_inventory(
                     )
                 ty_packages.append(package)
 
-        if context in required_contexts and not ay_packages:
-            raise BoundaryViolation(f"{context} has no AY package source")
+        expected_ay_names = required_ay_inventories.get(context)
+        if expected_ay_names is not None:
+            ay_names = [str(package["name"]) for package in ay_packages]
+            actual_ay_names = set(ay_names)
+            duplicate_ay_names = sorted(
+                name for name in actual_ay_names if ay_names.count(name) > 1
+            )
+            if (
+                actual_ay_names != expected_ay_names
+                or len(actual_ay_names) != len(ay_names)
+            ):
+                raise BoundaryViolation(
+                    f"{context} AY package inventory does not match the audited "
+                    f"graph: missing={sorted(expected_ay_names - actual_ay_names)}, "
+                    f"unexpected={sorted(actual_ay_names - expected_ay_names)}, "
+                    f"duplicates={duplicate_ay_names}"
+                )
         ay_lock_versions: set[str] = set()
         for package in ay_packages:
             version = package.get("version")
@@ -360,7 +451,7 @@ def check_first_party_lock_inventory(
             raise BoundaryViolation(
                 f"{context} contains multiple Git-pinned {TY_DEPENDENCY_NAME} packages"
             )
-        if context in required_contexts and len(direct_ty) != 1:
+        if context in required_ty_contexts and len(direct_ty) != 1:
             raise BoundaryViolation(
                 f"{context} must contain exactly one Git-pinned {TY_DEPENDENCY_NAME}"
             )
@@ -918,33 +1009,54 @@ def regression_self_test() -> None:
     def first_party_lock_fixture(
         ay_version: str = "0.13.0",
         ay_revision: str = revision_a,
+        ay_names: tuple[str, ...] = ("ay", "ay-sat"),
         ty_version: str = "0.13.0",
         ty_revision: str = revision_b,
     ) -> str:
-        return "\n".join(
+        ay_packages = [
             (
-                "version = 4\n",
                 "[[package]]\n"
-                'name = "ay"\n'
+                f'name = "{name}"\n'
                 f'version = "{ay_version}"\n'
-                f'source = "{first_party_source(AY_REPOSITORY, ay_revision)}"\n',
+                f'source = "{first_party_source(AY_REPOSITORY, ay_revision)}"\n'
+            )
+            for name in ay_names
+        ]
+        return "\n".join(
+            [
+                "version = 4\n",
+                *ay_packages,
                 "[[package]]\n"
                 f'name = "{TY_DEPENDENCY_NAME}"\n'
                 f'version = "{ty_version}"\n'
                 f'source = "{first_party_source(TY_REPOSITORY, ty_revision)}"\n',
-            )
+            ]
         )
 
-    required_locks = {"Cargo.lock", "cli-runner/Cargo.lock"}
+    required_ay_inventories = {
+        context: frozenset({"ay", "ay-sat"})
+        for context in (
+            "Cargo.lock",
+            "cli-runner/Cargo.lock",
+            "bench-runner/Cargo.lock",
+            "realtelem-harness/Cargo.lock",
+            "telemetry-harness/Cargo.lock",
+        )
+    }
+    required_ty_locks = {"Cargo.lock", "cli-runner/Cargo.lock"}
     coherent_first_party_locks = {
         "Cargo.lock": first_party_lock_fixture(),
         "cli-runner/Cargo.lock": first_party_lock_fixture(),
+        "bench-runner/Cargo.lock": first_party_lock_fixture(),
+        "realtelem-harness/Cargo.lock": first_party_lock_fixture(),
+        "telemetry-harness/Cargo.lock": first_party_lock_fixture(),
         "unrelated/Cargo.lock": unrelated_lock,
     }
     assert (
         check_first_party_lock_inventory(
             coherent_first_party_locks,
-            required_locks,
+            required_ay_inventories,
+            required_ty_locks,
             "0.13.0",
             revision_a,
             revision_b,
@@ -952,6 +1064,52 @@ def regression_self_test() -> None:
         == "0.13.0"
     )
     invalid_first_party_locks = (
+        (
+            {
+                **coherent_first_party_locks,
+                "bench-runner/Cargo.lock": unrelated_lock,
+            },
+            "standalone clean-auto consumer without AY",
+        ),
+        (
+            {
+                **coherent_first_party_locks,
+                "bench-runner/Cargo.lock": (
+                    "version = 4\n\n"
+                    "[[package]]\n"
+                    'name = "ay"\n'
+                    'version = "0.13.0"\n'
+                ),
+            },
+            "standalone clean-auto consumer with path-sourced AY",
+        ),
+        (
+            {
+                **coherent_first_party_locks,
+                "bench-runner/Cargo.lock": first_party_lock_fixture(
+                    ay_names=("ay",)
+                ),
+            },
+            "incomplete standalone AY package inventory",
+        ),
+        (
+            {
+                **coherent_first_party_locks,
+                "bench-runner/Cargo.lock": first_party_lock_fixture(
+                    ay_names=("ay", "ay-unexpected")
+                ),
+            },
+            "substituted standalone AY package inventory",
+        ),
+        (
+            {
+                **coherent_first_party_locks,
+                "bench-runner/Cargo.lock": first_party_lock_fixture(
+                    ay_names=("ay", "ay-sat", "ay-sat")
+                ),
+            },
+            "duplicate standalone AY package inventory",
+        ),
         (
             {
                 **coherent_first_party_locks,
@@ -989,7 +1147,11 @@ def regression_self_test() -> None:
             "split standalone tla-core version",
         ),
         (
-            {"Cargo.lock": first_party_lock_fixture()},
+            {
+                context: lock
+                for context, lock in coherent_first_party_locks.items()
+                if context != "telemetry-harness/Cargo.lock"
+            },
             "missing standalone first-party lock",
         ),
     )
@@ -997,7 +1159,8 @@ def regression_self_test() -> None:
         try:
             check_first_party_lock_inventory(
                 lock_texts,
-                required_locks,
+                required_ay_inventories,
+                required_ty_locks,
                 "0.13.0",
                 revision_a,
                 revision_b,
@@ -1069,9 +1232,10 @@ def main() -> int:
         tla_core_version = check_first_party_lock_inventory(
             lock_texts,
             {
-                str(ROOT_LOCK.relative_to(ROOT)),
-                str(CLI_RUNNER_LOCK.relative_to(ROOT)),
+                str(path.relative_to(ROOT)): inventory
+                for path, inventory in REQUIRED_AY_LOCK_INVENTORIES.items()
             },
+            {str(path.relative_to(ROOT)) for path in REQUIRED_TY_LOCKS},
             ay_version,
             ay_revision,
             ty_revision,

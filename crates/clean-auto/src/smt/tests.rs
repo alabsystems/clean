@@ -182,80 +182,158 @@ fn test_smt_multiple_equalities() {
 }
 
 // ================================================================
-// Performance proof: check_theories clones entire terms Vec per theory
+// Regression guard: check_theories must not deep-clone the terms Vec
+// per theory per DPLL(T) iteration (#2308).
 //
-// smt.rs:414-416:
-//   for theory in &mut self.theories {
-//       theory.set_terms(self.terms.clone());
-//   }
+// Pre-fix, `check_theories` ran `theory.set_terms(self.terms.clone())`
+// for each of K theories on every one of up to MAX_DPLL_T_ITERATIONS
+// rounds: O(I * K * n) SmtTerm clones for n terms. The fix shares one
+// `Arc<[SmtTerm]>` snapshot (`shared_terms_for_theories`), rebuilt only
+// when a new term is interned, so the deep-copy count is O(1) per term-set
+// version regardless of K, I or n.
 //
-// Every call to check_theories deep-clones self.terms (Vec<SmtTerm>)
-// for EACH registered theory solver. In the DPLL(T) loop (line 384),
-// check_theories is called up to MAX_DPLL_T_ITERATIONS (10,000) times.
-//
-// For T terms and K theories: each DPLL(T) iteration costs O(T * K) clones.
-// Over I iterations: total clone cost is O(I * T * K).
-// With T=1000 terms, K=2 theories, I=100 iterations: 200,000 Vec clones.
-//
-// Fix: share terms via Arc<[SmtTerm]> or pass &[SmtTerm] references.
+// This used to be a wall-clock microbenchmark of `Vec::to_vec` at 50 vs
+// 800 terms asserting a >5x ratio. That measured the std library, not the
+// solver, and flaked under parallel load (1/2266 runs on 2026-08-20: a
+// preempted 50-term timing inflated the denominator). The property is now
+// measured by counting the work directly: the number of distinct term-slice
+// allocations handed to theories, which is deterministic.
 // ================================================================
 
-/// Performance proof: terms Vec clone cost scales with term count.
-///
-/// Measures the cost of `self.terms.clone()` at varying term counts.
-/// This operation happens once per theory per DPLL(T) iteration.
+/// Every theory, on every resync round, must receive the *same* shared
+/// `Arc<[SmtTerm]>` allocation: exactly one O(n) copy per term-set version.
 #[test]
 fn test_check_theories_term_clone_scaling() {
-    use std::time::Instant;
+    use crate::cdcl::Lit;
+    use std::any::Any;
+    use std::sync::{Arc, Mutex};
 
-    let term_counts = [50usize, 200, 800];
-    let mut clone_times = Vec::new();
-
-    for &n in &term_counts {
-        let mut smt = SmtSolver::new();
-
-        // Build n terms -- a mix of Const and App to approximate real workloads
-        let mut term_ids = Vec::new();
-        for i in 0..n {
-            if i < n / 2 {
-                let id = smt.const_term(format!("c{i}"));
-                term_ids.push(id);
-            } else {
-                // App with 2 children to bulk up the clone cost
-                let child1 = term_ids[i % (n / 2)];
-                let child2 = term_ids[(i + 1) % (n / 2)];
-                let id = smt.app_term(format!("f{i}"), vec![child1, child2]);
-                term_ids.push(id);
-            }
-        }
-
-        // Measure the cost of cloning the terms vector (the operation on line 415)
-        let terms_ref = smt.terms();
-        let start = Instant::now();
-        for _ in 0..500 {
-            let cloned: Vec<SmtTerm> = terms_ref.to_vec();
-            std::hint::black_box(&cloned);
-        }
-        let elapsed = start.elapsed().as_nanos();
-        clone_times.push(elapsed);
+    struct SnapshotRecordingTheory {
+        snapshots: Arc<Mutex<Vec<Arc<[SmtTerm]>>>>,
     }
 
-    // term_counts go 50 -> 200 -> 800 (4x each step).
-    // Clone is O(n) where n = number of terms.
-    // 16x terms -> should give ~16x clone time.
-    let ratio_16x = clone_times[2] as f64 / clone_times[0].max(1) as f64;
-    // The per-clone cost is O(n). In check_theories, this happens K times per
-    // DPLL(T) iteration (K = number of theories). Over a full solve with I
-    // iterations, total clone cost is O(I * K * n).
-    //
-    // With n=800 terms, K=2, I=100: clone happens 200 times at O(800) each
-    // = 160,000 SmtTerm clones. This dominates theory-check cost for
-    // problems with many terms and few theory conflicts.
-    assert!(
-        ratio_16x > 5.0,
-        "Expected at least 5x growth for 16x terms (got {ratio_16x:.1}x). \
-         If this fails, the clone overhead may have been optimized away."
+    impl TheorySolver for SnapshotRecordingTheory {
+        fn assert_literal(&mut self, _lit: Lit, _theory_lit: &TheoryLiteral) -> TheoryCheckResult {
+            TheoryCheckResult::Consistent
+        }
+
+        fn check(&self) -> TheoryCheckResult {
+            TheoryCheckResult::Consistent
+        }
+
+        fn backtrack(&mut self, _level: u32) {}
+
+        fn push(&mut self) {}
+
+        fn name(&self) -> &'static str {
+            "SnapshotRecordingTheory"
+        }
+
+        fn set_terms(&mut self, terms: Arc<[SmtTerm]>) {
+            self.snapshots
+                .lock()
+                .expect("snapshot mutex should not be poisoned")
+                .push(terms);
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn Any {
+            self
+        }
+    }
+
+    /// Number of distinct heap allocations among the recorded snapshots.
+    /// Pre-#2308 this equals the number of `set_terms` calls (K * rounds);
+    /// post-fix it equals the number of term-set versions.
+    fn distinct_allocations(snapshots: &[Arc<[SmtTerm]>]) -> usize {
+        let mut seen: Vec<&Arc<[SmtTerm]>> = Vec::new();
+        for snapshot in snapshots {
+            if !seen.iter().any(|s| Arc::ptr_eq(s, snapshot)) {
+                seen.push(snapshot);
+            }
+        }
+        seen.len()
+    }
+
+    const THEORIES: usize = 2;
+    const RESYNC_ROUNDS: usize = 4;
+    const TERM_COUNT: usize = 800;
+
+    let mut smt = SmtSolver::new();
+    let snapshots = Arc::new(Mutex::new(Vec::new()));
+    for _ in 0..THEORIES {
+        smt.add_theory(Box::new(SnapshotRecordingTheory {
+            snapshots: Arc::clone(&snapshots),
+        }));
+    }
+
+    // Build n terms -- a mix of Const and App to approximate real workloads.
+    let mut term_ids = Vec::new();
+    for i in 0..TERM_COUNT {
+        if i < TERM_COUNT / 2 {
+            term_ids.push(smt.const_term(format!("c{i}")));
+        } else {
+            let child1 = term_ids[i % (TERM_COUNT / 2)];
+            let child2 = term_ids[(i + 1) % (TERM_COUNT / 2)];
+            term_ids.push(smt.app_term(format!("f{i}"), vec![child1, child2]));
+        }
+    }
+    let _ = smt.assert_eq(term_ids[0], term_ids[1]);
+
+    // Each round: force a full theory resync (mutable theory access marks the
+    // sync state dirty) and solve, so set_terms fires K times per round.
+    for _ in 0..RESYNC_ROUNDS {
+        let theory = smt
+            .get_theory_mut(0)
+            .expect("recording theory should stay registered");
+        assert_eq!(theory.name(), "SnapshotRecordingTheory");
+        assert!(matches!(smt.solve(), SmtResult::Sat(_)));
+    }
+
+    let recorded = snapshots
+        .lock()
+        .expect("snapshot mutex should not be poisoned")
+        .clone();
+    assert_eq!(
+        recorded.len(),
+        THEORIES * RESYNC_ROUNDS,
+        "every theory should be resynced on every round"
     );
+    assert!(
+        recorded.iter().all(|s| s.len() == TERM_COUNT),
+        "each snapshot should expose the full term set"
+    );
+    assert_eq!(
+        distinct_allocations(&recorded),
+        1,
+        "an unchanged term set must be deep-copied exactly once across {THEORIES} theories x \
+         {RESYNC_ROUNDS} resyncs; more allocations means check_theories is cloning the \
+         terms Vec per theory again (#2308)"
+    );
+
+    // Interning one new term is the only event that may trigger a fresh copy,
+    // and again it must be shared by every theory.
+    let extra = smt.const_term("c_extra");
+    let _ = smt.assert_eq(extra, term_ids[0]);
+    assert!(matches!(smt.solve(), SmtResult::Sat(_)));
+
+    let recorded = snapshots
+        .lock()
+        .expect("snapshot mutex should not be poisoned")
+        .clone();
+    assert_eq!(recorded.len(), THEORIES * (RESYNC_ROUNDS + 1));
+    assert_eq!(
+        distinct_allocations(&recorded),
+        2,
+        "a term-set change should rebuild the shared snapshot exactly once"
+    );
+    let (old, new) = recorded.split_at(THEORIES * RESYNC_ROUNDS);
+    assert!(new.iter().all(|s| s.len() == TERM_COUNT + 1));
+    assert!(new.iter().all(|s| !Arc::ptr_eq(s, &old[0])));
+    assert!(new.iter().all(|s| Arc::ptr_eq(s, &new[0])));
 }
 
 #[test]

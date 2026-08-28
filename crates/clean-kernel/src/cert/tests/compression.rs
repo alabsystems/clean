@@ -8,6 +8,7 @@ use crate::cert::*;
 use crate::expr::{BigNat, BinderData, BinderInfo, Expr, ExprKind, FVarId, Literal, Multiplicity};
 use crate::level::Level;
 use crate::name::Name;
+use std::sync::Arc;
 
 #[test]
 fn test_decompress_rejects_cyclic_and_forward_table_edges() {
@@ -119,7 +120,7 @@ fn test_compression_memoizes_shared_expression_identity() {
     let mut expr = Expr::from_kind(ExprKind::BVar(0));
     const DEPTH: usize = 48;
     for _ in 0..DEPTH {
-        let shared = std::sync::Arc::new(expr);
+        let shared = Arc::new(expr);
         expr = Expr::from_kind(ExprKind::App(shared.clone(), shared));
     }
     let cert = ProofCert::BVar {
@@ -546,10 +547,10 @@ fn test_compress_with_shared_types() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -569,13 +570,13 @@ fn test_compress_app_certificate() {
     let b_ty = Expr::const_(Name::from_string("B"), vec![]);
 
     let cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("f"),
             levels: vec![],
             type_: Box::new(Expr::arrow(a_ty.clone(), b_ty.clone())),
         }),
         fn_type: Box::new(Expr::arrow(a_ty.clone(), b_ty.clone())),
-        arg_cert: Box::new(ProofCert::Const {
+        arg_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("x"),
             levels: vec![],
             type_: Box::new(a_ty.clone()),
@@ -592,11 +593,11 @@ fn test_compress_app_certificate() {
 fn test_compress_pi_certificate() {
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         arg_level: Level::succ(Level::zero()),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -616,13 +617,13 @@ fn test_compress_let_certificate() {
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
 
     let cert = ProofCert::Let {
-        type_cert: Box::new(ProofCert::Sort {
+        type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        value_cert: Box::new(ProofCert::Sort {
+        value_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -663,7 +664,7 @@ fn test_compress_fvar_certificate() {
 #[test]
 fn test_compress_def_eq_certificate() {
     let cert = ProofCert::DefEq {
-        inner: Box::new(ProofCert::Sort {
+        inner: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
@@ -683,7 +684,7 @@ fn test_compress_mdata_certificate() {
     let metadata = vec![(Name::from_string("trace"), MDataValue::Bool(true))];
     let cert = ProofCert::MData {
         metadata: metadata.clone(),
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
@@ -703,10 +704,10 @@ fn test_compress_with_stats() {
     // Certificate for identity: λ (x : Prop). x
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -739,11 +740,11 @@ fn test_compress_complex_nested() {
 
     let inner_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::BVar {
+        arg_type_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(type1.clone()),
         }),
-        body_cert: Box::new(inner_body_cert),
+        body_cert: Arc::new(inner_body_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             Expr::from_kind(ExprKind::BVar(0)),
@@ -753,10 +754,10 @@ fn test_compress_complex_nested() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(inner_cert),
+        body_cert: Arc::new(inner_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             type0.clone(),
@@ -779,10 +780,10 @@ fn test_compress_serialization_roundtrip() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -816,13 +817,13 @@ fn test_compression_deduplicates_shared_expressions() {
     let shared_type = Expr::const_(Name::from_string("SharedType"), vec![Level::zero()]);
 
     let cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("f"),
             levels: vec![Level::zero()],
             type_: Box::new(Expr::arrow(shared_type.clone(), shared_type.clone())),
         }),
         fn_type: Box::new(Expr::arrow(shared_type.clone(), shared_type.clone())),
-        arg_cert: Box::new(ProofCert::Const {
+        arg_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("x"),
             levels: vec![Level::zero()],
             type_: Box::new(shared_type.clone()),
@@ -909,10 +910,10 @@ fn test_archive_complex_cert() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -931,10 +932,10 @@ fn test_archive_with_stats() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -1007,35 +1008,35 @@ fn test_archive_nested_app_chain() {
     };
 
     let h_app_cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("h"),
             levels: vec![],
             type_: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
         }),
         fn_type: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
-        arg_cert: Box::new(inner_cert),
+        arg_cert: Arc::new(inner_cert),
         result_type: Box::new(unit_type.clone()),
     };
 
     let g_app_cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("g"),
             levels: vec![],
             type_: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
         }),
         fn_type: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
-        arg_cert: Box::new(h_app_cert),
+        arg_cert: Arc::new(h_app_cert),
         result_type: Box::new(unit_type.clone()),
     };
 
     let cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("f"),
             levels: vec![],
             type_: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
         }),
         fn_type: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
-        arg_cert: Box::new(g_app_cert),
+        arg_cert: Arc::new(g_app_cert),
         result_type: Box::new(unit_type),
     };
 
@@ -1139,13 +1140,13 @@ fn test_archive_with_all_cert_variants() {
 
     // Let certificate
     let let_cert = ProofCert::Let {
-        type_cert: Box::new(ProofCert::Sort {
+        type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        value_cert: Box::new(ProofCert::Sort {
+        value_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(type0.clone()),
         }),
@@ -1190,10 +1191,10 @@ fn test_zstd_archive_complex_cert() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -1228,10 +1229,10 @@ fn test_zstd_archive_with_stats() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -1354,35 +1355,35 @@ fn test_zstd_archive_nested_app_chain() {
     };
 
     let h_app_cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("h"),
             levels: vec![],
             type_: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
         }),
         fn_type: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
-        arg_cert: Box::new(inner_cert),
+        arg_cert: Arc::new(inner_cert),
         result_type: Box::new(unit_type.clone()),
     };
 
     let g_app_cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("g"),
             levels: vec![],
             type_: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
         }),
         fn_type: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
-        arg_cert: Box::new(h_app_cert),
+        arg_cert: Arc::new(h_app_cert),
         result_type: Box::new(unit_type.clone()),
     };
 
     let cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("f"),
             levels: vec![],
             type_: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
         }),
         fn_type: Box::new(Expr::arrow(unit_type.clone(), unit_type.clone())),
-        arg_cert: Box::new(g_app_cert),
+        arg_cert: Arc::new(g_app_cert),
         result_type: Box::new(unit_type),
     };
 
@@ -1538,13 +1539,13 @@ fn test_compare_lz4_vs_zstd() {
     };
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(inner_cert.clone()),
+        arg_type_cert: Arc::new(inner_cert.clone()),
         arg_level: Level::zero(),
-        body_type_cert: Box::new(ProofCert::Pi {
+        body_type_cert: Arc::new(ProofCert::Pi {
             binder_info: BinderInfo::Default,
-            arg_type_cert: Box::new(inner_cert.clone()),
+            arg_type_cert: Arc::new(inner_cert.clone()),
             arg_level: Level::zero(),
-            body_type_cert: Box::new(inner_cert.clone()),
+            body_type_cert: Arc::new(inner_cert.clone()),
             body_level: Level::zero(),
         }),
         body_level: Level::zero(),
@@ -1584,13 +1585,13 @@ fn test_zstd_archive_with_all_cert_variants() {
 
     // Let certificate
     let let_cert = ProofCert::Let {
-        type_cert: Box::new(ProofCert::Sort {
+        type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        value_cert: Box::new(ProofCert::Sort {
+        value_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(type0.clone()),
         }),
@@ -1611,7 +1612,7 @@ fn test_zstd_archive_with_all_cert_variants() {
 
     // DefEq certificate
     let def_eq_cert = ProofCert::DefEq {
-        inner: Box::new(ProofCert::Sort {
+        inner: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expected_type: Box::new(type0.clone()),
@@ -1639,11 +1640,11 @@ fn test_compare_dict_vs_no_dict_compression() {
             } else if i % 3 == 1 {
                 ProofCert::Pi {
                     binder_info: BinderInfo::Default,
-                    arg_type_cert: Box::new(ProofCert::Sort {
+                    arg_type_cert: Arc::new(ProofCert::Sort {
                         level: Level::zero(),
                     }),
                     arg_level: Level::zero(),
-                    body_type_cert: Box::new(ProofCert::Sort {
+                    body_type_cert: Arc::new(ProofCert::Sort {
                         level: Level::zero(),
                     }),
                     body_level: Level::zero(),
@@ -1651,10 +1652,10 @@ fn test_compare_dict_vs_no_dict_compression() {
             } else {
                 ProofCert::Lam {
                     binder_info: BinderInfo::Default,
-                    arg_type_cert: Box::new(ProofCert::Sort {
+                    arg_type_cert: Arc::new(ProofCert::Sort {
                         level: Level::zero(),
                     }),
-                    body_cert: Box::new(ProofCert::BVar {
+                    body_cert: Arc::new(ProofCert::BVar {
                         idx: 0,
                         expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::zero()))),
                     }),
@@ -1673,11 +1674,11 @@ fn test_compare_dict_vs_no_dict_compression() {
     // Test certificate
     let test_cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         arg_level: Level::zero(),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::succ(Level::zero()),
         }),
         body_level: Level::succ(Level::zero()),

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use clean_kernel::env::TrustedEnvExt;
 use clean_kernel::expr::{BinderInfo, ZFCSetExpr};
 use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr, ExprKind, FVarId, Level, LocalContext};
@@ -1202,9 +1203,9 @@ fn assert_merge_fixture_restored(
         assert!(state.get(*id).is_none(), "sparse meta {id:?} leaked");
     }
     assert_eq!(state.next_id, baseline_next_id);
-    assert!(state.level_constraints.is_empty());
     assert!(state.level_parent.is_empty());
     assert!(state.level_concrete.is_empty());
+    assert!(state.level_bound.is_empty());
 }
 
 #[test]
@@ -1220,14 +1221,17 @@ fn test_merge_from_owned_rollback_restores_every_mutation_exactly() {
     assert!(state.is_assigned(stable));
     assert!(state.is_assigned(sparse));
     assert_eq!(state.next_id, 10_001);
-    assert_eq!(state.level_constraints.len(), 2);
     assert_eq!(state.level_parent.len(), 1);
     assert_eq!(state.level_concrete.len(), 1);
 
     let trail_after_first_merge = state.undo_trail_len_for_tests();
+    // 5, not 7: the two `LevelConstraint` records went with the legacy
+    // `level_constraints` map on 2026-08-26 (U2 stage-3 deferral 2). What is
+    // left is exactly the two meta mutations, the cursor, and the two
+    // FIRST-CLASS level-map mutations (one parent, one concrete).
     assert_eq!(
-        trail_after_first_merge, 7,
-        "merge should record exactly its two meta, cursor, and four level-map mutations"
+        trail_after_first_merge, 5,
+        "merge should record exactly its two meta, cursor, and two level-map mutations"
     );
     state.merge_from(&focused);
     assert_eq!(
@@ -1262,7 +1266,6 @@ fn test_merge_from_owned_commit_persists_and_clears_trail() {
     assert!(state.is_assigned(stable));
     assert!(state.is_assigned(sparse));
     assert_eq!(state.next_id, 10_001);
-    assert_eq!(state.level_constraints.len(), 2);
     assert_eq!(state.level_parent.len(), 1);
     assert_eq!(state.level_concrete.len(), 1);
     assert_eq!(state.fresh(Expr::type_()), MetaId(10_001));
@@ -2747,8 +2750,15 @@ fn test_unify_levels_meta_occurs_in_max_defers() {
         v,
         "occurs-check failure must not assign ?v"
     );
+    // No level-map entry of ANY kind for ?v. This used to read the legacy
+    // `level_constraints` map (removed 2026-08-26, U2 stage-3 deferral 2);
+    // checking all three first-class maps is strictly stronger, since the
+    // legacy map was never the store an occurs-check failure could have
+    // written to on its own.
     assert!(
-        state.get_level_constraint(&v_name).is_none(),
+        !state.level_parent.contains_key(&v_name)
+            && !state.level_concrete.contains_key(&v_name)
+            && !state.level_bound.contains_key(&v_name),
         "occurs-check failure must not record a level constraint for ?v"
     );
 }
@@ -2920,5 +2930,154 @@ fn test_level_bound_cyclic_class_terminates() {
     assert!(
         matches!(resolved, Level::Succ(_)),
         "cyclic bound must terminate at the guarded fixed point, got {resolved:?}"
+    );
+}
+
+// =====================================================================
+// U2 stage 2 (2026-08-25): `infer_level_for_type` covers Pi types, so a
+// Sort-typed metavariable assigned a FUNCTION type gets its level equation
+// GENERATED instead of silently orphaned (the measured sub-class-B class:
+// `expected Sort(Param(u_N)), got Sort(Max(Succ(..), Succ(..)))` at the
+// decl-close kernel re-check — docs/analysis/u2-implementation-plan-2026-08-24.md
+// §1.2/§3 stage 2). Battery pins: p43 (pass family) / p44 (rigid twin).
+// =====================================================================
+
+/// `?A : Sort ?u := Prop → Prop` must solve `?u := 1` (the concrete face).
+/// Before the Pi arm this generated NOTHING: `?u` survived unconstrained.
+#[test]
+fn test_pi_assignment_constrains_sort_meta_concrete() {
+    let env = Environment::new();
+    let u9 = Name::from_string("u2s2_u9");
+    let mut state = MetaState::new();
+    let meta_id = state.fresh(Expr::sort(Level::param(u9.clone())));
+
+    let pi = Expr::pi(BinderInfo::Default, Expr::prop(), Expr::prop());
+    let result = {
+        let mut unifier = Unifier::with_env(&mut state, &env, LocalContext::new());
+        unifier.unify(&meta_expr(meta_id), &pi)
+    };
+    assert!(
+        matches!(result, UnifyResult::Success),
+        "assigning a Pi type to a Sort-typed meta should succeed, got {result:?}"
+    );
+    // `Prop → Prop : Sort 1`, so the meta's level param must now resolve
+    // to `Succ(Zero)` — not survive as an unconstrained param.
+    assert_eq!(
+        state.instantiate_level(&Level::param(u9)),
+        Level::succ(Level::zero()),
+        "the Pi arm must constrain the meta's Sort level to the Pi's inferred sort"
+    );
+}
+
+/// The measured sub-class-B shape: `?A : Sort ?u := α → β` over two
+/// parametric binder levels must record a compound bound for `?u`
+/// (max/imax of the two), not leave it unconstrained.
+#[test]
+fn test_pi_assignment_constrains_sort_meta_max() {
+    let env = Environment::new();
+    let u0 = Name::from_string("u2s2_u0");
+    let u1 = Name::from_string("u2s2_u1");
+    let u9 = Name::from_string("u2s2_free");
+
+    let mut ctx = LocalContext::new();
+    let fa = ctx.push(
+        Name::from_string("alpha"),
+        Expr::sort(Level::succ(Level::param(u0.clone()))),
+        BinderInfo::Default,
+    );
+    let fb = ctx.push(
+        Name::from_string("beta"),
+        Expr::sort(Level::succ(Level::param(u1.clone()))),
+        BinderInfo::Default,
+    );
+
+    let mut state = MetaState::new();
+    let meta_id = state.fresh_with_locals(
+        Expr::sort(Level::param(u9.clone())),
+        vec![
+            (
+                "alpha".to_owned(),
+                fa,
+                Expr::sort(Level::succ(Level::param(u0.clone()))),
+            ),
+            (
+                "beta".to_owned(),
+                fb,
+                Expr::sort(Level::succ(Level::param(u1.clone()))),
+            ),
+        ],
+    );
+
+    let pi = Expr::pi(BinderInfo::Default, Expr::fvar(fa), Expr::fvar(fb));
+    let result = {
+        let mut unifier = Unifier::with_env(&mut state, &env, ctx);
+        unifier.unify(&meta_expr(meta_id), &pi)
+    };
+    assert!(
+        matches!(result, UnifyResult::Success),
+        "assigning a two-level Pi to a Sort-typed meta should succeed, got {result:?}"
+    );
+    let resolved = state.instantiate_level(&Level::param(u9));
+    assert!(
+        !matches!(resolved, Level::Param(_)),
+        "the meta's Sort level must be bound to the Pi's compound sort, \
+         not left an unconstrained param — got {resolved:?}"
+    );
+    assert!(
+        resolved.has_params(),
+        "the bound must mention the binder levels, got {resolved:?}"
+    );
+}
+
+/// The rigid twin (battery p44): when the newly-generated Pi-level equation
+/// needs `rigid := 0`, the refusal is LOUD at the constraint site — the
+/// assignment fails instead of silently succeeding with an orphaned level.
+#[test]
+fn test_pi_assignment_rigid_refusal_is_loud() {
+    let env = Environment::new();
+    let ur = Name::from_string("u2s2_rigid_u");
+    let vr = Name::from_string("u2s2_rigid_v");
+
+    let mut ctx = LocalContext::new();
+    let fa = ctx.push(
+        Name::from_string("alpha"),
+        Expr::sort(Level::succ(Level::param(ur.clone()))),
+        BinderInfo::Default,
+    );
+    let fb = ctx.push(
+        Name::from_string("beta"),
+        Expr::sort(Level::succ(Level::param(vr.clone()))),
+        BinderInfo::Default,
+    );
+
+    let mut state = MetaState::new();
+    state.add_rigid_level_param(ur.clone());
+    state.add_rigid_level_param(vr.clone());
+    // `?A : Type` (Sort 1, concrete): assigning `α → β` forces
+    // `max(succ u, succ v) =?= 1`, i.e. `u := 0 ∧ v := 0` — refused rigid.
+    let meta_id = state.fresh_with_locals(
+        Expr::type_(),
+        vec![
+            (
+                "alpha".to_owned(),
+                fa,
+                Expr::sort(Level::succ(Level::param(ur))),
+            ),
+            (
+                "beta".to_owned(),
+                fb,
+                Expr::sort(Level::succ(Level::param(vr))),
+            ),
+        ],
+    );
+
+    let pi = Expr::pi(BinderInfo::Default, Expr::fvar(fa), Expr::fvar(fb));
+    let result = {
+        let mut unifier = Unifier::with_env(&mut state, &env, ctx);
+        unifier.unify(&meta_expr(meta_id), &pi)
+    };
+    assert!(
+        matches!(result, UnifyResult::Failure(_)),
+        "a Pi-level equation that must assign a rigid param refuses loudly, got {result:?}"
     );
 }

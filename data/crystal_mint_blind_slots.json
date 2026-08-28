@@ -18,7 +18,8 @@
     },
     {
      "file": "crates/clean-verify/src/ir_mint/interface.rs",
-     "text": "check_params(\"parameter\", &interface.params, &tags.interface.params)?;"
+     "text": "check_params(\"parameter\", &interface.params, &pinned_iface.params)?;",
+     "reanchored_2026_08_23": "RE-ANCHORED 2026-08-23 (lane MINT18), and re-anchored is the right verb: the check did not weaken and the row is not closed. Chain 18's module holds TWO functions, so `ir_mint::project` now reads each body against ITS OWN pinned interface -- the root's from the tag table's `interface`, a sibling's from its `extra_bodies` row -- and the comparison moved out of `project` into `check_body`, reading `pinned_iface` where it read `tags.interface`. On every one-body chain, which is seventeen of the eighteen, `pinned_iface` IS `tags.interface` and nothing about the comparison changed. What changed is that a second body can no longer inherit the first body's pin -- which, on the chain that has one, is a STRENGTHENING: only the callee carries `#proof: shift_in_range` and only the callee's `functy` is 433."
     },
     {
      "file": "scripts/crystal_a2_project/src/main.rs",
@@ -46,7 +47,8 @@
     },
     {
      "file": "crates/clean-verify/src/ir_mint/interface.rs",
-     "text": "if interface.function_name != tags.body {"
+     "text": "if interface.function_name != pinned_iface.function_name {",
+     "reanchored_2026_08_23": "RE-ANCHORED 2026-08-23 (lane MINT18), and re-anchored is the right verb: the check did not weaken and the row is not closed. Chain 18's module holds TWO functions, so `ir_mint::project` now reads each body against ITS OWN pinned interface -- the root's from the tag table's `interface`, a sibling's from its `extra_bodies` row -- and the comparison moved out of `project` into `check_body`, reading `pinned_iface` where it read `tags.interface`. On every one-body chain, which is seventeen of the eighteen, `pinned_iface` IS `tags.interface` and nothing about the comparison changed. What changed is that a second body can no longer inherit the first body's pin -- which, on the chain that has one, is a STRENGTHENING: only the callee carries `#proof: shift_in_range` and only the callee's `functy` is 433."
     },
     {
      "file": "scripts/crystal_a2_project/src/main.rs",
@@ -125,7 +127,8 @@
     },
     {
      "file": "crates/clean-verify/src/ir_mint/interface.rs",
-     "text": "if interface.functy != tags.interface.functy {"
+     "text": "if interface.functy != pinned_iface.functy {",
+     "reanchored_2026_08_23": "RE-ANCHORED 2026-08-23 (lane MINT18), and re-anchored is the right verb: the check did not weaken and the row is not closed. Chain 18's module holds TWO functions, so `ir_mint::project` now reads each body against ITS OWN pinned interface -- the root's from the tag table's `interface`, a sibling's from its `extra_bodies` row -- and the comparison moved out of `project` into `check_body`, reading `pinned_iface` where it read `tags.interface`. On every one-body chain, which is seventeen of the eighteen, `pinned_iface` IS `tags.interface` and nothing about the comparison changed. What changed is that a second body can no longer inherit the first body's pin -- which, on the chain that has one, is a STRENGTHENING: only the callee carries `#proof: shift_in_range` and only the callee's `functy` is 433."
     },
     {
      "file": "crates/clean-verify/src/ir_mint/tags.rs",
@@ -184,7 +187,8 @@
     },
     {
      "file": "crates/clean-verify/src/ir_mint/interface.rs",
-     "text": "if interface.producer != tags.interface.producer {"
+     "text": "if interface.producer != pinned_iface.producer {",
+     "reanchored_2026_08_23": "RE-ANCHORED 2026-08-23 (lane MINT18), and re-anchored is the right verb: the check did not weaken and the row is not closed. Chain 18's module holds TWO functions, so `ir_mint::project` now reads each body against ITS OWN pinned interface -- the root's from the tag table's `interface`, a sibling's from its `extra_bodies` row -- and the comparison moved out of `project` into `check_body`, reading `pinned_iface` where it read `tags.interface`. On every one-body chain, which is seventeen of the eighteen, `pinned_iface` IS `tags.interface` and nothing about the comparison changed. What changed is that a second body can no longer inherit the first body's pin -- which, on the chain that has one, is a STRENGTHENING: only the callee carries `#proof: shift_in_range` and only the callee's `functy` is 433."
     }
    ],
    "consequence": "The CONTENT erasure is deliberate and load-bearing, and stays: the `#loc` file index is a whole-crate table that renumbers with no instruction changed, and `Module::stable_digest` excludes it upstream for the same reason. Erasing it is what makes the core digest producer-invariant. What was WRONG before 2026-08-20 is that the erasure was unbounded -- every `  ; #...` suffix was dropped whatever it said -- so a producer that started annotating an instruction with something trust-bearing would have been erased in silence. That is the exact failure the `exhaustive_enum_unreachable` flag demonstrates one level in. The kind set is now an allowlist of five, each inert for a stated reason, and an unlisted kind is a refusal.",
@@ -299,6 +303,31 @@
    "witness": "content_after_the_closing_brace_is_now_refused_rather_than_dropped_unread",
    "live_on_chains": "none of the sixteen committed fixtures carries anything after its close -- which is exactly why this was latent, and exactly the position `global-index` was in before it was closed.",
    "residual": "Reader A is unaffected: it projects one `trust_ir::Function` out of a decoded module and never sees text, so it could not have had this defect and gains nothing from the fix. The two readers were therefore NOT in agreement about what the fixture file means, and nothing had noticed."
+  },
+  {
+   "id": "usize-width",
+   "kind": "compared",
+   "slot": "The target word size behind a printed `usize` type token.",
+   "artifact_carries": "`trust_ir::Ty::Usize` in the binary; the token `usize` in the emitted text (`zext u32 %1 to usize`, node_id_index).",
+   "core_carries": "The RESOLVED fixed-width integer, `(uint 64)`. The core module cannot remember the token was `usize`: reader C decodes the registered kernel term, and Clean's `IRTy` has no usize constructor -- so keeping the distinction in the core would make reader C structurally unable to agree.",
+   "erased_by": "The RESOLUTION, and only under a pin. Neither text reader resolves on its own: reader A refuses `Ty::Usize` unless `--usize-bits <N>` was stated (and records bits + site count in provenance), reader B refuses the token unless the chain's tag table carries a `usize` lane (bits + exact site count), and `project` COMPARES the observed site count against the pin -- which is what catches the one mutation the resolved core text cannot: a `u64` spelled where the body says `usize`, or the reverse. What stays genuinely blind: a body with EQUAL counts whose usize and real-u64 sites are exchanged, which no chained body exhibits (the one chained usize body has one cast and no u64).",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted.rs",
+     "text": "\"usize\" => match self.usize_bits {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface.rs",
+     "text": "let pinned_usize = tags.usize_pin.map_or(0, |u| u.sites);"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/tags.rs",
+     "text": "pub struct UsizePin {"
+    }
+   ],
+   "witness": "usize_is_refused_unpinned_and_the_site_count_separates_the_u64_twin",
+   "consequence": "Without the pin, NOTHING resolves: both text readers refuse the token by name, so a chain whose body contains `usize` cannot join the mint at all until its table states the width as a reviewed target fact. With the pin, the resolved core is one module for `usize` and `u64` twins -- and the pinned SITE COUNT is the acceptance check that separates them, so the erasure is bounded to a count-preserving positional exchange between a usize and a real u64, which no chained body exhibits (the one chained usize body has one cast and no u64).",
+   "read_by": "Reader A: `Projector::ty`, `Ty::Usize` arm (scripts/crystal_a2_project/src/main.rs), resolved under `--usize-bits`, recorded as `usize_bits` + `usize_sites_resolved` in the provenance JSON. Reader B: `Reader::ty`, the `\"usize\"` arm (src/ir_mint/emitted.rs), resolved through `read_with_pins`, counted into `ObservedTags::usize_seen`. The pin: `Tags::usize_pin` (src/ir_mint/tags.rs), compared by `project` (src/ir_mint/interface.rs)."
   }
  ],
  "justification_standard": "A row that stays `erased` or `unwitnessed` must justify itself with a KERNEL-CHECKED THEOREM, a MEASURED FACT, or a QUOTED LINE of the producer's source -- never with a recollection. The standard for a theorem is `ir_ty_is_agg_enum_any` (`spec/core_spec/eval_ir_ops.rs`), which proves `ir_ty_is_agg (IRTy.enum_ n) = Bool.true` at EVERY whole-crate id and is why a type-table renumbering cannot reach the value the machine computes; `ir_exec_switch_exh_irrelevant`, `ir_exec_callind_conv_irrelevant` and `ir_exec_callind_sig_irrelevant` (`spec/core_spec/eval_ir_machine.rs`) are the same standard for three dropped operands. And a theorem must be about THE OBJECT THE ROW IS ABOUT: `functy-index` cited `ir_exec_callind_sig_irrelevant` for four months, which proves something true about `callindirect`'s operand and nothing at all about the function's own header signature. That mismatch is what let a variadic and a non-variadic function be accepted as one program."

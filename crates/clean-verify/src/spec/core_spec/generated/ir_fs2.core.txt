@@ -1,0 +1,16 @@
+(module
+  (funcs
+    (func 0
+      (params 0 1 2)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 3) (binop fsub (float 64) 1 2))
+            (node (results) (ret (vals 3)))
+          ))
+      ))
+  )
+  (globals)
+)

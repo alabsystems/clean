@@ -74,22 +74,46 @@ fn compile_external_snippet(test_name: &str, source: &str) -> Output {
     let source_path = compile_dir.join("snippet.rs");
     fs::write(&source_path, source).expect("snippet source should be writable");
 
-    let output = Command::new("rustc")
-        .arg("--crate-type")
-        .arg("lib")
-        .arg("--edition")
-        .arg("2021")
-        .arg("--emit")
-        .arg("metadata")
-        .arg("--out-dir")
-        .arg(&compile_dir)
-        .arg(&source_path)
-        .arg("--extern")
-        .arg(format!("clean_kernel={}", artifact.display()))
-        .arg("-L")
-        .arg(format!("dependency={}", deps_dir.display()))
-        .output()
-        .expect("rustc should be runnable from integration tests");
+    // TRUST OPT-OUT -- the same probe-and-fall-back the clean-auto API-surface
+    // tests already carry. `rustc` resolves through rustup from this repo's
+    // `rust-toolchain.toml` (`channel = "trust"`), so a BARE invocation runs
+    // Trust's obligation checker over this throwaway snippet: the compile then
+    // fails on a runtime-checked obligation instead of the `must_use` lint, and
+    // the fragment assertion below reports a missing diagnostic that the lint
+    // never got a chance to emit. The crate's own builds are compiled with this
+    // exact flag (`.cargo/config.toml`, [target.aarch64-apple-darwin]); the
+    // snippet exists only to prove a lint fires and is not a verification
+    // target. Probe, and fall back when the flag is not understood.
+    let run_rustc = |trust_opt_out: bool| {
+        let mut cmd = Command::new("rustc");
+        if trust_opt_out {
+            cmd.arg("-Ztrust-verify=off");
+        }
+        cmd.arg("--crate-type")
+            .arg("lib")
+            .arg("--edition")
+            .arg("2021")
+            .arg("--emit")
+            .arg("metadata")
+            .arg("--out-dir")
+            .arg(&compile_dir)
+            .arg(&source_path)
+            .arg("--extern")
+            .arg(format!("clean_kernel={}", artifact.display()))
+            .arg("-L")
+            .arg(format!("dependency={}", deps_dir.display()))
+            .output()
+    };
+    let flag_was_rejected = |stderr: &str| {
+        stderr.contains("only accepted on the nightly compiler")
+            || stderr.contains("unknown unstable option")
+            || stderr.contains("unknown debugging option")
+            || stderr.contains("incorrect value")
+    };
+    let mut output = run_rustc(true).expect("rustc should be runnable from integration tests");
+    if !output.status.success() && flag_was_rejected(&String::from_utf8_lossy(&output.stderr)) {
+        output = run_rustc(false).expect("rustc should be runnable from integration tests");
+    }
 
     let _ = fs::remove_dir_all(&compile_dir);
     output

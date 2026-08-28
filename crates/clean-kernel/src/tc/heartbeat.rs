@@ -79,6 +79,17 @@ impl<'env> TypeChecker<'env> {
     /// `type_checker.cpp:274`.
     #[inline]
     pub(super) fn tick_heartbeat(&self) -> Result<(), super::TypeError> {
+        // The AMBIENT declaration budget is checked FIRST and unconditionally.
+        // It must bind even when this checker's own heartbeat is disabled
+        // (`limit == 0`), because "unlimited for this checker" is exactly the
+        // configuration a runaway declaration reaches through — see
+        // `decl_budget.rs`. Disabled ambient budget = one TLS load, no branch
+        // taken, no behavior change.
+        if !super::decl_budget::consume_declaration_budget() {
+            return Err(super::TypeError::DeclarationBudgetExhausted {
+                limit: super::decl_budget::declaration_budget_limit(),
+            });
+        }
         let limit = self.heartbeat_limit;
         if limit == 0 {
             return Ok(());
@@ -103,7 +114,8 @@ impl<'env> TypeChecker<'env> {
     /// disabled (limit == 0).
     #[inline]
     pub(super) fn heartbeat_exhausted(&self) -> bool {
-        self.heartbeat_limit != 0 && self.heartbeat_counter.get() == 0
+        (self.heartbeat_limit != 0 && self.heartbeat_counter.get() == 0)
+            || super::decl_budget::declaration_budget_exhausted()
     }
 
     /// Public probe: has the current heartbeat budget been fully spent?
@@ -143,6 +155,13 @@ impl<'env> TypeChecker<'env> {
     /// Decrement heartbeat counter without checking, with category attribution.
     #[inline]
     fn inc_heartbeat_categorized(&self, category: HeartbeatProfileCategory) {
+        // Ambient budget first, for the same reason as `tick_heartbeat`: a
+        // checker with its own heartbeat disabled must still draw down the
+        // declaration's pot. Non-`Result` path, so exhaustion is not reported
+        // here — `heartbeat_exhausted()` (which reads the ambient latch) makes
+        // `whnf_impl` / `is_def_eq_impl` bail, and the next `tick_heartbeat`
+        // turns it into a typed error.
+        let _ = super::decl_budget::consume_declaration_budget();
         if self.heartbeat_limit == 0 {
             return;
         }

@@ -46,7 +46,7 @@ impl<'a> ElabCtx<'a> {
             ExprKind::Sort(level) if level.normalize() == Level::Zero => Ok(false),
             _ => Err(ElabError::TypeMismatch {
                 expected: "conditional guard of type Bool or Prop".to_string(),
-                actual: format!("{condition_ty:?}"),
+                actual: format!("{condition_ty}"),
             }),
         }
     }
@@ -563,8 +563,8 @@ impl<'a> ElabCtx<'a> {
                     return Ok(self.metas.instantiate_levels(&result));
                 }
                 Err(ElabError::TypeMismatch {
-                    expected: format!("{ty_expr:?}"),
-                    actual: format!("{actual_ty:?} ({_msg})"),
+                    expected: format!("{ty_expr}"),
+                    actual: format!("{actual_ty} ({_msg})"),
                 })
             }
             UnifyResult::Stuck => {
@@ -948,6 +948,17 @@ impl<'a> ElabCtx<'a> {
         //
         // 1. Current-namespace-outward walk (#3410 + B03 reorder). Inside
         //    `namespace Foo.Bar`, try `Foo.Bar.name`, then `Foo.name`.
+        //
+        //    ONE candidate is deliberately passed over here: a DERIVED
+        //    inherited-field projection (`crate::name_resolution::
+        //    is_generated_inherited_projection`). Lean 4 declares no such
+        //    constant — it composes `P.f (C.toP self)` on the fly per use site
+        //    — so it must not join this candidate set and shadow the root /
+        //    exported name the author wrote. It is remembered in `deferred` and
+        //    used only if NOTHING else resolves, which keeps every name that
+        //    resolves today resolving (Lean would report `unknown identifier`
+        //    there instead; accepting more is safe — the kernel re-checks).
+        let mut deferred_inherited_projection: Option<Name> = None;
         if !self.namespace_prefix.is_empty() {
             let mut prefix = self.namespace_prefix.as_str();
             loop {
@@ -955,6 +966,21 @@ impl<'a> ElabCtx<'a> {
                 let qualified_name = Name::from_string(&qualified_str);
                 if self.is_const_accessible(&qualified_name) {
                     if let Some(info) = self.env.get_const(&qualified_name) {
+                        if crate::name_resolution::is_generated_inherited_projection(
+                            self.env,
+                            &qualified_name,
+                        ) {
+                            if deferred_inherited_projection.is_none() {
+                                deferred_inherited_projection = Some(qualified_name);
+                            }
+                            match prefix.rsplit_once('.') {
+                                Some((parent, _)) => {
+                                    prefix = parent;
+                                    continue;
+                                }
+                                None => break,
+                            }
+                        }
                         let levels: Vec<Level> = info
                             .level_params
                             .iter()
@@ -1289,6 +1315,21 @@ impl<'a> ElabCtx<'a> {
             return self.elab_ident("Hashable.hash");
         }
 
+        // Last resort BEFORE auto-implicit: the derived inherited-field
+        // projection the namespace walk passed over. Reached only when the
+        // root/exported name it would have shadowed does not exist, so this
+        // can only ever ACCEPT what already resolved before this change.
+        if let Some(qualified_name) = deferred_inherited_projection {
+            if let Some(info) = self.env.get_const(&qualified_name) {
+                let levels: Vec<Level> = info
+                    .level_params
+                    .iter()
+                    .map(|_| self.fresh_universe_param())
+                    .collect();
+                return Ok(Expr::const_(qualified_name, levels));
+            }
+        }
+
         // Auto-implicit handling (#164)
         // Respect `set_option autoImplicit false` at file or section scope.
         //
@@ -1354,6 +1395,57 @@ impl<'a> ElabCtx<'a> {
                 };
             }
         }
+        // A SELF-REFERENCE is not a typo (Trust ruling v7/D3: a refusal must
+        // carry the fix, with options). `def gcd (a b : Nat) : Nat := … gcd b
+        // (a % b)` used to die here as `UnknownIdentWithSuggestions` offering
+        // `Quotient.ind` — the nearest theorem name to `gcd` — which is a
+        // name-distance answer to a question nobody asked: `gcd` is the name
+        // being DEFINED, so the real report is that its recursion is outside
+        // the fragment Clean lowers, plus the ways across that boundary.
+        //
+        // This runs only where resolution has ALREADY failed, so it is a
+        // choice of MESSAGE and nothing else — fail-closed behaviour is
+        // byte-identical, and the two admitting recursion shapes never reach
+        // this function at all (they resolve the self-call to an induction
+        // hypothesis or a `WellFounded.fix` argument long before).
+        if let Some(subject) = &self.self_reference {
+            if self.ident_names_current_decl(name, &subject.written) {
+                return ElabError::RecursionOutsideFragment {
+                    name: name.to_string(),
+                    decl: subject.written.clone(),
+                    params: subject.params,
+                };
+            }
+        }
+
+        // The adjacent case, one level out: the identifier names a declaration
+        // in the SAME header-first batch whose own signature never reached the
+        // index, so there was nothing to forward-resolve against. That is a
+        // report about the sibling, and nearest-theorem names are noise.
+        // Exact canonical match first, short name second, so a qualified
+        // sibling is never mistaken for a differently-namespaced one.
+        let written = structural::normalize_root_prefix(name);
+        let sibling = self
+            .unstaged_siblings
+            .iter()
+            .find(|candidate| candidate.name == written)
+            .or_else(|| {
+                self.unstaged_siblings.iter().find(|candidate| {
+                    candidate
+                        .name
+                        .rsplit_once('.')
+                        .map_or(candidate.name.as_str(), |(_, tail)| tail)
+                        == written
+                })
+            });
+        if let Some(sibling) = sibling {
+            return ElabError::SameBatchHeaderUnavailable {
+                name: name.to_string(),
+                sibling: sibling.name.clone(),
+                reason: sibling.reason,
+            };
+        }
+
         let suggestions = self.nearest_theorem_names(name, 5);
         if suggestions.is_empty() {
             ElabError::UnknownIdent(name.to_string())
@@ -1363,6 +1455,19 @@ impl<'a> ElabCtx<'a> {
                 suggestions,
             }
         }
+    }
+
+    /// Is `written`, as it appears at a failed use site, the name of the
+    /// declaration currently being elaborated?
+    ///
+    /// Both the bare spelling and the namespace-qualified one count: inside
+    /// `namespace Ty`, `def bitWidth` is `Ty.bitWidth`, and a body may write
+    /// either. `_root_.` prefixes are stripped on both sides, mirroring
+    /// [`super::structural`]'s own recursion-name normalization.
+    fn ident_names_current_decl(&self, written: &str, decl: &str) -> bool {
+        let written = structural::normalize_root_prefix(written);
+        let decl = structural::normalize_root_prefix(decl);
+        written == decl || written == self.qualify_name(decl)
     }
 
     fn nearest_theorem_names(&self, name: &str, limit: usize) -> Vec<String> {
@@ -1435,6 +1540,36 @@ impl<'a> ElabCtx<'a> {
                 if name == "_" {
                     return Ok(self.fresh_universe_param());
                 }
+                // THE MINT NAMESPACE IS RESERVED (2026-08-26b). Universe
+                // metavariables are spelled `?u_N`, and `?` is not
+                // `is_ident_start`, so `Sort ?u_0` has no production in the
+                // level grammar. Guillemets are the one door that does not go
+                // through the lexer's identifier rules — measured on the
+                // release binary at `2ce2cf2c1`, `def gq (γ : Sort «my?weird»)
+                // (y : γ) : γ := y` reports `1 passed, 0 failed` — so a
+                // written `«?u_0»` would otherwise walk straight back into the
+                // namespace this reservation exists to keep empty. Refusing it
+                // here is what turns "a user cannot write a mint name" from a
+                // lexer accident into a checked property, and it is the reason
+                // `crate::level_role`'s `Minted` arm is now unreachable from a
+                // WRITTEN name rather than merely unlikely. See
+                // `crate::level_mint::MINT_PREFIX`.
+                if crate::level_mint::is_reserved_level_name(name) {
+                    return Err(ElabError::ReservedUniverseName {
+                        detail: format!(
+                            "`{name}` is not a universe parameter name: the `?` space is \
+                             reserved for universe METAVARIABLES the elaborator mints \
+                             (`{}0`, `{}1`, …), so that a level hole and a level a \
+                             declaration writes can never be the same level. The level \
+                             grammar has no production for such a name — a quoted \
+                             identifier (`«…»`) is the only way to write one. Use an \
+                             ordinary universe name (`u`, `v`, `u_0`, …) — or `_` if you \
+                             meant a hole.",
+                            crate::level_mint::MINT_PREFIX,
+                            crate::level_mint::MINT_PREFIX,
+                        ),
+                    });
+                }
                 // Check if it's a known universe parameter; if not, auto-add it.
                 // This matches Lean 4's auto-bound implicit universe behavior:
                 // `class Foo (X : Type u)` without explicit `universe u` declaration
@@ -1453,8 +1588,31 @@ impl<'a> ElabCtx<'a> {
                 //
                 // Level holes (`Type _`) are NOT affected: they return above via
                 // `fresh_universe_param` and must stay solvable.
-                if !self.universe_params.contains(name) {
-                    self.universe_params.push(name.clone());
+                //
+                // U2 stage-3 deferral 1 (2026-08-26): the test used to be
+                // `!self.universe_params.contains(name)`, and that vector is
+                // the UNION of the rigid names and the MINTED ones —
+                // `fresh_universe_param` pushes its mints there so the next
+                // mint skips them. So a user-written universe name colliding
+                // with a name this declaration had already minted read as
+                // "already a parameter", never reached the rigid set, and
+                // stayed solvable: `def badAutoCollide (β : Sort _) : Sort u_0
+                // := Nat` was ACCEPTED and monomorphized to `Sort 1` with zero
+                // surviving level params, while the identical declaration
+                // spelled `Sort w` was correctly rejected. That is p30's
+                // silent-monomorphization class reached through the mint-name
+                // door. Asking for the total ROLE instead of the union's
+                // membership is the whole fix; a `Minted` name the user also
+                // WROTE is a genuine parameter and is promoted to rigid, which
+                // resolves the name clash in the loud-refusal direction.
+                // Fixtures: universes/p47_..._MUST_FAIL (the defect), p48 (its
+                // precision companion, which must keep passing), and p49 (the
+                // MEASURED COST — a shape Lean accepts that this now refuses,
+                // pinned rather than left unstated). See `crate::level_role`.
+                if self.level_param_role(name).is_assignable() {
+                    if !self.universe_params.contains(name) {
+                        self.universe_params.push(name.clone());
+                    }
                     self.metas.add_rigid_level_param(Name::from_string(name));
                 }
                 Ok(Level::param(Name::from_string(name)))
@@ -1482,6 +1640,27 @@ impl<'a> ElabCtx<'a> {
                 // In a full implementation, we'd check if `name` is bound to a
                 // Level value in scope. For Phase 4, we treat it as a level param
                 // that will be substituted.
+                //
+                // The reserved-namespace guard runs here too (2026-08-26b).
+                // This arm builds a `Level::Param` straight from a written
+                // identifier, so `$«?u_0»` is the SECOND way into the mint
+                // namespace and it does not pass through the `Param` arm above.
+                // Two lines is the whole cost of making the reservation total
+                // over the level grammar rather than total over one of its
+                // productions; see `crate::level_mint::MINT_PREFIX`.
+                if crate::level_mint::is_reserved_level_name(name) {
+                    return Err(ElabError::ReservedUniverseName {
+                        detail: format!(
+                            "`{name}` is not a universe parameter name: the `?` space is \
+                             reserved for universe METAVARIABLES the elaborator mints \
+                             (`{}0`, `{}1`, …). A level antiquotation names a level \
+                             variable in the quotation's scope, and no such variable can \
+                             be spelled in this space.",
+                            crate::level_mint::MINT_PREFIX,
+                            crate::level_mint::MINT_PREFIX,
+                        ),
+                    });
+                }
                 Ok(Level::param(Name::from_string(name)))
             }
         })

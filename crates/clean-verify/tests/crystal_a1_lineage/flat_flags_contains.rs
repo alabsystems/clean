@@ -55,7 +55,9 @@ fn flat_flags_contains_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_contains.rs", "const SRC_IR_FC_B"),
+        // The registered block is the MINTED script (crystal A2,
+        // `src/ir_mint`) as of 2026-08-21 — the same lines the spec replays.
+        &clean_block_sources("generated/ir_fc.defs.txt", "def ir_fc_b"),
         "def ir_fc_b",
     );
 
@@ -122,7 +124,7 @@ fn flat_flags_contains_proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_contains.rs", "const SRC_IR_FC_FUNC"),
+        &clean_block_sources("generated/ir_fc.defs.txt", "def ir_fc_func"),
         "flat_flags_contains",
     );
     assert_lanes(&emitted, &clean, "flat_flags_contains");

@@ -387,7 +387,7 @@ impl<'a> CompactedRegion<'a> {
     ///
     /// # ENSURES
     /// - Returns `base_addr + offset` (no validation).
-    pub fn offset_to_ptr(&self, offset: usize) -> u64 {
+    pub(crate) fn offset_to_ptr(&self, offset: usize) -> u64 {
         self.base_addr + offset as u64
     }
 
@@ -399,7 +399,7 @@ impl<'a> CompactedRegion<'a> {
     /// # ENSURES
     /// - Returns a slice of length `len` from `offset`.
     /// - Returns `OleanError::OutOfBounds` on invalid range.
-    pub fn bytes_at(&self, offset: usize, len: usize) -> OleanResult<&'a [u8]> {
+    pub(crate) fn bytes_at(&self, offset: usize, len: usize) -> OleanResult<&'a [u8]> {
         if offset + len > self.data.len() {
             return Err(OleanError::OutOfBounds {
                 offset,
@@ -420,7 +420,7 @@ impl<'a> CompactedRegion<'a> {
     /// # ENSURES
     /// - Returns a BigNat value on success.
     /// - Returns `OleanError` on unexpected tags or malformed data.
-    pub fn read_bignat_value(&self, ptr: u64) -> OleanResult<BigNat> {
+    pub(crate) fn read_bignat_value(&self, ptr: u64) -> OleanResult<BigNat> {
         if is_scalar(ptr) {
             return Ok(BigNat::from_u64(unbox_scalar(ptr)));
         }
@@ -470,7 +470,7 @@ impl<'a> CompactedRegion<'a> {
     ///
     /// For BVar indices and other values that should always fit in u64.
     /// Multi-limb values are truncated to low 64 bits.
-    pub fn read_nat_value(&self, ptr: u64) -> OleanResult<u64> {
+    pub(crate) fn read_nat_value(&self, ptr: u64) -> OleanResult<u64> {
         let bignat = self.read_bignat_value(ptr)?;
         match bignat {
             BigNat::Small(v) => Ok(v),
@@ -488,7 +488,7 @@ impl<'a> CompactedRegion<'a> {
     /// # ENSURES
     /// - Returns UTF-8 string data from the region.
     /// - Returns `OleanError::InvalidObjectTag` if tag mismatch.
-    pub fn read_lean_string_at(&self, offset: usize) -> OleanResult<&'a str> {
+    pub(crate) fn read_lean_string_at(&self, offset: usize) -> OleanResult<&'a str> {
         let header = self.read_header_at(offset)?;
         if header.tag != tags::STRING {
             return Err(OleanError::InvalidObjectTag {

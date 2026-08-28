@@ -108,12 +108,41 @@ impl<'a> ElabCtx<'a> {
             return self.elab_struct_lit(struct_type, base, &rewritten);
         }
 
-        // Build constructor call: StructName.mk field1 field2 ...
+        // Build constructor call: StructName.<ctor> field1 field2 ...
+        //
+        // `.mk` is only the DEFAULT constructor name. `structure Foo where` mints
+        // `Foo.mk`, but `structure Foo where intro :: …` — and every core `Prop`
+        // structure written that way, `Iff.intro` / `And.intro` / `Exists.intro`
+        // — mints something else, and hardcoding `.mk` made the struct-instance
+        // form unusable at exactly those types. That is the dominant Mathlib
+        // `where` idiom: an `↔` statement proved by `mp`/`mpr` fields.
+        //
+        // `.mk` is still tried FIRST, so this is weakening-only: a structure
+        // that has one is resolved byte-identically to before, and the
+        // sole-constructor fallback is reached only where the old code raised
+        // `UnknownIdent`. A multi-constructor inductive has no sole constructor
+        // and still fails, with the same message.
         let struct_name_obj = Name::from_string(&struct_name);
-        let mk_name = Name::from_string(&format!("{}.mk", struct_name));
-        let mk_info = self.env.get_const(&mk_name).ok_or_else(|| {
-            ElabError::UnknownIdent(format!("struct constructor {}.mk", struct_name))
-        })?;
+        let mk_name = match self
+            .env
+            .get_const(&Name::from_string(&format!("{}.mk", struct_name)))
+        {
+            Some(_) => Name::from_string(&format!("{}.mk", struct_name)),
+            None => self
+                .env
+                .get_inductive(&struct_name_obj)
+                .and_then(|ind| match ind.constructor_names.as_slice() {
+                    [only] => Some(only.clone()),
+                    _ => None,
+                })
+                .ok_or_else(|| {
+                    ElabError::UnknownIdent(format!("struct constructor {}.mk", struct_name))
+                })?,
+        };
+        let mk_info = self
+            .env
+            .get_const(&mk_name)
+            .ok_or_else(|| ElabError::UnknownIdent(format!("struct constructor {}", mk_name)))?;
         let ind_info =
             self.env
                 .get_inductive(&struct_name_obj)
@@ -531,7 +560,10 @@ impl<'a> ElabCtx<'a> {
                 direct.push(field.clone());
                 continue;
             }
-            match self.inherited_field_parent_proj(struct_name, &field.name) {
+            match self
+                .inherited_field_parent_proj(struct_name, &field.name)
+                .or_else(|| self.inherited_field_parent_from_metadata(struct_name, &field.name))
+            {
                 Some(parent_proj) => {
                     found_inherited = true;
                     if !inherited.contains_key(&parent_proj) {
@@ -726,13 +758,23 @@ impl<'a> ElabCtx<'a> {
     /// parent that `struct_name` `extends`), return the name of the `toParent`
     /// projection field that reaches it.
     ///
-    /// On the imported path the inherited projection `<struct>.<field>` has body
+    /// The inherited projection `<struct>.<field>` has body
     /// `ParentStruct.<field> (<struct>.toParent self)` — a composition through a
     /// parent projection rather than a direct kernel `Proj`. We recover the
     /// `toParent` field by inspecting that body: the inner application's head is
     /// the parent projection function `<struct>.toParent`, whose own body is the
     /// direct `Proj(<struct>, idx, self)`. Returns `None` for a direct field or
     /// any shape we do not recognize, so the rewrite is conservative.
+    ///
+    /// CORRECTED 2026-08-24: this comment used to open "on the IMPORTED path".
+    /// That was wrong in both directions. Such a constant exists only on the
+    /// SOURCE-ELABORATION path — Clean's own `build_inherited_projections`
+    /// mints it — while Lean 4 declares none and an imported structure carries
+    /// no `extends` metadata at all (`register_structure_parents` has one
+    /// caller, `crate::register`). So this decompiler is reachable ONLY for
+    /// source-elaborated structures, and it is exactly the dependency that
+    /// [`Self::inherited_field_parent_from_metadata`] removes. Evidence and
+    /// counts: `designs/2026-08-24-inherited-projection-parity.md`.
     fn inherited_field_parent_proj(&self, struct_name: &str, field_name: &str) -> Option<String> {
         let struct_name_obj = Name::from_string(struct_name);
         let proj_fn_name = Name::from_string(&format!("{struct_name}.{field_name}"));
@@ -761,6 +803,34 @@ impl<'a> ElabCtx<'a> {
         let inner_body = inner_info.value.as_ref()?;
         Self::projection_body_index(inner_body, &struct_name_obj)?;
         inner_name.last_component()
+    }
+
+    /// The `toParent` hop for an inherited field, read from the structure's
+    /// recorded `extends` METADATA instead of from a materialized projection
+    /// constant's body.
+    ///
+    /// [`Self::inherited_field_parent_proj`] recovers the hop by decompiling
+    /// `<struct>.<field> := Parent.<field> (<struct>.toParent self)`. That works
+    /// only while such a constant exists — which is a Clean-only artefact:
+    /// Lean 4 composes inherited-field access on the fly and declares NO
+    /// constant (measured against real Lean 4 `Init`: 1,235 inherited
+    /// (structure, field) pairs, 0 declared;
+    /// `designs/2026-08-24-inherited-projection-parity.md`). This path answers
+    /// the same question from `Environment::get_structure_parents`, so
+    /// `{ c with inheritedField := v }` keeps rewriting when the constant is
+    /// absent. First parent that reaches the field wins — the same rule
+    /// `build_inherited_projections` uses.
+    fn inherited_field_parent_from_metadata(
+        &self,
+        struct_name: &str,
+        field_name: &str,
+    ) -> Option<String> {
+        crate::name_resolution::inherited_field_subobject_hop(
+            self.env,
+            &Name::from_string(struct_name),
+            &Name::from_string(field_name),
+        )
+        .map(|n| n.to_string())
     }
 
     /// Whether the structure field at `idx` carries a default value usable to

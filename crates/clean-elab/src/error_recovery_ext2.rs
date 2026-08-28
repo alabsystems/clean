@@ -166,6 +166,16 @@ pub(crate) fn hint_for_error(error: &ElabError) -> Vec<DiagnosticHint> {
             message: "Remove extra arguments or check the function's type signature".into(),
             replacement: None,
         }],
+        // The auto-bound face of the same failure: the hint is about the NAME,
+        // not the arity — removing arguments from `nosuchpred a a` cannot help,
+        // because `nosuchpred` is the thing that does not exist.
+        ElabError::AutoBoundHeadOverApplied { name, .. } => vec![DiagnosticHint {
+            message: format!(
+                "`{name}` does not resolve; a signature position auto-bound it \
+                 instead of reporting it"
+            ),
+            replacement: None,
+        }],
         ElabError::AnonymousCtorNoExpectedType => vec![DiagnosticHint {
             message: "Provide an expected type for the anonymous constructor".into(),
             replacement: Some("(⟨...⟩ : T)".into()),

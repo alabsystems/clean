@@ -7,6 +7,7 @@
 use crate::cert::*;
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
+use std::sync::Arc;
 
 fn explicit_v1_stream_fixture(certs: &[ProofCert]) -> Vec<u8> {
     use std::io::Write as _;
@@ -176,11 +177,11 @@ fn test_streaming_write_read_multiple_certs() {
         },
         ProofCert::Pi {
             binder_info: BinderInfo::Default,
-            arg_type_cert: Box::new(ProofCert::Sort {
+            arg_type_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
             arg_level: Level::succ(Level::zero()),
-            body_type_cert: Box::new(ProofCert::Sort {
+            body_type_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
             body_level: Level::succ(Level::zero()),
@@ -566,19 +567,19 @@ fn test_streaming_complex_certs() {
     let type1 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
 
     let complex_cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Lam {
+        fn_cert: Arc::new(ProofCert::Lam {
             binder_info: BinderInfo::Default,
-            arg_type_cert: Box::new(ProofCert::Sort {
+            arg_type_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
-            body_cert: Box::new(ProofCert::BVar {
+            body_cert: Arc::new(ProofCert::BVar {
                 idx: 0,
                 expected_type: Box::new(type0.clone()),
             }),
             result_type: Box::new(Expr::pi(BinderInfo::Default, type0.clone(), type0.clone())),
         }),
         fn_type: Box::new(Expr::pi(BinderInfo::Default, type0.clone(), type0.clone())),
-        arg_cert: Box::new(ProofCert::Sort {
+        arg_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(type1.clone()),

@@ -53,10 +53,10 @@ mod graph;
 mod term;
 mod types;
 
-pub use ematch::*;
-pub use graph::*;
-pub use term::*;
-pub use types::*;
+pub(crate) use ematch::*;
+pub(crate) use graph::*;
+pub(crate) use term::*;
+pub(crate) use types::*;
 
 #[cfg(test)]
 mod tests;

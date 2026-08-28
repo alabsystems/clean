@@ -1,0 +1,58 @@
+{
+ "chain": "ir_vc",
+ "body": "env::native_reducers_char::is_valid_char",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. Every aggregate lane is EMPTY, and that is a measurement: the body takes one u64 BY VALUE, performs no load, and names no enum or struct -- reader A's crate_enum_ids_seen and crate_struct_ids_seen are both [] on the laneREG wc-REG dump_O3 2026-08-21 dump. The INTERFACE half is what this table pins: the argument's width and the two Bool joins.",
+ "how_it_is_used": "`ir_mint::mint` reads the (empty) aggregate lanes -- no alias line is minted -- and `ir_mint::project` compares the emitted header and block-parameter rows against the `interface` object below, refusing a body whose interface is not the pinned one.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Read `ir_h2.tags.json`'s `interface_what`. The sharp slot on this chain is the parameter WIDTH (`bb0(%0: u64)`): the surrogate-range comparisons run at the width the instruction carries, so a u32 twin is a different function through the same CFG -- and a char is a 21-bit value arriving in a 64-bit register, which is why the third comparison (against 1114112) exists at all.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. No token on this chain names a crate-level id, so canonical and observed coincide. Reader A's own record on the laneREG wc-REG dump_O3 2026-08-21 dump: `param_tys_erased: [\"U64\"]`, `block_param_tys_erased: [\"bb3:Bool\", \"bb6:Bool\"]`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 377,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The producer A/B record has this index at 547/547/375 over its three dumps and reader A's 2026-08-21 laneREG dump says 374 -- the recorded whole-crate drift class. The pin compares reader B's header against the FIXTURE-ERA 377; reader A's value is RECORDED in ir_vc.mint.json, NEVER COMPARED, like observed_ty.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "u64",
+    "observed_ty": "u64",
+    "rust_type": "n: u64",
+    "note": "The candidate code point, BY VALUE in a 64-bit register. The width is the semantic payload of this row: all three range comparisons canonicalize at it."
+   }
+  ],
+  "block_params": [
+   {
+    "block": 3,
+    "index": 0,
+    "ssa": 1,
+    "ty": "bool",
+    "observed_ty": "bool",
+    "note": "The OUTER join -- the only block that returns."
+   },
+   {
+    "block": 6,
+    "index": 0,
+    "ssa": 2,
+    "ty": "bool",
+    "observed_ty": "bool",
+    "note": "The INNER join -- the merge of the surrogate test's short circuit, which immediately branches into the outer join."
+   }
+  ],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement: this body contains no memory instruction of any kind.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `is_valid_char` calls NOTHING: reader A's `crate_func_ids_seen` is the single entry [3345] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`; `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`."
+}

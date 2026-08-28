@@ -196,13 +196,28 @@ pub(super) fn assert_launch_blocker_accounting_tail(report: &ReplacementStatusRe
         .commands
         .iter()
         .all(|command| command.wrapper_free));
+    // This used to assert `command == "clean replacement status --json"`, i.e.
+    // it pinned the circle: the row was gated by the very command that prints
+    // it. The row now cites the const its own emitter stamps into
+    // reports/rust-first-tooling.json, so row and artifact cannot drift.
     assert!(accounting
         .reviewer_proof_command_deck
         .commands
         .iter()
         .any(|command| command.row_id == "rust-first-tooling"
-            && command.command == "clean replacement status --json"
+            && command.command == RUST_FIRST_TOOLING_GATE_COMMAND
             && command.launch_blocking_until_green));
+    // No row may be gated by the report it lives in.
+    assert!(
+        accounting
+            .replacement_row_proof_surface_audit
+            .self_reported_gate_row_ids
+            .is_empty(),
+        "rows gated by their own report: {:?}",
+        accounting
+            .replacement_row_proof_surface_audit
+            .self_reported_gate_row_ids
+    );
     let launch_docs_evidence = accounting
         .blocker_evidence_requirements
         .iter()
@@ -286,11 +301,13 @@ pub(super) fn valid_kernel_soundness_launch_artifact(
     }
 }
 
-/// The checked-in ratchet with its counts, rows, and production sites closed
-/// to 0/0. Strict deny-sorry launch-evidence lanes require a closed ratchet
-/// (`current ratchet is not closed at 0/0`), so tests exercising the lanes
-/// beyond that check use this fixture instead of the live artifact, which may
-/// honestly carry open debt (G3 correction, 2026-07-01).
+/// The checked-in ratchet with its counts, rows, and production sites emptied.
+/// An empty ratchet is trivially closed under every definition the gate has
+/// used, so tests exercising the deny-sorry lanes beyond the closure check use
+/// this fixture rather than the live artifact (G3 correction, 2026-07-01).
+/// G6 (2026-08-23): the live artifact is now closed too — its one counted
+/// bypass is sanctioned — but keeping the fixture empty keeps these tests
+/// independent of which sites happen to be sanctioned today.
 pub(super) fn closed_unchecked_decl_ratchet() -> UncheckedDeclRatchetArtifact {
     let mut ratchet = load_unchecked_decl_ratchet().expect("unchecked-decl ratchet");
     ratchet.add_decl_structural_count = 0;

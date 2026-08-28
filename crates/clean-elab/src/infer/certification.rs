@@ -59,7 +59,7 @@ impl<'a> ElabCtx<'a> {
             })
             .map_err(|e| ElabError::TypeMismatch {
                 expected: "valid type".to_string(),
-                actual: format!("{e:?}"),
+                actual: format!("{e}"),
             })
     }
 
@@ -83,14 +83,14 @@ impl<'a> ElabCtx<'a> {
             .create_cert_verifier()
             .map_err(|e| ElabError::TypeMismatch {
                 expected: "valid certificate verifier".to_string(),
-                actual: format!("{e:?}"),
+                actual: format!("{e}"),
             })?;
 
         let _ = verifier
             .verify(&cert, &expr)
             .map_err(|e| ElabError::TypeMismatch {
                 expected: "certificate verification".to_string(),
-                actual: format!("{e:?}"),
+                actual: format!("{e}"),
             })?;
 
         Ok((expr, ty, cert))

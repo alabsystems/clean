@@ -46,6 +46,25 @@
 
 use clean_kernel::{BinderInfo, Declaration, Environment, Expr, KernelInstanceInfo, Level, Name};
 
+/// Is this `add_decl` rejection a RESOURCE limit rather than a statement about
+/// the declaration?
+///
+/// `HeartbeatExceeded` (this type checker ran out of its own fuel) and
+/// `DeclarationBudgetExhausted` (the caller's ambient per-declaration budget
+/// ran out — `clean check --decl-budget`) both mean "the check did not
+/// finish". Neither means the bridge is ill-typed, so neither may trip the
+/// shape assertion below.
+fn is_resource_limit(err: &clean_kernel::EnvError) -> bool {
+    matches!(
+        err,
+        clean_kernel::EnvError::TypeCheckFailed {
+            source: clean_kernel::KernelTypeError::HeartbeatExceeded { .. }
+                | clean_kernel::KernelTypeError::DeclarationBudgetExhausted { .. },
+            ..
+        }
+    )
+}
+
 /// Priority for the seeded bridge instances: strictly below
 /// `clean_kernel::DEFAULT_INSTANCE_PRIORITY` (100), so the prelude's
 /// directly-registered monomorphic instances always win their carriers.
@@ -173,8 +192,15 @@ fn seed_bridge(env: &mut Environment, spec: &BridgeSpec) {
         value,
         is_reducible: true,
     });
+    // …but a RESOURCE-LIMIT rejection is not that. The assertion's subject is
+    // the SHAPE of the prelude classes; a spent heartbeat or a spent ambient
+    // per-declaration budget says nothing about shape, and firing on one turns
+    // a legitimate `clean check --decl-budget <small>` into a debug-build
+    // panic. The production path below is already correct for both cases: the
+    // bridge is skipped, and the seed is idempotent and retries on the next
+    // declaration.
     debug_assert!(
-        added.is_ok(),
+        added.is_ok() || added.as_ref().err().is_some_and(is_resource_limit),
         "B101 hetero bridge {} failed kernel check: {:?}",
         spec.inst_name,
         added.err()

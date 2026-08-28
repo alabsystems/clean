@@ -1,101 +1,321 @@
 {
- "schema": "clean.crystal.freshness_scope/v1",
+ "schema": "clean.crystal.freshness_scope/v2",
  "what_this_is": "The clean-kernel SOURCE the newest crystal revalidation record was measured at. Whether a chained BODY drifted is a question only trustc can answer, and the record is its DATED answer; this pins the tree that answer covers, so a pre-push gate and a suite row can decide -- with no Trust compiler and no dump -- whether it still covers the tree in front of them. Derivable: `scripts/crystal_freshness_scope.py --emit`.",
- "record": "data/crystal_chain_revalidation_2026-08-21_b03937e74.json",
- "covered_clean_rev": "b03937e748123cc115bfd159694fd64f0ce8538a",
+ "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+ "covered_clean_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
  "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
  "clean_kernel_src_file_count": 1892,
  "digest_definition": "sha256 over, in sorted path order, `<repo-relative path>\\0<sha256 of file bytes>\\n` for every crates/clean-kernel/src/**/*.rs plus crates/clean-kernel/Cargo.toml, walked from the filesystem.",
+ "body_digest_definition": "Per chained def_path, sha256 over, in the order `items` lists them, `<anchors joined by ::>\\0<the item's CODE text>\\n`. An item is located by finding its anchor in a string-, char- and comment-MASKED copy of the file (so a brace in a literal or a comment cannot cut the span), taking the anchor's line start extended back over any #[...] attributes, and ending at the `}` matching the first depth-0 `{` or at the first depth-0 `;`. The item's CODE text is that span with COMMENTS blanked, blank lines dropped and trailing whitespace stripped -- a comment cannot move an emitted instruction -- while string and char literals are kept byte-for-byte, because those are data the compiler emits. `items` pins the body's own item plus the items in that file whose layout or signature its emitted code depends on; `items_why` says which and why. If any item cannot be located UNAMBIGUOUSLY the entry records body_sha256: null and body_extraction: \"file-fallback: <reason>\", and the check compares `sha256` -- the whole FILE -- for that def_path instead.",
  "chained_body_sources": {
   "bvar_in_range": {
    "file": "crates/clean-kernel/src/expr/mod.rs",
    "sha256": "5fd1bc0db51566a599c3d144593515a9998531a2d805cc072307f7387fdbb3db",
-   "must_contain": "fn bvar_in_range"
+   "must_contain": "fn bvar_in_range",
+   "items": [
+    [
+     "fn bvar_in_range"
+    ]
+   ],
+   "items_why": "three u32 primitives in, bool out; no kernel type in the signature",
+   "body_sha256": "03b1a0baf03442e144728fdef8aac4706f2dc421af005708ad5c2dba7efef384",
+   "body_extraction": "item"
   },
   "expr_path_step_clone": {
    "file": "crates/clean-kernel/src/tc/expr_location.rs",
    "sha256": "4560d3ee2c79a0b33c8cdb87d69040e29c9ef0eafe7606452cd90f1681b24785",
-   "must_contain": "ExprPathStep"
+   "must_contain": "ExprPathStep",
+   "items": [
+    [
+     "enum ExprPathStep"
+    ]
+   ],
+   "items_why": "a DERIVED Clone: the body is generated from the enum item and its derive list, so the enum item IS the body's source",
+   "body_sha256": "21f8d04bb7eacc995648cf33e4eacf32b997689c5a8bcaa2312125af60cd5c4e",
+   "body_extraction": "item"
   },
   "flat_flags_contains": {
    "file": "crates/clean-kernel/src/flat/types.rs",
    "sha256": "a5cd6b04eebb0c4cc540219781b00e6dbc237d8b7cb003ca90e44ee1dd14baed",
-   "must_contain": "fn contains"
+   "must_contain": "fn contains",
+   "items": [
+    [
+     "const fn contains"
+    ],
+    [
+     "struct FlatFlags"
+    ]
+   ],
+   "items_why": "reads FlatFlags' single field; the newtype's shape decides the emitted mask",
+   "body_sha256": "d3d960b64a14443d81c9940d7864cad1f86465b88b3c93337348968629afa6d4",
+   "body_extraction": "item"
   },
   "flat_flags_with": {
    "file": "crates/clean-kernel/src/flat/types.rs",
    "sha256": "a5cd6b04eebb0c4cc540219781b00e6dbc237d8b7cb003ca90e44ee1dd14baed",
-   "must_contain": "fn with"
+   "must_contain": "fn with",
+   "items": [
+    [
+     "const fn with"
+    ],
+    [
+     "struct FlatFlags"
+    ]
+   ],
+   "items_why": "constructs a FlatFlags from its single field; the newtype's shape decides the emitted or",
+   "body_sha256": "eeceaada870baeb6d19e8615c957d99317288b649c06118029753d7b88ae3eca",
+   "body_extraction": "item"
   },
   "float_add": {
    "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
    "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
-   "must_contain": "fn reduce_float_add"
+   "must_contain": "fn reduce_float_add",
+   "items": [
+    [
+     "fn reduce_float_add"
+    ],
+    [
+     "fn float_binary_op"
+    ]
+   ],
+   "items_why": "the chained def path is the closure inside it; the closure's argument types come from float_binary_op's bound",
+   "body_sha256": "130e5768603a71192592eed852605a5b2fc65ec67b501fd292a7464ba2cf7cd0",
+   "body_extraction": "item"
   },
   "float_div": {
    "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
    "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
-   "must_contain": "fn reduce_float_div"
+   "must_contain": "fn reduce_float_div",
+   "items": [
+    [
+     "fn reduce_float_div"
+    ],
+    [
+     "fn float_binary_op"
+    ]
+   ],
+   "items_why": "the chained def path is the closure inside it; the closure's argument types come from float_binary_op's bound",
+   "body_sha256": "92f7e3f240e6e1b2ea2207a6019a5411132fbae0cb313a95eb857e0f03fd1bfd",
+   "body_extraction": "item"
   },
   "float_mul": {
    "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
    "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
-   "must_contain": "fn reduce_float_mul"
+   "must_contain": "fn reduce_float_mul",
+   "items": [
+    [
+     "fn reduce_float_mul"
+    ],
+    [
+     "fn float_binary_op"
+    ]
+   ],
+   "items_why": "the chained def path is the closure inside it; the closure's argument types come from float_binary_op's bound",
+   "body_sha256": "69c94794665cf41f91639e6a69c466df122200956a44f6350bf7a75ddc0b704b",
+   "body_extraction": "item"
   },
   "float_sub": {
    "file": "crates/clean-kernel/src/env/native_reducers_float.rs",
    "sha256": "824432ac6dd99dbee90f85005280f9f45a83c0daec8d694f386a9cbf50bee174",
-   "must_contain": "fn reduce_float_sub"
+   "must_contain": "fn reduce_float_sub",
+   "items": [
+    [
+     "fn reduce_float_sub"
+    ],
+    [
+     "fn float_binary_op"
+    ]
+   ],
+   "items_why": "the chained def path is the closure inside it; the closure's argument types come from float_binary_op's bound",
+   "body_sha256": "9217cfdf6071023869cb1631ef9b8fb96892c5cada643f849162a6994c4f60d6",
+   "body_extraction": "item"
   },
   "from_source_system": {
    "file": "crates/clean-kernel/src/mode.rs",
    "sha256": "e62ea7ce50dfa12fcaa539ab7323d673a8d1f82cd4ec9eb1cb77b3435a4039af",
-   "must_contain": "fn from_source_system"
+   "must_contain": "fn from_source_system",
+   "items": [
+    [
+     "fn from_source_system"
+    ],
+    [
+     "enum CleanMode"
+    ],
+    [
+     "enum SourceSystem"
+    ]
+   ],
+   "items_why": "maps SourceSystem discriminants to CleanMode discriminants; both enums are load-bearing",
+   "body_sha256": "0a948386d7ce8291941b32bad14c0ee8eb160e8a15c0ac7423459884f822f51b",
+   "body_extraction": "item"
   },
   "get_char_val_trunc": {
    "file": "crates/clean-kernel/src/env/native_reducers_beq_shortcircuit.rs",
    "sha256": "e74180ae04b5a2186c5732238fe24cd36fd98bb78cf08d70a09cc6a7ecf8af89",
-   "must_contain": "fn get_char_val"
+   "must_contain": "fn get_char_val",
+   "items": [
+    [
+     "fn get_char_val"
+    ]
+   ],
+   "items_why": "the chained def path is the `map` closure inside it",
+   "body_sha256": "e150c69f50d069681e25d6667412a1e56dd664d5c6e3b6f4279b6e683ec2a217",
+   "body_extraction": "item"
   },
   "has_cubical_layer": {
    "file": "crates/clean-kernel/src/mode.rs",
    "sha256": "e62ea7ce50dfa12fcaa539ab7323d673a8d1f82cd4ec9eb1cb77b3435a4039af",
-   "must_contain": "fn has_cubical_layer"
+   "must_contain": "fn has_cubical_layer",
+   "items": [
+    [
+     "fn has_cubical_layer"
+    ],
+    [
+     "enum CleanMode"
+    ]
+   ],
+   "items_why": "matches on CleanMode; the emitted body switches on the numeric discriminant",
+   "body_sha256": "bf0ca32a454edfbcdfbdb99a10f6e0179a805a2d05ef8810dde815e30331a45c",
+   "body_extraction": "item"
+  },
+  "has_loose_bvars": {
+   "file": "crates/clean-kernel/src/expr/meta.rs",
+   "sha256": "b6b627408d08dc5e45d8d32e32c25eaf26222b9f020295704157af721010bce3",
+   "must_contain": "fn has_loose_bvars",
+   "items": [
+    [
+     "fn has_loose_bvars"
+    ],
+    [
+     "fn loose_bvar_range"
+    ],
+    [
+     "const BVAR_RANGE_SHIFT"
+    ],
+    [
+     "struct ExprMeta"
+    ]
+   ],
+   "items_why": "the composition site: it calls loose_bvar_range, which shifts by BVAR_RANGE_SHIFT out of ExprMeta's word -- all three are the emitted body's source",
+   "body_sha256": "306e7a339ae2105ccf73e74a16b945c7435c1006fbb70fbd4b7df5f0bff0a584",
+   "body_extraction": "item"
   },
   "is_valid_char": {
    "file": "crates/clean-kernel/src/env/native_reducers_char.rs",
    "sha256": "19befb08a8228dac92c36ddbc9339536a0caa000275d77f80529e390771a6b82",
-   "must_contain": "fn is_valid_char"
+   "must_contain": "fn is_valid_char",
+   "items": [
+    [
+     "fn is_valid_char"
+    ]
+   ],
+   "items_why": "one u64 in, bool out; no kernel type in the signature",
+   "body_sha256": "65f408ecca0e97df3423546c02c45b8c954d3095f3393e737d286c52567f4b83",
+   "body_extraction": "item"
   },
   "level_is_zero": {
    "file": "crates/clean-kernel/src/level/mod.rs",
    "sha256": "efbb8a123f1a2eac24e6df3a95b20dbeb6a9dc03e4b90486f24b92be95c223b7",
-   "must_contain": "fn is_zero"
+   "must_contain": "fn is_zero",
+   "items": [
+    [
+     "pub fn is_zero"
+    ],
+    [
+     "pub enum Level {"
+    ],
+    [
+     "struct LevelArc"
+    ],
+    [
+     "impl std::ops::Deref for LevelArc"
+    ]
+   ],
+   "items_why": "the one chained body that calls: 6 calls into <LevelArc as Deref>::deref, which is inlinable and lives in this file",
+   "body_sha256": "8f79f5cea41cf6c4de76039d37407c3e8fd2c088cf31f30509dd237fff5ff093",
+   "body_extraction": "item"
   },
   "level_kind_ord": {
    "file": "crates/clean-kernel/src/level/mod.rs",
    "sha256": "efbb8a123f1a2eac24e6df3a95b20dbeb6a9dc03e4b90486f24b92be95c223b7",
-   "must_contain": "fn kind_ord"
+   "must_contain": "fn kind_ord",
+   "items": [
+    [
+     "fn kind_ord"
+    ],
+    [
+     "pub enum Level {"
+    ],
+    [
+     "struct LevelArc"
+    ]
+   ],
+   "items_why": "matches on Level; the emitted body switches on the numeric discriminant. `LevelArc` is pinned for the same reason its sibling `level_is_zero` pins it: `Level` is `Succ(LevelArc) | Max(LevelArc, LevelArc) | IMax(..)`, so Level's layout and niche depend on LevelArc, which lives in this same file. Without it an edit to `struct LevelArc` left this row silently green while `level_is_zero` reddened \u2014 a narrowing against the whole-file pin this replaced, and against this map's own doctrine of pinning the items whose layout the emitted code depends on.",
+   "body_sha256": "86a11d55af2b635d0f1cc6bf9e37a70c03cee3ae2144e5ac2f92a872865359d6",
+   "body_extraction": "item"
   },
   "meta_tag_shl": {
    "file": "crates/clean-kernel/src/tc/local_context.rs",
    "sha256": "d5dc97f9c0306c77a25bafabd96ea9623e353fb698439e80d50927bab955517a",
-   "must_contain": "META_TAG"
+   "must_contain": "META_TAG",
+   "items": [
+    [
+     "fn push_low_local",
+     "const META_TAG"
+    ]
+   ],
+   "items_why": "a const item whose body is the shift itself; scoped to its enclosing fn because the test module declares two more consts of that name",
+   "body_sha256": "943cb87ec887411d8bebbb986b0ea22a0f2827c80649dd4ff3fea8a47f360f8e",
+   "body_extraction": "item"
   },
   "node_id_index": {
    "file": "crates/clean-kernel/src/cert/builder/state.rs",
    "sha256": "2d8f40dcc1f7de095bc02f7668afb463def303101b783437f51ef20b0f229595",
-   "must_contain": "fn index"
+   "must_contain": "fn index",
+   "items": [
+    [
+     "fn index"
+    ],
+    [
+     "struct NodeId"
+    ]
+   ],
+   "items_why": "widens NodeId's single field; the newtype's shape decides the emitted cast",
+   "body_sha256": "a5aa1c046a3c1dece1f52fd047e4e298cf1c8c24c756ca6187182bfbd3c19eb9",
+   "body_extraction": "item"
   },
   "simp_priority_value": {
    "file": "crates/clean-kernel/src/env/types.rs",
    "sha256": "6d62a0159012c04e97d89582df3b6179e0f4d08515c1e7a00b2fa6a8877e3e0b",
-   "must_contain": "fn value"
+   "must_contain": "fn value",
+   "items": [
+    [
+     "impl SimpPriority",
+     "fn value"
+    ],
+    [
+     "enum SimpPriority"
+    ]
+   ],
+   "items_why": "matches on SimpPriority and reads its payload; `fn value` is not unique in the file",
+   "body_sha256": "9a02d19307f5cd791b801926bb5e3b03320008155adaec49c0d7623f0cc2bb68",
+   "body_extraction": "item"
   },
   "strict_monads": {
    "file": "crates/clean-kernel/src/env/mod.rs",
    "sha256": "0eca2ddf7fbf7b34f1118effce987f81400489e7f4161829df100aa2793a9bdc",
-   "must_contain": "fn set_lean4_core_strict_monads"
+   "must_contain": "fn set_lean4_core_strict_monads",
+   "items": [
+    [
+     "fn set_lean4_core_strict_monads"
+    ],
+    [
+     "pub struct Environment"
+    ]
+   ],
+   "items_why": "one field store into Environment, at an offset chosen by that struct's layout -- a field added there moves this body with its own text unchanged",
+   "body_sha256": "3b39e23c95ca6d976b3b418599b97009743aa2f644e003752e4e7fc933885c3e",
+   "body_extraction": "item"
   }
  },
  "how_to_re_derive": "A CONTENT-SCOPE failure is not refreshed by re-emitting this file. Produce a fresh dump and run scripts/crystal_fixture_freshness.py, commit the new revalidation record, point `record` at it, then --emit."

@@ -41,6 +41,7 @@ mod elab_pattern_lambda;
 mod elab_subst;
 mod elab_universe_inst;
 use elab_do::DoMonadInfo;
+mod demand_local_ctx;
 mod elab_decl_value;
 mod elab_def_body;
 mod elab_do_if;
@@ -64,6 +65,8 @@ mod elab_variable;
 pub(crate) mod elaborate_decl;
 mod equation_dep_family;
 mod instance;
+mod local_bindings;
+mod local_ctx_cache;
 mod meta_builtin;
 mod meta_control_flow;
 mod meta_query;
@@ -78,6 +81,9 @@ mod synth_order;
 // are individually `pub(crate)` only where that reuse requires it.
 pub(crate) mod user_tactic;
 pub(crate) mod user_term;
+// Conv-position user macros (`macro … : conv => `(conv| …)`): the
+// substitute-and-delegate bridge into the conv tactic substrate.
+mod user_conv;
 mod wf_recursion;
 pub(in crate::infer) use elab_types::{is_out_param_type, is_semi_out_param_type};
 // `pub(crate)`: `register::register_param_names` (B01) converts surface binder
@@ -116,28 +122,62 @@ use std::collections::HashMap;
 pub struct ElabCtx<'a> {
     /// The kernel environment
     env: &'a Environment,
-    /// Local bindings: name -> (fvar_id, type)
-    locals: Vec<(String, FVarId, Expr)>,
-    /// Values of let-bound locals: fvar_id -> value. A local in `locals` that
-    /// also appears here is a *local definition* (`let x : T := v`) rather than
-    /// an opaque hypothesis: its value is body-visible / zeta-reducible. The
-    /// ProofState → ElabCtx bridge (`eval_tactic`) records `LocalDecl.value`
-    /// here so a subsequent term elaboration (e.g. `have h : x = v := rfl`) can
-    /// unfold `x` to `v` during definitional-equality checking. `build_local_ctx`
-    /// consults this map and emits `push_let_with_id` (instead of `push_with_id`)
-    /// for these fvars. Cleared in lock-step with `locals` by `pop_local`.
-    local_let_values: HashMap<FVarId, Expr>,
+    /// Local bindings: name -> (fvar_id, type), plus the let-value side table
+    /// for `let x : T := v` locals (the ProofState → ElabCtx bridge
+    /// `eval_tactic` records `LocalDecl.value` there so a subsequent term
+    /// elaboration such as `have h : x = v := rfl` can unfold `x` to `v`
+    /// during definitional-equality checking; `rebuild_local_ctx` emits those
+    /// as `push_let_with_id`). Generation-stamped: every mutation goes through
+    /// a `LocalBindings` method that re-mints the generation, which is what
+    /// keeps `local_ctx_cache` exact.
+    locals: local_bindings::LocalBindings,
     /// Active synthetic names used to thread helper-generated `if let`
     /// scrutinees through recursive elaboration without macro expansion.
     shared_if_let_scrutinees: Vec<String>,
     /// Universe parameter names
     universe_params: Vec<String>,
+    /// Universe names in scope from file-level `universe` commands, as
+    /// [`crate::FileContext`] held them when this context was built.
+    ///
+    /// NOT a parameter list — a SUBTRAHEND. `preprocess_decl_with_context`
+    /// merges the file's `universe` names into every declaration's
+    /// `universe_params` vector ahead of whatever the declaration itself
+    /// wrote, which is precisely why the two were indistinguishable at
+    /// declaration close (the reason the rung-4 explicitness enforcement was
+    /// cut in the first place). Subtracting this vector recovers the written
+    /// `.{...}` list; see [`ElabCtx::set_decl_universe_params`].
+    ///
+    /// Empty when a declaration is elaborated with no `FileContext` — which
+    /// is correct, because without one no `universe` command could have been
+    /// merged in.
+    file_universe_params: Vec<String>,
+    /// The universe list the declaration WROTE (`def f.{u, v}`), or `None`
+    /// when it wrote none.
+    ///
+    /// `Some` makes the list CLOSED for [`ElabCtx::finalize_level_params`]:
+    /// a leftover undetermined level is refused
+    /// ([`ElabError::ExplicitUniverseListClosed`]) instead of appended, which
+    /// is Lean's `sortDeclLevelParams` rule. `None` keeps auto-generalization
+    /// exactly as it was.
+    ///
+    /// Deliberately NOT part of `LocalScopeSnapshot`: it is written once per
+    /// declaration, at `set_decl_universe_params`, and never mutated while a
+    /// term elaborates, so a rolled-back term cannot disturb it.
+    decl_explicit_universes: Option<Vec<String>>,
     /// Metavariable state (for unification)
     pub(crate) metas: MetaState,
     /// Next fresh free variable id
     next_fvar: u64,
-    /// Next fresh universe parameter id
-    next_universe: u64,
+    /// Fresh universe-parameter id source (U2 stage 3, `crate::level_mint`).
+    ///
+    /// SHARED BY HANDLE with every `ProofState` this context opens — the
+    /// bridge hands `seed_universe_world` a clone of this handle, and a
+    /// sub-proof-state clones its parent's. Level identity in the elaborator
+    /// IS the `u_N` string (the union-find is `Name`-keyed and there is no
+    /// `LevelMVarId`), so two independent counters mean two names that alias;
+    /// one monotone counter makes that structurally impossible. See the
+    /// module docs for the measured collision this replaced.
+    level_mint: crate::level_mint::LevelMint,
     /// Instance table for type class resolution
     instances: InstanceTable,
     /// Local instance-implicit binders for nested instance resolution
@@ -170,6 +210,12 @@ pub struct ElabCtx<'a> {
     /// elaboration operations. Uses RefCell for interior mutability since
     /// whnf/is_def_eq take &self.
     tc_caches: RefCell<TcCaches>,
+    /// Memoised kernel `LocalContext` keyed by the `locals` and `metas`
+    /// generations; see `local_ctx_cache` for the measurement behind it.
+    local_ctx_cache: RefCell<Option<local_ctx_cache::LocalCtxCache>>,
+    /// Instantiated declarations memoised for the current generation pair;
+    /// feeds the demand-driven contexts `make_tc` builds (`demand_local_ctx`).
+    decl_memo: RefCell<demand_local_ctx::DeclMemo>,
     /// Read-only authentication verdicts for executable recursor side-table
     /// packets. `ElabCtx` holds an immutable environment borrow for its entire
     /// lifetime, so a name's packet cannot change while this cache is live.
@@ -252,6 +298,10 @@ pub struct ElabCtx<'a> {
     /// (name, priority): turn an existing definition into a type class
     /// instance (B06; Lean `src/Lean/Meta/Instances.lean`, `addInstance`).
     collected_instance_attrs: Vec<(Name, u32)>,
+    /// `attribute [class] X` targets collected for register-time class
+    /// registration (the ctx holds `&Environment`, so it cannot register
+    /// directly; mirrors every other collected_* attribute).
+    collected_class_attrs: Vec<Name>,
     /// Collected @[derive_handler] registrations.
     collected_derive_handler: Vec<Name>,
     /// Collected file-scope attribute removals (decl name, attribute name)
@@ -283,6 +333,12 @@ pub struct ElabCtx<'a> {
     /// references only worked by falling through to body auto-implicits —
     /// removing body auto-bind required making the binders real.
     section_binder_stack: Vec<SurfaceBinder>,
+    /// Section variables an `include` command forces into every following
+    /// declaration of the current `section` / `namespace` block.
+    ///
+    /// Parallel to `section_binder_stack` and truncated on the same exits, so
+    /// an `include` dies with the block that issued it.
+    included_var_stack: Vec<String>,
     /// Expected type for bidirectional type checking (#172)
     /// Used by anonymous constructor syntax `⟨...⟩` to determine which structure to construct.
     /// Set when elaborating definition bodies with type annotations.
@@ -418,6 +474,48 @@ pub struct ElabCtx<'a> {
     /// Informational only: it never affects elaboration outside the refine
     /// bridge's goal-tag lookup.
     hole_names: HashMap<MetaId, String>,
+    /// The declaration currently being elaborated, for the recursion-aware
+    /// unknown-identifier refusal ([`ElabError::RecursionOutsideFragment`]).
+    ///
+    /// Set unconditionally at [`ElabCtx::elab_decl`] entry — to `None` for any
+    /// shape that has no self-reference question — so a value can never
+    /// survive into the next declaration, and REFINED after equation-form
+    /// normalization so the parameter count the refusal quotes is the
+    /// normalized one. Read only by [`ElabCtx::unknown_ident_error`], i.e.
+    /// only once resolution has already failed: it selects a message and can
+    /// never change what elaborates.
+    self_reference: Option<SelfReferenceSubject>,
+    /// Same-batch declarations that contributed no forward-resolvable header,
+    /// for [`ElabError::SameBatchHeaderUnavailable`].
+    ///
+    /// Empty for every caller outside [`crate::module_batch`]'s body phase,
+    /// which is the only place the question exists. Read on the same
+    /// already-failed path as `self_reference`.
+    unstaged_siblings: Vec<UnstagedSibling>,
+}
+
+/// The declaration whose own name a failed identifier resolution might be.
+///
+/// See [`ElabCtx::self_reference`].
+#[derive(Debug, Clone)]
+pub(super) struct SelfReferenceSubject {
+    /// The declaration's name as WRITTEN (`gcd`, or `Ty.bitWidth`).
+    pub(super) written: String,
+    /// Its explicit parameter count. Seeded from the surface binders and
+    /// refined after equation-form normalization lifts binders out of the
+    /// arrow type, so `def f : A → B → C | …` reports 2, not 0.
+    pub(super) params: usize,
+}
+
+/// A same-batch declaration that staged no header.
+///
+/// See [`ElabCtx::unstaged_siblings`].
+#[derive(Debug, Clone)]
+pub(crate) struct UnstagedSibling {
+    /// Its canonical, namespace-qualified name.
+    pub name: String,
+    /// Why it staged no header, as a phrase that completes "… because …".
+    pub reason: &'static str,
 }
 
 /// The auxiliary-arm source for a fused nested-mutual fold (Track AA).

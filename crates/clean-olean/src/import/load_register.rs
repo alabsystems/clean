@@ -12,6 +12,7 @@ use super::convert::{
     is_inductive_family_kind, ConvertedConstant,
 };
 use super::convert_direct::convert_load_constant;
+use super::convert_expr_direct::RegionPtrCache;
 use super::load_parse::LoadModule;
 use super::{ExprInternCache, ImportError, LoadSummary, OleanImportPolicy, SkippedConstant};
 use crate::module::{
@@ -224,6 +225,30 @@ fn filter_payload_dups<T: Clone>(
         .collect()
 }
 
+/// Divert structural-tier rejections (R1-IND) into a `SkippedConstant` list and
+/// return the origin names that were actually inserted, so refused records are
+/// neither origin-tagged nor counted as added.
+fn divert_structural_rejections(
+    origin_names: Vec<Name>,
+    rejected: Vec<(Name, clean_kernel::env::EnvError)>,
+    skipped: &mut Vec<SkippedConstant>,
+) -> Vec<Name> {
+    if rejected.is_empty() {
+        return origin_names;
+    }
+    let rejected_names: HashSet<Name> = rejected.iter().map(|(name, _)| name.clone()).collect();
+    for (name, err) in rejected {
+        skipped.push(SkippedConstant {
+            name: name.to_string(),
+            reason: format!("structural validation failed: {err}"),
+        });
+    }
+    origin_names
+        .into_iter()
+        .filter(|name| !rejected_names.contains(name))
+        .collect()
+}
+
 fn tag_inserted_constants(
     env: &mut Environment,
     origin: Option<&ConstantOrigin>,
@@ -257,14 +282,22 @@ fn load_clean_payload(
     let mut duplicates = 0usize;
     let mut structural_rejections = Vec::new();
 
+    // R1-IND (2026-08-24): the inductive-family legs go through the structural
+    // tier (extend_*_structural — same O(1) checks as the constants leg below:
+    // no dup level params, no metavariables, no free vars, Level::Param scope,
+    // over every carried expression incl. recursor-rule rhs). A failing record
+    // REFUSES structurally: diverted to `structural_rejections`, never inserted.
     let mut inductives = filter_payload_dups(
         &payload.inductives,
         |ind| env.get_inductive(&ind.name).is_some(),
         &mut duplicates,
     );
     let inductive_origin_names: Vec<_> = inductives.iter().map(|ind| ind.name.clone()).collect();
-    added += inductives.len();
-    env.extend_inductives_unchecked(inductives.drain(..));
+    let pre_validate_inductives = inductives.len();
+    let rejected = env.extend_inductives_structural(inductives.drain(..));
+    added += pre_validate_inductives - rejected.len();
+    let inductive_origin_names =
+        divert_structural_rejections(inductive_origin_names, rejected, &mut structural_rejections);
     tag_inserted_constants(env, origin, inductive_origin_names, added_acc);
 
     let mut constructors = filter_payload_dups(
@@ -273,8 +306,14 @@ fn load_clean_payload(
         &mut duplicates,
     );
     let constructor_origin_names: Vec<_> = constructors.iter().map(|c| c.name.clone()).collect();
-    added += constructors.len();
-    env.extend_constructors_unchecked(constructors.drain(..));
+    let pre_validate_constructors = constructors.len();
+    let rejected = env.extend_constructors_structural(constructors.drain(..));
+    added += pre_validate_constructors - rejected.len();
+    let constructor_origin_names = divert_structural_rejections(
+        constructor_origin_names,
+        rejected,
+        &mut structural_rejections,
+    );
     tag_inserted_constants(env, origin, constructor_origin_names, added_acc);
 
     let mut recursors = filter_payload_dups(
@@ -283,8 +322,11 @@ fn load_clean_payload(
         &mut duplicates,
     );
     let recursor_origin_names: Vec<_> = recursors.iter().map(|r| r.name.clone()).collect();
-    added += recursors.len();
-    env.extend_recursors_unchecked(recursors.drain(..));
+    let pre_validate_recursors = recursors.len();
+    let rejected = env.extend_recursors_structural(recursors.drain(..));
+    added += pre_validate_recursors - rejected.len();
+    let recursor_origin_names =
+        divert_structural_rejections(recursor_origin_names, rejected, &mut structural_rejections);
     tag_inserted_constants(env, origin, recursor_origin_names, added_acc);
 
     // HYBRID (Phase-1 zero-copy): skip the payload's definitional constants under
@@ -302,9 +344,10 @@ fn load_clean_payload(
         // only the O(1) structural checks (env/registration.rs: no dup level params, no
         // metavariables, no free vars, Level::Param scope) and diverts failures to `rejected`
         // below — so every INSERTED constant is closed, metavar-free, and level-scope-correct,
-        // but NOT confirmed well-typed (no value:type / type-is-a-Sort check). SCOPE: covers
-        // payload.constants only; payload.inductives/constructors/recursors above are registered
-        // via extend_*_unchecked (no structural check at all). Why tolerated: a CleanPayload is
+        // but NOT confirmed well-typed (no value:type / type-is-a-Sort check). SCOPE: since
+        // R1-IND (2026-08-24) the payload.inductives/constructors/recursors legs above run the
+        // SAME structural tier (extend_*_structural, incl. recursor-rule rhs), so the whole
+        // payload is uniformly structurally checked. Why tolerated: a CleanPayload is
         // Clean's own re-serialization of kernel ConstantInfos already type-checked on export (a
         // definition-reuse cache), tagged ConstantOrigin::CleanPayload (Unpinned) in the trust
         // ledger. Residual trust: no authenticity/hash check (OleanImportPolicy is admission-only),
@@ -1655,8 +1698,19 @@ pub(super) fn load_parsed_module_with_cache_and_policy(
                 _ => {} // inductives/constructors/recursors not expected in upgrade path
             }
         }
-        let upgraded = env.upgrade_axiom_stubs(upgrade_others.into_iter());
+        // R1-STUB (2026-08-24): the checked tier — the stub must exist, the
+        // incoming type must kernel-match the stub's type, and the incoming
+        // value must check_type against it (UnknownConst-tolerant, G4). A
+        // refused record leaves the stub in place FAIL-CLOSED and is recorded
+        // loudly below; nothing ever registers unchecked.
+        let (upgraded, refused) = env.upgrade_axiom_stubs_checked(upgrade_others.into_iter());
         summary.added_constants += upgraded;
+        for (name, err) in refused {
+            summary.skipped_constants.push(SkippedConstant {
+                name: name.to_string(),
+                reason: format!("axiom stub upgrade refused (kernel check): {err}"),
+            });
+        }
     }
 
     apply_declaration_safety_marks(env, safety_marks);
@@ -1873,6 +1927,13 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
     // Reconstruct the compacted region from the owned bytes
     let region = module.region();
 
+    // Region-scoped memo for the direct converter (#import-dag-memo). Created
+    // WITH `region` and dropped with it, which is what keeps its pointer keys
+    // meaningful — see `RegionPtrCache`. It is shared by the main conversion
+    // below and the `.olean.private` axiom-stub upgrade further down, both of
+    // which read THIS region, so a type reachable from both is decoded once.
+    let mut ptr_memo = RegionPtrCache::for_region();
+
     // Convert constants using direct binary-to-Expr path
     let cache_size_before: u64 = intern_cache.total_entries;
     let inductive_families_only = policy.inductive_families_only();
@@ -1882,7 +1943,15 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         // kinds are served by the lazy `ShardConstantSource`; never build their owned
         // `Arc<Expr>` (the memory win). See the ParsedModule path for the soundness note.
         .filter(|c| !inductive_families_only || is_inductive_family_kind(&c.kind))
-        .map(|c| convert_load_constant(c, &region, intern_cache, policy.proof_elision()))
+        .map(|c| {
+            convert_load_constant(
+                c,
+                &region,
+                intern_cache,
+                &mut ptr_memo,
+                policy.proof_elision(),
+            )
+        })
         .collect();
 
     // Registration logic is identical to the ParsedModule path
@@ -1918,6 +1987,7 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
                     &module.constants[i],
                     &region,
                     intern_cache,
+                    &mut ptr_memo,
                     ProofValueElision::None,
                 )
             })
@@ -1941,8 +2011,19 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
                 _ => {} // inductives/constructors/recursors not expected in upgrade path
             }
         }
-        let upgraded = env.upgrade_axiom_stubs(upgrade_others.into_iter());
+        // R1-STUB (2026-08-24): the checked tier — the stub must exist, the
+        // incoming type must kernel-match the stub's type, and the incoming
+        // value must check_type against it (UnknownConst-tolerant, G4). A
+        // refused record leaves the stub in place FAIL-CLOSED and is recorded
+        // loudly below; nothing ever registers unchecked.
+        let (upgraded, refused) = env.upgrade_axiom_stubs_checked(upgrade_others.into_iter());
         summary.added_constants += upgraded;
+        for (name, err) in refused {
+            summary.skipped_constants.push(SkippedConstant {
+                name: name.to_string(),
+                reason: format!("axiom stub upgrade refused (kernel check): {err}"),
+            });
+        }
     }
 
     apply_declaration_safety_marks(env, safety_marks);
@@ -2089,10 +2170,20 @@ fn register_converted_constants(
         }
     }
 
-    // Pass 1: Bulk register inductives
+    // Pass 1: Bulk register inductives.
+    // R1-IND (2026-08-24): passes 1-3 run the structural tier
+    // (extend_*_structural — the same O(1) checks as Pass 4's constants leg,
+    // incl. every recursor-rule rhs). A failing record REFUSES structurally:
+    // diverted to summary.skipped_constants, never inserted.
     let inductive_origin_names: Vec<_> = ok_inductives.iter().map(|ind| ind.name.clone()).collect();
-    summary.added_constants += ok_inductives.len();
-    env.extend_inductives_unchecked(ok_inductives.into_iter());
+    let pre_validate_inductives = ok_inductives.len();
+    let rejected = env.extend_inductives_structural(ok_inductives.into_iter());
+    summary.added_constants += pre_validate_inductives - rejected.len();
+    let inductive_origin_names = divert_structural_rejections(
+        inductive_origin_names,
+        rejected,
+        &mut summary.skipped_constants,
+    );
     tag_inserted_constants(
         env,
         origin,
@@ -2105,8 +2196,14 @@ fn register_converted_constants(
         .iter()
         .map(|ctor| ctor.name.clone())
         .collect();
-    summary.added_constants += ok_constructors.len();
-    env.extend_constructors_unchecked(ok_constructors.into_iter());
+    let pre_validate_constructors = ok_constructors.len();
+    let rejected = env.extend_constructors_structural(ok_constructors.into_iter());
+    summary.added_constants += pre_validate_constructors - rejected.len();
+    let constructor_origin_names = divert_structural_rejections(
+        constructor_origin_names,
+        rejected,
+        &mut summary.skipped_constants,
+    );
     tag_inserted_constants(
         env,
         origin,
@@ -2147,8 +2244,14 @@ fn register_converted_constants(
         }
         let recursor_origin_names: Vec<_> =
             ok_recursors.iter().map(|rec| rec.name.clone()).collect();
-        summary.added_constants += ok_recursors.len();
-        env.extend_recursors_unchecked(ok_recursors.into_iter());
+        let pre_validate_recursors = ok_recursors.len();
+        let rejected = env.extend_recursors_structural(ok_recursors.into_iter());
+        summary.added_constants += pre_validate_recursors - rejected.len();
+        let recursor_origin_names = divert_structural_rejections(
+            recursor_origin_names,
+            rejected,
+            &mut summary.skipped_constants,
+        );
         tag_inserted_constants(env, origin, recursor_origin_names, &mut summary.added_names);
     }
 

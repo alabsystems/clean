@@ -58,7 +58,7 @@ fn expr_path_step_clone_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_path_step.rs", "const SRC_IR_EP_B"),
+        &clean_block_sources("generated/ir_ep.defs.txt", "def ir_ep_b"),
         "def ir_ep_b",
     );
 
@@ -188,7 +188,7 @@ fn expr_path_step_clone_proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_path_step.rs", "const SRC_IR_EP_FUNC"),
+        &clean_block_sources("generated/ir_ep.defs.txt", "def ir_ep_func"),
         "expr_path_step_clone",
     );
     assert_lanes(&emitted, &clean, "expr_path_step_clone");

@@ -827,6 +827,7 @@ mod tests {
     use super::*;
     use crate::cert::{DefEqStep, ProofCert};
     use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]
     enum FlatRow {
@@ -921,7 +922,7 @@ mod tests {
         let mut step = DefEqStep::Refl;
         for _ in 0..64 {
             cert = ProofCert::Squash {
-                inner_cert: Box::new(cert),
+                inner_cert: Arc::new(cert),
             };
             step = DefEqStep::Symm(Box::new(step));
         }

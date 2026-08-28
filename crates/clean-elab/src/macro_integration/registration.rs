@@ -10,14 +10,50 @@ use clean_parser::{NotationItem, NotationKind, SurfaceExpr, SyntaxPatternItem};
 
 use super::surface_to_syntax;
 
-/// Determine the syntax category of a raw quotation body from its outer
-/// delimiter: `` `(...) `` ⇒ term, `` `[...] `` ⇒ tactic, `` `{...} `` ⇒ command.
+/// Determine the syntax category of a raw quotation body. A `(cat| …)`
+/// category head ([`quotation_category_head`]) is authoritative:
+/// `` `(tactic| …) `` ⇒ tactic, `` `(conv| …) `` ⇒ conv,
+/// `` `(command| …) `` ⇒ command, `` `(term| …) `` ⇒ term. Without a head the
+/// outer delimiter decides: `` `(...) `` ⇒ term, `` `[...] `` ⇒ tactic,
+/// `` `{...} `` ⇒ command.
 pub(super) fn quotation_category(content: &str) -> SyntaxKind {
+    if let Some((head, _)) = quotation_category_head(content) {
+        return match head {
+            "tactic" => SyntaxKind::tactic(),
+            "conv" => SyntaxKind::app("conv"),
+            "command" => SyntaxKind::command(),
+            _ => SyntaxKind::term(),
+        };
+    }
     match content.trim().chars().next() {
         Some('[') => SyntaxKind::tactic(),
         Some('{') => SyntaxKind::command(),
         _ => SyntaxKind::term(),
     }
+}
+
+/// Split a category-headed quotation `(cat| body)` into `(head, body)`.
+///
+/// Only the categories Lean writes at quotation heads are recognized —
+/// `tactic`, `conv`, `command`, `term` — and the `|` must directly follow the
+/// head token, so ordinary parenthesized terms (`(a || b)`, `(p | q)`) are
+/// never split. `pub(crate)`: the declaration router (`infer::elaborate_decl`)
+/// uses the same recognition to send `(tactic| …)` macros to the
+/// tactic-position registration path.
+pub(crate) fn quotation_category_head(content: &str) -> Option<(&str, &str)> {
+    let inner = content.trim().strip_prefix('(')?.strip_suffix(')')?;
+    let bar = inner.find('|')?;
+    let (head, rest) = inner.split_at(bar);
+    let head = head.trim();
+    let body = &rest[1..];
+    // A doubled bar is the `||` operator, not a category delimiter.
+    if body.starts_with('|') {
+        return None;
+    }
+    if !matches!(head, "tactic" | "conv" | "command" | "term") {
+        return None;
+    }
+    Some((head, body.trim()))
 }
 
 /// Lower an already-parsed quotation `body` to a [`SyntaxQuote`], taking the
@@ -63,6 +99,23 @@ pub(super) fn surface_expr_to_syntax_quote(
 ) -> Result<SyntaxQuote, MacroRegistrationError> {
     match expr {
         SurfaceExpr::SyntaxQuote(_, content) => {
+            // A `(cat| …)` category head is authoritative: the body AFTER the
+            // head is parsed with the quotation grammar and the category comes
+            // from the head. An unparseable body is a loud registration error —
+            // an explicitly-categorized quotation must never fall back to a
+            // term template that could silently never fire.
+            if let Some((head, body)) = quotation_category_head(content) {
+                let wrapped = format!("({body})");
+                return clean_parser::parse_quotation_body(&wrapped)
+                    .map(|parsed| {
+                        SyntaxQuote::new(surface_to_syntax(&parsed), quotation_category(content))
+                    })
+                    .map_err(|e| {
+                        MacroRegistrationError::QuotationParse(format!(
+                            "in `({head}| …)` quotation body `{body}`: {e}"
+                        ))
+                    });
+            }
             // Faithful path: parse the quotation body with the antiquotation- and
             // operator-aware quotation grammar, then lower to macro `Syntax`. This
             // correctly handles multi-token templates such as `` `($x + $x) `` that

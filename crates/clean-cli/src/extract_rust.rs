@@ -50,6 +50,11 @@ use clean_kernel::{Environment, Expr, ExprKind, Literal, Name};
 
 use crate::cmd_extract::{GateSig, ScalarTy};
 
+mod extract_rust_control;
+use extract_rust_control::{
+    translate_beta_redex, translate_ite, translate_nat_cases, translate_nat_rec,
+};
+
 /// Stable refusal codes for the Rust backend. A refusal writes no artifacts.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum RustEmitError {
@@ -92,6 +97,7 @@ pub(crate) fn rust_literal(t: ScalarTy, v: u64) -> String {
 /// A rendered Rust expression plus whether it can be a method receiver without
 /// parentheses (identifiers, suffixed literals and method calls can; `!x` and
 /// `x && y` cannot).
+#[derive(Debug)]
 struct Rendered {
     text: String,
     postfix_safe: bool,
@@ -120,6 +126,14 @@ impl Rendered {
 /// `Nat` and `UIntW` deliberately differ: `UIntW` is modular in Lean, `Nat` is
 /// not, so the emitted spelling is `wrapping_*` for the former and `checked_*`
 /// for the latter. Getting that backwards is a silent miscompile at 2^w, which
+/// The message every `Nat`-model overflow carries.
+///
+/// One constant so the `checked_*` sites cannot drift apart: `Nat` is unbounded
+/// in Lean and `u64` is not, so this string is where that gap is disclosed to
+/// whoever runs the extracted code.
+const NAT_OVERFLOW_MSG: &str =
+    "Nat overflow: clean extract models Lean Nat as u64 (see manifest.json)";
+
 /// is exactly why the battery carries the wraparound points.
 fn int_binop(head: &str, expected: ScalarTy) -> Option<(&'static str, Option<&'static str>)> {
     let (ty_name, op) = head.rsplit_once('.')?;
@@ -134,10 +148,9 @@ fn int_binop(head: &str, expected: ScalarTy) -> Option<(&'static str, Option<&'s
     if ty != expected {
         return None;
     }
-    const OVERFLOW: &str = "Nat overflow: clean extract models Lean Nat as u64 (see manifest.json)";
     match (ty, op) {
-        (ScalarTy::Nat, "add") => Some(("checked_add", Some(OVERFLOW))),
-        (ScalarTy::Nat, "mul") => Some(("checked_mul", Some(OVERFLOW))),
+        (ScalarTy::Nat, "add") => Some(("checked_add", Some(NAT_OVERFLOW_MSG))),
+        (ScalarTy::Nat, "mul") => Some(("checked_mul", Some(NAT_OVERFLOW_MSG))),
         // Lean's `Nat.sub` is TRUNCATED subtraction: `3 - 5 = 0`.
         (ScalarTy::Nat, "sub") => Some(("saturating_sub", None)),
         (_, "add") => Some(("wrapping_add", None)),
@@ -255,29 +268,224 @@ fn translate_app(
     params: &[(String, ScalarTy)],
 ) -> Result<Rendered, RustEmitError> {
     let (head, args) = flatten_app(e);
+    // A lambda head is a beta-redex — match elaboration's shared-default-arm
+    // shape — and gets its own translation rather than a refusal.
+    if matches!(head.kind(), ExprKind::Lam(_, _, _)) {
+        return translate_beta_redex(head, &args, expected, params);
+    }
     let ExprKind::Const(name, levels) = head.kind() else {
         return Err(RustEmitError::Unsupported(format!(
             "application head is a {}, not a constant",
             form_name(head.kind())
         )));
     };
+    let head_name = name.to_string();
+
+    // CONTROL FLOW. `ite` is the one v1 constant allowed to carry a universe
+    // level: it is `{α : Sort u} → (c : Prop) → [Decidable c] → α → α → α`, and
+    // the level is instantiated at the scalar result type, so the emitted code
+    // is still monomorphic. Everything else stays level-free.
+    if head_name == "ite" {
+        return translate_ite(&args, expected, params);
+    }
+    if head_name == "Nat.casesOn" {
+        return translate_nat_cases(&args, expected, params);
+    }
+    if head_name == "Nat.rec" {
+        return translate_nat_rec(&args, expected, params);
+    }
+    // `OfNat.ofNat α n inst` IS the numeral `n`. Lean wraps every literal in it
+    // once a type is known, so a `0` written in source arrives here rather than
+    // as a bare `Lit`. It carries a universe level like the other two.
+    if head_name == "OfNat.ofNat" {
+        let [_alpha, lit, _inst] = args.as_slice() else {
+            return Err(RustEmitError::Unsupported(format!(
+                "`OfNat.ofNat` applied to {} argument(s); expected 3",
+                args.len()
+            )));
+        };
+        return translate(lit, expected, params);
+    }
+    // `BEq.beq α inst x y` → `(x == y)` — for the CANONICAL instances only.
+    //
+    // Like `ite`/`OfNat.ofNat` it carries a universe level instantiated at the
+    // scalar element type, so emission stays monomorphic. The operands are
+    // translated at the ELEMENT type read off `α`, not at `expected` (which is
+    // `Bool`).
+    //
+    // FAIL-CLOSED ON THE INSTANCE, and this is the load-bearing part: a user's
+    // own `BEq` instance can implement ANY relation, and emitting Rust `==` for
+    // it would be a silently wrong program — the exact class of defect the
+    // differential battery only catches if a battery point happens to land on a
+    // disagreement. So only the prelude's structural instances are accepted,
+    // each faithful to Rust `==` on its model type (`Nat` as `u64` — values in
+    // play are within the model, since overflow aborts earlier; `UIntW` wraps on
+    // both sides; `Bool` is `Bool`). Anything else refuses, NAMING the instance
+    // it saw.
+    if head_name == "BEq.beq" {
+        if expected != ScalarTy::Bool {
+            return Err(RustEmitError::Unsupported(format!(
+                "`BEq.beq` produces a Bool, but a {} is expected here",
+                rust_ty(expected)
+            )));
+        }
+        let [alpha, inst, lhs, rhs] = args.as_slice() else {
+            return Err(RustEmitError::Unsupported(format!(
+                "`BEq.beq` applied to {} argument(s); expected 4 (α, inst, x, y)",
+                args.len()
+            )));
+        };
+        let Some(elem_ty) = ScalarTy::of(strip_mdata(alpha)) else {
+            return Err(RustEmitError::Unsupported(format!(
+                "`BEq.beq` at element type {} — outside the v1 scalar class",
+                form_name(strip_mdata(alpha).kind())
+            )));
+        };
+        // Two canonical shapes, MEASURED from the elaborator's output:
+        //   1. a direct structural instance (`instBEqNat`, `instBEqUInt32`, …)
+        //   2. `instBEqOfDecidableEq α instDecidableEq<T>` — the decide-wrapper,
+        //      whose `beq a b` is literally `decide (a = b)`: structural
+        //      equality, PROVIDED the inner `DecidableEq` instance is itself the
+        //      canonical one. This is what `a == b` on `Nat` actually elaborates
+        //      to here (dumped: `instBEqOfDecidableEq Nat instDecidableEqNat`).
+        // Anything else — including the wrapper over a NON-canonical
+        // DecidableEq — refuses, naming what it saw.
+        let direct_ok = |n: &str| {
+            matches!(
+                (elem_ty, n),
+                (ScalarTy::Nat, "instBEqNat")
+                    | (ScalarTy::Bool, "instBEqBool")
+                    | (ScalarTy::UInt8, "instBEqUInt8")
+                    | (ScalarTy::UInt16, "instBEqUInt16")
+                    | (ScalarTy::UInt32, "instBEqUInt32")
+                    | (ScalarTy::UInt64, "instBEqUInt64")
+            )
+        };
+        let dec_ok = |n: &str| {
+            matches!(
+                (elem_ty, n),
+                (ScalarTy::Nat, "instDecidableEqNat")
+                    | (ScalarTy::Bool, "instDecidableEqBool")
+                    | (ScalarTy::UInt8, "instDecidableEqUInt8")
+                    | (ScalarTy::UInt16, "instDecidableEqUInt16")
+                    | (ScalarTy::UInt32, "instDecidableEqUInt32")
+                    | (ScalarTy::UInt64, "instDecidableEqUInt64")
+            )
+        };
+        let inst_stripped = strip_mdata(inst);
+        let canonical = match inst_stripped.kind() {
+            ExprKind::Const(n, _) => direct_ok(&n.to_string()),
+            ExprKind::App(_, _) => {
+                let (ih, iargs) = flatten_app(inst_stripped);
+                match (ih.kind(), iargs.as_slice()) {
+                    (ExprKind::Const(wn, _), [_ty, inner])
+                        if wn.to_string() == "instBEqOfDecidableEq" =>
+                    {
+                        matches!(
+                            strip_mdata(inner).kind(),
+                            ExprKind::Const(dn, _) if dec_ok(&dn.to_string())
+                        )
+                    }
+                    _ => false,
+                }
+            }
+            _ => false,
+        };
+        if !canonical {
+            return Err(RustEmitError::Unsupported(format!(
+                "`BEq.beq` through instance `{inst_stripped:?}` at {} — only the \
+                 canonical structural instance (direct, or the decide-wrapper \
+                 over the canonical DecidableEq) is emitted as `==`; a custom \
+                 `BEq` can implement any relation, and `==` for it would be a \
+                 silently wrong program",
+                rust_ty(elem_ty)
+            )));
+        }
+        let l = translate(lhs, elem_ty, params)?;
+        let r = translate(rhs, elem_ty, params)?;
+        return Ok(Rendered::atom(format!("({} == {})", l.text, r.text)));
+    }
+
     if !levels.is_empty() {
         return Err(RustEmitError::Unsupported(format!(
             "`{name}` is applied at explicit universe levels; v1 is monomorphic"
         )));
     }
-    let head_name = name.to_string();
 
     // Nullary constants.
     if args.is_empty() {
         return match (head_name.as_str(), expected) {
-            ("Bool.true", ScalarTy::Bool) => Ok(Rendered::atom("true".to_string())),
-            ("Bool.false", ScalarTy::Bool) => Ok(Rendered::atom("false".to_string())),
+            // Both spellings: the elaborator emits the SHORT `true`/`false` in
+            // some positions (measured inside a `Nat.casesOn` branch) and the
+            // qualified constructor in others.
+            ("Bool.true" | "true", ScalarTy::Bool) => Ok(Rendered::atom("true".to_string())),
+            ("Bool.false" | "false", ScalarTy::Bool) => Ok(Rendered::atom("false".to_string())),
             ("Nat.zero", ScalarTy::Nat) => Ok(Rendered::atom(rust_literal(ScalarTy::Nat, 0))),
             _ => Err(RustEmitError::Unsupported(format!(
                 "constant `{head_name}` is not in the v1 Rust emission table"
             ))),
         };
+    }
+
+    // `Nat.succ n` is `n + 1` — and it is a MODEL boundary like every other Nat
+    // addition here, so it goes through the checked form. `Nat` is unbounded in
+    // Lean; the u64 model is not, and the successor of `u64::MAX` is exactly
+    // where that gap shows.
+    if head_name == "Nat.succ" && expected == ScalarTy::Nat {
+        let [n] = args.as_slice() else {
+            return Err(RustEmitError::Unsupported(format!(
+                "`Nat.succ` applied to {} argument(s); expected 1",
+                args.len()
+            )));
+        };
+        let n = translate(n, ScalarTy::Nat, params)?;
+        return Ok(Rendered::atom(format!(
+            "{}.checked_add(1u64).expect(\"{NAT_OVERFLOW_MSG}\")",
+            n.as_receiver()
+        )));
+    }
+
+    // TOTAL division and remainder.
+    //
+    // Lean's `Nat.div`/`Nat.mod` are TOTAL: `n / 0 = 0` and `n % 0 = n`. Rust's
+    // `/` and `%` PANIC on a zero divisor. Emitting them bare would therefore be
+    // wrong in the one case the kernel defines most explicitly — so the guard is
+    // part of the semantics, not defensive programming.
+    //
+    // The battery makes this a live check rather than a claim: for a two-Nat
+    // signature it contains the crossed point `(63, 0)`, so a bare `/` does not
+    // silently disagree — it CRASHES the battery binary, and the harness fails
+    // the extraction. See `test_battery_divides_by_zero`.
+    //
+    // The divisor is bound once: it can be an arbitrary expression, and the
+    // guard reads it twice.
+    if let Some((op, zero_result)) = match (head_name.as_str(), expected) {
+        ("Nat.div", ScalarTy::Nat) => Some(("/", None)),
+        ("Nat.mod", ScalarTy::Nat) => Some(("%", Some(()))),
+        _ => None,
+    } {
+        let [num, den] = args.as_slice() else {
+            return Err(RustEmitError::Unsupported(format!(
+                "`{head_name}` applied to {} argument(s); expected 2",
+                args.len()
+            )));
+        };
+        let n = translate(num, expected, params)?;
+        let d = translate(den, expected, params)?;
+        let depth = params.len();
+        let nn = format!("__d{depth}n");
+        let dd = format!("__d{depth}d");
+        // `n % 0 = n` keeps the numerator; `n / 0 = 0`.
+        let zero_case = if zero_result.is_some() {
+            nn.clone()
+        } else {
+            rust_literal(expected, 0)
+        };
+        return Ok(Rendered::atom(format!(
+            "{{ let {nn} = {}; let {dd} = {}; if {dd} == 0 {{ {zero_case} }} else \
+             {{ {nn} {op} {dd} }} }}",
+            n.text, d.text
+        )));
     }
 
     // Homogeneous integer binary operators.
@@ -582,23 +790,5 @@ pub(crate) fn run_rust_battery(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_rust_fn_name_refuses_non_identifiers() {
-        assert_eq!(rust_fn_name("Foo.barU").expect("dots become _"), "Foo_barU");
-        assert!(matches!(rust_fn_name("f'"), Err(RustEmitError::BadName(_))));
-        assert!(matches!(
-            rust_fn_name("1bad"),
-            Err(RustEmitError::BadName(_))
-        ));
-    }
-
-    #[test]
-    fn test_param_names_are_readable_then_indexed() {
-        assert_eq!(param_name(0), "a");
-        assert_eq!(param_name(25), "z");
-        assert_eq!(param_name(26), "x26");
-    }
-}
+#[path = "extract_rust_tests.rs"]
+mod tests;

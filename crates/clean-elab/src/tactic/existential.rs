@@ -8,7 +8,7 @@
 
 use crate::unify::{MetaState, Unifier, UnifyResult};
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Expr, ExprKind, Level};
+use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 use super::simp::beta_reduce;
@@ -63,8 +63,8 @@ pub fn existsi(state: &mut ProofState, witness: Expr) -> TacticResult {
     // Check that the witness has the right type (α)
     if !state.is_def_eq(&goal, &witness_ty, &alpha) {
         return Err(TacticError::TypeMismatch {
-            expected: format!("{alpha:?}"),
-            actual: format!("{witness_ty:?}"),
+            expected: format!("{alpha}"),
+            actual: format!("{witness_ty}"),
         });
     }
 
@@ -230,7 +230,7 @@ pub fn by_cases(state: &mut ProofState, hyp_name: &str, prop: Expr) -> TacticRes
     if !state.is_def_eq(&goal, &prop_ty, &prop_sort) {
         return Err(TacticError::TypeMismatch {
             expected: "Prop".to_string(),
-            actual: format!("{prop_ty:?}"),
+            actual: format!("{prop_ty}"),
         });
     }
 
@@ -250,7 +250,16 @@ pub fn by_cases(state: &mut ProofState, hyp_name: &str, prop: Expr) -> TacticRes
     // scopes (a goal is solved before the next), both `h` binders can safely
     // share ONE fvar id; each branch body then references offset 0 at depth 1 and
     // closes cleanly. The assembled term is still kernel-rechecked by add_decl.
-    let fvar_h = state.fresh_fvar();
+    // GOAL-DERIVED minting (the intro pattern, proof_term.rs): the scope
+    // checker derives its binder base from the destination meta's captured
+    // scope, so a cursor-minted id drifts out of the checked window whenever
+    // ANYTHING minted between two splits (measured: sequential surface
+    // `by_cases` steps with tauto in between — the second split's hypothesis
+    // landed at id 8 where the checker expected 4). Minting from the goal's
+    // own binder base is drift-immune by construction.
+    let base = state.goal_binder_base(&goal);
+    let fvar_h = FVarId::new(base);
+    state.next_fvar = state.next_fvar.max(base + 1);
     let fvar_pos = fvar_h;
     let fvar_neg = fvar_h;
 

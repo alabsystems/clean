@@ -199,21 +199,6 @@ fn registry_contains_discover_feature() {
 }
 
 #[test]
-fn registry_contains_tlaps_bench_feature() {
-    // Phase 3 (#3448): `clean tlaps bench` must appear in the registry.
-    let descriptors = all_features();
-    assert!(
-        descriptors.iter().any(|d| d.path == ["tlaps", "bench"]),
-        "expected `clean tlaps bench` descriptor in the registry; \
-         found paths: {:?}",
-        descriptors
-            .iter()
-            .map(|d| d.path_display())
-            .collect::<Vec<_>>()
-    );
-}
-
-#[test]
 fn registry_contains_mathverse_convert_operator_tool_descriptor() {
     // Phase 3.5 (#3513): descriptor-only surface for the standalone
     // `mathverse_convert` binary. The descriptor lives under

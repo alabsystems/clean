@@ -8,6 +8,53 @@
 use super::support::*;
 use crate::cmd_replacement::*;
 
+/// DIRECTION 2 for the self-reported-gate refusal: it must be able to say no.
+///
+/// `replacement_status_accounts_launch_blockers_without_green_claims` asserts
+/// the proof-surface audit is `"passed"`, and it is — because both circular rows
+/// were fixed. A predicate that can never fire passes that same assertion just
+/// as quietly, and this surface has form: until 2026-08-26 `tests/support.rs`
+/// *asserted* that `rust-first-tooling` was gated by `clean replacement status
+/// --json`, so the circle had a test defending it and no test refusing it.
+///
+/// The refusal is therefore exercised against a row that cites the report it
+/// lives in, on a local copy, so the arm stands on every run instead of being a
+/// mutation somebody did once.
+#[test]
+fn a_row_gated_by_its_own_report_is_refused_by_name() {
+    assert!(is_self_reported_gate_command(
+        "clean replacement status --json"
+    ));
+    assert!(is_self_reported_gate_command("clean replacement status"));
+    assert!(!is_self_reported_gate_command(
+        RUST_FIRST_TOOLING_GATE_COMMAND
+    ));
+    assert!(!is_self_reported_gate_command(
+        "cargo test --locked -p clean-cli --lib cmd_replacement"
+    ));
+
+    let mut rows = replacement_rows();
+    let victim = rows.first_mut().expect("at least one replacement row");
+    let victim_id = victim.id;
+    victim.gate_command = "clean replacement status --json";
+    let audit = ReplacementRowProofSurfaceAudit::from_rows(&rows);
+    assert_eq!(
+        audit.status, "blocked",
+        "a row gated by the report it lives in must block the proof-surface audit"
+    );
+    assert_eq!(audit.self_reported_gate_row_count, 1);
+    assert_eq!(audit.self_reported_gate_row_ids, vec![victim_id]);
+
+    // ...and the shipped table carries no such row.
+    let shipped = ReplacementRowProofSurfaceAudit::from_rows(&replacement_rows());
+    assert!(
+        shipped.self_reported_gate_row_ids.is_empty(),
+        "rows gated by their own report: {:?}",
+        shipped.self_reported_gate_row_ids
+    );
+    assert_eq!(shipped.status, "passed");
+}
+
 #[test]
 fn replacement_status_accounts_launch_blockers_without_green_claims() {
     let Ok(report) = ReplacementStatusReport::current() else {

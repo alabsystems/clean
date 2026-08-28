@@ -546,7 +546,12 @@ require_text "docs/RELEASE_READINESS.md" "--input /tmp/Clean-2875-auto.tsv"
 require_text "docs/RELEASE_READINESS.md" "--input /tmp/Clean-2875-elab.tsv"
 require_text "docs/RELEASE_READINESS.md" "\`data/unchecked_decl_ratchet.json\`"
 require_text "docs/RELEASE_READINESS.md" "\`add_decl_structural_count: 0\`"
-require_text "docs/RELEASE_READINESS.md" "\`add_decl_unchecked_count: 0\`"
+# G6 (2026-08-23): was `add_decl_unchecked_count: 0`. That was never true of the
+# tree — one production bypass (the Metamath PASS-1 proof-drop) has always
+# existed and is now counted, argued and sanctioned. The doc must also carry the
+# correction, so the smoke asserts both.
+require_text "docs/RELEASE_READINESS.md" "\`add_decl_unchecked_count: 1\`"
+require_text "docs/RELEASE_READINESS.md" "G6 correction (2026-08-23)"
 require_text "docs/RELEASE_READINESS.md" "empty legacy \`files\` list"
 require_text "docs/RELEASE_READINESS.md" "cargo test -p clean-mathverse verify_incremental --lib"
 require_text "docs/RELEASE_READINESS.md" "rg -n \"add_decl_unchecked\" crates/clean-mathverse/src"
@@ -584,7 +589,11 @@ require_text "docs/MATHVERSE_RELEASE_CHECKLIST.md" "CARGO_BUILD_JOBS=1 cargo run
 require_file "docs/plans/LEAN4_REPLACEMENT_PLAN.md"
 require_file "data/unchecked_decl_ratchet.json"
 require_text "data/unchecked_decl_ratchet.json" "\"add_decl_structural_count\": 0"
-require_text "data/unchecked_decl_ratchet.json" "\"add_decl_unchecked_count\": 0"
+require_text "data/unchecked_decl_ratchet.json" "\"add_decl_unchecked_count\": 1"
+# The count on its own is only a number; the site behind it must be named and
+# argued, and the scanner must agree with the tree.
+require_text "data/unchecked_decl_ratchet.json" "crates/clean-kernel/src/env/decl_add.rs"
+require_executable "scripts/check_add_decl_ratchet.py"
 
 section "Release command surfaces"
 require_executable "scripts/release_readiness_smoke.sh"

@@ -112,6 +112,14 @@ pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
         }
     }
 
+    // GOAL-DERIVED minting (see existential.rs by_cases): the k-th non-final
+    // fallback branch's equality local is bound by the k-th true-side lambda
+    // of the Or.rec chain (under k false-branch binders), so it must carry id
+    // `base + k` of the destination meta's positional window — the global
+    // cursor drifts past that window whenever anything minted since the
+    // goal's meta was created. (Unused on the Bool/PUnit recursor path,
+    // which mints no equality locals.)
+    let mut eq_fvar_id = state.goal_binder_base(&goal);
     for (case_idx, inhabitant) in inhabitants.iter().enumerate() {
         let mut new_ctx = goal.local_ctx.clone();
 
@@ -122,8 +130,11 @@ pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
             // generic: no proof of its would-be equality exists in this
             // fallback, so adding one would be unsound.
             if case_idx + 1 < inhabitants.len() {
+                let eq_fvar = FVarId::new(eq_fvar_id);
+                eq_fvar_id += 1;
+                state.next_fvar = state.next_fvar.max(eq_fvar_id);
                 new_ctx.push(LocalDecl {
-                    fvar: state.fresh_fvar(),
+                    fvar: eq_fvar,
                     name: format!("{hyp_name}_eq"),
                     ty: make_equality_type(
                         &hyp.ty,

@@ -1,0 +1,33 @@
+{
+ "chain": "ir_mt",
+ "body": "tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. Every aggregate lane is EMPTY, and that is a measurement: reader A's crate_enum_ids_seen and crate_struct_ids_seen are both [] on the laneREG wc-REG dump_O3 2026-08-21 dump. This chain is the DEGENERATE interface -- a const-initializer with NO parameters, NO block parameters and NO memory instruction -- and pinning that emptiness is the row's content: a twin that smuggled the shift amount in as a parameter instead of a constant would differ from this body ONLY here and in no instruction count.",
+ "how_it_is_used": "`ir_mint::mint` reads the (empty) aggregate lanes -- no alias line is minted -- and `ir_mint::project` compares the emitted header against the `interface` object below, refusing a body whose interface is not the pinned one.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Read `ir_h2.tags.json`'s `interface_what`. On this chain every parameter lane is EMPTY and the pin is the emptiness itself, plus the clause KINDS: this is the only chained body carrying a `#proof` clause (`; #proof: shift_in_range` on the assert), and the only one carrying NO `#names` clause -- a const-init has no named arguments.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. Both lanes are empty here. Reader A's own record on the laneREG wc-REG dump_O3 2026-08-21 dump: `param_tys_erased: []`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 118,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The producer A/B record has this index at 130/130/119 over its three dumps and reader A's 2026-08-21 laneREG dump says 118 -- equal to the fixture-era pin for the first time on any migrated chain, which is a coincidence of this dump and not an invariance. The pin compares reader B's header against the FIXTURE-ERA 118; reader A's value is RECORDED in ir_mt.mint.json, NEVER COMPARED, like observed_ty.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [],
+  "params_note": "EMPTY, and that is the pin: a const-initializer takes nothing. A body identical in every instruction that also BINDS a parameter is refused here and nowhere else.",
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement: this body contains no memory instruction of any kind.",
+  "clauses": [
+   "loc",
+   "producer",
+   "proof"
+  ],
+  "clauses_note": "The only chained body whose clause set carries `proof` (the assert's `; #proof: shift_in_range`) and lacks `names`. The KINDS are compared as a set; the proof clause's CONTENT is a producer claim about the body and is deliberately not compared, exactly like `loc` content."
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. The const-init calls NOTHING: reader A's `crate_func_ids_seen` is the single entry [4633] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`; `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`."
+}

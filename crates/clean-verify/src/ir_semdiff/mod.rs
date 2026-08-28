@@ -146,6 +146,8 @@
 mod cost;
 mod obligations;
 mod report;
+pub mod synth;
+pub mod wide;
 
 pub use cost::CostVerdict;
 pub use obligations::{fuel_out_obligation, value_obligation, ArgShape, RunResult, MAX_IR_NUMERAL};
@@ -195,6 +197,15 @@ pub enum EnumModel {
     /// body provably never reads the payload — see [`payload_is_unread`], which
     /// is a hard precondition checked mechanically, not a comment.
     TagSurrogate,
+    /// The module is SYNTHETIC — authored for the differential itself, because
+    /// no clean-kernel body emits the constructor it exercises (the plan's W2
+    /// lane, `docs/analysis/evalir-completion-plan-2026-08-24.md` §4(b)/§5).
+    /// There is no Rust type or shipped body the declarations model: the
+    /// committed `tests/fixtures/synth/*.trust-ir.txt` text IS the subject, E3
+    /// is structurally absent, and what the row measures is E1/E2 agreement on
+    /// that text alone. Never used for a chain whose fixture a producer
+    /// emitted.
+    Synthetic,
 }
 
 /// Errors that make a differential row REFUSE rather than pass.

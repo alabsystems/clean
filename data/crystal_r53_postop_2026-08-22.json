@@ -1,0 +1,930 @@
+{
+ "schema": "clean.crystal.r53_recensus_and_postop/1",
+ "date": "2026-08-22",
+ "lane": "LANE R53 \u2014 the residual -O0/-O3 gap RE-DERIVED at tip against this lane's own sealed control; the SWITCH-TABLE family measured as structurally refused (a second wall, not the marker gate); and the CALL + SCALAR POST-OP family taken whole as the thirteenth whole-body marker plan.",
+ "question": "The brief said the gap was 53 and ranked the switch tables first. Both were re-derived here rather than inherited. The gap at tip is 37, not 53 \u2014 the brief's own family list already summed to 37, and the 16 aggregate-of-calls bodies lane S3 converted had landed too. And the switch-table family is not takeable by a marker plan at all: built's `match`/`if` lowering interposes candidate blocks the derived MIR has no counterpart for, so every marker at or after an arm lands at a different canonical FINE BLOCK INDEX. The takeable tranche of the same size was F4.",
+ "provenance": {
+  "method": "THREE sealed drivers from THREE detached trust worktrees at the same rev, each whole-crate clean-kernel at -O3 / -O0 / -O3+noflip against one PINNED clean corpus. Control = tip, unmodified. Subject = tip + the one subject file (plus the perturbation class's option-domain registration). M-COR = subject with one wall deleted. Perturbation = the subject driver, one extra flag, -O3.",
+  "trust_rev": "52e0a703141a1cdd2bf8a8cf35abd31f5eb9ed28",
+  "trust_origin_main_at_measure": "52e0a703141a1cdd2bf8a8cf35abd31f5eb9ed28",
+  "clean_corpus_rev": "51c893ce5e6f79fe1f08fe8db828da14b0dd71d6",
+  "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13)",
+  "drivers": {
+   "control": {
+    "dir": "$HOME/trust/scratchpad/laneR53/seal-r1",
+    "sha256": "913f547e1d5846d7dd146fe821083aa026acef1140a319ec239a0674d8e807cc",
+    "tree": "clean",
+    "sysrootcheck": "OK"
+   },
+   "subject": {
+    "dir": "$HOME/trust/scratchpad/laneR53/seal-subj",
+    "sha256": "513df6945d63f0e67755955f0f51bb4f6188ddb3d72440a3cc6f712fb47dc1c2",
+    "tree": "dirty",
+    "sysrootcheck": "OK"
+   },
+   "mcor": {
+    "dir": "$HOME/trust/scratchpad/laneR53/seal-mcor",
+    "sha256": "c2bde87281231d91c30fb8e6647e00cb959bd88aba46e287866d4a52cd13f2f9",
+    "sysrootcheck": "OK"
+   }
+  },
+  "perturb_classes_registered_by_the_subject_driver": [
+   "enum-reshape",
+   "enum-case-value",
+   "enum-ctor",
+   "enum-disc-index",
+   "switch-map",
+   "enum-payload",
+   "marker-order",
+   "marker-drop",
+   "agg-field-order",
+   "marker-arm",
+   "payload-tramp",
+   "dr-tramp",
+   "dr-retire",
+   "mc-plan",
+   "cf-lit-order",
+   "chain-ret-order",
+   "cf-field-drop",
+   "cf-unit-late",
+   "cf-pair-order",
+   "cf-ret-late",
+   "cf-post-late"
+  ],
+  "flip_path_blobs_control": {
+   "crates/trust-thir-lower/src/flip.rs": "e92e026609f1ac954bd333a63bbe55e86dd370f5",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "f072e2c435537fc969bd1179664000ebcfa52481",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+  },
+  "flip_path_blobs_subject": {
+   "crates/trust-thir-lower/src/flip.rs": "e92e026609f1ac954bd333a63bbe55e86dd370f5",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "c6dab117e82bf11893bc6424e2a7b265d17a70aa",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+  },
+  "flip_path_blobs_mcor": {
+   "crates/trust-thir-lower/src/flip.rs": "e92e026609f1ac954bd333a63bbe55e86dd370f5",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "77780af5a0879b1c9c3a216ae9a026a52a38f0a8",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+  },
+  "only_file_that_differs": "crates/trust-thir-lower/src/to_mir.rs \u2014 every other flip-path blob, the FROZEN mir_differential.rs (the ORACLE) included, is byte-identical across all three drivers.",
+  "instruments": {
+   "census": "$HOME/trust/scratchpad/laneR53/analyze.py (laneGAP2's analyze3.py, unchanged)",
+   "families": "$HOME/trust/scratchpad/laneR53/rank.py (laneGAP2's rank4.py, unchanged)",
+   "ab": "$HOME/trust/scratchpad/laneR53/compare.py (laneGAP/laneS3's compare.py, unchanged)",
+   "markers": "$HOME/trust/scratchpad/laneR53/markers.py \u2014 this lane's own re-implementation of `canon_markers` (mir_differential.rs:3604) over a `-Zdump-mir=built` text dump and a `-Ztrust-dump=mir` derived JSON. VALIDATED against the oracle's own first-divergence lines before use: it reproduces `mk b0.0:live s0:u8` for x1, `mk b6.0:live s0:bool` for x3 and `mk b2.0:live s0:u32` for x4, and the 2-line count of the already-converted y5 forwarder."
+  }
+ },
+ "census_control_tip_x_tip": {
+  "totals": {
+   "bodies": 13879,
+   "agreed": 1592,
+   "agreed_markers_exact": 1555,
+   "codegen_flips_O3": 581,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "fe731458a41e1ef2eb2e20736d10f81e6bb9eb5bd62464b221181525563c38fc",
+   "coverage_O0_sha256": "fe731458a41e1ef2eb2e20736d10f81e6bb9eb5bd62464b221181525563c38fc",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": {
+   "size": 37,
+   "by_kind": {
+    "fn": 36,
+    "const-init": 1
+   },
+   "partition_by_channel": {
+    "derived-end@0": 37
+   },
+   "partition_sums_to_gap": true,
+   "shape_overlay": {
+    "other": 31,
+    "WB8-named-chain": 3,
+    "chain-forward (all-calls, unnamed)": 2,
+    "NO-TRUST-IR-BODY": 1
+   },
+   "first_divergence_built_types_derived_end_at_0": {
+    "bool": 13,
+    "()": 7,
+    "u32": 5,
+    "adt:clean_kernel::expr::sorry::SorryFlags": 4,
+    "usize": 3,
+    "u8": 1,
+    "&core::cell::Cell": 1,
+    "u64": 1,
+    "&clean_kernel::level::Level": 1,
+    "adt:clean_kernel::memory_model::AllocationId": 1
+   },
+   "first_divergence_built_types_by_shape": {
+    "other": {
+     "bool": 11,
+     "()": 5,
+     "u32": 4,
+     "adt:clean_kernel::expr::sorry::SorryFlags": 4,
+     "usize": 3,
+     "u8": 1,
+     "&core::cell::Cell": 1,
+     "u64": 1,
+     "adt:clean_kernel::memory_model::AllocationId": 1
+    },
+    "WB8-named-chain": {
+     "bool": 2,
+     "&clean_kernel::level::Level": 1
+    },
+    "NO-TRUST-IR-BODY": {
+     "u32": 1
+    },
+    "chain-forward (all-calls, unnamed)": {
+     "()": 2
+    }
+   }
+  },
+  "closed_accounting": {
+   "agreed_fn": 662,
+   "agreed_const_init": 930,
+   "markers_exact_fn": 626,
+   "markers_exact_const_init": 929,
+   "loud_fallback_bodies_fn": {
+    "O0": 45,
+    "O3": 45
+   },
+   "loud_fallback_bodies_const_init": {
+    "O0": 2,
+    "O3": 2
+   },
+   "O0_identity_fn": "662 agreed fn - 45 fallback bodies = 617 vs measured O0 codegen flips 617",
+   "O0_identity_exact": true,
+   "O3_identity_fn": "626 marker-passing fn - 45 fallback bodies = 581 vs measured O3 codegen flips 581",
+   "O3_identity_exact": true
+  },
+  "fallback_reasons_O3": {
+   "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+   "shim: abi rederive: generic fn signature": 43,
+   "shim: abi rederive: generic closure": 2
+  },
+  "fallback_reasons_O0": {
+   "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+   "shim: abi rederive: generic fn signature": 43,
+   "shim: abi rederive: generic closure": 2
+  }
+ },
+ "census_control_families": {
+  "gap": 37,
+  "families_ranked": [
+   {
+    "family": "F8 multi-block, NO calls (switch tables etc.)",
+    "n": 8,
+    "examples": [
+     "cert::cross_project::hex_digit",
+     "cert::types::proof_cert_has_recursive_children",
+     "env::native_reducers_bitvec::to_signed",
+     "env::native_reducers_sint::to_signed"
+    ],
+    "first_divergence_built_types": {
+     "bool": 4,
+     "()": 2,
+     "u8": 1,
+     "u32": 1
+    }
+   },
+   {
+    "family": "F4 call + scalar post-op (icmp/extractfield/select)",
+    "n": 8,
+    "examples": [
+     "cert::builder::cache::WhnfCache::is_empty",
+     "env::decl_add::mm_two_pass_active::{closure#0}",
+     "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}",
+     "expr::sorry::<impl expr::Expr>::has_sorry"
+    ],
+    "first_divergence_built_types": {
+     "adt:clean_kernel::expr::sorry::SorryFlags": 3,
+     "usize": 2,
+     "bool": 2,
+     "u32": 1
+    }
+   },
+   {
+    "family": "F7 multi-block with calls (branching)",
+    "n": 7,
+    "examples": [
+     "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq",
+     "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+     "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+     "expr::subst::<impl expr::Expr>::has_loose_bvar"
+    ],
+    "first_divergence_built_types": {
+     "bool": 5,
+     "()": 2
+    }
+   },
+   {
+    "family": "F5 single-block, >=2 calls, mixed",
+    "n": 3,
+    "examples": [
+     "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+     "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+     "tc::equiv_manager::EquivManager::add_equiv"
+    ],
+    "first_divergence_built_types": {
+     "&core::cell::Cell": 1,
+     "()": 1,
+     "u32": 1
+    }
+   },
+   {
+    "family": "F3 WB8 chain (named)",
+    "n": 3,
+    "examples": [
+     "env::origin::ConstantOrigin::is_unpinned_olean_import",
+     "expr::kind::arc_eq",
+     "<level::LevelArc as std::fmt::Debug>::fmt"
+    ],
+    "first_divergence_built_types": {
+     "bool": 2,
+     "&clean_kernel::level::Level": 1
+    }
+   },
+   {
+    "family": "F9 single-block, no call",
+    "n": 3,
+    "examples": [
+     "expr::types::BigNat::is_zero::{closure#0}",
+     "memory_model::MemoryRegion::new",
+     "tc::heartbeat_profiler::types::SourcePos::coalesced"
+    ],
+    "first_divergence_built_types": {
+     "u64": 1,
+     "adt:clean_kernel::memory_model::AllocationId": 1,
+     "u32": 1
+    }
+   },
+   {
+    "family": "F3 chain-forward (all calls, unnamed)",
+    "n": 2,
+    "examples": [
+     "env::native_reducers_bitvec::<impl env::Environment>::init_bitvec_native_reducers",
+     "env::Environment::ensure_native_reducers"
+    ],
+    "first_divergence_built_types": {
+     "()": 2
+    }
+   },
+   {
+    "family": "F0 no trust-ir body",
+    "n": 1,
+    "examples": [
+     "env::ext_instance::PRIORITY_BYTES"
+    ],
+    "first_divergence_built_types": {
+     "u32": 1
+    }
+   },
+   {
+    "family": "F6 single-block, one call, other mix",
+    "n": 1,
+    "examples": [
+     "expr::sorry::<impl expr::Expr>::sorry_scan"
+    ],
+    "first_divergence_built_types": {
+     "adt:clean_kernel::expr::sorry::SorryFlags": 1
+    }
+   },
+   {
+    "family": "F2 aggregate-of-calls (Default-style: calls -> insertfield -> ret)",
+    "n": 1,
+    "examples": [
+     "<env::ai_proof_search::AiSearchStats as std::default::Default>::default"
+    ],
+    "first_divergence_built_types": {
+     "usize": 1
+    }
+   }
+  ]
+ },
+ "the_brief_said_53": {
+  "measured": 37,
+  "why": "85 (the 2026-08-21 GAP2 re-census) minus lane S1F's 32 forwarders minus lane S3's 16 aggregate-of-calls bodies. The brief subtracted only S1F. Its own remaining-family list (8+8+7+4+3+3+2+1+1) already summed to 37.",
+  "S1F_landed_as": "trust d24dea87d5",
+  "S3_landed_as": "trust 026b90f1f1"
+ },
+ "switch_table_family_REFUSED": {
+  "verdict": "NOT takeable by a marker plan. The refusal is STRUCTURAL and is a SECOND WALL, distinct from the marker gate: it is not that the shim declines to place markers, it is that the positions built puts them at DO NOT EXIST in the derived body.",
+  "the_wall": "`canon_markers` numbers blocks by a DFS preorder over RAW successors. Built's `match` lowering interposes one 0-assign `falseEdge` candidate block per arm (two for an or-pattern), and its `if` lowering interposes a 0-assign else-entry block AND an empty join block. The shim's `lower_ir_to_mir` emits one MIR block per trust-ir block and has none of them, so every marker at or after an arm sits at a different FINE index. No marker plan can move it: a plan chooses WHICH markers to place, not what the block graph is.",
+  "measured_on": "probes/r53.rs x1..x6, through THIS lane's own sealed control driver (913f547e1d5846d7\u2026), both dumps.",
+  "witnesses": {
+   "x1 (cert::cross_project::hex_digit shape)": "built markers 4, last at b3.0 (join = built fine 3, behind a per-arm falseEdge block); derived join = fine 2. The body-end retirement has no index to land on.",
+   "x3 (mode::CleanMode::allows_large_elimination shape)": "built's marked arm body is at fine 6 (TWO interposed 0-assign blocks for the or-pattern: f4=bb4/0 assigns -> f5=bb10/0 -> f6=bb11); derived's is at fine 3. The oracle's own first-divergence line for x3 is `mk b6.0:live s0:bool`, which is how the instrument was validated.",
+   "x4 (tc::reduction::cofib::CofibAtom::var shape)": "built mints the or-pattern binding TWICE (live s0 at fine 2 AND fine 5, dead at b3.1); derived's arms are fine 1 and fine 3.",
+   "x5 (<MentionsNameVisitor as ExprVisitor>::combine shape)": "built's else path carries an extra 0-assign entry block and an EMPTY join (f1=bb2/0, f3=bb4/0); derived has neither, so built's `dead s0` at b3.0 has no derived counterpart. Lane K's branch plan separately refuses this body at its param-condition tripwire.",
+   "x6 (tc::heartbeat_profiler::types::clamp_u32 shape)": "the same interposition, plus lane K's ordering rule (2) \u2014 a marked result may not be non-leftmost \u2014 which names `clamp_u32` in the source, verbatim."
+  },
+  "the_eight_bodies_are_not_eight_switch_tables": {
+   "switch-headed, arms to one join": [
+    "cert::cross_project::hex_digit",
+    "cert::types::proof_cert_has_recursive_children",
+    "mode::CleanMode::allows_large_elimination",
+    "tc::reduction::cofib::CofibAtom::var"
+   ],
+   "condbr-headed, no call": [
+    "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+    "tc::heartbeat_profiler::types::clamp_u32"
+   ],
+   "SCOPED (refused by the `func.scopes.is_some()` firewall before any shape question)": [
+    "env::native_reducers_bitvec::to_signed",
+    "env::native_reducers_sint::to_signed"
+   ],
+   "reading": "the census family label is `multi-block, NO calls (switch tables etc.)`; the switch shape is 4 of the 8, and all three sub-shapes hit walls that are not the marker gate."
+  }
+ },
+ "post_op_family_CONVERTED": {
+  "family": "F4 call + scalar post-op (icmp / select / extractfield)",
+  "n": 8,
+  "bodies": [
+   "cert::builder::cache::WhnfCache::is_empty",
+   "env::decl_add::mm_two_pass_active::{closure#0}",
+   "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}",
+   "expr::sorry::<impl expr::Expr>::has_sorry",
+   "expr::sorry::<impl expr::Expr>::has_synthetic_sorry",
+   "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry",
+   "name::NameInterner::is_empty",
+   "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}"
+  ],
+  "built_model_measured": {
+   "instrument": "-Zdump-mir=built through the CONTROL driver on probes/r53.rs (y1,y2,y5,y6,y7,y8,y9,y10,y11,y12,y13), rendered by this lane's validated canon_markers re-implementation.",
+   "the_law": "for `[const]* call [const]* <one scalar post-op> ret` with k place arguments: live(d) FIRST at b0.0 (d = the call's own destination temp), then live(arg_i) at b0.i in operand order; at the successor, dead(arg_i) in REVERSE order all at b1.0, then the post-op's single assign, then dead(d) at b1.1. Four marker lines for one argument, six for two.",
+   "sub_shapes_all_one_model": {
+    "y1/y6 `call() == k`": "b0.0:live s0:<ret>; b0.0:live s1:&W; b1.0:dead s1; b1.1:dead s0",
+    "y2 `!call()`": "identical, `_0 = Not(move d)`",
+    "y7/y8 `call().f`": "identical, `_0 = copy (d.f)`, slot type Opaque",
+    "y9 two arguments": "6 lines \u2014 b0.0:live s0; b0.0:live s1; b0.1:live s2; b1.0:dead s2; b1.0:dead s1; b1.1:dead s0",
+    "y10 a folded const argument": "mints nothing, 4 lines",
+    "y11/y12 CLOSURES": "identical model; the closure env parameter mints no temp"
+   },
+   "refused_and_measured": {
+    "y13 `call().f == false` (TWO post-ops)": "built hoists BOTH the field temp and the call destination at b0.0 and retires both at b1.2 \u2014 a different model. The plan admits ONE post-op and refuses this."
+   }
+  },
+  "why_the_CALL_FORWARD_plan_and_not_wave_MC": {
+   "wave-MC (plan_call_markers) already models `call -> ICmp/BinOp/UnOp/Cast -> ret`": "and refuses all eight of these bodies at ONE clause, named in its own source: `OPERAND ADMISSION, with the class boundary at Ty::Ptr` \u2014 a `&self` argument is neither a scalar candidate nor a struct, so `by_value` is false and the plan returns None. Its instruction set also has no `Select` and no `ExtractField` arm, which is the other five-of-eight refusal.",
+   "why_extend_the_call_forward_plan": "it already has the `&(*_p)` reborrow spelling for a Ptr argument (lane S1F's CfForm::Bare), so extending IT costs one post region and no new argument model."
+  },
+  "the_change": {
+   "one_subject_file": "crates/trust-thir-lower/src/to_mir.rs",
+   "plus_the_option_domain": [
+    "compiler/rustc_driver_impl/src/lib.rs",
+    "compiler/rustc_driver_impl/src/tests.rs",
+    "compiler/rustc_session/src/options.rs"
+   ],
+   "note": "the three compiler files register the `cf-post-late` perturbation CLASS with the driver's option domain and change no emission; without them the sealed driver rejects the control flag at parse time and the perturbation cannot be run at all.",
+   "parts": [
+    "CfPostOp \u2014 the three measured post-op forms",
+    "MfCallFwdPlan::{post, post_ty, post_late} and MfSlot::CfPost",
+    "plan_call_fwd_markers \u2014 the block splits at THE call, not at the last node; the post region is validated instruction by instruction",
+    "call_fwd_source_admits \u2014 the HIR peels the post-op and must ANSWER the same form the trust-ir witnessed; the FIELD form additionally requires a NON-SCALAR call return, which is what makes MfTy::Opaque a checked token rather than a guess",
+    "predict_call_fwd \u2014 the slot opens first, carries the class's FIRST use-site key (Some((1,0,0)) for the two operand forms, none for the field form), and retires one assign into the successor",
+    "the emitter \u2014 the destination temp is minted before the argument temps, the call is routed into it, and the retirement is DEFERRED to the Return arm (the only deferred marker in the shim, because the post-op's write happens one node later)",
+    "ShimCx::mf_call_fwd_post_route \u2014 the post-op's own result goes STRAIGHT into `_0`, wave-J's move for a directly-returned call result, plan-gated"
+   ]
+  }
+ },
+ "whole_crate_subject_vs_control": {
+  "base": "$HOME/trust/scratchpad/laneR53/wc-r1t",
+  "subject": "$HOME/trust/scratchpad/laneR53/wc-subjt",
+  "O3": {
+   "codegen_base": 581,
+   "codegen_subject": 589,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 8,
+   "lost": 0,
+   "gained_names": [
+    "cert::builder::cache::WhnfCache::is_empty",
+    "env::decl_add::mm_two_pass_active::{closure#0}",
+    "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}",
+    "expr::sorry::<impl expr::Expr>::has_sorry",
+    "expr::sorry::<impl expr::Expr>::has_synthetic_sorry",
+    "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry",
+    "name::NameInterner::is_empty",
+    "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 617,
+   "codegen_subject": 617,
+   "ctfe_base": 43,
+   "ctfe_subject": 43,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 8
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "cert::builder::cache::WhnfCache::is_empty",
+   "env::decl_add::mm_two_pass_active::{closure#0}",
+   "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}",
+   "expr::sorry::<impl expr::Expr>::has_sorry",
+   "expr::sorry::<impl expr::Expr>::has_synthetic_sorry",
+   "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry",
+   "name::NameInterner::is_empty",
+   "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1592,
+   "subject_agreed": 1592,
+   "base_markers_exact": 1555,
+   "subject_markers_exact": 1563
+  }
+ },
+ "census_subject": {
+  "totals": {
+   "bodies": 13879,
+   "agreed": 1592,
+   "agreed_markers_exact": 1563,
+   "codegen_flips_O3": 589,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "21d01b67c1b2fa0b99a88b76f99ce543f2b2c1faea2214bb49633aecd104f713",
+   "coverage_O0_sha256": "21d01b67c1b2fa0b99a88b76f99ce543f2b2c1faea2214bb49633aecd104f713",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": {
+   "size": 29,
+   "by_kind": {
+    "fn": 28,
+    "const-init": 1
+   },
+   "partition_by_channel": {
+    "derived-end@0": 29
+   },
+   "partition_sums_to_gap": true,
+   "shape_overlay": {
+    "other": 23,
+    "WB8-named-chain": 3,
+    "chain-forward (all-calls, unnamed)": 2,
+    "NO-TRUST-IR-BODY": 1
+   },
+   "first_divergence_built_types_derived_end_at_0": {
+    "bool": 11,
+    "()": 7,
+    "u32": 4,
+    "u8": 1,
+    "&core::cell::Cell": 1,
+    "adt:clean_kernel::expr::sorry::SorryFlags": 1,
+    "u64": 1,
+    "&clean_kernel::level::Level": 1,
+    "adt:clean_kernel::memory_model::AllocationId": 1,
+    "usize": 1
+   },
+   "first_divergence_built_types_by_shape": {
+    "other": {
+     "bool": 9,
+     "()": 5,
+     "u32": 3,
+     "u8": 1,
+     "&core::cell::Cell": 1,
+     "adt:clean_kernel::expr::sorry::SorryFlags": 1,
+     "u64": 1,
+     "adt:clean_kernel::memory_model::AllocationId": 1,
+     "usize": 1
+    },
+    "WB8-named-chain": {
+     "bool": 2,
+     "&clean_kernel::level::Level": 1
+    },
+    "NO-TRUST-IR-BODY": {
+     "u32": 1
+    },
+    "chain-forward (all-calls, unnamed)": {
+     "()": 2
+    }
+   }
+  },
+  "closed_accounting": {
+   "agreed_fn": 662,
+   "agreed_const_init": 930,
+   "markers_exact_fn": 634,
+   "markers_exact_const_init": 929,
+   "loud_fallback_bodies_fn": {
+    "O0": 45,
+    "O3": 45
+   },
+   "loud_fallback_bodies_const_init": {
+    "O0": 2,
+    "O3": 2
+   },
+   "O0_identity_fn": "662 agreed fn - 45 fallback bodies = 617 vs measured O0 codegen flips 617",
+   "O0_identity_exact": true,
+   "O3_identity_fn": "634 marker-passing fn - 45 fallback bodies = 589 vs measured O3 codegen flips 589",
+   "O3_identity_exact": true
+  }
+ },
+ "census_subject_families": {
+  "gap": 29,
+  "families_ranked": [
+   {
+    "family": "F8 multi-block, NO calls (switch tables etc.)",
+    "n": 8,
+    "examples": [
+     "cert::cross_project::hex_digit",
+     "cert::types::proof_cert_has_recursive_children",
+     "env::native_reducers_bitvec::to_signed",
+     "env::native_reducers_sint::to_signed"
+    ],
+    "first_divergence_built_types": {
+     "bool": 4,
+     "()": 2,
+     "u8": 1,
+     "u32": 1
+    }
+   },
+   {
+    "family": "F7 multi-block with calls (branching)",
+    "n": 7,
+    "examples": [
+     "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq",
+     "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+     "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+     "expr::subst::<impl expr::Expr>::has_loose_bvar"
+    ],
+    "first_divergence_built_types": {
+     "bool": 5,
+     "()": 2
+    }
+   },
+   {
+    "family": "F5 single-block, >=2 calls, mixed",
+    "n": 3,
+    "examples": [
+     "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+     "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+     "tc::equiv_manager::EquivManager::add_equiv"
+    ],
+    "first_divergence_built_types": {
+     "&core::cell::Cell": 1,
+     "()": 1,
+     "u32": 1
+    }
+   },
+   {
+    "family": "F3 WB8 chain (named)",
+    "n": 3,
+    "examples": [
+     "env::origin::ConstantOrigin::is_unpinned_olean_import",
+     "expr::kind::arc_eq",
+     "<level::LevelArc as std::fmt::Debug>::fmt"
+    ],
+    "first_divergence_built_types": {
+     "bool": 2,
+     "&clean_kernel::level::Level": 1
+    }
+   },
+   {
+    "family": "F9 single-block, no call",
+    "n": 3,
+    "examples": [
+     "expr::types::BigNat::is_zero::{closure#0}",
+     "memory_model::MemoryRegion::new",
+     "tc::heartbeat_profiler::types::SourcePos::coalesced"
+    ],
+    "first_divergence_built_types": {
+     "u64": 1,
+     "adt:clean_kernel::memory_model::AllocationId": 1,
+     "u32": 1
+    }
+   },
+   {
+    "family": "F3 chain-forward (all calls, unnamed)",
+    "n": 2,
+    "examples": [
+     "env::native_reducers_bitvec::<impl env::Environment>::init_bitvec_native_reducers",
+     "env::Environment::ensure_native_reducers"
+    ],
+    "first_divergence_built_types": {
+     "()": 2
+    }
+   },
+   {
+    "family": "F0 no trust-ir body",
+    "n": 1,
+    "examples": [
+     "env::ext_instance::PRIORITY_BYTES"
+    ],
+    "first_divergence_built_types": {
+     "u32": 1
+    }
+   },
+   {
+    "family": "F6 single-block, one call, other mix",
+    "n": 1,
+    "examples": [
+     "expr::sorry::<impl expr::Expr>::sorry_scan"
+    ],
+    "first_divergence_built_types": {
+     "adt:clean_kernel::expr::sorry::SorryFlags": 1
+    }
+   },
+   {
+    "family": "F2 aggregate-of-calls (Default-style: calls -> insertfield -> ret)",
+    "n": 1,
+    "examples": [
+     "<env::ai_proof_search::AiSearchStats as std::default::Default>::default"
+    ],
+    "first_divergence_built_types": {
+     "usize": 1
+    }
+   }
+  ]
+ },
+ "per_body_marker_line_counts": {
+  "note": "the MARKER channel's own count, not the semantic channel's canonical count \u2014 conflating them is how a 0-vs-0 pass gets reported as a conversion. The control side has NO marker line at all (`derived <end>` at line 0).",
+  "control": {
+   "cert::builder::cache::WhnfCache::is_empty": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 5,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`",
+    "detail": "5 canonical line(s) identical"
+   },
+   "env::decl_add::mm_two_pass_active::{closure#0}": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 6,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`",
+    "detail": "6 canonical line(s) identical"
+   },
+   "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 6,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "detail": "6 canonical line(s) identical"
+   },
+   "expr::sorry::<impl expr::Expr>::has_sorry": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 5,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:adt:clean_kernel::expr::sorry::SorryFlags` vs derived `<end>`",
+    "detail": "5 canonical line(s) identical"
+   },
+   "expr::sorry::<impl expr::Expr>::has_synthetic_sorry": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 5,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:adt:clean_kernel::expr::sorry::SorryFlags` vs derived `<end>`",
+    "detail": "5 canonical line(s) identical"
+   },
+   "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 5,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:adt:clean_kernel::expr::sorry::SorryFlags` vs derived `<end>`",
+    "detail": "5 canonical line(s) identical"
+   },
+   "name::NameInterner::is_empty": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 5,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:usize` vs derived `<end>`",
+    "detail": "5 canonical line(s) identical"
+   },
+   "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "marker_lines_identical": null,
+    "canonical_lines_identical": 6,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "detail": "6 canonical line(s) identical"
+   }
+  },
+  "subject": {
+   "cert::builder::cache::WhnfCache::is_empty": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 5,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   },
+   "env::decl_add::mm_two_pass_active::{closure#0}": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 6,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   },
+   "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 6,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   },
+   "expr::sorry::<impl expr::Expr>::has_sorry": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 5,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   },
+   "expr::sorry::<impl expr::Expr>::has_synthetic_sorry": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 5,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   },
+   "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 5,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   },
+   "name::NameInterner::is_empty": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 5,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   },
+   "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "marker_lines_identical": 4,
+    "canonical_lines_identical": 6,
+    "markers_detail": "4 marker line(s) identical",
+    "detail": null
+   }
+  }
+ },
+ "perturbation_cf_post_late": {
+  "codegen_base": 581,
+  "codegen_subject": 589,
+  "codegen_perturbed": 581,
+  "ctfe_base": 42,
+  "ctfe_subject": 42,
+  "ctfe_perturbed": 42,
+  "lost_vs_subject_names": [
+   "cert::builder::cache::WhnfCache::is_empty",
+   "env::decl_add::mm_two_pass_active::{closure#0}",
+   "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}",
+   "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry",
+   "expr::sorry::<impl expr::Expr>::has_sorry",
+   "expr::sorry::<impl expr::Expr>::has_synthetic_sorry",
+   "name::NameInterner::is_empty",
+   "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}"
+  ],
+  "gained_vs_subject_names": [],
+  "kept_vs_base_names": [],
+  "regressed_vs_base": [],
+  "applications_by_body": {},
+  "family_lost": [
+   "cert::builder::cache::WhnfCache::is_empty",
+   "env::decl_add::mm_two_pass_active::{closure#0}",
+   "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}",
+   "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry",
+   "expr::sorry::<impl expr::Expr>::has_sorry",
+   "expr::sorry::<impl expr::Expr>::has_synthetic_sorry",
+   "name::NameInterner::is_empty",
+   "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}"
+  ],
+  "family_kept": [],
+  "applications_nonzero": [
+   "cert::builder::cache::{impl#0}::is_empty",
+   "env::decl_add::mm_two_pass_active::{closure#0}",
+   "env::sorry_tracer::{impl#0}::has_sorry_deps::{closure#0}",
+   "expr::sorry::{impl#1}::has_non_synthetic_sorry",
+   "expr::sorry::{impl#1}::has_sorry",
+   "expr::sorry::{impl#1}::has_synthetic_sorry",
+   "name::{impl#0}::is_empty",
+   "tc::def_eq::proof_irrel::{impl#0}::try_infer_type_quick::{closure#1}"
+  ],
+  "applications_zero_rows": 2211,
+  "reading": "the control removes EXACTLY the eight converted bodies and nothing else \u2014 589 -> 581, the control's own count \u2014 and it REACHED all eight (`applications=1` on each, 0 on the other 2211 rows). Not vacuous."
+ },
+ "mutation_mcor": {
+  "mutation": "the two-derivation REGION-AGREEMENT wall in `predict_call_fwd` DELETED \u2014 the match that refuses a post-free plan on a post-bearing body and a post-bearing plan on a post-free body.",
+  "unit_test_kill": "test to_mir::s1f_field_tests::the_post_op_form_is_neither_the_bare_nor_the_reborrowed_sequence ... FAILED (`post-free plan, post-bearing body`); 769 passed; 1 failed.",
+  "whole_crate_vs_subject": {
+   "base": "$HOME/trust/scratchpad/laneR53/wc-subjt",
+   "subject": "$HOME/trust/scratchpad/laneR53/wc-mcort",
+   "O3": {
+    "codegen_base": 589,
+    "codegen_subject": 589,
+    "ctfe_base": 42,
+    "ctfe_subject": 42,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "O0": {
+    "codegen_base": 617,
+    "codegen_subject": 617,
+    "ctfe_base": 43,
+    "ctfe_subject": 43,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "channel_moves": {},
+   "verdict_regressions": [],
+   "markers_gained": [],
+   "markers_lost": [],
+   "totals": {
+    "base_agreed": 1592,
+    "subject_agreed": 1592,
+    "base_markers_exact": 1563,
+    "subject_markers_exact": 1563
+   }
+  },
+  "reading": "M-COR ROW-EXACT IDENTICAL to the subject at BOTH levels \u2014 0 channel moves, 0 gained, 0 lost. Defense in depth: the LIVE kill is the unit test."
+ },
+ "unit_tests": {
+  "subject": "test result: ok. 770 passed; 0 failed; 0 ignored (control: 767 \u2014 three new tests)",
+  "new_tests": [
+   "the_post_op_form_is_neither_the_bare_nor_the_reborrowed_sequence",
+   "the_post_op_slot_type_is_part_of_the_sequence",
+   "the_post_late_control_moves_the_predicted_sequence"
+  ]
+ },
+ "two_refusals_the_first_two_whole_crate_runs_PRINTED": [
+  "run 1 \u2014 all eight bodies went `agreed -> unsupported`, marker law, line 0: predicted `mk b0.0:live s0:Usize@term` vs derived `mk b0.0:live s0:Usize@b1.0:0`. Cause: the post-op destination temp is read by an ASSIGNMENT, so the observed side keys it; wave-CF registers no keys because its temps are moved by the call TERMINATOR. Fixed by registering the key.",
+  "run 2 \u2014 the three FIELD bodies converted; the five operand bodies refused at line 3: predicted `mk b1.1:dead s0` vs derived `mk b1.2:dead s0`. Cause: the shim gives every non-call instruction result an `mf_result_temp` and the Return arm copies it, so the successor carried TWO assigns where built carries ONE. Fixed by wave-J's own move \u2014 route the post-op's result straight into `_0`, plan-gated."
+ ],
+ "what_refuses_the_rest": {
+  "gap_after": 29,
+  "F8 switch tables (8)": "structurally refused \u2014 see switch_table_family_REFUSED. Not a plan question; it is a derived-block-graph question.",
+  "F7 multi-block with calls (7)": "no plan admits an `Inst::Call` in a MULTI-BLOCK body: lane K's `operands_of` has no Call arm, and wave-MC, the call-forward, chain-forward and aggregate-of-calls classes are all one-block. Two sub-shapes: the `||`/`&&` short-circuit over calls (is_fully_verified, try_string_lit_expansion, try_type_directed_eq, try_struct_eta_eq) and early-return-plus-tail-call (has_loose_bvar, round_up_to_next, try_structure_eta_expansion). Both inherit the F8 block-interposition question, so a plan alone will not do it either \u2014 that is the thing to measure BEFORE building.",
+  "F5 (3), F9 (3), F6 (1)": "single-block leftovers outside every current grammar; not re-measured this lane.",
+  "F3 WB8 named (3) + chain-forward (2)": "each carries lane WB8's own measured refusal; not re-measured this lane.",
+  "F2 residual (1)": "<AiSearchStats as Default>::default \u2014 lane S3's measured struct-typed field refusal, unchanged.",
+  "F0 (1)": "env::ext_instance::PRIORITY_BYTES has no trust-ir body at all."
+ }
+}

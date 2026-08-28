@@ -1,0 +1,41 @@
+{
+ "prefix": "ir_ni",
+ "body": "cert::builder::state::NodeId::index",
+ "core_digest": "e5753c09f51c522dcca64506d7d8f924e77c4eb7145aaf25977600dd67b0e4fa",
+ "defs_digest": "1ac16d8aba8aaec6319fba003d83b5bea8df82c2e1506c7dbb94fb620cb8a3cf",
+ "def_count": 4,
+ "artifact_core_digest": "daa4038fce90d6764d339acf52b76fc1b9ef80da7a8b56f97d9e1410be8f7a87",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This chain is NOT in the producer A/B record — it was a named REFUSAL (no Clean IRTy image for trust_ir::Ty::Usize) until 2026-08-22 — so ONE reader-A dump is recorded, not three, and this note says so.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 550,
+  "artifact_func_id": 550,
+  "artifact_functy_id": 97,
+  "artifact_functy_note": "97 on the laneREG dump AND in the committed fixture — the first chain in the mint whose whole-crate signature index has not been observed to move. The pin compares reader B's header against the fixture-era 97 by policy, exactly as if it had.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "usize_bits": 64,
+  "usize_sites_resolved": 1,
+  "usize_note": "Reader A REFUSED this body until the width was stated: `a2project` was run with --usize-bits 64, the target fact generated/ir_ni.tags.json pins in its `usize` lane, and it recorded the resolution and the site count here. Without the flag the refusal names the flag — measured verbatim on this dump before the resolved run.",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [
+   550
+  ],
+  "crate_func_names_seen": [
+   "cert::builder::state::NodeId::index"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [
+   "Struct(StructId(323))"
+  ],
+  "block_param_tys_erased": []
+ },
+ "text_unwitnessed": [
+ ],
+ "text_unwitnessed_note": "EMPTY: this body carries no `switch`, so the one field trust-ir's Display never prints does not occur and the emitted text fully determines the core module — GIVEN the pinned usize width. What the RESOLUTION erases is recorded in the tag table's `usize.erasure_note` instead: the resolved core cannot distinguish this body from a u64-spelled twin, and the pinned site count is the check that refuses that twin.",
+ "producer_dumps_observed": 1,
+ "producer_dumps_note": "The laneREG wc-REG dump_O3 2026-08-21 projection only (recorded verbatim under reader_a above). This chain is not in generated/ir_mint.producer_ab.json — the A/B record was cut while reader A still refused Ty::Usize — so no cross-producer core-digest identity is claimed here; the fixture-era text and this one dump are the two witnesses, and their agreement is M2's."
+}

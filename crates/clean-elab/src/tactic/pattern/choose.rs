@@ -6,7 +6,7 @@
 
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Expr, Level};
+use clean_kernel::{BinderInfo, Expr, FVarId, Level};
 
 use super::super::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 use super::util::{apply_predicate, try_extract_exists};
@@ -95,8 +95,28 @@ pub fn choose(
         )));
     };
 
-    // Create fresh fvar for the witness
-    let witness_fvar = state.fresh_fvar();
+    // Create goal object for close_goal (needs original ctx before modification).
+    // Part of #2154 Track 3 Option B: migrate from metas.assign bypass to checked
+    // close_goal by supplying all implicit arguments to Exists.elim.
+    // (Constructed before minting so the fvar ids below can derive from it.)
+    let goal_for_close = Goal {
+        meta_id: goal_id,
+        target: goal_target.clone(),
+        local_ctx: original_ctx.clone(),
+        tag: None,
+    };
+
+    // GOAL-DERIVED minting (see existential.rs by_cases): both locals reach the
+    // continuation subgoal's context and are bound by the two nested lambdas of
+    // the `Exists.elim` continuation (witness at depth 1, proof at depth 2), so
+    // they must carry ids `base` and `base + 1` of the destination meta's
+    // positional window — the global cursor drifts past that window whenever
+    // anything minted since the goal's meta was created.
+    let (witness_fvar, proof_fvar) = {
+        let base = state.goal_binder_base(&goal_for_close);
+        state.next_fvar = state.next_fvar.max(base + 2);
+        (FVarId::new(base), FVarId::new(base + 1))
+    };
 
     // Create the witness local declaration
     let witness_decl = LocalDecl {
@@ -109,24 +129,11 @@ pub fn choose(
     // Apply the predicate to the witness to get the type of the proof
     let proof_type = apply_predicate(&predicate, Expr::fvar(witness_fvar));
 
-    // Create fresh fvar for the proof
-    let proof_fvar = state.fresh_fvar();
-
     let proof_decl = LocalDecl {
         fvar: proof_fvar,
         name: proof_name.to_string(),
         ty: proof_type,
         value: None,
-    };
-
-    // Create goal object for close_goal (needs original ctx before modification).
-    // Part of #2154 Track 3 Option B: migrate from metas.assign bypass to checked
-    // close_goal by supplying all implicit arguments to Exists.elim.
-    let goal_for_close = Goal {
-        meta_id: goal_id,
-        target: goal_target.clone(),
-        local_ctx: original_ctx.clone(),
-        tag: None,
     };
 
     // Create the continuation goal FIRST so we can reference its meta in the proof term.

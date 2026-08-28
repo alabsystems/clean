@@ -21,9 +21,11 @@
 //! ## Pipeline
 //!
 //! 1. **emit** the C closure for `decl` (root + transitive compilable deps) via
-//!    the exact `clean compile --emit c` pipeline ([`emit_entry_c`]).
-//! 2. **classify** the entry shape ([`classify_entry`]) — `IO Unit` vs nullary
-//!    `Nat` — which selects the synthesized driver and shim set.
+//!    the exact `clean compile --emit c` pipeline ([`emit_entry_c_with_type`]).
+//! 2. **derive the entry contract** ([`entry_contract`]) — `IO` vs nullary
+//!    `Nat` (which selects the driver and shim set), the call shape (does the
+//!    emitted prototype take `argv`?), and the exit shape (`IO Unit` -> 0 vs
+//!    `IO UInt32` -> the returned status).
 //! 3. **select shims** the emitted C references ([`select_shims_from_tables`]),
 //!    failing closed if it references a mangled extern no shim covers.
 //! 4. **render** the combined translation unit (includes + shims + emitted
@@ -48,8 +50,28 @@
 //! lowering passes the `IO` monad dictionary (`l_IO()`) and type erasures
 //! (`clean_box(0)`) but the action functions take only their real arguments.
 //! Effects fire in source order: `l_main()` *is* the driver — calling it runs
-//! every effect and returns the final `Unit`, which the synthesized `main`
-//! discards before returning `0`.
+//! every effect and returns the action's final value.
+//!
+//! ## The entry contract
+//!
+//! Lean 4's entry point is `def main : IO Unit`, `def main : IO UInt32`, or
+//! either of those taking `(args : List String)`. Both halves of that are
+//! decided here, from two different sources, because neither source has both:
+//!
+//! * **Call shape** comes from the emitted C prototype ([`entry_arity_in_c`]).
+//!   That is the ground truth for the call the driver has to make — the
+//!   emitter, not the Lean type, decides whether the symbol is
+//!   `l_main(void)` or `l_main(clean_obj*)`.
+//! * **Exit shape** comes from the entry's elaborated Lean type. It CANNOT come
+//!   from the C: `IO Unit` and `IO UInt32` lower to the same
+//!   `clean_obj* l_main(...)` signature, so a driver working from the artifact
+//!   alone would have to guess, and guessing "always 0" is exactly the bug this
+//!   contract closes.
+//!
+//! The two are cross-checked rather than trusted independently: a unary entry
+//! is only handed a marshalled `List String` when the Lean type agrees that is
+//! what it takes, and anything wider is refused with a message naming the
+//! contract.
 //!
 //! If the emitted C references a mangled `l_*` symbol outside the shim tables we
 //! refuse with an explicit message rather than emit a binary that fails to link.
@@ -61,8 +83,9 @@ use std::process::Command;
 
 use anyhow::{anyhow, bail, Context};
 
-use crate::cmd_compile::compile_to_string;
+use crate::cmd_compile::compile_to_string_with_decl_type;
 use clean_compiler::cli::{CompileArgs, EmitFormat};
+use clean_kernel::{Expr, ExprKind};
 
 /// A prelude extern shim: the mangled symbol the emitted C may call, paired with
 /// a faithful small-`Nat` C definition. Injected into the build only when the
@@ -246,6 +269,129 @@ const UINT32_PRELUDE_SHIMS: &[PreludeShim] = &[
     },
 ];
 
+/// `String` shims for the byte-string runtime carrier.
+///
+/// REPRESENTATION MISMATCH, verified in source rather than assumed. The
+/// runtime carrier is the flat byte string `clean_mk_string` builds
+/// (`clean_string`: header + `len` word + NUL-terminated UTF-8 bytes), but the
+/// prelude registers `String.length`/`String.append` as genuine Definitions
+/// over the `List Char` model (`data_types_collections.rs`: `String.length s
+/// := List.length Char (String.data s)`). A `String.*` body lowered FROM
+/// SOURCE therefore projects `String.data` out of the byte-string object —
+/// `clean_ctor_get(s, 0)` reads the `len` word as a `clean_obj*` — and then
+/// walks garbage. That compiles and links cleanly: a SILENT miscompile. Closed
+/// from both sides: these ops are denylisted (via [`ALL_PRELUDE_SHIM_TABLES`])
+/// so the #14 boundary keeps them extern and the shim implements them against
+/// the real carrier; every OTHER source-lowered `String.*` body is refused
+/// fail-closed in [`select_shims_from_tables`].
+///
+/// The table covers exactly the kernel's `String` native-reducer surface
+/// (`clean-kernel/src/env/native_reducers.rs`), whose semantics these bodies
+/// mirror — the kernel is the differential authority: `length` counts CODE
+/// POINTS, not bytes (Lean: `s.data.length`); `utf8ByteSize` is the byte
+/// length; `append` is byte concatenation; `push` appends the UTF-8 encoding
+/// of the Char's code point (the Char arrives boxed, read via tagged-or-heap
+/// `clean_unbox_uint32`, and is a valid Unicode scalar by the `Char.valid`
+/// invariant); `decEq`/`beq`/`isEmpty` return the tagged `0`/`1` the switch
+/// lowering reads via `clean_obj_tag`/`clean_unbox_uint64`, exactly like the
+/// wired `l_Nat_decEq`.
+///
+/// String operands are BORROWED, not consumed: the RC pass `clean_inc`s a
+/// string operand AFTER the call site (see the module-header IO example), so a
+/// shim that dec'd its argument would free memory the emitted code still
+/// touches. This matches the `l_IO_println` family, which takes the same
+/// carrier; results are fresh owned strings.
+const STRING_PRELUDE_SHIMS: &[PreludeShim] = &[
+    PreludeShim {
+        symbol: "l_String_append",
+        definition: "clean_obj* l_String_append(clean_obj* a, clean_obj* b) {\n  \
+            size_t la = clean_string_len(a);\n  \
+            size_t lb = clean_string_len(b);\n  \
+            char* buf = (char*)malloc(la + lb + 1);\n  \
+            if (!buf) { clean_panic(\"l_String_append: allocation failed\"); }\n  \
+            memcpy(buf, clean_string_data(a), la);\n  \
+            memcpy(buf + la, clean_string_data(b), lb);\n  \
+            buf[la + lb] = 0;\n  \
+            clean_obj* r = clean_mk_string(buf);\n  \
+            free(buf);\n  \
+            return r;\n}\n",
+    },
+    // Code points, not bytes: count non-continuation bytes ((b & 0xC0) != 0x80),
+    // which equals `chars().count()` on the valid UTF-8 the carrier holds.
+    PreludeShim {
+        symbol: "l_String_length",
+        definition: "clean_obj* l_String_length(clean_obj* s) {\n  \
+            const unsigned char* p = (const unsigned char*)clean_string_data(s);\n  \
+            size_t bytes = clean_string_len(s);\n  \
+            uint64_t chars = 0;\n  \
+            for (size_t i = 0; i < bytes; i++) {\n    \
+            if ((p[i] & 0xC0) != 0x80) { chars++; }\n  \
+            }\n  \
+            return clean_nat_of_u64(chars);\n}\n",
+    },
+    // The carrier is NUL-terminated (`clean_mk_string` copies via `strlen`), so
+    // it cannot hold an interior NUL: pushing U+0000 must fail closed rather
+    // than silently truncate the result.
+    PreludeShim {
+        symbol: "l_String_push",
+        definition: "clean_obj* l_String_push(clean_obj* s, clean_obj* c) {\n  \
+            uint32_t cp = clean_unbox_uint32(c);\n  \
+            if (cp == 0) { clean_panic(\"l_String_push: NUL is not representable in the \
+byte-string carrier\"); }\n  \
+            size_t len = clean_string_len(s);\n  \
+            char* buf = (char*)malloc(len + 4 + 1);\n  \
+            if (!buf) { clean_panic(\"l_String_push: allocation failed\"); }\n  \
+            memcpy(buf, clean_string_data(s), len);\n  \
+            size_t k = len;\n  \
+            if (cp < 0x80) { buf[k++] = (char)cp; }\n  \
+            else if (cp < 0x800) {\n    \
+            buf[k++] = (char)(0xC0 | (cp >> 6));\n    \
+            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
+            } else if (cp < 0x10000) {\n    \
+            buf[k++] = (char)(0xE0 | (cp >> 12));\n    \
+            buf[k++] = (char)(0x80 | ((cp >> 6) & 0x3F));\n    \
+            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
+            } else {\n    \
+            buf[k++] = (char)(0xF0 | (cp >> 18));\n    \
+            buf[k++] = (char)(0x80 | ((cp >> 12) & 0x3F));\n    \
+            buf[k++] = (char)(0x80 | ((cp >> 6) & 0x3F));\n    \
+            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
+            }\n  \
+            buf[k] = 0;\n  \
+            clean_obj* r = clean_mk_string(buf);\n  \
+            free(buf);\n  \
+            return r;\n}\n",
+    },
+    // Byte equality IS code-point equality on UTF-8, so `memcmp` decides both
+    // `decEq` and `beq` exactly.
+    PreludeShim {
+        symbol: "l_String_decEq",
+        definition: "clean_obj* l_String_decEq(clean_obj* a, clean_obj* b) {\n  \
+            size_t la = clean_string_len(a);\n  \
+            int eq = la == clean_string_len(b) &&\n      \
+            memcmp(clean_string_data(a), clean_string_data(b), la) == 0;\n  \
+            return clean_box(eq ? 1 : 0);\n}\n",
+    },
+    PreludeShim {
+        symbol: "l_String_beq",
+        definition: "clean_obj* l_String_beq(clean_obj* a, clean_obj* b) {\n  \
+            size_t la = clean_string_len(a);\n  \
+            int eq = la == clean_string_len(b) &&\n      \
+            memcmp(clean_string_data(a), clean_string_data(b), la) == 0;\n  \
+            return clean_box(eq ? 1 : 0);\n}\n",
+    },
+    PreludeShim {
+        symbol: "l_String_isEmpty",
+        definition: "clean_obj* l_String_isEmpty(clean_obj* s) {\n  \
+            return clean_box(clean_string_len(s) == 0 ? 1 : 0);\n}\n",
+    },
+    PreludeShim {
+        symbol: "l_String_utf8ByteSize",
+        definition: "clean_obj* l_String_utf8ByteSize(clean_obj* s) {\n  \
+            return clean_nat_of_u64((uint64_t)clean_string_len(s));\n}\n",
+    },
+];
+
 /// All prelude shim tables, in one place. The union of these symbols is the
 /// `PRIMITIVE_DENYLIST` the #14 dependency-closure boundary treats as never
 /// compiled-from-source even if their bodies lower, so the shim always wins and
@@ -254,6 +400,7 @@ const ALL_PRELUDE_SHIM_TABLES: &[&[PreludeShim]] = &[
     NAT_PRELUDE_SHIMS,
     INT_PRELUDE_SHIMS,
     UINT32_PRELUDE_SHIMS,
+    STRING_PRELUDE_SHIMS,
     BOOL_PRELUDE_SHIMS,
     TYPECLASS_PRELUDE_SHIMS,
     IO_PRELUDE_SHIMS,
@@ -489,11 +636,46 @@ const QUOT_PRELUDE_SHIMS: &[PreludeShim] = &[
 pub(crate) enum EntryKind {
     /// A nullary `Nat`-returning entry: unbox and print the result.
     Nat,
-    /// An `IO Unit` entry: drive the (eager) IO action and exit `0`.
+    /// An `IO` entry: drive the (eager) IO action, then exit per [`EntryExit`].
     Io,
 }
 
-/// Decide whether the emitted entry is an `IO Unit` program or a nullary `Nat`
+/// What the synthesized driver hands the entry — Lean 4's two `main` shapes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum EntryArgs {
+    /// `def main : IO α` — call the entry with no arguments.
+    #[default]
+    None,
+    /// `def main (args : List String) : IO α` — marshal `argv[1..]` into a
+    /// `List String` and pass it.
+    Argv,
+}
+
+/// How the synthesized driver turns the entry's returned object into the
+/// process exit status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum EntryExit {
+    /// `IO Unit` (and the nullary `Nat` driver): always exit `0`.
+    #[default]
+    AlwaysZero,
+    /// `IO UInt32` — Lean 4's entry contract: the returned `UInt32` **is** the
+    /// process status.
+    FromUInt32,
+}
+
+/// The full entry contract: which driver to synthesize, what to call the entry
+/// with, and what to return from `main`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct EntryContract {
+    /// Nat-print driver vs IO driver.
+    pub(crate) kind: EntryKind,
+    /// Call shape, from the emitted C prototype (checked against the Lean type).
+    pub(crate) args: EntryArgs,
+    /// Exit shape, from the Lean type — the emitted C cannot carry it.
+    pub(crate) exit: EntryExit,
+}
+
+/// Decide whether the emitted entry is an `IO` program or a nullary `Nat`
 /// computation, by detecting the `IO`-monad prelude externs the L5 emitter only
 /// lowers to for `IO` entries.
 pub(crate) fn classify_entry(emitted_c: &str) -> EntryKind {
@@ -514,10 +696,156 @@ pub(crate) fn classify_entry(emitted_c: &str) -> EntryKind {
     }
 }
 
-/// Emit the C closure for `decl` (root + transitive compilable deps), reusing
-/// the exact `clean compile --emit c` pipeline.
-pub(crate) fn emit_entry_c(file: &Path, decl: &str, opt_level: u8) -> anyhow::Result<String> {
-    compile_to_string(CompileArgs {
+/// Count the `clean_obj*` parameters the emitted C declares for `mangled_entry`.
+///
+/// This PARSES the emitted artifact's own prototype rather than scanning source
+/// text for a signature: the C prototype is the ground truth for the call the
+/// driver has to make (lambda lifting, closure conversion and eta can move
+/// binders between the Lean type and the emitted symbol). `Some(0)` is a
+/// declared `(void)`; `None` means the emitted C declares no such entry.
+pub(crate) fn entry_arity_in_c(emitted_c: &str, mangled_entry: &str) -> Option<usize> {
+    let needle = format!("{mangled_entry}(");
+    let bytes = emitted_c.as_bytes();
+    let mut from = 0usize;
+    while let Some(rel) = emitted_c[from..].find(&needle) {
+        let start = from + rel;
+        from = start + needle.len();
+        // Whole-identifier match only: `l_mainly(` must not answer for `l_main`.
+        if start > 0 && is_ident_byte(bytes[start - 1]) {
+            continue;
+        }
+        let open = start + needle.len();
+        let close = match emitted_c[open..].find(')') {
+            Some(rel_close) => open + rel_close,
+            None => continue,
+        };
+        let params = emitted_c[open..close].trim();
+        return Some(if params.is_empty() || params == "void" {
+            0
+        } else {
+            params.split(',').count()
+        });
+    }
+    None
+}
+
+/// Peel the type-checking-transparent `MData` wrapper off an expression.
+fn strip_mdata(expr: &Expr) -> &Expr {
+    let mut cur = expr;
+    while let ExprKind::MData(_, inner) = cur.kind() {
+        cur = inner;
+    }
+    cur
+}
+
+/// Is `expr` the constant `name` (modulo `MData`)?
+fn is_const_named(expr: &Expr, name: &str) -> bool {
+    matches!(strip_mdata(expr).kind(), ExprKind::Const(n, _) if n.to_string() == name)
+}
+
+/// Is `expr` syntactically `List String` — the type of Lean's `main` argument?
+fn is_list_string(expr: &Expr) -> bool {
+    match strip_mdata(expr).kind() {
+        ExprKind::App(f, a) => is_const_named(f, "List") && is_const_named(a, "String"),
+        _ => false,
+    }
+}
+
+/// Split an entry's elaborated type into its explicit binder domains and the
+/// result type.
+fn peel_entry_binders(ty: &Expr) -> (Vec<&Expr>, &Expr) {
+    let mut domains = Vec::new();
+    let mut cur = strip_mdata(ty);
+    while let ExprKind::Pi(_, domain, body) = cur.kind() {
+        domains.push(domain.as_ref());
+        cur = strip_mdata(body);
+    }
+    (domains, cur)
+}
+
+/// Derive the full entry contract: the driver shape from the emitted C, the
+/// call shape from the emitted C prototype, and the exit shape from the Lean
+/// type.
+///
+/// Fails closed rather than mis-marshalling: an entry the emitted C declares
+/// with an argument is only driven when the Lean type agrees that the argument
+/// is `List String`, and an entry with more than one argument is refused with a
+/// message naming what Lean's entry contract allows.
+pub(crate) fn entry_contract(
+    decl: &str,
+    emitted_c: &str,
+    decl_type: Option<&Expr>,
+) -> anyhow::Result<EntryContract> {
+    let mangled_entry = mangle_decl(decl);
+    let kind = classify_entry(emitted_c);
+    let c_arity = entry_arity_in_c(emitted_c, &mangled_entry);
+
+    // The Nat driver prints the unboxed result and exits 0; it has exactly one
+    // supported shape (nullary), guarded in `build_native_binary_in_scratch`.
+    if kind == EntryKind::Nat {
+        return Ok(EntryContract {
+            kind,
+            args: EntryArgs::None,
+            exit: EntryExit::AlwaysZero,
+        });
+    }
+
+    let binders = decl_type.map(peel_entry_binders);
+
+    // EXIT SHAPE — only the Lean type carries it. `IO Unit` and `IO UInt32`
+    // both lower to `clean_obj* l_main(...)`, so the emitted C cannot tell
+    // them apart; an `IO UInt32` entry driven as `IO Unit` silently exits 0
+    // where Lean exits with the returned status.
+    let exit = match binders.as_ref().map(|(_, result)| *result) {
+        Some(result) => match strip_mdata(result).kind() {
+            ExprKind::App(f, a) if is_const_named(f, "IO") && is_const_named(a, "UInt32") => {
+                EntryExit::FromUInt32
+            }
+            _ => EntryExit::AlwaysZero,
+        },
+        None => EntryExit::AlwaysZero,
+    };
+
+    // CALL SHAPE — the emitted prototype decides how many arguments to pass.
+    let args = match c_arity {
+        None | Some(0) => EntryArgs::None,
+        Some(1) => {
+            if let Some((domains, _)) = binders.as_ref() {
+                let ok = domains.len() == 1 && is_list_string(domains[0]);
+                if !ok {
+                    bail!(
+                        "native build entry `{decl}` takes one argument the driver cannot \
+                         marshal: Lean's entry contract is `def main : IO Unit`, \
+                         `def main : IO UInt32`, or `def main (args : List String) : IO ...`."
+                    );
+                }
+            }
+            EntryArgs::Argv
+        }
+        Some(n) => bail!(
+            "native build entry `{decl}` is emitted with {n} arguments; Lean's entry \
+             contract allows at most one (`def main (args : List String) : IO ...`)."
+        ),
+    };
+
+    Ok(EntryContract { kind, args, exit })
+}
+
+/// Emit the C closure for `decl` (root + transitive compilable deps) through
+/// the exact `clean compile --emit c` pipeline, together with the entry's
+/// elaborated type.
+///
+/// The type is not optional garnish: it is the only place the
+/// `IO Unit` / `IO UInt32` distinction survives lowering, and therefore the
+/// only input that can decide the process exit status. It shares one
+/// elaboration with the emit, so there is no cheaper type-less variant to
+/// reach for.
+pub(crate) fn emit_entry_c_with_type(
+    file: &Path,
+    decl: &str,
+    opt_level: u8,
+) -> anyhow::Result<(String, Option<Expr>)> {
+    compile_to_string_with_decl_type(CompileArgs {
         file: Some(file.to_path_buf()),
         decl: Some(decl.to_owned()),
         emit: EmitFormat::C,
@@ -557,8 +885,8 @@ pub(crate) fn build_native_executable_with_source_sink(
     out_path: &Path,
     source_sink: Option<&Path>,
 ) -> anyhow::Result<()> {
-    let emitted_c = emit_entry_c(file, decl, opt_level)?;
-    let program = render_native_translation_unit(decl, &emitted_c)?;
+    let (emitted_c, decl_type) = emit_entry_c_with_type(file, decl, opt_level)?;
+    let program = render_native_translation_unit(decl, &emitted_c, decl_type.as_ref())?;
 
     if let Some(sink) = source_sink {
         if let Some(parent) = sink.parent() {
@@ -601,6 +929,7 @@ pub(crate) struct BuiltBinary {
 pub(crate) fn build_native_binary_in_scratch(
     decl: &str,
     emitted_c: &str,
+    decl_type: Option<&Expr>,
     nat_strict_guard: bool,
 ) -> anyhow::Result<BuiltBinary> {
     let mangled_entry = mangle_decl(decl);
@@ -608,7 +937,7 @@ pub(crate) fn build_native_binary_in_scratch(
 
     if nat_strict_guard
         && kind == EntryKind::Nat
-        && !emitted_c.contains(&format!("{mangled_entry}(void)"))
+        && entry_arity_in_c(emitted_c, &mangled_entry) != Some(0)
     {
         bail!(
             "native build entry must be a nullary declaration: the emitted C does not \
@@ -617,7 +946,7 @@ pub(crate) fn build_native_binary_in_scratch(
         );
     }
 
-    let program = render_native_translation_unit(decl, emitted_c)?;
+    let program = render_native_translation_unit(decl, emitted_c, decl_type)?;
     link_program_in_scratch(&program)
 }
 
@@ -625,18 +954,28 @@ pub(crate) fn build_native_binary_in_scratch(
 /// emitted C references + the emitted closure + the synthesized driver `main`)
 /// for `decl`. Selects the shim set from the entry shape; fails closed if the
 /// emitted C references an uncovered mangled extern.
+///
+/// `decl_type` is the entry's elaborated type. It is optional because the two
+/// non-`IO` render paths do not need it, but WITHOUT it an `IO UInt32` entry is
+/// driven as if it were `IO Unit` (exit `0`) — the exit shape lives only in the
+/// type. Production callers thread it through; pass `None` only where the
+/// emitted artifact is genuinely all that exists.
 pub(crate) fn render_native_translation_unit(
     decl: &str,
     emitted_c: &str,
+    decl_type: Option<&Expr>,
 ) -> anyhow::Result<String> {
     let mangled_entry = mangle_decl(decl);
-    let program = match classify_entry(emitted_c) {
+    let contract = entry_contract(decl, emitted_c, decl_type)?;
+    let program = match contract.kind {
         EntryKind::Nat => {
             let shims = select_shims_from_tables(
                 emitted_c,
                 &[
                     NAT_PRELUDE_SHIMS,
                     INT_PRELUDE_SHIMS,
+                    UINT32_PRELUDE_SHIMS,
+                    STRING_PRELUDE_SHIMS,
                     BOOL_PRELUDE_SHIMS,
                     TYPECLASS_PRELUDE_SHIMS,
                     QUOT_PRELUDE_SHIMS,
@@ -654,12 +993,14 @@ pub(crate) fn render_native_translation_unit(
                     IO_PRELUDE_SHIMS,
                     NAT_PRELUDE_SHIMS,
                     INT_PRELUDE_SHIMS,
+                    UINT32_PRELUDE_SHIMS,
+                    STRING_PRELUDE_SHIMS,
                     BOOL_PRELUDE_SHIMS,
                     TYPECLASS_PRELUDE_SHIMS,
                     QUOT_PRELUDE_SHIMS,
                 ],
             )?;
-            render_io_program(emitted_c, &shims, &mangled_entry)
+            render_io_program(emitted_c, &shims, &mangled_entry, contract)
         }
     };
     Ok(program)
@@ -738,6 +1079,24 @@ fn select_shims_from_tables(
     emitted_c: &str,
     tables: &[&'static [PreludeShim]],
 ) -> anyhow::Result<Vec<&'static PreludeShim>> {
+    // String bodies refuse BEFORE selection: a source-lowered `String.*` body
+    // would link cleanly and compute garbage against the byte-string carrier
+    // (see STRING_PRELUDE_SHIMS), so it can never ride the double-emit guard
+    // into the binary — shimmed symbol or not.
+    if let Some(op) = first_source_lowered_string_body(emitted_c) {
+        bail!(
+            "native build refuses source-lowered String body `{op}`: the runtime \
+             `String` carrier is a flat byte string, but a body lowered from the \
+             prelude's `List Char` model reads it as a constructor cell — it \
+             links and silently computes garbage. Shimmed String ops: {:?}; add \
+             a shim to STRING_PRELUDE_SHIMS in native_build (or keep `{op}` out \
+             of the entry's dependency closure).",
+            STRING_PRELUDE_SHIMS
+                .iter()
+                .map(|s| s.symbol)
+                .collect::<Vec<_>>()
+        );
+    }
     let needed: Vec<&PreludeShim> = tables
         .iter()
         .flat_map(|table| table.iter())
@@ -817,6 +1176,30 @@ fn file_defines_symbol(emitted_c: &str, symbol: &str) -> bool {
         let l = line.trim_start();
         l.contains(&format!("{symbol}(")) && l.trim_end().ends_with('{')
     })
+}
+
+/// Find the first `l_String_*` symbol the emitted C DEFINES (same brace-line
+/// heuristic as [`file_defines_symbol`]). The `l_String_` prefix cannot false-
+/// positive on compound names (`Stringify.foo` mangles to `l_Stringify_foo`,
+/// which the trailing underscore excludes); it does catch a String op's mangled
+/// helpers (`l_String_take_go`, `l_String_take___boxed`), which lower from the
+/// same `List Char` model and are equally wrong on the byte-string carrier.
+/// L5CNF is let-normalized — calls are bound to temps, never opened on a
+/// brace-line — so a brace-line match is a definition, not a call.
+fn first_source_lowered_string_body(emitted_c: &str) -> Option<String> {
+    for line in emitted_c.lines() {
+        let trimmed = line.trim_start();
+        if !trimmed.trim_end().ends_with('{') {
+            continue;
+        }
+        if let Some(sym) = extract_mangled_calls(trimmed)
+            .into_iter()
+            .find(|token| token.starts_with("l_String_"))
+        {
+            return Some(sym);
+        }
+    }
+    None
 }
 
 /// Extract mangled `l_*` identifiers immediately followed by `(` on a line.
@@ -904,8 +1287,37 @@ fn render_program(emitted_c: &str, shims: &[&PreludeShim], mangled_entry: &str) 
     s
 }
 
-/// Render the combined translation unit for an `IO Unit` entry.
-fn render_io_program(emitted_c: &str, shims: &[&PreludeShim], mangled_entry: &str) -> String {
+/// Marshal the process `argv` into Lean's `List String`.
+///
+/// The layout is the emitter's own, read off its output for `[1, 2, 3]` rather
+/// than assumed: `nil` is the tagged scalar `clean_box(0)` (NOT a heap ctor
+/// cell), and `cons` is `clean_alloc_ctor(1, 2, 0, head, tail)` with field 0 the
+/// head and field 1 the tail — which is exactly what the emitted
+/// `List.length` reads back (`clean_ctor_get(xs, 1)` for the tail under
+/// `case 1:`). Built back-to-front so the list comes out in argv order, and
+/// every cell is freshly allocated with refcount 1, matching the all-owned ABI
+/// the emitted entry consumes (`clean_inc(_x0)` … `clean_dec(_x0)`).
+///
+/// `argv[0]` — the program path — is excluded: Lean's `main (args : List
+/// String)` receives the arguments only, which is why `#args` is `argc - 1`.
+const ARGV_MARSHAL_HELPER: &str = "static clean_obj* clean_driver_argv_list(int argc, \
+     char** argv) {\n  \
+     clean_obj* xs = clean_box(0); /* List.nil */\n  \
+     for (int i = argc - 1; i >= 1; i--) {\n    \
+     clean_obj* head = clean_mk_string(argv[i]);\n    \
+     xs = clean_alloc_ctor(1, 2, 0, head, xs); /* List.cons head tail */\n  \
+     }\n  \
+     return xs;\n}\n";
+
+/// Render the combined translation unit for an `IO` entry, honouring Lean's
+/// entry contract: `argv` marshalling when the entry takes `List String`, and
+/// the returned `UInt32` propagated to the process exit status.
+fn render_io_program(
+    emitted_c: &str,
+    shims: &[&PreludeShim],
+    mangled_entry: &str,
+    contract: EntryContract,
+) -> String {
     let mut s = String::new();
     s.push_str(
         "/* Synthesized by clean native_build — IO prelude shims + emitted closure + IO main. */\n",
@@ -922,16 +1334,43 @@ fn render_io_program(emitted_c: &str, shims: &[&PreludeShim], mangled_entry: &st
         s.push('\n');
     }
     s.push_str("\n/* ---- synthesized IO entry ---- */\n");
-    s.push_str("int main(void) {\n");
-    s.push_str("  clean_runtime_init();\n");
-    s.push_str(&format!(
-        "  clean_obj* _r = {mangled_entry}(); /* drives every IO effect */\n"
-    ));
-    s.push_str("  (void)_r; /* the final Unit is discarded */\n");
+    match contract.args {
+        EntryArgs::None => {
+            s.push_str("int main(void) {\n");
+            s.push_str("  clean_runtime_init();\n");
+            s.push_str(&format!(
+                "  clean_obj* _r = {mangled_entry}(); /* drives every IO effect */\n"
+            ));
+        }
+        EntryArgs::Argv => {
+            s.push_str(ARGV_MARSHAL_HELPER);
+            s.push('\n');
+            s.push_str("int main(int argc, char** argv) {\n");
+            s.push_str("  clean_runtime_init();\n");
+            s.push_str("  clean_obj* _args = clean_driver_argv_list(argc, argv);\n");
+            s.push_str(&format!(
+                "  clean_obj* _r = {mangled_entry}(_args); /* drives every IO effect */\n"
+            ));
+        }
+    }
     s.push_str("  fflush(stdout);\n");
     s.push_str("  fflush(stderr);\n");
+    match contract.exit {
+        EntryExit::AlwaysZero => {
+            s.push_str("  (void)_r; /* IO Unit: the final Unit is discarded */\n");
+            s.push_str("  int _status = 0;\n");
+        }
+        EntryExit::FromUInt32 => {
+            // Lean's entry contract for `def main : IO UInt32`. Under the eager
+            // IO model `l_main()` returns the final value of the action, so the
+            // returned object IS the status; read it through the tagged-or-heap
+            // dispatch rather than assuming the tagged representation.
+            s.push_str("  /* Lean entry contract: the returned UInt32 IS the exit status. */\n");
+            s.push_str("  int _status = (int)clean_unbox_uint32(_r);\n");
+        }
+    }
     s.push_str("  clean_runtime_finalize();\n");
-    s.push_str("  return 0;\n");
+    s.push_str("  return _status;\n");
     s.push_str("}\n");
     s
 }
@@ -1038,6 +1477,7 @@ fn cc_available() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clean_kernel::{BinderInfo, Name};
 
     fn write_temp_lean(source: &str) -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1144,11 +1584,140 @@ mod tests {
     #[test]
     fn test_render_io_program_drives_entry_and_exits_zero() {
         let emitted = "clean_obj* l_main(void) { return clean_box(0); }\n";
-        let program = render_io_program(emitted, &[], "l_main");
+        let program = render_io_program(
+            emitted,
+            &[],
+            "l_main",
+            EntryContract {
+                kind: EntryKind::Io,
+                args: EntryArgs::None,
+                exit: EntryExit::AlwaysZero,
+            },
+        );
         assert!(program.contains("int main(void)"), "{program}");
         assert!(program.contains("l_main();"), "{program}");
         assert!(!program.contains("printf(\"%zu"), "{program}");
-        assert!(program.contains("return 0;"), "{program}");
+        assert!(program.contains("int _status = 0;"), "{program}");
+        assert!(program.contains("return _status;"), "{program}");
+    }
+
+    /// The emitted C prototype — not a source-text scan — decides the arity the
+    /// driver calls with.
+    #[test]
+    fn test_entry_arity_in_c_reads_the_emitted_prototype() {
+        assert_eq!(
+            entry_arity_in_c("clean_obj* l_main(void);\n", "l_main"),
+            Some(0)
+        );
+        assert_eq!(
+            entry_arity_in_c("clean_obj* l_main(clean_obj* _x0);\n", "l_main"),
+            Some(1)
+        );
+        assert_eq!(
+            entry_arity_in_c("clean_obj* l_f(clean_obj* _x0, clean_obj* _x1);\n", "l_f"),
+            Some(2)
+        );
+        assert_eq!(
+            entry_arity_in_c("clean_obj* l_other(void);\n", "l_main"),
+            None
+        );
+        // Whole-identifier match only: a longer symbol must not answer.
+        assert_eq!(
+            entry_arity_in_c("clean_obj* l_x_l_main(void);\n", "l_main"),
+            None
+        );
+    }
+
+    /// Without the entry's Lean type the driver CANNOT know the exit shape, so
+    /// it must stay on the safe `IO Unit` reading rather than guess. This pins
+    /// why the type is threaded through the production callers at all.
+    #[test]
+    fn test_entry_contract_without_type_defaults_to_exit_zero() {
+        let emitted = "clean_obj* l_main(void);\nclean_obj* _x = l_IO_println(_s);\n";
+        let contract = entry_contract("main", emitted, None).expect("contract");
+        assert_eq!(contract.kind, EntryKind::Io);
+        assert_eq!(contract.args, EntryArgs::None);
+        assert_eq!(contract.exit, EntryExit::AlwaysZero);
+    }
+
+    /// A unary entry the Lean type says is NOT `List String` must be refused,
+    /// not marshalled: passing a `List String` where the body expects something
+    /// else links cleanly and then reads the wrong representation.
+    #[test]
+    fn test_entry_contract_refuses_unary_entry_that_is_not_argv() {
+        let emitted = "clean_obj* l_main(clean_obj* _x0);\nclean_obj* _x = l_IO_println(_s);\n";
+        let nat_arg = Expr::pi(
+            BinderInfo::Default,
+            Expr::const_(Name::from_string("Nat"), vec![]),
+            Expr::app(
+                Expr::const_(Name::from_string("IO"), vec![]),
+                Expr::const_(Name::from_string("Unit"), vec![]),
+            ),
+        );
+        let err = entry_contract("main", emitted, Some(&nat_arg))
+            .expect_err("a non-`List String` argument must be refused");
+        assert!(
+            err.to_string().contains("List String"),
+            "the refusal should name Lean's entry contract: {err:#}"
+        );
+
+        // Control: the same emitted C with the real `List String` domain is
+        // accepted and marshals argv.
+        let argv_arg = Expr::pi(
+            BinderInfo::Default,
+            Expr::app(
+                Expr::const_(Name::from_string("List"), vec![]),
+                Expr::const_(Name::from_string("String"), vec![]),
+            ),
+            Expr::app(
+                Expr::const_(Name::from_string("IO"), vec![]),
+                Expr::const_(Name::from_string("UInt32"), vec![]),
+            ),
+        );
+        let contract = entry_contract("main", emitted, Some(&argv_arg)).expect("argv contract");
+        assert_eq!(contract.args, EntryArgs::Argv);
+        assert_eq!(contract.exit, EntryExit::FromUInt32);
+    }
+
+    /// The argv driver's list layout must be the EMITTER's layout, read off its
+    /// own output for `[1, 2, 3]`: `nil` is the tagged scalar `clean_box(0)`,
+    /// `cons` is `clean_alloc_ctor(1, 2, 0, head, tail)`. A heap-cell nil (what
+    /// the brick's original note assumed) would still switch correctly but is
+    /// not what the emitter produces, and `argv[0]` must be excluded.
+    #[test]
+    fn test_render_io_program_argv_driver_uses_the_emitter_list_layout() {
+        let emitted = "clean_obj* l_main(clean_obj* _x0) { return clean_box(0); }\n";
+        let program = render_io_program(
+            emitted,
+            &[],
+            "l_main",
+            EntryContract {
+                kind: EntryKind::Io,
+                args: EntryArgs::Argv,
+                exit: EntryExit::FromUInt32,
+            },
+        );
+        assert!(
+            program.contains("int main(int argc, char** argv)"),
+            "{program}"
+        );
+        assert!(
+            program.contains("clean_obj* xs = clean_box(0);"),
+            "{program}"
+        );
+        assert!(
+            program.contains("clean_alloc_ctor(1, 2, 0, head, xs)"),
+            "{program}"
+        );
+        assert!(
+            program.contains("i >= 1; i--"),
+            "argv[0] must be skipped: {program}"
+        );
+        assert!(program.contains("l_main(_args);"), "{program}");
+        assert!(
+            program.contains("int _status = (int)clean_unbox_uint32(_r);"),
+            "{program}"
+        );
     }
 
     #[test]
@@ -1167,8 +1736,83 @@ mod tests {
             "Nat.pred has no shim and must be compilable from source"
         );
         assert!(
-            !is_primitive_denylisted("l_String_length"),
-            "String.length has no shim and must be compilable from source"
+            is_primitive_denylisted("l_String_length"),
+            "String.length is shimmed: its source body computes over the \
+             List Char model, which miscompiles against the byte-string carrier"
+        );
+    }
+
+    /// The String shim table mirrors the kernel's `String` native-reducer
+    /// surface (`native_reducers.rs`) — the differential authority for these
+    /// semantics. A symbol drifting out of this set silently re-opens the
+    /// source-lowered path for that op.
+    #[test]
+    fn test_string_shim_table_matches_kernel_reducer_surface() {
+        let symbols: Vec<&str> = STRING_PRELUDE_SHIMS.iter().map(|s| s.symbol).collect();
+        assert_eq!(
+            symbols,
+            [
+                "l_String_append",
+                "l_String_length",
+                "l_String_push",
+                "l_String_decEq",
+                "l_String_beq",
+                "l_String_isEmpty",
+                "l_String_utf8ByteSize",
+            ],
+            "STRING_PRELUDE_SHIMS must cover exactly the kernel String \
+             native-reducer surface"
+        );
+    }
+
+    #[test]
+    fn test_select_string_shims_includes_only_referenced() {
+        let c = "clean_obj* _x2 = l_String_append(_x0, _x1);";
+        let shims = select_shims_from(c, STRING_PRELUDE_SHIMS).expect("string append is covered");
+        assert_eq!(shims.len(), 1);
+        assert_eq!(shims[0].symbol, "l_String_append");
+    }
+
+    /// A `String.*` body compiled from source (here: an unshimmed op) must be
+    /// refused with an error naming the op — this is the silent-miscompile
+    /// path (the body links, then reads the byte string as a ctor cell).
+    #[test]
+    fn test_source_lowered_string_body_is_refused() {
+        let c = "clean_obj* l_String_take(clean_obj* _x0, clean_obj* _x1) {\n  \
+                 return _x0;\n}\n\
+                 clean_obj* l_entry(void) {\n  return clean_box(0);\n}";
+        let err = select_prelude_shims(c).expect_err("source-lowered String body must be refused");
+        assert!(
+            err.to_string().contains("l_String_take"),
+            "error should name the source-lowered String op: {err:#}"
+        );
+    }
+
+    /// Even a SHIMMED symbol defined from source (root-decl edge: the #14
+    /// denylist only guards the dependency closure, not the selected root) must
+    /// refuse — the double-emit guard would otherwise drop the shim and let the
+    /// List-Char-model body run against the byte-string carrier.
+    #[test]
+    fn test_shimmed_string_symbol_defined_from_source_is_refused() {
+        let c = "clean_obj* l_String_length(clean_obj* _x0) {\n  return _x0;\n}";
+        let err = select_prelude_shims(c).expect_err("source-defined String.length must refuse");
+        assert!(
+            err.to_string().contains("l_String_length"),
+            "error should name the source-lowered String op: {err:#}"
+        );
+    }
+
+    #[test]
+    fn test_render_nat_program_covers_string_externs() {
+        let emitted = "clean_obj* l_answer(void) {\n  \
+                       clean_obj* _x0 = clean_mk_string(\"ab\");\n  \
+                       clean_obj* _x1 = l_String_length(_x0);\n  \
+                       return _x1;\n}\n";
+        let program = render_native_translation_unit("answer", emitted, None)
+            .expect("string extern is covered");
+        assert!(
+            program.contains("clean_obj* l_String_length(clean_obj* s)"),
+            "rendered program should inject the String length shim: {program}"
         );
     }
 
@@ -1194,6 +1838,52 @@ mod tests {
         assert_eq!(String::from_utf8_lossy(&output.stdout), "hello out\n");
     }
 
+    /// The Lake production path, end to end: `clean lake run` builds the target
+    /// through THIS function and then execs the produced binary with the
+    /// caller's arguments (`cmd_lake/run.rs`, `run_native_executable` ->
+    /// `Command::new(path).args(args)`). So the argv marshalling and the
+    /// `UInt32` exit status have to hold in the artifact this writes, not only
+    /// in `clean run`'s scratch build.
+    #[test]
+    fn test_build_native_executable_argv_and_exit_status_end_to_end() {
+        if !cc_available() {
+            eprintln!(
+                "skipping test_build_native_executable_argv_and_exit_status_end_to_end: no cc"
+            );
+            return;
+        }
+        let (dir, file) = write_temp_lean(
+            "def main (args : List String) : IO UInt32 := do\n  \
+             IO.println (toString args.length)\n  \
+             pure (UInt32.ofNat args.length)\n",
+        );
+        let out_path = dir.path().join("bin").join("argv_exit");
+        build_native_executable(&file, "main", 0, &out_path).expect("build argv/UInt32 entry");
+
+        let three = Command::new(&out_path)
+            .args(["a", "b", "c"])
+            .output()
+            .expect("run with 3 args");
+        assert_eq!(
+            String::from_utf8_lossy(&three.stdout),
+            "3\n",
+            "argv[1..] must marshal into the List String the entry counts"
+        );
+        assert_eq!(
+            three.status.code(),
+            Some(3),
+            "the returned UInt32 must be the process exit status"
+        );
+
+        let none = Command::new(&out_path).output().expect("run with no args");
+        assert_eq!(String::from_utf8_lossy(&none.stdout), "0\n");
+        assert_eq!(
+            none.status.code(),
+            Some(0),
+            "no arguments: nil marshals to length 0 and the status follows it"
+        );
+    }
+
     /// `build_native_executable` must handle compute-and-print (toString of a
     /// computed Nat) — the coverage the Lake path previously lacked.
     #[test]
@@ -1210,5 +1900,44 @@ mod tests {
             .expect("run compute binary");
         assert!(output.status.success(), "{output:?}");
         assert_eq!(String::from_utf8_lossy(&output.stdout), "2\n");
+    }
+
+    /// String ops must route through the byte-string shims end-to-end: append
+    /// two literals at runtime (opt 0 — no const-fold) and print the result.
+    /// Before the shim table, `String.append`'s List-Char-model body was the
+    /// silent-miscompile path.
+    #[test]
+    fn test_build_native_executable_string_append_prints() {
+        if !cc_available() {
+            eprintln!("skipping test_build_native_executable_string_append_prints: no cc");
+            return;
+        }
+        let (dir, file) =
+            write_temp_lean("def main : IO Unit := IO.println (String.append \"ab\" \"cd\")\n");
+        let out_path = dir.path().join("bin").join("append");
+        build_native_executable(&file, "main", 0, &out_path).expect("build string append");
+        let output = Command::new(&out_path).output().expect("run append binary");
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "abcd\n");
+    }
+
+    /// `String.length` must be the shim's code-point count — a garbage value
+    /// here is the exact signature of the source List-Char body reading the
+    /// byte string as a ctor cell. ASCII input keeps the byte/code-point
+    /// distinction out of scope for this fixture (the shim comment carries it).
+    #[test]
+    fn test_build_native_executable_string_length_prints() {
+        if !cc_available() {
+            eprintln!("skipping test_build_native_executable_string_length_prints: no cc");
+            return;
+        }
+        let (dir, file) = write_temp_lean(
+            "def main : IO Unit := IO.println (toString (String.length \"hello\"))\n",
+        );
+        let out_path = dir.path().join("bin").join("strlen");
+        build_native_executable(&file, "main", 0, &out_path).expect("build string length");
+        let output = Command::new(&out_path).output().expect("run length binary");
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "5\n");
     }
 }

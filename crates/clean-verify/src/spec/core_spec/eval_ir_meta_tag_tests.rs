@@ -15,32 +15,47 @@
 
 use super::*;
 
+/// The minted `def` line for one name, from the committed script.
+fn minted_line(name: &str) -> &'static str {
+    let prefix = format!("def {name} ");
+    ir_mt_module_defs()
+        .iter()
+        .find(|l| l.starts_with(&prefix))
+        .unwrap_or_else(|| panic!("the minted script must define {name}"))
+}
+
 /// Nine nodes, in this order, and the sixth is the assert.
 #[test]
 fn test_the_body_is_nine_nodes_and_the_sixth_is_the_panic_arm() {
-    assert!(SRC_IR_MT_B0.contains("IRInst.assert ir_d4"));
+    assert!(minted_line("ir_mt_b0").contains("IRInst.assert ir_d4"));
     assert!(
-        SRC_IR_MT_B0.contains("(ir_nd (IRInst.assert ir_d4))"),
+        minted_line("ir_mt_b0").contains("(ir_nd (IRInst.assert ir_d4))"),
         "the assert binds NO result — `ir_nd`, not `ir_nd1`"
     );
-    assert!(SRC_IR_MT_B0.contains("IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_br_tu32 ir_d1"));
-    assert!(SRC_IR_MT_B0.contains("IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1"));
-    assert!(SRC_IR_MT_B0.contains("IRInst.binop IRBinOp.shl ir_vc_tu64 ir_d0 ir_d5"));
-    assert!(SRC_IR_MT_B0.contains("IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3"));
-    assert!(SRC_IR_MT_B0.contains("IRInst.ret (ir_nl1 ir_d6)"));
+    assert!(minted_line("ir_mt_b0")
+        .contains("IRInst.cast IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) ir_d1"));
+    assert!(minted_line("ir_mt_b0")
+        .contains("IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1"));
+    assert!(
+        minted_line("ir_mt_b0").contains("IRInst.binop IRBinOp.shl (IRTy.uint_ 64) ir_d0 ir_d5")
+    );
+    assert!(
+        minted_line("ir_mt_b0").contains("IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3")
+    );
+    assert!(minted_line("ir_mt_b0").contains("IRInst.ret (ir_nl1 ir_d6)"));
     // …and it returns the SHIFTED value, not the constant 1.
-    assert!(!SRC_IR_MT_B0.contains("IRInst.ret (ir_nl1 ir_d0)"));
+    assert!(!minted_line("ir_mt_b0").contains("IRInst.ret (ir_nl1 ir_d0)"));
 }
 
 /// The two casts read the SAME operand and are different instructions. If
 /// they ever became the same opcode the body would compute something else.
 #[test]
 fn test_the_two_casts_share_an_operand_and_differ_in_opcode() {
-    assert!(SRC_IR_MT_B0.matches("ir_d1)").count() >= 2);
-    assert!(SRC_IR_MT_B0.contains("IRCastOp.bitcast"));
-    assert!(SRC_IR_MT_B0.contains("IRCastOp.sext"));
+    assert!(minted_line("ir_mt_b0").matches("ir_d1)").count() >= 2);
+    assert!(minted_line("ir_mt_b0").contains("IRCastOp.bitcast"));
+    assert!(minted_line("ir_mt_b0").contains("IRCastOp.sext"));
     assert!(
-        !SRC_IR_MT_B0.contains("IRCastOp.zext"),
+        !minted_line("ir_mt_b0").contains("IRCastOp.zext"),
         "a zext here would be a different program"
     );
     // and the semantics says they disagree at the sign bit
@@ -67,7 +82,7 @@ fn test_the_assert_dichotomy_is_general_and_two_sided() {
 /// The counterfactuals are NOT the shipped body, and they panic.
 #[test]
 fn test_the_counterfactuals_change_exactly_one_constant_and_panic() {
-    assert!(SRC_IR_MT_B0.contains("(IRConst.int_ 63)"));
+    assert!(minted_line("ir_mt_b0").contains("(IRConst.int_ 63)"));
     assert!(SRC_IR_MT_OOB_B0.contains("(IRConst.int_ 64)"));
     assert!(
         !SRC_IR_MT_OOB_B0.contains("(IRConst.int_ 63)"),
@@ -116,9 +131,9 @@ fn test_no_existing_name_is_redeclared() {
         SRC_IR_MT_BD9,
         SRC_IR_MT_AMT,
         SRC_ENV_META_TAG,
-        SRC_IR_MT_B0,
-        SRC_IR_MT_FUNC,
-        SRC_IR_MT_MODULE,
+        minted_line("ir_mt_b0"),
+        minted_line("ir_mt_func"),
+        minted_line("ir_mt_module"),
         SRC_IR_MT_MACH0,
     ] {
         for name in [
@@ -359,7 +374,7 @@ const AFTER_4: f64 = 2045.4;
 
 #[test]
 fn test_sources_balanced_ascii() {
-    for src in ALL_SOURCES {
+    for src in ALL_SOURCES.iter().chain(ir_mt_module_defs()) {
         let mut d: i64 = 0;
         for ch in src.chars() {
             match ch {
@@ -379,9 +394,8 @@ const ALL_SOURCES: &[&str] = &[
     SRC_IR_MT_BD9,
     SRC_IR_MT_AMT,
     SRC_ENV_META_TAG,
-    SRC_IR_MT_B0,
-    SRC_IR_MT_FUNC,
-    SRC_IR_MT_MODULE,
+    // The three minted lines are checked by the same loop through
+    // `ir_mt_module_defs()` — see the ALL_SOURCES consumer.
     SRC_IR_MT_MACH0,
     SRC_IR_MT_INIT,
     SRC_IR_MT_COND,

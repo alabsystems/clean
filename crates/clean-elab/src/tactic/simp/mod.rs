@@ -8,9 +8,11 @@
 //! of expressions using rewrite lemmas, beta/eta reduction, and other normalizations.
 
 mod all;
+mod binder;
 mod cache;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+mod budget;
 #[cfg(test)]
 pub(crate) mod congr;
 mod discharge;
@@ -19,8 +21,11 @@ mod discharge_tests;
 mod expr;
 mod lemmas;
 mod lemmas_builtin;
+mod match_target;
 mod pattern;
+mod perm;
 mod proof;
+mod rec_equations;
 mod reduce;
 mod rw;
 pub(crate) mod simproc;
@@ -39,6 +44,7 @@ pub use squeeze::{SqueezeSimpConfig, SqueezeSimpResult};
 pub use types::{SimpConfig, SimpIndexMode, SimpLemma};
 
 // Re-export pub(crate) items used by other tactic modules
+pub(crate) use budget::SimpBudget;
 #[cfg(test)]
 pub(crate) use cache::cacheable_rebuild_count;
 pub(crate) use cache::collect_simp_lemmas_cached;
@@ -71,7 +77,8 @@ use super::{
     LocalDecl, ProofState, TacticError, TacticResult,
 };
 
-use self::expr::{extract_eq_parts, try_apply_simp_lemma_with_proof};
+use self::expr::{extract_eq_parts, simp_expr_budgeted, try_apply_simp_lemma_with_proof};
+use self::match_target::MatchTarget;
 
 /// Simplification tactic that rewrites the goal using a set of lemmas.
 ///
@@ -96,6 +103,7 @@ use self::expr::{extract_eq_parts, try_apply_simp_lemma_with_proof};
 /// # Errors
 /// - `NoGoals` if there are no goals
 /// - `Other` if simplification makes no progress and goal not closed
+/// - `BudgetExceeded` if one traversal exceeded its work/growth budget
 ///
 /// # Contract
 ///
@@ -103,7 +111,32 @@ use self::expr::{extract_eq_parts, try_apply_simp_lemma_with_proof};
 /// ENSURES: On Ok, each simplification step is justified by an `Eq.trans` proof chain
 /// ENSURES: On Ok, at most `config.max_steps` rewrite steps are applied
 /// ENSURES: On Err(NoGoals), state is unchanged
-pub fn simp(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
+/// ENSURES: On Err(BudgetExceeded), state is unchanged — the traversal that
+///   exceeded its budget is discarded whole, so no partial rewrite and no
+///   proof over one reaches the goal (see `simp/budget.rs`)
+pub fn simp(state: &mut ProofState, config: SimpConfig) -> TacticResult {
+    simp_impl(state, config, None)
+}
+
+/// `simp` with an explicit [`SimpBudget`].
+///
+/// Test-only: the refusal fixtures need a trip to be reachable without a
+/// pathological goal, and the production entry must not grow a knob that lets
+/// a caller widen the budget it is being protected by.
+#[cfg(test)]
+pub(crate) fn simp_with_budget(
+    state: &mut ProofState,
+    config: SimpConfig,
+    budget: SimpBudget,
+) -> TacticResult {
+    simp_impl(state, config, Some(budget))
+}
+
+fn simp_impl(
+    state: &mut ProofState,
+    mut config: SimpConfig,
+    budget: Option<SimpBudget>,
+) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -120,28 +153,48 @@ pub fn simp(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
     // calls against an unchanged environment reuse the built set + index).
     let simp_lemmas = collect_simp_lemmas_cached(state, &config);
 
-    // Growth budget: a rewrite/unfold interplay that GROWS the target every
-    // pass (e.g. mutually-referencing unfold defs layering per iteration)
-    // would otherwise run all `max_steps` passes over an exponentially
-    // growing term — first observed as a stack overflow / memory abort under
-    // real `import Init` once the typed simpExtension decoder made ~10k
-    // entries live. Whatever partial normal form exists when the budget
-    // trips is still sound: the accumulated proof kernel-checks or the
-    // caller reports no-progress.
-    let growth_budget = expr_node_count_capped(&current_target, usize::MAX)
-        .saturating_mul(32)
-        .max(4096);
+    // Growth/work budget: a rewrite/unfold interplay that GROWS the target
+    // every pass (e.g. mutually-referencing unfold defs layering per
+    // iteration) would otherwise run all `max_steps` passes over an
+    // exponentially growing term — first observed as a stack overflow /
+    // memory abort under real `import Init` once the typed simpExtension
+    // decoder made ~10k entries live.
+    //
+    // This budget is now consulted INSIDE `simp_expr` as well as between
+    // steps. The between-steps check could only ever see a runaway that
+    // RETURNED; the measured one does not — it lives in a single traversal
+    // that recurses into subterms, rewrites them larger, and pays a
+    // `whnf`/`instantiate` per candidate at every node it is growing (see
+    // `budget.rs` for the stack signature and the 9.95 CPU-hour check it
+    // wedged). `SimpBudget::for_target` reproduces the old size formula
+    // exactly, so the ceiling is unchanged; only where it is checked moved.
+    let budget = budget.unwrap_or_else(|| SimpBudget::for_target(&current_target));
 
     // Main simplification loop — accumulate proof via Eq.trans chaining
     let mut accumulated_proof: Option<Expr> = None;
     while steps < config.max_steps {
-        let step_result = simp_expr(state, &goal, &current_target, &simp_lemmas, &config);
+        // The bound is per TRAVERSAL: a `simp` that legitimately needs many
+        // steps must not be starved by the steps it already took.
+        budget.refuel();
+        let step_result = simp_expr_budgeted(
+            state,
+            &goal,
+            &current_target,
+            &simp_lemmas,
+            &config,
+            &budget,
+        );
 
-        if step_result.expr != current_target
-            && expr_node_count_capped(&step_result.expr, growth_budget) >= growth_budget
-        {
-            // The step would blow the size budget: stop with what we have.
-            break;
+        // Exceeding the budget is an honest FAILURE, not a partial rewrite:
+        // the traversal already unwound to the original term (`expr.rs`), and
+        // returning here leaves `state` — and therefore the goal — exactly as
+        // simp found it. Anything else would hand the kernel a term this
+        // tactic could not justify, or silently answer a different goal.
+        if let Some(detail) = budget.detail() {
+            return Err(TacticError::BudgetExceeded {
+                tactic: "simp".into(),
+                detail,
+            });
         }
 
         if step_result.expr != current_target {
@@ -180,21 +233,25 @@ pub fn simp(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
                 let mut rewrote = false;
 
                 // Try to rewrite current_lhs using simp lemmas (with proof terms)
+                let match_target = MatchTarget::new(state, &goal, &current_lhs);
                 for lemma in simp_lemmas.candidates(state, &goal, &current_lhs) {
                     if let Some((new_lhs, lhs_proof)) = try_apply_simp_lemma_with_proof(
                         state,
                         &goal,
-                        &current_lhs,
+                        &match_target,
                         lemma,
                         &simp_lemmas,
                         &config,
+                        &budget,
                     ) {
                         if new_lhs == current_lhs {
                             continue;
                         }
-                        if expr_node_count_capped(&new_lhs, growth_budget) >= growth_budget {
+                        if !budget.admit(&new_lhs) {
                             // Same growth budget as the main loop: a lemma
-                            // that balloons the LHS ends the search honestly.
+                            // that balloons the LHS ends the search. `admit`
+                            // trips the budget, and the post-loop check turns
+                            // that into a refusal rather than a partial answer.
                             break 'trans;
                         }
 
@@ -256,6 +313,15 @@ pub fn simp(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
         }
     }
 
+    // The transitivity loop above can also trip the budget (its `admit` call).
+    // Same rule as the main loop: refuse, do not keep the partial LHS chain.
+    if let Some(detail) = budget.detail() {
+        return Err(TacticError::BudgetExceeded {
+            tactic: "simp".into(),
+            detail,
+        });
+    }
+
     if made_progress {
         // Part of #2477: use replace_target_* instead of in-place mutation.
         // In-place target mutation (Pattern B) keeps MetaId(0) but proves
@@ -305,6 +371,28 @@ fn try_simp_closers(state: &mut ProofState) -> bool {
         || try_tactic_preserving_state(state, close_true_goal)
         || try_tactic_preserving_state(state, assumption)
         || try_tactic_preserving_state(state, close_constructor_diseq_implication)
+}
+
+/// The subset of [`try_simp_closers`] that `dsimp` shares: reflexivity at
+/// REDUCIBLE transparency, and `⊢ True`.
+///
+/// `dsimp` reduced its target definitionally and then abandoned it, so a goal
+/// that its own normalization made self-evident was still reported unsolved.
+/// Lean's `dsimp` closes exactly such a goal.
+///
+/// Deliberately EXCLUDES simp's `assumption` and constructor-disequality
+/// closers. `dsimp` in Lean closes a goal its own definitional normalization
+/// made true and nothing else; adding `assumption` here would let `dsimp`
+/// discharge goals Lean's `dsimp` leaves open.
+///
+/// SOUNDNESS: inherited unchanged from the two closers — `close_refl_reducible`
+/// gates on `is_def_eq_reducible`, strictly stronger than the full-transparency
+/// check `close_goal` performs afterwards, and `close_true_goal` fires only when
+/// the target WHNFs to `True`. Both submit their proof term through
+/// `close_goal`, which kernel-checks it.
+pub(crate) fn try_definitional_closers(state: &mut ProofState) -> bool {
+    try_tactic_preserving_state(state, close_refl_reducible)
+        || try_tactic_preserving_state(state, close_true_goal)
 }
 
 /// Close an equality goal `a = b` by reflexivity, but only when `a` and `b` are
@@ -490,6 +578,83 @@ pub(crate) fn simp_at_with_config(
     simp_at_with_lemmas(state, hyp_name, &config, &simp_lemmas)
 }
 
+/// Simplify the TYPE of `proof` and transport `proof` along the resulting
+/// equality — the half of `simpa … using e` that Lean performs and Clean did
+/// not.
+///
+/// `simpa using h` in Lean 4 simplifies BOTH the goal and `h`'s type, then
+/// closes the goal with the simplified `h`. Clean's compound `simpa` handler
+/// simplified only the goal and then ran `exact` on the RAW term, so it worked
+/// exactly when simp was a no-op on `h`.
+///
+/// Returns the transported proof, or `proof` unchanged whenever transport is
+/// unnecessary or cannot be justified:
+///   * no goal, or the proof's type cannot be inferred;
+///   * simp made no progress on the type;
+///   * simp's change was definitional only (`result.proof == None`) — `exact`
+///     already accepts the raw term up to def-eq, so no cast is needed;
+///   * the budget tripped.
+///
+/// The cast is the same `Eq.subst`-with-identity-motive construction
+/// [`simp_at_with_lemmas`] uses for `simp … at h`, including its universe-level
+/// derivation (`Eq.subst.{u}` with `α : Sort u`, so `u = succ l` when
+/// `α = Sort l`).
+///
+/// SOUNDNESS: the assembled term is accepted only when its own INFERRED type is
+/// def-eq to the simplified type; otherwise the original proof is returned
+/// untouched and `exact` refuses it in the normal way. Nothing here bypasses
+/// `close_goal`, which kernel-checks whatever `exact` finally submits.
+pub(crate) fn simp_proof_type(state: &ProofState, mut config: SimpConfig, proof: Expr) -> Expr {
+    let Some(goal) = state.current_goal().cloned() else {
+        return proof;
+    };
+    let Ok(old_ty) = state.infer_type(&goal, &proof) else {
+        return proof;
+    };
+
+    seed_unfold_defs_from_extras(state, &mut config);
+    lemmas::seed_unfold_defs_from_simp_defs(state, &mut config);
+    let simp_lemmas = collect_simp_lemmas_cached(state, &config);
+
+    let budget = SimpBudget::for_target(&old_ty);
+    let result = simp_expr_budgeted(state, &goal, &old_ty, &simp_lemmas, &config, &budget);
+    if budget.detail().is_some() || result.expr == old_ty {
+        return proof;
+    }
+    let new_ty = result.expr;
+    let Some(eq_proof) = result.proof else {
+        // Definitional-only normalization: `exact` unifies up to def-eq, so the
+        // raw term still lands. Fabricating a cast without a witness is exactly
+        // the soundness gap `simp_at_with_lemmas` refuses.
+        return proof;
+    };
+
+    let alpha = state
+        .infer_type(&goal, &old_ty)
+        .unwrap_or(Expr::sort(Level::zero()));
+    let eq_subst_level = match alpha.kind() {
+        ExprKind::Sort(level) => Level::succ(level.clone()),
+        _ => Level::succ(Level::zero()),
+    };
+    let motive = Expr::lam(BinderInfo::Default, alpha.clone(), Expr::bvar(0));
+    let transported = Expr::apps(
+        Expr::const_(Name::from_string("Eq.subst"), vec![eq_subst_level]),
+        [
+            alpha,
+            motive,
+            old_ty,
+            new_ty.clone(),
+            eq_proof,
+            proof.clone(),
+        ],
+    );
+
+    match state.infer_type(&goal, &transported) {
+        Ok(ty) if state.is_def_eq(&goal, &ty, &new_ty) => transported,
+        _ => proof,
+    }
+}
+
 /// Populate `config.unfold_defs` from `config.extra_lemmas` entries whose
 /// resolved `ConstantInfo` is a `Declaration::Definition` (Part of #3518).
 ///
@@ -535,7 +700,16 @@ pub(super) fn simp_at_with_lemmas(
     let hyp_fvar = goal.local_ctx[hyp_idx].fvar;
 
     let old_ty = goal.local_ctx[hyp_idx].ty.clone();
-    let simp_result = simp_expr(state, &goal, &old_ty, simp_lemmas, config);
+    // Own the budget so a trip is reported as a refusal rather than silently
+    // read as "the hypothesis did not simplify".
+    let budget = SimpBudget::for_target(&old_ty);
+    let simp_result = simp_expr_budgeted(state, &goal, &old_ty, simp_lemmas, config, &budget);
+    if let Some(detail) = budget.detail() {
+        return Err(TacticError::BudgetExceeded {
+            tactic: format!("simp at {hyp_name}"),
+            detail,
+        });
+    }
     let new_ty = simp_result.expr;
 
     if new_ty == old_ty {

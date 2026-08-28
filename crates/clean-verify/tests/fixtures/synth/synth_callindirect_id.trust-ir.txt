@@ -1,0 +1,9 @@
+fn @synth::ci_ident(functy.920) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the W2c semdiff lane: the
+    ; #synthetic: IDENTITY companion callee of synth_callindirect (Clean twin
+    ; #synthetic: ir_w2c_ci_cb_func in ir_w2c_ci_module, eval_ir_w2c_synth.rs),
+    ; #synthetic: so the payload's round-trip through the indirect call frame is
+    ; #synthetic: observable. Do not add it to any emitted-fixture census.
+bb0(%0: u32):
+    ret %0
+}

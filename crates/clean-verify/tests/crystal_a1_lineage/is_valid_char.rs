@@ -52,7 +52,7 @@ fn is_valid_char_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_valid_char.rs", "const SRC_IR_VC_B"),
+        &clean_block_sources("generated/ir_vc.defs.txt", "def ir_vc_b"),
         "def ir_vc_b",
     );
 
@@ -196,7 +196,7 @@ fn is_valid_char_proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_valid_char.rs", "const SRC_IR_VC_FUNC"),
+        &clean_block_sources("generated/ir_vc.defs.txt", "def ir_vc_func"),
         "is_valid_char",
     );
     assert_lanes(&emitted, &clean, "is_valid_char");

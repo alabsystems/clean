@@ -90,7 +90,7 @@ impl<'a> Lean4Importer<'a> {
 /// - `Quot.*` (`Quot`, `Quot.mk`, `Quot.ind`, `Quot.lift`) -> QUOT bit
 ///
 /// Any `Axiom` or `Opaque` constant also gets the AXIOMATIZED bit set.
-pub fn compute_axiom_profile(constant: &ParsedConstant) -> AxiomProfile {
+pub(crate) fn compute_axiom_profile(constant: &ParsedConstant) -> AxiomProfile {
     let mut profile = AxiomProfile::NONE;
 
     // Check for well-known axiom names
@@ -453,7 +453,7 @@ impl<'a> LoweringCtx<'a> {
 /// - Source system set to `Lean4`
 /// - Content domain set to `PureMath` (heuristic default)
 /// - Axiom profile computed from the constant's name and kind
-pub fn import_module(
+pub(crate) fn import_module(
     module: &ParsedModule,
     writer: &mut ShardWriter,
 ) -> MathverseResult<ImportStats> {
@@ -577,7 +577,7 @@ pub fn import_module_verified(
 /// This is used to compute the dependency graph: for a constant with type
 /// expression rooted at `type_idx`, `extract_deps(&exprs, type_idx)` returns
 /// the name indices of all constants referenced in that type.
-pub fn extract_deps(exprs: &[FlatExpr], root: ExprIdx) -> Vec<u32> {
+pub(crate) fn extract_deps(exprs: &[FlatExpr], root: ExprIdx) -> Vec<u32> {
     let mut deps = Vec::new();
     let mut visited = hashbrown::HashSet::new();
     extract_deps_recursive(exprs, root, &mut deps, &mut visited);
@@ -846,7 +846,7 @@ pub fn batch_compute_axiom_profiles(constants: &[(String, &ParsedConstant)]) -> 
 /// Returns `(ImportStats, Vec<ProvenanceRecord>)` — the records are ordered
 /// to match the constants in `module.constants` (skipped constants still
 /// produce a record tagged with a "skipped" note).
-pub fn import_with_provenance(
+pub(crate) fn import_with_provenance(
     module: &ParsedModule,
     writer: &mut ShardWriter,
     config: &Lean4ImportConfig,

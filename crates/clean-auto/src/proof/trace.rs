@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Proof trace recording all union operations
 #[derive(Debug, Clone, Default)]
-pub struct ProofTrace {
+pub(crate) struct ProofTrace {
     /// Sequence of union operations with reasons
     pub steps: Vec<(u32, u32, UnionReason)>, // (e-class1, e-class2, reason)
     /// Mapping from (e-class, e-class) to proof index
@@ -20,7 +20,7 @@ pub struct ProofTrace {
 
 impl ProofTrace {
     /// Create a new empty proof trace
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         ProofTrace {
             steps: Vec::new(),
             proof_index: HashMap::new(),
@@ -33,12 +33,12 @@ impl ProofTrace {
     }
 
     /// Return the number of recorded union steps.
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.steps.len()
     }
 
     /// Truncate the trace to the given prefix length and rebuild lookup indices.
-    pub fn truncate(&mut self, len: usize) {
+    pub(crate) fn truncate(&mut self, len: usize) {
         assert!(
             len <= self.steps.len(),
             "cannot truncate ProofTrace from {} to {}",
@@ -61,7 +61,7 @@ impl ProofTrace {
     }
 
     /// Record a union with its reason
-    pub fn record_union(&mut self, ec1: u32, ec2: u32, reason: UnionReason) -> usize {
+    pub(crate) fn record_union(&mut self, ec1: u32, ec2: u32, reason: UnionReason) -> usize {
         let idx = self.steps.len();
         self.steps.push((ec1, ec2, reason));
 
@@ -72,7 +72,7 @@ impl ProofTrace {
     }
 
     /// Get the proof index for a union
-    pub fn get_proof_index(&self, ec1: u32, ec2: u32) -> Option<usize> {
+    pub(crate) fn get_proof_index(&self, ec1: u32, ec2: u32) -> Option<usize> {
         self.proof_index.get(&(ec1, ec2)).copied()
     }
 
@@ -84,7 +84,7 @@ impl ProofTrace {
 
     /// Build a proof step from an e-class equality
     /// Returns None if no proof path exists
-    pub fn build_proof(&self, ec1: u32, ec2: u32) -> Option<ProofStep> {
+    pub(crate) fn build_proof(&self, ec1: u32, ec2: u32) -> Option<ProofStep> {
         if ec1 == ec2 {
             // Reflexivity - need a term ID, but we don't have it here
             // This should be handled by the caller

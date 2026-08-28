@@ -75,7 +75,7 @@ fn meta_tag_shl_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_meta_tag.rs", "const SRC_IR_MT_B0"),
+        &clean_block_sources("generated/ir_mt.defs.txt", "def ir_mt_b0"),
         "def ir_mt_b0",
     );
 
@@ -247,7 +247,7 @@ fn meta_tag_shl_proved_module_matches_the_emitted_artifact() {
         "the entry block takes NO parameters: a const initializer has none, which is what makes \
          A4 quantify over nothing but the heap and the fuel"
     );
-    let func = clean_block_sources("eval_ir_meta_tag.rs", "const SRC_IR_MT_FUNC");
+    let func = clean_block_sources("generated/ir_mt.defs.txt", "def ir_mt_func");
     assert!(
         func.contains("IRFunc.mk ir_d0 ir_nl0 ir_d0"),
         "the registered IRFunc must bind NO parameters: {func}"
@@ -281,7 +281,7 @@ fn meta_tag_shl_proved_module_matches_the_emitted_artifact() {
     );
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_meta_tag.rs", "const SRC_IR_MT_FUNC"),
+        &clean_block_sources("generated/ir_mt.defs.txt", "def ir_mt_func"),
         "meta_tag_shl",
     );
     assert_lanes(&emitted, &clean, "meta_tag_shl");
@@ -365,7 +365,7 @@ fn meta_tag_shl_the_failing_arm_is_pinned_to_the_panic_outcome() {
         !oob.contains("ir_run ir_d9 ir_mt_module"),
         "…explicitly: not the shipped module: {oob}"
     );
-    let mine = clean_block_sources("eval_ir_meta_tag.rs", "const SRC_IR_MT_B0");
+    let mine = clean_block_sources("generated/ir_mt.defs.txt", "def ir_mt_b0");
     let counterfactual = clean_block_sources("eval_ir_meta_tag.rs", "const SRC_IR_MT_OOB_B0");
     assert!(
         mine.contains("IRConst.int_ 63") && counterfactual.contains("IRConst.int_ 64"),

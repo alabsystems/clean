@@ -1,0 +1,10 @@
+fn @synth::ci_const11(functy.920) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the W2c semdiff lane: the
+    ; #synthetic: argument-INDEPENDENT companion callee of synth_callindirect
+    ; #synthetic: (Clean twin ir_w2c_ci_ca_func in ir_w2c_ci_module,
+    ; #synthetic: eval_ir_w2c_synth.rs). Reaching it is observable no matter what
+    ; #synthetic: payload rode along. Do not add it to any emitted-fixture census.
+bb0(%0: u32):
+    %1 = const u32 11
+    ret %1
+}

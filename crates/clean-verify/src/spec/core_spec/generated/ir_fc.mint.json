@@ -1,0 +1,40 @@
+{
+ "prefix": "ir_fc",
+ "body": "flat::types::FlatFlags::contains",
+ "core_digest": "7c9f5e0194c17162f38d3448c0e0cf7830a05b4a044d6cff2c06ba8efbeb3f8e",
+ "defs_digest": "6f575868db7913e59fa9b5f1772b4a79eba774967002408892823aadb3f0cad3",
+ "def_count": 4,
+ "def_count_note": "TWO module definitions (the one block, the func, the module -- three) plus the ir_fc_tflags alias, which the mint reproduces BYTE-IDENTICAL to the interface-only struct pin the hand transcription already registered: def_count 4 = 1 alias + 1 block + func + module.",
+ "artifact_core_digest": "53e469871568db5264370462e3567edd62d43ba248b7f7238a7ce947a5172d38",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the flat_flags_contains row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 3833,
+  "artifact_func_id": 3833,
+  "artifact_functy_id": 485,
+  "artifact_functy_note": "485 on the dump this migration was revalidated against, where the COMMITTED fixture says 488 and the producer A/B record says 661/661/486: the whole-crate function-TYPE index moves under a producer re-interning with zero instructions changed, exactly like func_id (3833 here, after 5241-era ids -- the same drift class). The interface pin compares reader B's header against the fixture-era 488; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [],
+  "crate_struct_ids_seen_note": "EMPTY even though both parameters are struct.1017: the module's INSTRUCTIONS name no aggregate at all -- the two extractfields read the u8 payloads off the by-value SSA arguments -- so the struct occurs only in the header the core module cannot hold. That is why the tag table's FlatFlags row is INTERFACE-ONLY, the struct sibling of ir_fs_tsrc.",
+  "crate_func_ids_seen": [
+   3833
+  ],
+  "crate_func_names_seen": [
+   "flat::types::FlatFlags::contains"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [
+   "Struct(StructId(1017))",
+   "Struct(StructId(1017))"
+  ],
+  "block_param_tys_erased": []
+ },
+ "text_unwitnessed": [],
+ "text_unwitnessed_note": "EMPTY, like the float tranche's: the body contains no `switch`, so the one field trust-ir's Display never prints does not occur, and the emitted TEXT fully determines the core module. M2 on this chain is therefore an EXACT comparison with no mask.",
+ "producer_dumps_observed": 4,
+ "producer_dumps_note": "The three dumps of generated/ir_mint.producer_ab.json (trust wave-tr-fix 2026-08-12 v36, mfclose 2026-08-13 v36, lane2rv 2026-08-19 v37) plus the laneREG wc-REG dump_O3 2026-08-21 projection this migration ran (recorded verbatim under reader_a above). All four project to the byte-identical committed core text: func_id and functy moved, struct.1017 has not been observed to move yet, and no core digest moved."
+}

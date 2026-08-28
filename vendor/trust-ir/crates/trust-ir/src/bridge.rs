@@ -35,13 +35,14 @@
 //!    [`ConformanceSubset::check`]) to confirm the module stays inside that
 //!    surface; it returns location-rich [`SubsetViolation`]s for any
 //!    out-of-subset construct. The current subset version is
-//!    [`ConformanceSubset::CURRENT`]. The excluded constructs are exactly the
-//!    ones whose Lean semantics are still only partial — see
-//!    [`ConformanceSubset`] for the authoritative list and how it stays in sync
-//!    with the `crates/trust-ir/tests/lean_schema_parity.rs` B3 gate. This is the
-//!    *semantic* allowlist; the *wire-format* corpus a producer must round-trip
-//!    bit-for-bit is the `trust-ir-conformance` crate's fixture set (see
-//!    `TRUST.md` §"Frontend emission handshake").
+//!    [`ConformanceSubset::CURRENT`]. The AUTHORITY for the in/out boundary
+//!    is `lowering-target-subset.md` (repo root) with its machine-readable
+//!    mirror `trust_ir_conformance::subset`; this classifier restates the
+//!    same v2 boundary for in-process producers, and the conformance crate's
+//!    bridge-agreement gate (`tests/bridge_subset_agreement.rs`) pins the two
+//!    spellings verdict- and version-identical, so neither can drift alone.
+//!    The *wire-format* corpus a producer must round-trip bit-for-bit is the
+//!    same crate's fixture set (see `TRUST.md` §"Frontend emission handshake").
 //!
 //! 3. **Hand off for verification.** Structural well-formedness is checked by
 //!    `trust_ir_build::validate_module`; the typed in-process verification
@@ -174,29 +175,40 @@ impl core::fmt::Display for VectorSelectContractError {
 /// stays inside it is guaranteed a backend can lower it and the proof layer can
 /// reason about it.
 ///
-/// # Excluded constructs (subset v2)
+/// # Excluded constructs (subset v2 — `lowering-target-subset.md` is the authority)
 ///
-/// These mirror the partial-semantics list the B3 gate documents; the subset
-/// excludes them until their Lean semantics are complete:
+/// The boundary is the ratified lowering-target subset v2 (repo-root doc;
+/// machine mirror `trust_ir_conformance::subset`, agreement pinned by that
+/// crate's `bridge_subset_agreement` gate):
 ///
 /// - **Types**: [`Ty::F16`] (rounding semantics pending), pointer-width
-///   integers / `char` pending their depth-ledger adoption, and producer-only
-///   [`Ty::Error`]. First-class [`Ty::FatPtr`] is admitted on the model's
-///   pinned 64-bit little-endian target in v2.
-/// - **Casts**: [`CastOp::Transmute`] (scalar-only partial),
-///   [`CastOp::ReifyFnPointer`] (fn-item partial), and [`CastOp::PtrToPtr`].
-/// - **Opaque dialect ops**: [`Inst::DialectOp`] — by construction outside the
-///   modelled core until lowered by a registered pass.
+///   integers / `char` pending their depth-ledger adoption, producer-only
+///   [`Ty::Error`], and [`Ty::Refine`] (never ratified into the subset;
+///   fail-closed until a version bump admits it). First-class [`Ty::FatPtr`]
+///   is admitted on the model's pinned 64-bit little-endian target in v2.
+/// - **Casts**: [`CastOp::ReifyFnPointer`] (fn-item partial) and
+///   [`CastOp::FPToSISat`] / [`CastOp::FPToUISat`] (no proven bridge/ay
+///   lowering). [`CastOp::Transmute`] is in-subset **scalar-to-scalar only**
+///   (structural condition); [`CastOp::PtrToPtr`] is fully in-subset.
+/// - **Instructions**: [`Inst::Resume`], [`Inst::LandingPad`],
+///   [`Inst::CoroSuspend`] — host-unwinding / coroutine depth-ledger partials.
+/// - **Dialect ops**: [`Inst::DialectOp`] except the six proven fast-4
+///   `vector.*` ops (`pack_lanes`, `extract_lane`, `insert_lane`,
+///   `mask_to_bits`, `reduce`, `shuffle`).
+/// - **Proof annotations**: [`ProofAnnotation::Custom`] (producer-defined,
+///   unpinned) and any unratified or feature-gated variant (fail-closed).
 ///
 /// Everything else — scalar/vector arithmetic, comparisons, memory, atomics,
-/// borrow, ARC, control flow, calls, aggregates, binding frames, and all proof
-/// annotations (which are metadata and carry no operational obligation of their
-/// own here) — is in-subset.
+/// borrow, ARC, control flow, calls (`Invoke` on the normal-path contract),
+/// aggregates, binding frames, and the 36 ratified proof annotations — is
+/// in-subset.
 ///
 /// The classifier ([`ConformanceSubset::ty_excluded`] /
-/// [`ConformanceSubset::inst_excluded`]) matches the `Ty` / `Inst` / `CastOp`
-/// enums *exhaustively*, so adding a new IR variant forces an explicit in/out
-/// decision here at compile time — the subset cannot silently drift.
+/// [`ConformanceSubset::inst_excluded`] /
+/// [`ConformanceSubset::proof_annotation_excluded`]) matches the `Ty` /
+/// `Inst` / `CastOp` / `ProofAnnotation` enums *exhaustively*, so adding a
+/// new IR variant forces an explicit in/out decision here at compile time —
+/// the subset cannot silently drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ConformanceSubset {
@@ -295,6 +307,42 @@ impl Default for ConformanceSubset {
     }
 }
 
+/// Dialect ops with a proven trust-ir lowering (the ratified fast-4 set).
+/// Mirrors `trust_ir_conformance::subset::DIALECT_OP_ALLOWLIST_V2`; the
+/// conformance crate's bridge-agreement gate pins the two lists identical.
+const SUBSET_DIALECT_OPS: &[&str] = &[
+    "vector.extract_lane",
+    "vector.insert_lane",
+    "vector.mask_to_bits",
+    "vector.pack_lanes",
+    "vector.reduce",
+    "vector.shuffle",
+];
+
+/// The scalar types a `Transmute` may reinterpret between — the Lean `semCast`
+/// scalar partial (`lowering-target-subset.md` §"Structural conditions",
+/// condition 1): `I8`–`I128` / `U8`–`U128` / `F32` / `F64` / `Bool` / `Ptr`.
+/// Mirrors `trust_ir_conformance::subset::is_transmute_scalar`.
+fn transmute_scalar_ty(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::I8
+            | Ty::I16
+            | Ty::I32
+            | Ty::I64
+            | Ty::I128
+            | Ty::U8
+            | Ty::U16
+            | Ty::U32
+            | Ty::U64
+            | Ty::U128
+            | Ty::F32
+            | Ty::F64
+            | Ty::Bool
+            | Ty::Ptr
+    )
+}
+
 impl ConformanceSubset {
     /// The current pinned subset. Frontends target this version.
     pub const CURRENT: Self = Self { version: 2 };
@@ -350,24 +398,30 @@ impl ConformanceSubset {
             | Ty::Set(_, _)
             | Ty::Sequence(_)
             | Ty::Record(_)
-            | Ty::Closure(_)
-            // A refinement is representation-preserving, so it never changes
-            // whether the underlying value is in-subset; the base type lives
-            // in the module table and is checked at its own definition, like
-            // every other named-aggregate member here.
-            | Ty::Refine(_, _) => None,
+            | Ty::Closure(_) => None,
+            // Representation-preserving over its table-resolved base, but the
+            // ratified v2 subset never admitted it (`lowering-target-subset.md`
+            // does not list it; the machine allowlist refuses it fail-closed).
+            // Admitting it is an expansion under the doc's bump policy — do
+            // not re-include it here without a version bump in BOTH spellings.
+            Ty::Refine(_, _) => {
+                Some("Ty::Refine is not ratified into lowering-target subset v2 (fail-closed)")
+            }
         }
     }
 
     /// Reason a [`CastOp`] is outside the subset, or `None` if in-subset.
+    ///
+    /// `Transmute` is in-subset at the op level but **scalar-to-scalar only**;
+    /// that structural condition needs the cast's `src_ty`/`dst_ty`, so it is
+    /// enforced by [`ConformanceSubset::inst_excluded`] (condition 1 of
+    /// `lowering-target-subset.md` §"Structural conditions"). `PtrToPtr` has
+    /// full `semCast` semantics and is in-subset (it is NOT one of the
+    /// depth-ledger partials — see the spec doc §"Why these exclusions").
     pub fn cast_op_excluded(op: CastOp) -> Option<&'static str> {
         match op {
-            CastOp::Transmute => Some("CastOp::Transmute has only scalar-partial Lean semantics"),
             CastOp::ReifyFnPointer => {
                 Some("CastOp::ReifyFnPointer has only fn-item-partial Lean semantics")
-            }
-            CastOp::PtrToPtr => {
-                Some("CastOp::PtrToPtr has no full Lean pointer-cast semantics yet")
             }
             CastOp::FPToSISat | CastOp::FPToUISat => Some(
                 "CastOp::FP*Sat has no proven bridge/ay cast lowering yet (Lean semCast semantics landed 2026-07-10)",
@@ -383,6 +437,8 @@ impl ConformanceSubset {
             | CastOp::SIToFP
             | CastOp::PtrToInt
             | CastOp::IntToPtr
+            | CastOp::PtrToPtr
+            | CastOp::Transmute
             | CastOp::Bitcast => None,
         }
     }
@@ -395,6 +451,13 @@ impl ConformanceSubset {
             Inst::Cast {
                 op, src_ty, dst_ty, ..
             } => Self::cast_op_excluded(*op)
+                .or_else(|| {
+                    (*op == CastOp::Transmute
+                        && !(transmute_scalar_ty(src_ty) && transmute_scalar_ty(dst_ty)))
+                    .then_some(
+                        "CastOp::Transmute is scalar-to-scalar only in the subset (Lean semCast scalar partial)",
+                    )
+                })
                 .or_else(|| Self::ty_excluded(src_ty))
                 .or_else(|| Self::ty_excluded(dst_ty)),
             Inst::PtrData { ptr_ty, .. } => Self::ty_excluded(ptr_ty).or_else(|| {
@@ -426,9 +489,23 @@ impl ConformanceSubset {
                         "pointer-trio metadata type does not match the canonical 64-bit lane",
                     )
                 }),
-            Inst::DialectOp(_) => {
-                Some("Inst::DialectOp is opaque and outside the modelled core until lowered")
+            Inst::DialectOp(op) => {
+                if !SUBSET_DIALECT_OPS.contains(&op.qualified_name().as_str()) {
+                    return Some(
+                        "dialect op has no proven trust-ir lowering (only the ratified fast-4 `vector.*` set is in-subset)",
+                    );
+                }
+                op.result_tys.iter().find_map(Self::ty_excluded)
             }
+            Inst::CoroSuspend { .. } => Some(
+                "Inst::CoroSuspend: the whole-module resume state-machine theorem is open (B3 depth ledger)",
+            ),
+            Inst::LandingPad { .. } => Some(
+                "Inst::LandingPad: taken-unwind-edge selector dispatch is unmodelled (B3 depth ledger)",
+            ),
+            Inst::Resume { .. } => Some(
+                "Inst::Resume: host unwinding is structured `unsupported.host_unwind` in the executable model (B3 depth ledger)",
+            ),
             // Every other instruction is in-subset, but each one that carries an
             // inline `Ty` must still have that type be in-subset (e.g. a `Load`
             // of an `F16`). Surface that type via `Inst::result_tys` plus the
@@ -475,12 +552,90 @@ impl ConformanceSubset {
         }
     }
 
+    /// Reason a [`ProofAnnotation`] is outside the subset, or `None`.
+    ///
+    /// The subset pins the annotation VOCABULARY only — a claim stays a claim
+    /// (back it with `ProofRef`). Excluded: the producer-defined
+    /// [`ProofAnnotation::Custom`] tag, whose meaning no spec pins, plus any
+    /// variant the ratified v2 list never admitted (fail-closed). EXHAUSTIVE:
+    /// a new annotation variant must take an explicit in/out decision here.
+    pub fn proof_annotation_excluded(proof: &ProofAnnotation) -> Option<&'static str> {
+        match proof {
+            ProofAnnotation::Custom(_) => Some(
+                "ProofAnnotation::Custom is producer-defined and not pinned by the subset contract",
+            ),
+            ProofAnnotation::FreshSymbolicHavoc => Some(
+                "ProofAnnotation::FreshSymbolicHavoc is not ratified into lowering-target subset v2 (fail-closed)",
+            ),
+            #[cfg(feature = "clean-expr")]
+            ProofAnnotation::Goal(_) => Some(
+                "ProofAnnotation::Goal is feature-gated off the pinned default surface (fail-closed)",
+            ),
+            ProofAnnotation::InBounds
+            | ProofAnnotation::NotNull
+            | ProofAnnotation::ValidBorrow
+            | ProofAnnotation::UniqueBorrow
+            | ProofAnnotation::SharedBorrow
+            | ProofAnnotation::ValidDealloc
+            | ProofAnnotation::NoOverflow
+            | ProofAnnotation::NoWrap
+            | ProofAnnotation::DivNonZero
+            | ProofAnnotation::ShiftInRange
+            | ProofAnnotation::Wrapping
+            | ProofAnnotation::Pure
+            | ProofAnnotation::Terminates
+            | ProofAnnotation::Deterministic
+            | ProofAnnotation::Associative
+            | ProofAnnotation::Commutative
+            | ProofAnnotation::DataRaceFree
+            | ProofAnnotation::AtomicOrdering(_)
+            | ProofAnnotation::BoundedOutput { .. }
+            | ProofAnnotation::Monotonic
+            | ProofAnnotation::NoAlias
+            | ProofAnnotation::Aligned(_)
+            | ProofAnnotation::NoPanic
+            | ProofAnnotation::NoUndef
+            | ProofAnnotation::Tainted
+            | ProofAnnotation::TrustedSink
+            | ProofAnnotation::ReadonlyTable
+            | ProofAnnotation::AppendOnlyBuffer
+            | ProofAnnotation::AtomicSetInsert
+            | ProofAnnotation::ParallelMap
+            | ProofAnnotation::BoundedLoop(_)
+            | ProofAnnotation::DivergenceClass(_)
+            | ProofAnnotation::ProofRef(_)
+            | ProofAnnotation::ValueRange { .. }
+            | ProofAnnotation::KnownBits { .. }
+            | ProofAnnotation::BranchWeights(_) => None,
+        }
+    }
+
     /// Check every function in `module` against this subset, returning all
     /// out-of-subset constructs as location-rich [`SubsetViolation`]s.
+    ///
+    /// Scope: block-parameter types, instruction opcodes + inline types, and
+    /// proof annotations (function- and instruction-level) — the function
+    /// emission surface. The whole-module wire surface (interned type tables,
+    /// signatures, struct/enum/record fields, globals) is walked by the
+    /// superset checker
+    /// `trust_ir_conformance::subset::module_subset_violations`; the
+    /// PER-CONSTRUCT verdicts of the two are pinned identical by that crate's
+    /// `bridge_subset_agreement` gate.
     pub fn check(&self, module: &Module) -> Result<(), Vec<SubsetViolation>> {
         let mut violations = Vec::new();
         let fat_ptr_layout_supported = module_supports_fat_ptr_layout(module);
         for function in &module.functions {
+            for (proof_index, proof) in function.proofs.iter().enumerate() {
+                if let Some(reason) = Self::proof_annotation_excluded(proof) {
+                    violations.push(SubsetViolation {
+                        function: function.id,
+                        block: function.entry,
+                        instruction_index: None,
+                        site: SubsetSite::FunctionProof { proof_index },
+                        reason,
+                    });
+                }
+            }
             for block in &function.blocks {
                 for (param_index, (_value, ty)) in block.params.iter().enumerate() {
                     let reason = Self::ty_excluded(ty).or_else(|| {
@@ -515,6 +670,17 @@ impl ConformanceSubset {
                             reason,
                         });
                     }
+                    for (proof_index, proof) in node.proofs.iter().enumerate() {
+                        if let Some(reason) = Self::proof_annotation_excluded(proof) {
+                            violations.push(SubsetViolation {
+                                function: function.id,
+                                block: block.id,
+                                instruction_index: Some(instruction_index),
+                                site: SubsetSite::InstructionProof { proof_index },
+                                reason,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -534,6 +700,12 @@ pub enum SubsetSite {
     BlockParamType { param_index: usize },
     /// An instruction (its opcode or an inline type it carries) is out of subset.
     Instruction,
+    /// A proof annotation attached to an instruction is out of subset.
+    InstructionProof { proof_index: usize },
+    /// A function-level proof annotation is out of subset.
+    /// `SubsetViolation::block` carries the function's entry block (the site
+    /// is function-scoped; the variant is the discriminator).
+    FunctionProof { proof_index: usize },
 }
 
 /// A single out-of-subset construct, located precisely for diagnostics.
@@ -565,6 +737,21 @@ impl core::fmt::Display for SubsetViolation {
                 self.instruction_index
                     .map_or_else(|| "?".to_string(), |i| i.to_string()),
                 self.reason
+            ),
+            SubsetSite::InstructionProof { proof_index } => write!(
+                f,
+                "conformance-subset violation in function {:?}, block {:?}, instruction {}, proof {}: {}",
+                self.function,
+                self.block,
+                self.instruction_index
+                    .map_or_else(|| "?".to_string(), |i| i.to_string()),
+                proof_index,
+                self.reason
+            ),
+            SubsetSite::FunctionProof { proof_index } => write!(
+                f,
+                "conformance-subset violation in function {:?}, function-level proof {}: {}",
+                self.function, proof_index, self.reason
             ),
         }
     }
@@ -649,6 +836,26 @@ impl Function {
             }
         }
 
+        // Phase 2: a borrow's result type depends on its operand, and block
+        // order does not guarantee the operand's definition was walked first.
+        // The snapshot deliberately carries the PROVISIONAL `Ty::Ptr` that
+        // phase 1 wrote for every borrow; `borrow_result_types` never consults
+        // it for a borrow result, so a borrow-of-borrow chain still collapses
+        // to its true root.
+        let declared: BTreeMap<ValueId, Ty> = values
+            .iter()
+            .map(|entry| (entry.value, entry.ty.clone()))
+            .collect();
+        let resolved: BTreeMap<ValueId, Ty> =
+            borrow_result_types(self, &|value| declared.get(&value).cloned())
+                .into_iter()
+                .collect();
+        for entry in &mut values {
+            if let Some(ty) = resolved.get(&entry.value) {
+                entry.ty = ty.clone();
+            }
+        }
+
         values
     }
 
@@ -663,6 +870,34 @@ impl Function {
     pub fn vector_select_contract_errors(&self, module: &Module) -> Vec<VectorSelectContractError> {
         let mut errors = Vec::new();
         let mut value_tys = BTreeMap::<ValueId, Ty>::new();
+
+        // Borrow result types are resolved up front against a FULL snapshot,
+        // because block order does not guarantee a borrow's operand is walked
+        // before the borrow.
+        //
+        // This upgrades only the type this pass REPORTS for a borrow. Which
+        // conditions get checked still follows the walk below — a cond whose
+        // definition has not been reached is still `UnknownConditionType` — so
+        // no verdict moves: neither `Ty::Ptr` nor `Ty::FatPtr` is a vector, so
+        // `validate_select_condition_ty` rejects a borrow cond either way.
+        // What changes is that `actual_cond_ty` names the fat type the value
+        // really has instead of a thin `ptr` it does not, and a diagnostic
+        // that states a falsehood is a defect even when the verdict is right.
+        let mut declared = BTreeMap::<ValueId, Ty>::new();
+        for block in &self.blocks {
+            for (value, ty) in &block.params {
+                declared.insert(*value, ty.clone());
+            }
+            for node in &block.body {
+                for (value, ty) in node.results.iter().zip(node.result_tys(module)) {
+                    declared.insert(*value, ty);
+                }
+            }
+        }
+        let resolved: BTreeMap<ValueId, Ty> =
+            borrow_result_types(self, &|value| declared.get(&value).cloned())
+                .into_iter()
+                .collect();
 
         for block in &self.blocks {
             for (value, ty) in &block.params {
@@ -705,7 +940,7 @@ impl Function {
                 }
 
                 for (value, ty) in node.results.iter().zip(node.result_tys(module)) {
-                    value_tys.insert(*value, ty);
+                    value_tys.insert(*value, resolved.get(value).cloned().unwrap_or(ty));
                 }
             }
         }
@@ -734,6 +969,126 @@ impl InstrNode {
     pub fn result_tys(&self, module: &Module) -> Vec<Ty> {
         inst_result_tys(&self.inst, module)
     }
+}
+
+/// The result type of a `Borrow` / `BorrowMut` over an operand of type
+/// `operand_ty`: the operand's own type when that type is FAT, `Ty::Ptr`
+/// otherwise.
+///
+/// This is THE statement of the borrow result rule. Both the bridge's
+/// [`InstrNode::result_tys`] and `trust-ir-build`'s `infer_result_type` call
+/// it rather than restating it — a drifted mirror of this rule is what let a
+/// fat borrow be typed `ptr` while the interpreter passed the fat value
+/// through, so every fat consumer downstream reported a bogus mismatch.
+///
+/// # Why not simply follow the operand
+///
+/// The rule is deliberately NOT "the result has the operand's type". The
+/// operational semantics normalise the THIN spellings: `interpret.rs` (the
+/// `Inst::Borrow { ptr } | Inst::BorrowMut { ptr }` arm) returns the operand
+/// value VERBATIM — same `ty`, both lanes untouched — only when the value is
+/// a `FatPtr`, and otherwise constructs a fresh `InterpretValue` at
+/// `ty: Ty::Ptr`, discarding the operand's `Ty::Ref` / `Ty::PtrConst` /
+/// `Ty::Rc` spelling. Returning the operand's spelling for a thin borrow
+/// would therefore be a NEW static/dynamic drift of exactly the kind this
+/// function exists to end.
+///
+/// # Residues (both fail CLOSED)
+///
+/// * An operand whose type this pass cannot give — a `Call`, `CallIndirect`
+///   or `LandingPad` result, or a value with no definition — answers `None`
+///   here and so `Ty::Ptr`. That is unchanged from the behaviour before this
+///   rule existed. If the value is really fat, the first fat consumer reports
+///   a mismatch and the module is REFUSED; refusal strips proof authority, it
+///   never grants it.
+/// * `Ty::Refine(base, pred)` over a fat pointer is NOT fat here, because
+///   [`Ty::is_fat_pointer`] is `matches!(self, Ty::FatPtr(_))` and does not
+///   peel a refinement. A refined fat borrow therefore answers `Ty::Ptr` and
+///   produces a false RED at its first fat consumer — never a false green.
+///   Peeling the refinement is a real extension, and whoever makes it owes a
+///   derivation that the peeled type is the one the interpreter passes
+///   through.
+pub fn borrow_result_ty(operand_ty: Option<&Ty>) -> Ty {
+    match operand_ty {
+        Some(ty) if ty.is_fat_pointer() => ty.clone(),
+        _ => Ty::Ptr,
+    }
+}
+
+/// Resolve the result type of every `Borrow` / `BorrowMut` in `func`, given a
+/// lookup `known` for the types this caller has already established.
+///
+/// `Borrow` is the only instruction whose result type depends on an OPERAND,
+/// so it cannot be answered by the per-instruction interface
+/// ([`InstrNode::result_tys`]) at all. Every caller that owns a whole function
+/// runs this as a second phase over its own value-type map and OVERWRITES the
+/// provisional `Ty::Ptr` that phase one wrote.
+///
+/// # Why two phases
+///
+/// A [`Function`] carries its entry block as `Function::entry`, so the order
+/// of `Function::blocks` is free: a borrow may be walked before the block that
+/// defines its operand. One forward pass would therefore read the operand as
+/// absent and answer `Ty::Ptr` for a fat borrow, which is the defect this
+/// resolves.
+///
+/// # Why the chain walk ignores `known` until the root
+///
+/// `known` is typically a PARTIALLY BUILT map that already holds the
+/// provisional `Ty::Ptr` for other borrows. Consulting it for a value that is
+/// itself a borrow result would short-circuit a borrow-of-borrow chain at that
+/// provisional entry and answer `Ty::Ptr` for a chain whose root is fat. So the
+/// walk follows `operand_of` FIRST and UNCONDITIONALLY, and consults `known`
+/// only on reaching a value no borrow defines.
+///
+/// A malformed borrow cycle (`%1 = Borrow %1`) has no root. The walk is bounded
+/// by the number of borrow results, so it TERMINATES and answers `Ty::Ptr`
+/// rather than looping; the cycle itself is a dominance/SSA defect that the
+/// passes owning that question report.
+///
+/// Returns owned pairs rather than mutating a map: that ends the borrow `known`
+/// holds before the caller mutates the map `known` reads.
+pub fn borrow_result_types(
+    func: &Function,
+    known: &dyn Fn(ValueId) -> Option<Ty>,
+) -> Vec<(ValueId, Ty)> {
+    // Phase A: every borrow result, mapped to the value it borrows.
+    let mut operand_of = BTreeMap::<ValueId, ValueId>::new();
+    for block in &func.blocks {
+        for node in &block.body {
+            if let Inst::Borrow { ptr } | Inst::BorrowMut { ptr } = &node.inst
+                && let Some(result) = node.results.first()
+            {
+                operand_of.insert(*result, *ptr);
+            }
+        }
+    }
+
+    // Phase B: collapse each chain to its root, then apply the shared rule.
+    let bound = operand_of.len();
+    let mut resolved = Vec::with_capacity(operand_of.len());
+    for result in operand_of.keys() {
+        let mut cursor = *result;
+        let mut steps = 0usize;
+        let root = loop {
+            match operand_of.get(&cursor) {
+                Some(operand) => {
+                    steps += 1;
+                    if steps > bound {
+                        // Pigeonhole: more hops than there are borrow results
+                        // means a cycle, which has no root to type from.
+                        break None;
+                    }
+                    cursor = *operand;
+                }
+                None => break Some(cursor),
+            }
+        };
+        let operand_ty = root.and_then(known);
+        resolved.push((*result, borrow_result_ty(operand_ty.as_ref())));
+    }
+
+    resolved
 }
 
 fn inst_result_tys(inst: &Inst, module: &Module) -> Vec<Ty> {
@@ -771,10 +1126,15 @@ fn inst_result_tys(inst: &Inst, module: &Module) -> Vec<Ty> {
         | Inst::PtrData { .. }
         | Inst::NullPtr
         | Inst::GlobalAddr { .. }
-        | Inst::Borrow { .. }
-        | Inst::BorrowMut { .. }
         | Inst::OpenFrame { .. }
         | Inst::BindSlot { .. } => vec![Ty::Ptr],
+        // A borrow's result type depends on its OPERAND, which this
+        // per-instruction interface cannot see. It answers the thin default,
+        // which `borrow_result_types` then OVERWRITES at every site that owns
+        // the whole function. This arm holds no independent statement of the
+        // rule; it defers to `borrow_result_ty`, and its arity stays 1 for
+        // `validate_instruction_result_arities`.
+        Inst::Borrow { .. } | Inst::BorrowMut { .. } => vec![borrow_result_ty(None)],
         // Invoke produces the callee's return values on the normal edge,
         // exactly like a direct `Call`.
         Inst::Call { callee, .. } | Inst::Invoke { callee, .. } => module
@@ -1203,12 +1563,13 @@ mod tests {
         let mut blk = crate::Block::new(b(0))
             .with_param(v(0), Ty::Ptr)
             .with_param(v(1), Ty::F16);
-        // A Transmute cast (out of subset op).
+        // A NON-SCALAR Transmute (scalar-to-scalar is in-subset; aggregate
+        // transmutes are the depth-ledger partial that stays out).
         blk.body.push(
             InstrNode::new(Inst::Cast {
                 op: CastOp::Transmute,
-                src_ty: Ty::I32,
-                dst_ty: Ty::U32,
+                src_ty: Ty::Tuple(vec![Ty::I32, Ty::I32]),
+                dst_ty: Ty::I64,
                 operand: v(0),
             })
             .with_result(v(2)),
@@ -1273,9 +1634,13 @@ mod tests {
         assert!(ConformanceSubset::ty_excluded(&Ty::Tuple(vec![Ty::I32, Ty::I64])).is_none());
         assert!(ConformanceSubset::ty_excluded(&Ty::Vector(Box::new(Ty::I32), 4)).is_none());
         assert!(ConformanceSubset::ty_excluded(&Ty::FatPtr(crate::FatPtrKind::Str)).is_none());
-        // PtrToPtr / ReifyFnPointer casts are out; an ordinary ZExt is in.
-        assert!(ConformanceSubset::cast_op_excluded(CastOp::PtrToPtr).is_some());
+        // ReifyFnPointer / FP*Sat casts are out; PtrToPtr, Transmute (op
+        // level — the scalar condition is structural) and ZExt are in.
         assert!(ConformanceSubset::cast_op_excluded(CastOp::ReifyFnPointer).is_some());
+        assert!(ConformanceSubset::cast_op_excluded(CastOp::FPToSISat).is_some());
+        assert!(ConformanceSubset::cast_op_excluded(CastOp::FPToUISat).is_some());
+        assert!(ConformanceSubset::cast_op_excluded(CastOp::PtrToPtr).is_none());
+        assert!(ConformanceSubset::cast_op_excluded(CastOp::Transmute).is_none());
         assert!(ConformanceSubset::cast_op_excluded(CastOp::ZExt).is_none());
     }
 
@@ -1366,5 +1731,357 @@ mod tests {
                 .any(|violation| violation.reason.contains("little-endian")),
             "{violations:?}"
         );
+    }
+
+    // ── Fat-borrow result typing ──────────────────────────────────────────
+    //
+    // `Borrow` is the only instruction whose result type depends on an
+    // OPERAND. `interpret.rs` has passed a fat borrow through verbatim since
+    // submodule commit 5129223; the STATIC half of that rule is
+    // `borrow_result_ty` + `borrow_result_types`, and these are its guards.
+    //
+    // Every one of these tests uses a FAT operand deliberately. Under the
+    // OVERWRITE structure a THIN borrow answers `Ty::Ptr` whether or not phase
+    // 2 ran, so a thin-operand test is BLIND to a deleted resolve call and
+    // would guard nothing.
+    //
+    // NOT CLAIMED, stated so no one mistakes silence for coverage: no test
+    // here catches reverting `inst_result_tys`'s
+    // `Inst::Borrow { .. } | Inst::BorrowMut { .. } => vec![borrow_result_ty(None)]`
+    // arm to a literal `vec![Ty::Ptr]`. That revert is a genuine NO-OP —
+    // `borrow_result_ty(None)` IS `Ty::Ptr` — so no observation can separate
+    // them. The arm's value is deferral of the STATEMENT, not of the value.
+
+    /// A one-function module whose entry block takes `operand_ty` as its only
+    /// parameter, `%1 = Borrow %0`, and nothing else.
+    fn module_borrowing_a_param(operand_ty: Ty) -> Module {
+        let mut module = Module::new("borrow-result-ty");
+        let ft = module.add_func_type(FuncTy {
+            params: vec![operand_ty.clone()],
+            returns: vec![],
+            is_vararg: false,
+        });
+        let mut func = Function::new(FuncId::new(0), "borrows", ft, b(0));
+        let mut block = crate::Block::new(b(0)).with_param(v(0), operand_ty);
+        block
+            .body
+            .push(InstrNode::new(Inst::Borrow { ptr: v(0) }).with_result(v(1)));
+        func.blocks.push(block);
+        module.add_function(func);
+        module
+    }
+
+    fn ty_of(module: &Module, value: ValueId) -> Option<Ty> {
+        module
+            .typed_values_for_function(FuncId::new(0))
+            .expect("function metadata")
+            .into_iter()
+            .find(|entry| entry.value == value)
+            .map(|entry| entry.ty)
+    }
+
+    /// THE HEADLINE. A borrow over a fat pointer is typed at the FAT type, not
+    /// `ptr` — which is exactly what `bb10: cast bitcast operand type ptr does
+    /// not match declared source type fatptr<slice ty.0>` was reporting.
+    ///
+    /// MUTATION A — delete the fat arm of `borrow_result_ty`, leaving
+    /// `_ => Ty::Ptr`. NOT NEUTRALISED: `typed_values` writes this value's type
+    /// exactly twice, and BOTH writes bottom out in `borrow_result_ty`. Phase 1
+    /// is `inst_result_tys`, whose borrow arm is `vec![borrow_result_ty(None)]`
+    /// and therefore `Ty::Ptr` under this mutation; phase 2 is
+    /// `borrow_result_types`, whose only source of a type is the same mutated
+    /// function. No third path can supply `FatPtr`.
+    ///
+    /// MUTATION B — delete the phase-2 block in `typed_values`. NOT
+    /// NEUTRALISED: phase 1 answers `borrow_result_ty(None)` = `Ty::Ptr` for
+    /// every borrow unconditionally, because the per-instruction interface
+    /// cannot see the operand at all. This is the mutation that a previous
+    /// attempt's headline guard SURVIVED, because that design let phase 1
+    /// answer the fat type on its own; under overwrite it cannot.
+    #[test]
+    fn borrow_of_a_fat_pointer_keeps_the_fat_type() {
+        let fat = Ty::FatPtr(crate::FatPtrKind::Str);
+        let module = module_borrowing_a_param(fat.clone());
+        assert_eq!(ty_of(&module, v(1)), Some(fat));
+    }
+
+    /// The rule is NOT "follow the operand": the interpreter rewrites every
+    /// THIN spelling to `Ty::Ptr` (it constructs a fresh
+    /// `InterpretValue { ty: Ty::Ptr, .. }` for a non-`FatPtr` operand), so
+    /// answering `Ty::Ref(i32)` here would be a NEW static/dynamic drift of
+    /// exactly the kind this change exists to end.
+    ///
+    /// MUTATION — make `borrow_result_ty` follow the operand unconditionally
+    /// (`Some(ty) => ty.clone()`). NOT NEUTRALISED: phase 2 OVERWRITES phase
+    /// 1's `Ty::Ptr` for every borrow, so the mutated answer is the one that
+    /// survives into the metadata. The `assert_ne!` names the wrong answer
+    /// explicitly so the failure reads as the drift it is.
+    #[test]
+    fn borrow_of_a_thin_reference_normalises_to_ptr() {
+        let thin = Ty::Ref(Box::new(Ty::I32));
+        let module = module_borrowing_a_param(thin.clone());
+        assert_eq!(ty_of(&module, v(1)), Some(Ty::Ptr));
+        assert_ne!(ty_of(&module, v(1)), Some(thin));
+    }
+
+    /// `Function::entry` carries the entry block, so the ORDER of
+    /// `Function::blocks` is free: a borrow can be walked before the block that
+    /// defines its operand. Blocks are listed `[bb1, bb0]` with `entry = bb0`,
+    /// and the borrow in bb1 is walked FIRST.
+    ///
+    /// MUTATION — resolve borrows inline during the phase-1 walk of
+    /// `typed_values` (compute each borrow's type from the values pushed so
+    /// far) instead of in a second phase, i.e. ANY single forward pass. The
+    /// operand `%0` has not been pushed when the borrow is reached, so the
+    /// lookup answers `None` and the borrow types as `Ty::Ptr`.
+    ///
+    /// NOT NEUTRALISED, and specifically NOT caught by
+    /// `borrow_of_a_fat_pointer_keeps_the_fat_type`, whose operand is a
+    /// parameter of the SAME block and therefore already pushed. That is why
+    /// this test exists separately.
+    #[test]
+    fn a_fat_operand_defined_in_a_later_listed_block_still_resolves() {
+        let fat = Ty::FatPtr(crate::FatPtrKind::Str);
+        let mut module = Module::new("borrow-block-order");
+        let ft = module.add_func_type(FuncTy {
+            params: vec![fat.clone()],
+            returns: vec![],
+            is_vararg: false,
+        });
+        // entry is bb0, but bb1 is LISTED first.
+        let mut func = Function::new(FuncId::new(0), "late_operand", ft, b(0));
+        let mut bb1 = crate::Block::new(b(1));
+        bb1.body
+            .push(InstrNode::new(Inst::Borrow { ptr: v(0) }).with_result(v(1)));
+        func.blocks.push(bb1);
+        func.blocks
+            .push(crate::Block::new(b(0)).with_param(v(0), fat.clone()));
+        module.add_function(func);
+
+        assert_eq!(ty_of(&module, v(1)), Some(fat));
+    }
+
+    /// A borrow of a borrow collapses to the CHAIN ROOT. Both results are fat.
+    ///
+    /// MUTATION — in `borrow_result_types` phase B, consult `known` for the
+    /// borrow's direct operand instead of walking `operand_of` first (or,
+    /// equivalently, reorder the walk to try `known` before `operand_of`).
+    ///
+    /// NOT NEUTRALISED — and this is the load-bearing part: `known` is backed
+    /// by a snapshot that already holds the PROVISIONAL `Ty::Ptr` phase 1 wrote
+    /// for `%1`. So the mutated lookup does not merely miss the fat type, it
+    /// finds a WRONG one, and `%2` answers `Ty::Ptr`. Nothing later overwrites
+    /// `%2`, because phase 2 is the last write in `typed_values`.
+    #[test]
+    fn a_borrow_of_a_borrow_collapses_to_the_chain_root() {
+        let fat = Ty::FatPtr(crate::FatPtrKind::Str);
+        let mut module = Module::new("borrow-chain");
+        let ft = module.add_func_type(FuncTy {
+            params: vec![fat.clone()],
+            returns: vec![],
+            is_vararg: false,
+        });
+        let mut func = Function::new(FuncId::new(0), "reborrow", ft, b(0));
+        let mut block = crate::Block::new(b(0)).with_param(v(0), fat.clone());
+        block
+            .body
+            .push(InstrNode::new(Inst::Borrow { ptr: v(0) }).with_result(v(1)));
+        block
+            .body
+            .push(InstrNode::new(Inst::BorrowMut { ptr: v(1) }).with_result(v(2)));
+        func.blocks.push(block);
+        module.add_function(func);
+
+        assert_eq!(ty_of(&module, v(1)), Some(fat.clone()));
+        assert_eq!(ty_of(&module, v(2)), Some(fat));
+    }
+
+    /// A malformed borrow CYCLE has no root to type from. The walk is bounded,
+    /// so it terminates and answers the conservative thin spelling.
+    ///
+    /// MUTATION — remove the `steps > bound` break in `borrow_result_types`.
+    /// NOT NEUTRALISED: nothing else bounds that loop, and `operand_of` maps
+    /// each of these values to the other forever.
+    ///
+    /// HONEST CAVEAT: under that mutation this test HANGS rather than failing
+    /// an assertion — the red signal is a timeout. The assertion below is still
+    /// a real one about the VALUE, which is why the test is a normal green
+    /// today rather than a timing observation.
+    #[test]
+    fn a_borrow_cycle_terminates_at_ptr() {
+        let mut module = Module::new("borrow-cycle");
+        let ft = module.add_func_type(FuncTy {
+            params: vec![],
+            returns: vec![],
+            is_vararg: false,
+        });
+        let mut func = Function::new(FuncId::new(0), "cyclic", ft, b(0));
+        let mut block = crate::Block::new(b(0));
+        block
+            .body
+            .push(InstrNode::new(Inst::Borrow { ptr: v(2) }).with_result(v(1)));
+        block
+            .body
+            .push(InstrNode::new(Inst::Borrow { ptr: v(1) }).with_result(v(2)));
+        func.blocks.push(block);
+        module.add_function(func);
+
+        assert_eq!(ty_of(&module, v(1)), Some(Ty::Ptr));
+        assert_eq!(ty_of(&module, v(2)), Some(Ty::Ptr));
+    }
+
+    /// PER-SITE PLANTED VIOLATION for `vector_select_contract_errors`.
+    ///
+    /// The VERDICT does not move — neither `Ty::Ptr` nor `Ty::FatPtr` is a
+    /// vector, so `validate_select_condition_ty` rejects a borrow condition
+    /// either way — but `actual_cond_ty` is a REPORTED diagnostic, and one that
+    /// names `ptr` for a value that is fat ships a false statement in an error
+    /// message.
+    ///
+    /// MUTATION — revert that site's result insert to
+    /// `value_tys.insert(*value, ty)`, dropping the `resolved` consult.
+    /// NOT NEUTRALISED: `node.result_tys(module)` answers `Ty::Ptr` for a
+    /// borrow unconditionally (the per-instruction interface cannot see the
+    /// operand), so `actual_cond_ty` becomes `Some(Ty::Ptr)` and the equality
+    /// below fails. The assertion is on the fat type specifically, not on the
+    /// presence of an error, so it cannot be satisfied by the verdict alone.
+    #[test]
+    fn a_fat_borrow_select_condition_is_reported_at_its_fat_type() {
+        let fat = Ty::FatPtr(crate::FatPtrKind::Str);
+        let v4i32 = Ty::Vector(Box::new(Ty::I32), 4);
+        let mut module = Module::new("borrow-select-cond");
+        let ft = module.add_func_type(FuncTy {
+            params: vec![fat.clone(), v4i32.clone(), v4i32.clone()],
+            returns: vec![],
+            is_vararg: false,
+        });
+        let mut func = Function::new(FuncId::new(0), "fat_cond", ft, b(0));
+        let mut block = crate::Block::new(b(0))
+            .with_param(v(0), fat.clone())
+            .with_param(v(1), v4i32.clone())
+            .with_param(v(2), v4i32.clone());
+        // The borrow precedes the select, so the walk has already recorded it.
+        block
+            .body
+            .push(InstrNode::new(Inst::Borrow { ptr: v(0) }).with_result(v(3)));
+        block.body.push(
+            InstrNode::new(Inst::Select {
+                ty: v4i32,
+                cond: v(3),
+                then_val: v(1),
+                else_val: v(2),
+            })
+            .with_result(v(4)),
+        );
+        func.blocks.push(block);
+        module.add_function(func);
+
+        let errors = module
+            .validate_vector_select_contracts()
+            .expect_err("a borrow is never a legal vector select condition");
+        let reported = errors
+            .iter()
+            .find(|error| error.cond == v(3))
+            .expect("the fat borrow condition is reported");
+        assert_eq!(reported.actual_cond_ty, Some(fat));
+    }
+
+    /// The ratified v2 verdicts on every construct where this classifier
+    /// historically drifted from `lowering-target-subset.md`. The machine
+    /// cross-check against `trust_ir_conformance::subset` lives in that
+    /// crate's `bridge_subset_agreement` gate; these are the core-crate
+    /// statements of the same verdicts.
+    #[test]
+    fn ratified_v2_boundary_verdicts() {
+        // Scalar-to-scalar Transmute is IN (Lean semCast scalar partial).
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::Cast {
+                op: CastOp::Transmute,
+                src_ty: Ty::I32,
+                dst_ty: Ty::U32,
+                operand: v(0),
+            })
+            .is_none()
+        );
+        // Aggregate transmutes stay OUT, named as the structural condition.
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::Cast {
+                op: CastOp::Transmute,
+                src_ty: Ty::Tuple(vec![Ty::I32, Ty::I32]),
+                dst_ty: Ty::I64,
+                operand: v(0),
+            })
+            .is_some_and(|reason| reason.contains("scalar-to-scalar"))
+        );
+        // PtrToPtr is IN (full semCast semantics; interpret.rs executes it).
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::Cast {
+                op: CastOp::PtrToPtr,
+                src_ty: Ty::Ptr,
+                dst_ty: Ty::Ptr,
+                operand: v(0),
+            })
+            .is_none()
+        );
+        // The unwinding/coroutine partials are OUT (the pre-unification
+        // fallthrough silently admitted all three).
+        assert!(ConformanceSubset::inst_excluded(&Inst::Resume { exn: v(0) }).is_some());
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::LandingPad {
+                is_cleanup: true,
+                catch_type_indices: vec![],
+            })
+            .is_some()
+        );
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::CoroSuspend {
+                frame: v(0),
+                state_slot: 0,
+                next_state: 1,
+                value: v(0),
+            })
+            .is_some()
+        );
+        // A ratified fast-4 vector op is IN; any other dialect op is OUT.
+        let allowed = crate::DialectInst::new("vector", "reduce").with_result_ty(Ty::I32);
+        assert!(ConformanceSubset::inst_excluded(&Inst::DialectOp(Box::new(allowed))).is_none());
+        let refused = crate::DialectInst::new("clean", "rc_inc");
+        assert!(ConformanceSubset::inst_excluded(&Inst::DialectOp(Box::new(refused))).is_some());
+        // Refine is fail-closed until a version bump ratifies it.
+        assert!(
+            ConformanceSubset::ty_excluded(
+                &Ty::Refine(crate::TyId::new(0), crate::PredId::new(0),)
+            )
+            .is_some()
+        );
+        // Custom proof annotations are refused, located at their site.
+        let mut module = Module::new("custom-proof");
+        let ft = module.add_func_type(FuncTy {
+            params: vec![],
+            returns: vec![],
+            is_vararg: false,
+        });
+        let mut func = Function::new(FuncId::new(0), "tagged", ft, b(0));
+        let mut block = crate::Block::new(b(0));
+        block.body.push(
+            InstrNode::new(Inst::Const {
+                ty: Ty::I32,
+                value: Constant::Int(1),
+            })
+            .with_result(v(0))
+            .with_proof(ProofAnnotation::Custom(crate::ProofTag::new(0))),
+        );
+        block
+            .body
+            .push(InstrNode::new(Inst::Return { values: vec![] }));
+        func.blocks.push(block);
+        module.add_function(func);
+        let violations = module
+            .check_conformance_subset()
+            .expect_err("Custom proof tags are outside the pinned vocabulary");
+        assert!(violations.iter().any(|violation| matches!(
+            violation.site,
+            SubsetSite::InstructionProof { proof_index: 0 }
+        )));
     }
 }

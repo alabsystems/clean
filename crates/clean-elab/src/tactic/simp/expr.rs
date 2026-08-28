@@ -22,6 +22,9 @@ static EQ_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("Eq"));
 /// Pre-interned `Iff` name (avoids repeated allocation in iff extraction).
 static IFF_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("Iff"));
 
+use super::binder::open_binder;
+use super::budget::SimpBudget;
+use super::match_target::{collapse_nat_ofnat_literals, MatchTarget};
 use super::pattern::{convert_bvars_to_metas, substitute_bvars_with_metas};
 use super::proof::{
     mk_congr, mk_congr_arg, mk_congr_fun, mk_eq_trans, mk_forall_congr, mk_funext,
@@ -321,7 +324,86 @@ pub(crate) fn make_eq_expr(original: &Expr, new_lhs: &Expr, rhs: &Expr) -> Expr 
     original.clone()
 }
 
-/// Simplify an expression using simp lemmas.
+/// Simplify an expression using simp lemmas, under a fresh per-call budget.
+///
+/// This is the entry point for callers that own a whole traversal and have no
+/// budget of their own to charge it to (`simp at`, `simp_rw`, the cast-lemma
+/// rewriter, tests). Each call gets its own [`SimpBudget`] sized from `expr`,
+/// so a runaway inside ONE traversal is bounded here rather than only between
+/// top-level `simp` steps — see [`super::budget`] for the measurement that
+/// motivated it.
+///
+/// A budget trip unwinds to `SimpResult::refl(expr)`: the caller sees "no
+/// change", which every one of them already reports as `NoProgress`. Callers
+/// that want to distinguish "nothing to do" from "refused, out of budget" —
+/// [`super::simp`] does — must own the budget and use
+/// [`simp_expr_budgeted`].
+///
+/// ENSURES: identical to [`simp_expr_budgeted`] with a fresh
+///   `SimpBudget::for_target(expr)`.
+pub(crate) fn simp_expr(
+    state: &ProofState,
+    goal: &Goal,
+    expr: &Expr,
+    lemmas: &SimpLemmaSet,
+    config: &SimpConfig,
+) -> SimpResult {
+    let budget = SimpBudget::for_target(expr);
+    simp_expr_budgeted(state, goal, expr, lemmas, config, &budget)
+}
+
+/// One frame of the simp traversal, charged to `budget`.
+///
+/// Every recursive descent, every re-entrant condition/discharge simp, and the
+/// top-level step in [`super::simp`] go through here, so one budget object sees
+/// the whole traversal.
+///
+/// # Fail-closed unwind
+///
+/// A tripped budget is answered with `SimpResult::refl(expr)` — the frame's own
+/// INPUT, with no proof — at three points: before any work is done, after the
+/// body returns, and when the body's own result is too large. Since the check
+/// runs on the way out of every frame, a trip deep in the recursion unwinds the
+/// entire traversal to the original term: no partial rewrite survives, no
+/// congruence proof is assembled over a term the budget refused, and the
+/// caller's `state` is untouched. [`super::simp`] then turns the trip into
+/// [`crate::tactic::TacticError::BudgetExceeded`].
+///
+/// ENSURES: on a budget trip, `result.expr == *expr` and `result.proof` is
+///   `None`.
+/// ENSURES: when the budget does not trip, the result is exactly what the
+///   unbudgeted traversal produced.
+pub(crate) fn simp_expr_budgeted(
+    state: &ProofState,
+    goal: &Goal,
+    expr: &Expr,
+    lemmas: &SimpLemmaSet,
+    config: &SimpConfig,
+    budget: &SimpBudget,
+) -> SimpResult {
+    // (1) Refuse to start a frame we cannot pay for.
+    if !budget.tick() {
+        return SimpResult::refl(expr.clone());
+    }
+
+    let result = simp_expr_inner(state, goal, expr, lemmas, config, budget);
+
+    // (2) A trip anywhere below unwinds this frame to its own input.
+    if budget.is_tripped() {
+        return SimpResult::refl(expr.clone());
+    }
+
+    // (3) The growth check, at the frame that produced the growth. `admit`
+    // trips the budget on failure, so every enclosing frame unwinds too.
+    if result.expr != *expr && !budget.admit(&result.expr) {
+        return SimpResult::refl(expr.clone());
+    }
+
+    result
+}
+
+/// The body of one simp traversal frame. Call [`simp_expr_budgeted`], never
+/// this: the budget checks that make a runaway fail closed live in the wrapper.
 ///
 /// Returns a `SimpResult` where:
 /// - `expr` is the simplified expression
@@ -338,12 +420,13 @@ pub(crate) fn make_eq_expr(original: &Expr, new_lhs: &Expr, rhs: &Expr) -> Expr 
 /// ENSURES: If `result.proof` is `Some(p)`, then `p : expr = result.expr`
 /// ENSURES: If `result.proof` is `None`, changes are definitional only (beta/eta)
 /// ENSURES: Recursion terminates via `stack_safe` guards on subexpression traversal
-pub(crate) fn simp_expr(
+fn simp_expr_inner(
     state: &ProofState,
     goal: &Goal,
     expr: &Expr,
     lemmas: &SimpLemmaSet,
     config: &SimpConfig,
+    budget: &SimpBudget,
 ) -> SimpResult {
     // First try beta/eta reduction (definitional — no proof term needed)
     let mut result = SimpResult::refl(expr.clone());
@@ -355,9 +438,20 @@ pub(crate) fn simp_expr(
     // definitional (by `Declaration::Definition` semantics) so `proof: None`
     // is correct. Beta reduction below then collapses the resulting redexes so
     // monadic unfolds like `StateT.bind` settle to a normal form.
+    // The three definitional rewrites below are the ones the traversal
+    // RECURSES THROUGH (everything else returns immediately and is size-checked
+    // by `simp_expr_budgeted` on the way out). A `simp [f]` whose unfold body
+    // mentions `f` again re-exposes `f` in the children this frame is about to
+    // descend into, so a term that grows here grows once per level for as long
+    // as the descent lasts. Charging each of them to the budget BEFORE
+    // descending is what stops that at the size limit instead of at the
+    // machine's memory.
     if !config.unfold_defs.is_empty() {
         let unfolded = unfold_named_consts(&result.expr, &config.unfold_defs);
         if unfolded != result.expr {
+            if !budget.admit(&unfolded) {
+                return SimpResult::refl(expr.clone());
+            }
             result = SimpResult {
                 expr: unfolded,
                 proof: None,
@@ -368,6 +462,9 @@ pub(crate) fn simp_expr(
     if config.beta {
         let beta_reduced = beta_reduce(&result.expr);
         if beta_reduced != result.expr {
+            if !budget.admit(&beta_reduced) {
+                return SimpResult::refl(expr.clone());
+            }
             result = SimpResult {
                 expr: beta_reduced,
                 proof: None,
@@ -378,6 +475,9 @@ pub(crate) fn simp_expr(
     if config.eta {
         let eta_reduced = eta_reduce(&result.expr);
         if eta_reduced != result.expr {
+            if !budget.admit(&eta_reduced) {
+                return SimpResult::refl(expr.clone());
+            }
             result = SimpResult {
                 expr: eta_reduced,
                 proof: None,
@@ -389,10 +489,17 @@ pub(crate) fn simp_expr(
     // Guard: skip matches that produce the same expression — this can happen when the
     // unifier WHNF-reduces the pattern (e.g. `Nat.add ?n 0` → `?n`) and the meta
     // absorbs the entire target, yielding an identity rewrite.
+    let match_target = MatchTarget::new(state, goal, &result.expr);
     for lemma in lemmas.candidates(state, goal, &result.expr) {
-        if let Some((new_expr, proof)) =
-            try_apply_simp_lemma_with_proof(state, goal, &result.expr, lemma, lemmas, config)
-        {
+        if let Some((new_expr, proof)) = try_apply_simp_lemma_with_proof(
+            state,
+            goal,
+            &match_target,
+            lemma,
+            lemmas,
+            config,
+            budget,
+        ) {
             if new_expr != result.expr {
                 let step = SimpResult {
                     expr: new_expr,
@@ -433,12 +540,15 @@ pub(crate) fn simp_expr(
             // `Decidable c` while the condition moved to `True`, producing an
             // ill-typed `@congrArg` equation the kernel later rejects. See
             // `try_simp_ite` for the soundness argument.
-            if let Some(ite_step) = try_simp_ite(state, goal, &result.expr, lemmas, config) {
+            if let Some(ite_step) = try_simp_ite(state, goal, &result.expr, lemmas, config, budget)
+            {
                 return mk_eq_trans(result, ite_step, state, goal);
             }
 
-            let f_result = stack_safe(|| simp_expr(state, goal, f, lemmas, config));
-            let arg_result = stack_safe(|| simp_expr(state, goal, arg, lemmas, config));
+            let f_result =
+                stack_safe(|| simp_expr_budgeted(state, goal, f, lemmas, config, budget));
+            let arg_result =
+                stack_safe(|| simp_expr_budgeted(state, goal, arg, lemmas, config, budget));
             let f_changed = f_result.expr != **f;
             let arg_changed = arg_result.expr != **arg;
 
@@ -495,22 +605,33 @@ pub(crate) fn simp_expr(
             }
         }
         ExprKind::Lam(bi, ty, body) => {
-            let body_result = stack_safe(|| simp_expr(state, goal, body, lemmas, config));
-            if body_result.expr != **body {
+            // Open the binder with a fresh fvar (see `simp::binder`): every
+            // congruence builder below needs `infer_type`, and the kernel
+            // cannot type a term with loose BVars. Without this, any redex
+            // mentioning an enclosing binder rewrote with `proof: None` and
+            // `replace_target_def_eq` then rejected the whole simp step.
+            let opened = open_binder(goal, ty, body);
+            let body_result = stack_safe(|| {
+                simp_expr_budgeted(state, &opened.goal, &opened.body, lemmas, config, budget)
+            });
+            if body_result.expr != opened.body {
+                let new_body = body_result.expr.abstract_fvar(opened.fvar);
                 // Build funext proof when body has a proof term
                 let lam_proof = body_result
                     .proof
                     .as_ref()
-                    .and_then(|bp| mk_funext(state, goal, ty, body, &body_result.expr, bp));
+                    .map(|bp| bp.abstract_fvar(opened.fvar))
+                    .and_then(|bp| mk_funext(state, goal, ty, body, &new_body, &bp));
                 let lam_result = SimpResult {
-                    expr: Expr::lam(*bi, ty.as_ref().clone(), body_result.expr),
+                    expr: Expr::lam(*bi, ty.as_ref().clone(), new_body),
                     proof: lam_proof,
                 };
                 return mk_eq_trans(result, lam_result, state, goal);
             }
         }
         ExprKind::Pi(bi, ty, body) => {
-            let ty_result = stack_safe(|| simp_expr(state, goal, ty, lemmas, config));
+            let ty_result =
+                stack_safe(|| simp_expr_budgeted(state, goal, ty, lemmas, config, budget));
             if ty_result.expr != **ty {
                 let pi_proof = ty_result.proof.as_ref().and_then(|tp| {
                     mk_pi_domain_congr(state, goal, *bi, ty, &ty_result.expr, body, tp)
@@ -522,25 +643,35 @@ pub(crate) fn simp_expr(
                 return mk_eq_trans(result, pi_result, state, goal);
             }
 
-            let body_result = stack_safe(|| simp_expr(state, goal, body, lemmas, config));
-            if body_result.expr != **body {
+            // Same binder discipline as the Lam arm: `mk_forall_congr` needs
+            // `infer_type` on the body, which is open until the binder is
+            // replaced by a fresh fvar in an extended local context.
+            let opened = open_binder(goal, ty, body);
+            let body_result = stack_safe(|| {
+                simp_expr_budgeted(state, &opened.goal, &opened.body, lemmas, config, budget)
+            });
+            if body_result.expr != opened.body {
+                let new_body = body_result.expr.abstract_fvar(opened.fvar);
                 // Build forall_congr + propext proof when body has a proof term
                 // and the Pi type is Prop-valued. Falls back to proof: None
                 // (definitional) for non-Prop Pi or when body proof is absent.
                 let pi_proof = body_result
                     .proof
                     .as_ref()
-                    .and_then(|bp| mk_forall_congr(state, goal, ty, body, &body_result.expr, bp));
+                    .map(|bp| bp.abstract_fvar(opened.fvar))
+                    .and_then(|bp| mk_forall_congr(state, goal, ty, body, &new_body, &bp));
                 let pi_result = SimpResult {
-                    expr: Expr::pi(*bi, ty.as_ref().clone(), body_result.expr),
+                    expr: Expr::pi(*bi, ty.as_ref().clone(), new_body),
                     proof: pi_proof,
                 };
                 return mk_eq_trans(result, pi_result, state, goal);
             }
         }
         ExprKind::Let(name, ty, val, body, non_dep) => {
-            let val_result = stack_safe(|| simp_expr(state, goal, val, lemmas, config));
-            let body_result = stack_safe(|| simp_expr(state, goal, body, lemmas, config));
+            let val_result =
+                stack_safe(|| simp_expr_budgeted(state, goal, val, lemmas, config, budget));
+            let body_result =
+                stack_safe(|| simp_expr_budgeted(state, goal, body, lemmas, config, budget));
             if val_result.expr != **val || body_result.expr != **body {
                 let let_result = SimpResult {
                     expr: Expr::let_named(
@@ -556,7 +687,8 @@ pub(crate) fn simp_expr(
             }
         }
         ExprKind::Proj(name, idx, inner) => {
-            let inner_result = stack_safe(|| simp_expr(state, goal, inner, lemmas, config));
+            let inner_result =
+                stack_safe(|| simp_expr_budgeted(state, goal, inner, lemmas, config, budget));
             if inner_result.expr != **inner {
                 // Build congruence: f = (fun x : T => Proj(name, idx, x)), then congrArg f h
                 let proj_proof = inner_result.proof.as_ref().and_then(|h| {
@@ -578,7 +710,8 @@ pub(crate) fn simp_expr(
         ExprKind::MData(_mdata, inner) => {
             // MData is semantically transparent (def-eq to inner via WHNF).
             // Recurse into the inner expression; proof carries through unchanged.
-            let inner_result = stack_safe(|| simp_expr(state, goal, inner, lemmas, config));
+            let inner_result =
+                stack_safe(|| simp_expr_budgeted(state, goal, inner, lemmas, config, budget));
             let strip_result = SimpResult {
                 expr: inner_result.expr,
                 proof: inner_result.proof,
@@ -675,6 +808,7 @@ fn try_simp_ite(
     expr: &Expr,
     lemmas: &SimpLemmaSet,
     config: &SimpConfig,
+    budget: &SimpBudget,
 ) -> Option<SimpResult> {
     let (u, alpha, c, inst, t, e) = peel_ite(expr)?;
 
@@ -683,7 +817,7 @@ fn try_simp_ite(
     // `True`/`False` the top-level `ite_true`/`ite_false` lemma handles it, so
     // requiring `Some(h1)` here loses no coverage and avoids fabricating a proof
     // for a non-change.
-    let cond_result = stack_safe(|| simp_expr(state, goal, &c, lemmas, config));
+    let cond_result = stack_safe(|| simp_expr_budgeted(state, goal, &c, lemmas, config, budget));
     let h1 = cond_result.proof.as_ref()?;
 
     let true_c = Expr::const_(Name::from_string("True"), vec![]);
@@ -734,66 +868,6 @@ fn try_simp_ite(
     // Condition changed but not to True/False: no sound non-dependent
     // congruence on the condition exists, so leave the ite untouched.
     None
-}
-
-/// If `e` is exactly the Nat-numeral projection form
-/// `@OfNat.ofNat Nat (Lit k) (instOfNatNat (Lit k))`, return the raw literal
-/// `Lit(Nat k)`; otherwise `None`.
-///
-/// SOUNDNESS: `instOfNatNat k` is the structure literal storing `k`, so the
-/// projection ι/δ-reduces to `k` — the two spellings are definitionally equal
-/// (the kernel's `add_decl` re-check enforces exactly this equivalence).
-fn as_nat_ofnat_literal(e: &Expr) -> Option<Expr> {
-    static OFNAT_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("OfNat.ofNat"));
-    static NAT_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat"));
-    static INST_OFNAT_NAT_NAME: LazyLock<Name> =
-        LazyLock::new(|| Name::from_string("instOfNatNat"));
-
-    let head = e.get_app_fn();
-    let ExprKind::Const(head_name, _) = head.kind() else {
-        return None;
-    };
-    if *head_name != *OFNAT_NAME {
-        return None;
-    }
-    let args = e.get_app_args();
-    let [ty, lit, inst] = args.as_slice() else {
-        return None;
-    };
-    if !matches!(ty.kind(), ExprKind::Const(n, _) if *n == *NAT_NAME) {
-        return None;
-    }
-    if !matches!(lit.kind(), ExprKind::Lit(clean_kernel::Literal::Nat(_))) {
-        return None;
-    }
-    let inst_head = inst.get_app_fn();
-    if !matches!(inst_head.kind(), ExprKind::Const(n, _) if *n == *INST_OFNAT_NAT_NAME) {
-        return None;
-    }
-    Some((*lit).clone())
-}
-
-/// Rewrite every `@OfNat.ofNat Nat k (instOfNatNat k)` subterm of `e` to the
-/// raw `Lit(Nat k)`. Returns `None` when nothing collapsed (the common case),
-/// so callers keep the original expression without an extra clone.
-fn collapse_nat_ofnat_literals(e: &Expr) -> Option<Expr> {
-    struct OfNatCollapser {
-        changed: bool,
-    }
-    impl ExprFolder for OfNatCollapser {
-        fn fold_app(&mut self, f: &Expr, arg: &Expr) -> Expr {
-            let rebuilt = Expr::app(self.fold_expr(f), self.fold_expr(arg));
-            if let Some(lit) = as_nat_ofnat_literal(&rebuilt) {
-                self.changed = true;
-                lit
-            } else {
-                rebuilt
-            }
-        }
-    }
-    let mut collapser = OfNatCollapser { changed: false };
-    let folded = collapser.fold_expr(e);
-    collapser.changed.then_some(folded)
 }
 
 /// Peel the LEMMA PATTERN's heterogeneous-operator projection layer when — and
@@ -858,6 +932,155 @@ fn peel_pattern_to_target_head(
     }
 }
 
+/// Head-agreement guard against the star-pattern whnf-rewrite NOISE class
+/// (the B102/B103 residue documented by the B7 permutative lane).
+///
+/// Mechanism, measured (see `test_simp_star_noise_guard_*`): a star-keyed
+/// builtin whose literal-operand pattern ι-collapses to a bare variable
+/// (`Nat.sub_zero : Nat.sub ?n 0`, whose LHS WHNFs to `?n`) is offered at
+/// EVERY subterm, and the unifier — reducing wherever discriminants disagree —
+/// legally matches it against an ARBITRARY subterm by binding `?n` to the
+/// subterm's WHNF. The rewrite is sound and kernel-accepted, but it re-spells
+/// e.g. `Nat.add a b` into its stuck `Nat.rec` WHNF: unreadable goals, and the
+/// spelling round-trips the B7 ordered-rewriting guard had to be immunized
+/// against (its 4-cycle `unfold → flip → unfold → flip` measurement).
+///
+/// The rule, purely RESTRICTIVE (refuses matches, never enables one): a lemma
+/// whose STORED pattern head is a constant `C` is only matched against a
+/// subterm whose own head — after the SAME normalization the matcher already
+/// performs for instance chains ([`MatchTarget`]: hetero-op projection peel +
+/// `OfNat` literal collapse) — is that same `C`. A `Nat.sub`-headed lemma can
+/// then never fire on a `Nat.add`-headed subterm merely because def-eq can
+/// bend one into the other.
+///
+/// Deliberately NOT refused (each would break a legitimate match):
+/// * either head a hetero-op projection (`HAdd.hAdd`, …): the matcher's own
+///   [`peel_pattern_to_target_head`] bridges pattern-side projections, and a
+///   polymorphic pattern whose instance is a metavariable cannot be peeled at
+///   all — the unifier must keep deciding those;
+/// * a non-`Const` head on either side (`Lit`, FVar/meta, `Lam`, `MData`, …):
+///   literal↔constructor bridging (`Lit 5` vs `Nat.succ …`, `Lit 0` vs
+///   `Nat.zero`) and hypothesis-lemma FVar patterns keep full unifier
+///   semantics.
+///
+/// This is a match-time guard, NOT an offer-time filter: star-keyed lemmas
+/// stay in every candidate set (`test_simp_star_tier_identity_siblings_…`
+/// pins that), and legitimate uses — `Nat.sub_zero` on `a - 0` in surface or
+/// bare spelling — still fire because the target's peeled head IS `Nat.sub`.
+///
+/// The head test alone is NOT the whole guard: the same absorption also
+/// happens head-to-head (`Nat.sub_zero` on `Nat.sub a a` binds
+/// `?n := whnf(Nat.sub a a)`, the stuck `Nat.rec` spelling, after the `0 =?= a`
+/// argument mismatch sends the unifier down its reduction fallback). That
+/// residue is caught by the binding-hygiene half,
+/// [`binding_is_whnf_absorption`], at the one place the binding is visible.
+fn star_noise_head_guard_refuses(lemma: &SimpLemma, match_target: &Expr) -> bool {
+    let ExprKind::Const(pattern_head, _) = lemma.lhs.get_app_fn().kind() else {
+        return false;
+    };
+    let ExprKind::Const(target_head, _) = match_target.get_app_fn().kind() else {
+        return false;
+    };
+    pattern_head != target_head
+        && !is_hetero_op_projection(pattern_head)
+        && !is_hetero_op_projection(target_head)
+}
+
+/// Binding-hygiene half of the star-noise guard: did this pattern-variable
+/// binding come from the unifier ABSORBING a re-spelling of the WHOLE target
+/// rather than from a position of it?
+///
+/// The noise class succeeds through the unifier's reduction fallback: a
+/// ι-collapsible pattern (`Nat.sub ?n 0` WHNFs to bare `?n`) meets a target
+/// whose argument refuted the structural match (`Nat.sub a a` — `0 =?= a` is
+/// rigid-rigid), both sides get reduced, and `?n` absorbs `whnf(target)` —
+/// the stuck `Nat.rec` re-spelling of the very subterm being rewritten, which
+/// makes the "rewrite" pure noise (it replaces the subterm with a def-eq
+/// respelling of itself). The signature is precise: the binding is NOT a
+/// syntactic subterm of the target as given, yet it is def-eq to the ENTIRE
+/// target. Refusing exactly that refuses the absorption.
+///
+/// Deliberate allowances (each a measured legitimate bend that a broader
+/// "binding must be a verbatim subterm" rule was seen to break — the
+/// `data_map-length` battery row):
+/// * a binding that IS a syntactic subterm of the normalized or source
+///   target — the ordinary first-order match;
+/// * a NON-subterm binding that is not def-eq to the whole target: the
+///   unifier legally exposes constructors inside an ARGUMENT by ι-reduction
+///   (`List.length_cons`'s `@List.cons ?α ?x ?xs` argument against
+///   `List.map f (x :: xs)` reduces the argument to `cons (f x) (map f xs)`
+///   and binds `?x := f x` — pieces of a reduced argument, not a re-spelling
+///   of the whole target);
+/// * a NUMERAL-shaped binding (`Lit k`, `Nat.zero`, a `Nat.succ` chain):
+///   value-level literal bridging (`?k := 2` when `Nat.succ ?k` meets
+///   `Lit 3`) — fast-pathed before any def-eq work;
+/// * a binding still carrying unassigned metas (left to the later guards /
+///   discharge), and any OPEN comparison (loose BVars on either side), where
+///   `is_def_eq` is unreliable — both conservatively allowed, preserving the
+///   pre-guard behaviour.
+fn binding_is_whnf_absorption(
+    state: &ProofState,
+    goal: &Goal,
+    bound: &Expr,
+    match_target: &Expr,
+    source: &Expr,
+) -> bool {
+    if contains_unassigned_meta(bound) || is_numeral_shaped(bound) {
+        return false;
+    }
+    if occurs_syntactically(bound, match_target) || occurs_syntactically(bound, source) {
+        return false;
+    }
+    if bound.has_loose_bvars() || source.has_loose_bvars() {
+        return false;
+    }
+    state.is_def_eq(goal, bound, source)
+}
+
+/// Is `e` a closed numeral spelling: a literal, `Nat.zero`, or a `Nat.succ`
+/// chain terminating in one? (See [`binding_is_whnf_absorption`].)
+fn is_numeral_shaped(e: &Expr) -> bool {
+    stack_safe(|| match e.kind() {
+        ExprKind::Lit(_) => true,
+        ExprKind::Const(name, _) => *name == *NAT_ZERO_NAME,
+        ExprKind::App(f, a) => {
+            matches!(f.kind(), ExprKind::Const(name, _) if *name == *NAT_SUCC_NAME)
+                && is_numeral_shaped(a)
+        }
+        _ => false,
+    })
+}
+
+static NAT_ZERO_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat.zero"));
+static NAT_SUCC_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat.succ"));
+
+/// Does `needle` occur as a syntactic subterm of `hay` (plain structural
+/// equality at every node)?
+fn occurs_syntactically(needle: &Expr, hay: &Expr) -> bool {
+    stack_safe(|| {
+        if needle == hay {
+            return true;
+        }
+        match hay.kind() {
+            ExprKind::App(f, a) => {
+                occurs_syntactically(needle, f) || occurs_syntactically(needle, a)
+            }
+            ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
+                occurs_syntactically(needle, ty) || occurs_syntactically(needle, body)
+            }
+            ExprKind::Let(_, ty, val, body, _) => {
+                occurs_syntactically(needle, ty)
+                    || occurs_syntactically(needle, val)
+                    || occurs_syntactically(needle, body)
+            }
+            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
+                occurs_syntactically(needle, inner)
+            }
+            _ => false,
+        }
+    })
+}
+
 /// Try to apply a simp lemma and also produce the proof term.
 ///
 /// On success, returns `(result, proof)` where `proof` is the lemma constant
@@ -870,18 +1093,66 @@ fn peel_pattern_to_target_head(
 /// discharger (it may run `simp` recursively on the premise, bounded by
 /// [`SimpConfig::discharge_depth`]).
 ///
+/// Applies [`star_noise_head_guard_refuses`] first: a `Const`-headed pattern
+/// is only matched against a subterm whose normalized head is the same
+/// constant. With `CLEAN_SIMP_HEAD_GUARD_TRACE` set, a refusal additionally
+/// runs the unguarded matcher and reports (stderr) any rewrite the guard
+/// suppressed — diagnostic only: that ghost run consumes simp budget/fuel, so
+/// never quote a verdict measured with the trace on.
+///
 /// REQUIRES: `lemma.name` and its BVar layout align with `lemma.lhs`/`lemma.rhs`
 /// ENSURES: On Some, returns the instantiated RHS plus a proof term built from `lemma.name`
 /// ENSURES: On Some, every side condition of `lemma` was discharged with a
 ///   type-checked proof term; no argument slot is silently skipped
+/// ENSURES: On Some, the guard did not refuse — i.e. the lemma's stored
+///   pattern head (when a non-hetero `Const`) equals the normalized target head
 pub(crate) fn try_apply_simp_lemma_with_proof(
     state: &ProofState,
     goal: &Goal,
-    expr: &Expr,
+    target: &MatchTarget,
     lemma: &SimpLemma,
     lemmas: &SimpLemmaSet,
     config: &SimpConfig,
+    budget: &SimpBudget,
 ) -> Option<(Expr, Expr)> {
+    if star_noise_head_guard_refuses(lemma, target.expr()) {
+        if std::env::var_os("CLEAN_SIMP_HEAD_GUARD_TRACE").is_some() {
+            if let Some((would_be, _proof)) =
+                try_apply_simp_lemma_unguarded(state, goal, target, lemma, lemmas, config, budget)
+            {
+                if would_be != *target.source() {
+                    eprintln!(
+                        "simp-head-guard: refused would-have-fired lemma={} \
+                         pattern_head={:?} target_head={:?} target={:?} would_rewrite_to={:?}",
+                        lemma.name,
+                        lemma.lhs.get_app_fn(),
+                        target.expr().get_app_fn(),
+                        target.source(),
+                        would_be
+                    );
+                }
+            }
+        }
+        return None;
+    }
+    try_apply_simp_lemma_unguarded(state, goal, target, lemma, lemmas, config, budget)
+}
+
+/// The matcher body behind [`try_apply_simp_lemma_with_proof`], WITHOUT the
+/// star-noise head guard. Only that wrapper (and its trace arm) may call this.
+fn try_apply_simp_lemma_unguarded(
+    state: &ProofState,
+    goal: &Goal,
+    target: &MatchTarget,
+    lemma: &SimpLemma,
+    lemmas: &SimpLemmaSet,
+    config: &SimpConfig,
+    budget: &SimpBudget,
+) -> Option<(Expr, Expr)> {
+    // The subterm being rewritten. Every guard below — `lhs_inst ≡ expr`,
+    // `proof_matches_rewrite` — is stated over THIS, never over the normalised
+    // match target.
+    let expr = target.source();
     let mut metas = MetaState::new();
     // Pattern metas are scoped to the GOAL's locals (elab locals + goal ctx):
     // a pattern variable must be allowed to bind a goal subterm mentioning a
@@ -891,33 +1162,11 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
     let (pattern_with_metas, mut bvar_to_meta) =
         convert_bvars_to_metas(&lemma.lhs, &mut metas, &pattern_scope);
 
-    // Match target. When `expr` is a heterogeneous-operator typeclass projection
-    // (`@HMul.hMul Nat … n 0`), bare-head builtin/library lemmas (`Nat.mul ?n 0`)
-    // cannot unify head-to-head against the projection spine: the first-order
-    // unifier mis-binds `?n` to a partial `HMul.hMul …` application, assembling a
-    // malformed proof that only the kernel `add_decl` rejects (after which simp
-    // has already lost the chance to fall through to another candidate). Peel
-    // EXACTLY the projection layer — exposing `Nat.mul n 0` WITHOUT ι-reducing
-    // the operands — and unify the pattern against THAT. The unifier then binds
-    // `?n ↦ n` correctly. Soundness is unchanged: the peeled form is def-eq to
-    // `expr`, so the existing `lhs_inst ≡ expr` guard and `proof_matches_rewrite`
-    // (both still stated over the ORIGINAL `expr`) validate the bridge, and the
-    // kernel re-check is the final backstop. `reduce_op_projection_head` returns
-    // `None` for non-projection heads, so the common case is untouched.
-    let peeled = reduce_op_projection_head(state, goal, expr);
-    let match_target = peeled.as_ref().unwrap_or(expr);
-
-    // Collapse `@OfNat.ofNat Nat k (instOfNatNat k)` operand leaves to the raw
-    // `Lit(Nat k)` before matching (B102). The surface elaborator spells a Nat
-    // numeral as the OfNat projection form; builtin literal-operand patterns
-    // (`Nat.add ?n 0`, `Nat.mul ?n 1`) carry the bare `Nat.zero`/`Lit 1` leaf,
-    // and the reducible-transparency unifier cannot bridge the two (the OfNat
-    // instance does not unfold at `withReducible`). The collapse is exactly
-    // the instance's own ι/δ-reduction (`instOfNatNat k` stores `k`), so it is
-    // def-eq; the `lhs_inst ≡ expr` guard below is still stated over the
-    // ORIGINAL `expr` and the kernel re-check backstops any mis-assembly.
-    let collapsed = collapse_nat_ofnat_literals(match_target);
-    let match_target = collapsed.as_ref().unwrap_or(match_target);
+    // Match target: the projection peel and the `OfNat` literal collapse the
+    // matcher needs, computed ONCE per subterm by the candidate loop rather
+    // than once per candidate. See [`MatchTarget`] for why hoisting them is
+    // behaviour-preserving and what each step is for.
+    let match_target = target.expr();
 
     // Normalize the LEMMA PATTERN the same way, so the two sides meet. Without
     // this the normalization above is ONE-SIDED: a lemma whose own statement is
@@ -964,6 +1213,31 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
             // no-op when no level param was solved, so the common case is
             // untouched.
             let inst = |e: &Expr| metas.instantiate_levels(&metas.instantiate(e));
+
+            // Binding-hygiene half of the star-noise guard (see
+            // `binding_is_whnf_absorption`): refuse the match when a pattern
+            // variable was bound by absorbing a re-spelling of the WHOLE
+            // target (`Nat.sub_zero` on `Nat.sub a a` binding `?n` to the
+            // stuck `Nat.rec` WHNF of `Nat.sub a a` itself). Runs before the
+            // type/def-eq guards so a noise match never pays for them;
+            // purely restrictive.
+            for meta_expr in bvar_to_meta.values() {
+                let bound = inst(meta_expr);
+                if bound == *meta_expr {
+                    continue; // unassigned: left to the later guards/discharge
+                }
+                if binding_is_whnf_absorption(state, goal, &bound, match_target, expr) {
+                    if std::env::var_os("CLEAN_SIMP_HEAD_GUARD_TRACE").is_some() {
+                        eprintln!(
+                            "simp-head-guard: refused absorptive-binding lemma={} \
+                             binding={bound:?} target={:?}",
+                            lemma.name,
+                            target.source()
+                        );
+                    }
+                    return None;
+                }
+            }
 
             // The instantiated LHS the proof is *stated* over. For lemmas whose
             // builtin pattern uses a bare head (`Nat.mul`) but whose match target
@@ -1034,6 +1308,7 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
                 &mut bvar_to_meta,
                 lemmas,
                 config,
+                budget,
             ) {
                 return None;
             }
@@ -1044,6 +1319,48 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
             let rhs_with_metas = substitute_bvars_with_metas(&lemma.rhs, &bvar_to_meta);
             let result = inst(&rhs_with_metas);
             if contains_unassigned_meta(&result) {
+                return None;
+            }
+
+            // B7 (ordered rewriting, Lean parity): a PERMUTATIVE lemma — same
+            // term on both sides up to a bijective renaming of its pattern
+            // variables, `Nat.add_comm : ?a + ?b = ?b + ?a` canonically —
+            // must not fire unconditionally. It matches its own output, so
+            // the main simp loop flips the SAME node every pass until
+            // `max_steps`, and (worse) the top-level match at that node runs
+            // before child recursion, so rewrites INSIDE the operands (the
+            // induction hypotheses of `data_tree-mirror-size`) are starved
+            // for the whole run. Lean marks such lemmas `perm` at
+            // registration and applies them only when the rewrite strictly
+            // DECREASES the term in a fixed total order — terminating, and
+            // canonicalizing both sides of an equality goal to the same
+            // ordering-minimal operand order. Same rule here.
+            //
+            // The comparison is `result < lhs_inst` — both assembled from the
+            // LEMMA's own pattern over the matched bindings — and
+            // deliberately NOT `result < expr` (the goal subterm). The two
+            // differ when the unifier matched through reduction: a
+            // ι-collapsed star pattern (`Nat.sub ?n 0` ⇒ bare `?n`, B102) can
+            // legally rewrite `Nat.add a b` to its stuck `Nat.rec` WHNF
+            // (def-eq, kernel-checkable), and against THAT spelling a
+            // bare-`Nat.add` flip always compares "smaller", re-arming the
+            // flip on every spelling round-trip (measured: a 4-cycle
+            // `unfold → flip → unfold → flip` consuming all 1000 steps on
+            // `Nat.add a b = Nat.add b a`). `lhs_inst`/`result` share the
+            // pattern's spelling by construction, so the order sees ONLY the
+            // operand permutation and re-spelling cannot re-enable a flip.
+            // Refusing is fail-closed (simp just reports the goal honestly);
+            // every accepted rewrite still carries its kernel-checked proof.
+            //
+            // (The star-noise re-spelling itself is now refused upstream by
+            // `star_noise_head_guard_refuses` / `binding_is_whnf_absorption`,
+            // so the 4-cycle can no longer arise — but the pattern-side
+            // comparison stays: it is the principled choice independent of
+            // that guard, and defense in depth against any future spelling
+            // bend the guard does not cover.)
+            if super::perm::is_permutative_pair(&lemma.lhs, &lemma.rhs)
+                && !super::perm::expr_order_lt(&result, &lhs_inst)
+            {
                 return None;
             }
 
@@ -1323,6 +1640,7 @@ fn bind_undetermined_binders(
     bvar_to_meta: &mut hashbrown::HashMap<u32, Expr>,
     lemmas: &SimpLemmaSet,
     config: &SimpConfig,
+    budget: &SimpBudget,
 ) -> bool {
     // A rule minted from a LOCAL hypothesis (`simp [*]`, `simp [h]`) carries
     // that hypothesis' name, which may coincide with an environment constant —
@@ -1369,7 +1687,8 @@ fn bind_undetermined_binders(
             continue;
         }
 
-        let Some(proof) = super::discharge::discharge_premise(state, goal, &domain, lemmas, config)
+        let Some(proof) =
+            super::discharge::discharge_premise(state, goal, &domain, lemmas, config, budget)
         else {
             return false;
         };

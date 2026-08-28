@@ -94,7 +94,7 @@ pub const MAX_DECOMPRESS_BYTES_ENV: &str = "MATHVERSE_MAX_DECOMPRESS_BYTES";
 /// Resolve the maximum decompressed-section size, honoring the
 /// [`MAX_DECOMPRESS_BYTES_ENV`] override when it parses as a `usize`.
 #[must_use]
-pub fn max_decompress_bytes() -> usize {
+pub(crate) fn max_decompress_bytes() -> usize {
     std::env::var(MAX_DECOMPRESS_BYTES_ENV)
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
@@ -158,13 +158,13 @@ pub struct ShardHeader {
 impl ShardHeader {
     /// Check whether the sorted name index flag is set.
     #[inline]
-    pub fn has_sorted_index(&self) -> bool {
+    pub(crate) fn has_sorted_index(&self) -> bool {
         (self.flags & FLAG_HAS_SORTED_INDEX) != 0
     }
 
     /// Whether this is a legacy (v1) shard with 32-byte constant headers.
     #[inline]
-    pub fn is_legacy(&self) -> bool {
+    pub(crate) fn is_legacy(&self) -> bool {
         self.version == SHARD_VERSION_LEGACY
     }
 
@@ -604,7 +604,7 @@ impl ShardWriter {
 
     /// Number of constant headers added so far.
     #[must_use]
-    pub fn constants_len(&self) -> usize {
+    pub(crate) fn constants_len(&self) -> usize {
         self.constants.len()
     }
 
@@ -616,7 +616,7 @@ impl ShardWriter {
     }
 
     /// Set the provenance sidecar (raw bytes, will be zstd compressed).
-    pub fn set_provenance(&mut self, data: Vec<u8>) {
+    pub(crate) fn set_provenance(&mut self, data: Vec<u8>) {
         self.provenance = data;
     }
 
@@ -627,7 +627,7 @@ impl ShardWriter {
     /// `KernelShardBuilder::add_declaration`) and attach per-constant
     /// [`crate::provenance::ProvenanceRecord`]s afterwards. Returns `false`
     /// when `idx` does not name an existing constant.
-    pub fn set_constant_provenance(
+    pub(crate) fn set_constant_provenance(
         &mut self,
         idx: u32,
         provenance_idx: u32,
@@ -741,7 +741,7 @@ impl ShardWriter {
     /// single shard the result is exact.
     ///
     /// Returns the number of constants whose profile gained at least one bit.
-    pub fn finalize_axiom_profiles(&mut self) -> usize {
+    pub(crate) fn finalize_axiom_profiles(&mut self) -> usize {
         crate::lean4::olean::axiom_profile::propagate_shard_axiom_profiles(
             &mut self.constants,
             &self.exprs,
@@ -899,7 +899,7 @@ impl ShardWriter {
     /// callers copy a shard, flip selected `import_confidence` bytes, and write
     /// the result back over the original file.
     #[must_use]
-    pub fn from_reader(reader: &ShardReader) -> Self {
+    pub(crate) fn from_reader(reader: &ShardReader) -> Self {
         // SOUNDNESS (restamp threading, Step 4): the KV-stamp/restamp path copies
         // a shard through `from_reader` -> `write`. If the v3 closure-binding
         // fields were dropped here, restamping a closure shard would zero
@@ -1356,7 +1356,7 @@ impl ShardReader {
 
     /// Check if a name might exist in this shard (bloom filter check).
     /// False positives possible, false negatives impossible.
-    pub fn bloom_maybe_contains(&self, name: &str) -> bool {
+    pub(crate) fn bloom_maybe_contains(&self, name: &str) -> bool {
         bloom_check(&self.bloom, name)
     }
 
@@ -1460,7 +1460,7 @@ impl ShardReader {
     }
 
     /// Returns true if this shard has a sorted name index for O(log n) lookup.
-    pub fn has_sorted_index(&self) -> bool {
+    pub(crate) fn has_sorted_index(&self) -> bool {
         !self.sorted_index.is_empty()
     }
 
@@ -1982,7 +1982,7 @@ impl ShardMmapReader {
     }
 
     /// Read a single constant header by index (zero-copy parse).
-    pub fn read_constant(&self, idx: u32) -> MathverseResult<MathverseConstantHeader> {
+    pub(crate) fn read_constant(&self, idx: u32) -> MathverseResult<MathverseConstantHeader> {
         if idx >= self.header.constant_count {
             return Err(MathverseError::ConstantOutOfRange {
                 idx,
@@ -2013,7 +2013,7 @@ impl ShardMmapReader {
     }
 
     /// Check if a name might exist in this shard (bloom filter check).
-    pub fn bloom_maybe_contains(&self, name: &str) -> bool {
+    pub(crate) fn bloom_maybe_contains(&self, name: &str) -> bool {
         bloom_check(self.bloom_bytes(), name)
     }
 

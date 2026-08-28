@@ -38,6 +38,7 @@
 
 pub(crate) mod alethe_bridge;
 pub(crate) mod alethe_parser;
+pub(crate) mod alethe_rule_kind;
 pub mod arrays;
 pub mod ay_smt_contract;
 pub mod bv;

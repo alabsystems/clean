@@ -24,7 +24,7 @@
 //! `ir_load_cell` faults `ub bad_addr` on a dead cell, and `ir_load_at` faults
 //! `ub null_deref` on `nullptr_`.
 //!
-//! **`mem` is a parameter, not an index** — `ir_lz_func` has no `Store` and no
+//! **`mem` is a parameter, not an index** — `ir_lzm_func` has no `Store` and no
 //! `Alloca`, so no frame rule is needed. Child pointers are explicit
 //! `forall`-bound fields rather than existentials, which *is* A2's
 //! no-unconstrained-premise requirement.
@@ -32,7 +32,7 @@
 //! ## The open obligation, named rather than laundered
 //!
 //! The tags `ir_d0..ir_d4` are declaration-index tags matching the
-//! **hand-authored** `ir_lz_module`. The real Rust `Level` is **niche-encoded**
+//! **hand-authored** `ir_lzm_module`. The real Rust `Level` is **niche-encoded**
 //! (measured, rustc 1.95.0, aarch64): `Param` is the untagged variant occupying
 //! byte-0 values `{0,1,2}`, with `Zero=3, Succ=4, Max=5, IMax=6`. This relation
 //! is therefore adequate for the hand-authored module **only**. When A0 emits
@@ -65,9 +65,9 @@ THREE SHAPE DECISIONS, each forced by the semantics rather than chosen: \
 \
 (2) The cell's liveness component is pinned to Bool.true because ir_load_cell faults ub bad_addr on a dead cell; and the index is IRScalar.ptr_ a because ir_load_at faults ub null_deref on nullptr_ and type_error on every other scalar. Both are what the emitted guard actually observes. \
 \
-(3) mem is a PARAMETER, not an index: ir_lz_func performs no Store and no Alloca, so no frame rule is needed. Addresses and child pointers are explicit forall-bound constructor fields rather than existentials -- that IS the no-unconstrained-premise requirement of A2's gate. \
+(3) mem is a PARAMETER, not an index: ir_lzm_func performs no Store and no Alloca, so no frame rule is needed. Addresses and child pointers are explicit forall-bound constructor fields rather than existentials -- that IS the no-unconstrained-premise requirement of A2's gate. \
 \
-*** OPEN OBLIGATION, NAMED RATHER THAN LAUNDERED. *** The tag constants ir_d0..ir_d4 are declaration-index tags matching the HAND-AUTHORED ir_lz_module. The real Rust Level is NICHE-ENCODED (measured, rustc 1.95.0 aarch64): Param is the untagged variant occupying byte-0 values {0,1,2} inherited from NameInner, with Zero=3, Succ=4, Max=5, IMax=6. So this relation is adequate for the hand-authored module ONLY. When A0 emits the real body, either the emitted body carries the niche decode or these tag constants change. Related and equally unearned here: repr(Rust) field reordering inside Level itself, and the fat pointer residual. None is observable by the IR semantics, which is exactly why they belong in a separate layout-adequacy theorem and must be NAMED. DerivedProved, zero axiom_deps.")?;
+*** OPEN OBLIGATION, NAMED RATHER THAN LAUNDERED. *** The tag constants ir_d0..ir_d4 are declaration-index tags matching the HAND-AUTHORED ir_lzm_module. The real Rust Level is NICHE-ENCODED (measured, rustc 1.95.0 aarch64): Param is the untagged variant occupying byte-0 values {0,1,2} inherited from NameInner, with Zero=3, Succ=4, Max=5, IMax=6. So this relation is adequate for the hand-authored module ONLY. When A0 emits the real body, either the emitted body carries the niche decode or these tag constants change. Related and equally unearned here: repr(Rust) field reordering inside Level itself, and the fat pointer residual. None is observable by the IR semantics, which is exactly why they belong in a separate layout-adequacy theorem and must be NAMED. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODES_REF, "EncodesLiveLevelRef mem p L: the root-reference wrapper of crystal job A2. One constructor over EncodesLevelArc. \
 \
 The design splits the relation into a root &Level and recursive Arc edges. In Rust those differ -- &Level is non-null by typing while LevelArc wraps an Option<Arc<Level>> -- but that asymmetry has NO IR IMAGE: both are IRScalar.ptr_ a to the machine. So the split is preserved as an auditable NAME over a single recursive family rather than faked as two mutually recursive inductives, which this elaborator does not register in any case. DerivedProved, zero axiom_deps.")?;

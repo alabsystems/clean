@@ -1,0 +1,44 @@
+{
+ "prefix": "ir_sm",
+ "body": "env::Environment::set_lean4_core_strict_monads",
+ "core_digest": "c535f439fc1e8c7b326fe5452ca1112e6f4fb43a31a7f8903da5ad3788a919a2",
+ "defs_digest": "e0136b79e7c0ba2a8ff03210852e26cecd39e8739c882f28a40172ac84958b12",
+ "def_count": 4,
+ "artifact_core_digest": "1a5cce349f6f64a2e8af3368968ceb8de553769032bd47e861bfd24f4e86e159",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This chain is NOT in the producer A/B record — it was a named REFUSAL (insertfield field index 81 outside the ir_d0..ir_d16 atom pool) until the 2026-08-22 field-index reclassification — so ONE reader-A dump is recorded, not three, and this note says so.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 3562,
+  "artifact_func_id": 3562,
+  "artifact_functy_id": 401,
+  "artifact_functy_note": "401 on this dump, where the COMMITTED fixture says 404: the whole-crate function-TYPE index moves under a producer re-interning with zero instructions changed — the recorded drift class. The interface pin compares reader B's header against the fixture-era 404; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [
+   441
+  ],
+  "crate_func_ids_seen": [
+   3562
+  ],
+  "crate_func_names_seen": [
+   "env::Environment::set_lean4_core_strict_monads"
+  ],
+  "aligns_erased": [
+   "load:None",
+   "store:None"
+  ],
+  "param_tys_erased": [
+   "Ptr",
+   "Bool"
+  ],
+  "block_param_tys_erased": []
+ },
+ "text_unwitnessed": [
+ ],
+ "text_unwitnessed_note": "EMPTY: this body carries no `switch`, so the one field trust-ir's Display never prints does not occur and the emitted text fully determines the core module.",
+ "producer_dumps_observed": 1,
+ "producer_dumps_note": "The laneREG wc-REG dump_O3 2026-08-21 projection only (recorded verbatim under reader_a above). This chain is not in generated/ir_mint.producer_ab.json — the A/B record was cut while the mint still refused its field index — so no cross-producer core-digest identity is claimed here; the fixture-era text and this one dump are the two witnesses, and their agreement is M2's."
+}

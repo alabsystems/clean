@@ -948,7 +948,7 @@ impl<'a> ElabCtx<'a> {
                             expected: format!(
                                 "inaccessible pattern definitionally equal to {scrutinee_expr:?}"
                             ),
-                            actual: format!("{pattern_expr:?}"),
+                            actual: format!("{pattern_expr}"),
                         });
                     }
                     let body_expr = self.elaborate_with_expected_type(
@@ -1547,7 +1547,7 @@ impl<'a> ElabCtx<'a> {
                     let ExprKind::Pi(_, expected_motive, _) = result_ty.kind() else {
                         return Err(ElabError::TypeMismatch {
                             expected: format!("mutual-inductive motive slot {motive_idx}"),
-                            actual: format!("{result_ty:?}"),
+                            actual: format!("{result_ty}"),
                         });
                     };
                     let aux_motive =
@@ -1767,7 +1767,7 @@ impl<'a> ElabCtx<'a> {
                     let ExprKind::Pi(_, expected_minor, _) = result_ty.kind() else {
                         return Err(ElabError::TypeMismatch {
                             expected: format!("minor premise for {}", rule.constructor_name),
-                            actual: format!("{result_ty:?}"),
+                            actual: format!("{result_ty}"),
                         });
                     };
                     let binder_count = rule.num_fields as usize
@@ -1786,7 +1786,7 @@ impl<'a> ElabCtx<'a> {
                                 "{} binders for {} minor",
                                 binder_count, rule.constructor_name
                             ),
-                            actual: format!("{expected_minor:?}"),
+                            actual: format!("{expected_minor}"),
                         });
                     };
                     result = Expr::app(result, alt);

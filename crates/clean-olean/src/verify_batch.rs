@@ -124,7 +124,7 @@ pub fn relative_display(path: &Path, root: &Path) -> String {
         .to_string()
 }
 
-pub fn error_category(err: &str) -> String {
+pub(crate) fn error_category(err: &str) -> String {
     let patterns = [
         ("HeartbeatExceeded", "HeartbeatExceeded"),
         ("heartbeat", "HeartbeatExceeded"),
@@ -544,7 +544,7 @@ pub fn collect_new_env_names(env: &Environment, known: &mut HashSet<String>) -> 
 /// `Full` here when only `InferOnly` was executed would relabel a type-only
 /// count as kernel-verified, which is exactly the over-statement the integrity
 /// audit forbids.
-pub fn build_summary_with_mode(
+pub(crate) fn build_summary_with_mode(
     root: &Path,
     total_files: usize,
     processed_files: usize,
@@ -1003,9 +1003,13 @@ fn snapshot_path(cache_dir: &Path) -> PathBuf {
 /// SOUNDNESS:
 /// - The snapshot is WRITTEN only after a full re-verify of the Init constants
 ///   succeeded in THIS run (never from a load-only / infer-only env), so it is
-///   a cache of a prior re-verification, not a trust claim.
-/// - The snapshot is REUSED only on an exact header match; any mismatch falls
-///   back to the full load (fail safe).
+///   a cache of a prior re-verification, not a trust claim. Since R1-SNAP the
+///   write carries a `SnapshotAttestation` of that re-verify, which the kernel
+///   seals into a content-bound `SnapshotReceipt` inside the snapshot header.
+/// - The snapshot is REUSED only on an exact header match AND a present,
+///   content-bound verification receipt (`SnapshotReceiptPolicy::RequireReceipt`
+///   — the only policy used in production); any mismatch, absent receipt, or
+///   receipt/content divergence falls back to the full load (fail safe).
 ///
 /// MEMORY BOUNDING (WS3): when `elide != ProofValueElision::None`, the Init
 /// closure is loaded through the import policy's proof-value elision, so each
@@ -1048,7 +1052,15 @@ pub fn preload_init_with_snapshot(
         if path.exists() {
             let hash = init_closure_hash(search_paths);
             let expected = clean_kernel::env::SnapshotHeader::current(hash);
-            match Environment::load_snapshot(&path, &expected) {
+            // R1-SNAP: production reuse REQUIRES the verification receipt — a
+            // snapshot nothing attested (or whose receipt no longer binds to
+            // the stored env bytes) is refused and the cold full re-verify
+            // runs instead. The AcceptUnreceipted opt-out is never used here.
+            match Environment::load_snapshot(
+                &path,
+                &expected,
+                clean_kernel::env::SnapshotReceiptPolicy::RequireReceipt,
+            ) {
                 Ok(clean_kernel::env::SnapshotLoadOutcome::Loaded(snap_env)) => {
                     let warm_start = Instant::now();
                     let added = snap_env.constants().count();
@@ -1068,6 +1080,27 @@ pub fn preload_init_with_snapshot(
                     info!(
                         stale_version = h.snapshot_version,
                         "Init snapshot header mismatch — discarding, full re-verify"
+                    );
+                }
+                Ok(clean_kernel::env::SnapshotLoadOutcome::ReceiptRefused {
+                    violation, ..
+                }) => {
+                    warn!(
+                        violation = %violation,
+                        path = %path.display(),
+                        "Init snapshot REFUSED: verification receipt absent or \
+                         not content-bound — discarding, full re-verify"
+                    );
+                }
+                Ok(clean_kernel::env::SnapshotLoadOutcome::LoadedUnreceipted {
+                    violation, ..
+                }) => {
+                    // Unreachable under RequireReceipt; refuse to use it anyway
+                    // (fail closed) if the kernel contract ever drifts.
+                    warn!(
+                        violation = %violation,
+                        "Init snapshot returned LoadedUnreceipted under \
+                         RequireReceipt — NOT reusing it, full re-verify"
                     );
                 }
                 Err(e) => {
@@ -1145,7 +1178,22 @@ pub fn preload_init_with_snapshot(
     let hash = init_closure_hash(search_paths);
     let header = clean_kernel::env::SnapshotHeader::current(hash);
     let path = snapshot_path(dir);
-    match env.save_snapshot(&path, header) {
+    // R1-SNAP: attest the re-verification that just succeeded (the fail==0
+    // gate above). save_snapshot seals this claim into a receipt whose digest
+    // it computes over the exact env bytes written; load_snapshot refuses any
+    // snapshot without it. `verified_at` is diagnostic only — the binding is
+    // content-derived and carries no timestamp.
+    let attestation = clean_kernel::env::SnapshotAttestation {
+        scope: "typecheck_constants_full: add_decl-equivalent re-verify of the \
+                Init closure (preload_init_with_snapshot cold path, fail==0)"
+            .to_string(),
+        decls_verified: pass as u64,
+        verified_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| format!("unix:{}", d.as_secs()))
+            .unwrap_or_else(|_| "unix:unknown".to_string()),
+    };
+    match env.save_snapshot(&path, header, Some(&attestation)) {
         Ok(()) => info!(path = %path.display(), "wrote Init .clean-cache snapshot"),
         Err(e) => warn!(err = %e, "failed to write Init snapshot"),
     }
@@ -1527,8 +1575,10 @@ mod snapshot_tests {
     }
 
     /// Seed `cache/init.snapshot` from `env` with a header whose closure hash
-    /// matches `paths` (so the warm gate accepts it). Optionally mutate the
-    /// header (tamper) before writing.
+    /// matches `paths` (so the warm gate accepts it) and a test attestation
+    /// (so the R1-SNAP receipt gate accepts it — the seeded env stands in for
+    /// a re-verified one). Optionally mutate the header (tamper) before
+    /// writing.
     fn seed_snapshot(
         cache: &Path,
         paths: &[PathBuf],
@@ -1537,7 +1587,20 @@ mod snapshot_tests {
     ) {
         let mut header = clean_kernel::env::SnapshotHeader::current(init_closure_hash(paths));
         mutate(&mut header);
-        env.save_snapshot(&cache.join("init.snapshot"), header)
+        let attestation = clean_kernel::env::SnapshotAttestation {
+            scope: "test seed: synthetic env standing in for a re-verified Init".to_string(),
+            decls_verified: env.constants().count() as u64,
+            verified_at: "test".to_string(),
+        };
+        env.save_snapshot(&cache.join("init.snapshot"), header, Some(&attestation))
+            .expect("seed snapshot write must succeed");
+    }
+
+    /// Seed a RECEIPT-LESS snapshot (no attestation): simulates a snapshot
+    /// nothing ever claimed to have re-verified. The warm gate must refuse it.
+    fn seed_snapshot_unreceipted(cache: &Path, paths: &[PathBuf], env: &Environment) {
+        let header = clean_kernel::env::SnapshotHeader::current(init_closure_hash(paths));
+        env.save_snapshot(&cache.join("init.snapshot"), header, None)
             .expect("seed snapshot write must succeed");
     }
 
@@ -1788,6 +1851,66 @@ mod snapshot_tests {
             warm.constants().count(),
             0,
             "closure-hash-mismatched snapshot must NOT be reused"
+        );
+
+        let _ = std::fs::remove_dir_all(&cache);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_receiptless_snapshot_is_refused_not_reused() {
+        // R1-SNAP: a snapshot with a MATCHING header but NO verification
+        // receipt (nothing ever attested a re-verification produced it) must
+        // be refused by the warm path. The fixture Init cannot load fully, so
+        // the env ends up EMPTY — proving the unreceipted snapshot's 50
+        // constants were NOT reused.
+        let Some((root, paths)) = fixture_setup() else {
+            return;
+        };
+        let cache = temp_cache_dir("norcpt");
+        let _ = std::fs::remove_dir_all(&cache);
+        std::fs::create_dir_all(&cache).expect("mkdir cache");
+
+        let seeded = synthetic_init_env();
+        seed_snapshot_unreceipted(&cache, &paths, &seeded);
+
+        // Control: the same env seeded WITH a receipt IS restored — so the
+        // refusal below is attributable to the receipt gate alone.
+        {
+            let mut control = Environment::default();
+            seed_snapshot(&cache, &paths, &seeded, |_| {});
+            preload_init_with_snapshot(
+                &mut control,
+                &root,
+                &paths,
+                Some(&cache),
+                true,
+                0,
+                ProofValueElision::None,
+            );
+            assert_eq!(
+                control.constants().count(),
+                seeded.constants().count(),
+                "control: the receipted twin of this snapshot must be restored"
+            );
+            seed_snapshot_unreceipted(&cache, &paths, &seeded);
+        }
+
+        let mut warm = Environment::default();
+        preload_init_with_snapshot(
+            &mut warm,
+            &root,
+            &paths,
+            Some(&cache),
+            true,
+            0,
+            ProofValueElision::None,
+        );
+        assert_eq!(
+            warm.constants().count(),
+            0,
+            "receipt-less snapshot must NOT be reused (its 50 constants must \
+             be absent); env reflects the fallback full load, not the snapshot"
         );
 
         let _ = std::fs::remove_dir_all(&cache);

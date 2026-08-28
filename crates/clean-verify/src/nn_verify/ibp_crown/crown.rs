@@ -72,13 +72,13 @@ impl CrownBound {
 
     /// Number of output neurons tracked by this bound.
     #[must_use]
-    pub fn num_outputs(&self) -> usize {
+    pub(crate) fn num_outputs(&self) -> usize {
         self.lower_bias.len()
     }
 
     /// Number of input variables in the symbolic expression.
     #[must_use]
-    pub fn num_inputs(&self) -> usize {
+    pub(crate) fn num_inputs(&self) -> usize {
         if self.lower_coeffs.is_empty() {
             0
         } else {

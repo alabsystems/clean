@@ -13,6 +13,32 @@ use crate::ParseError;
 impl Parser {
     /// Parse one or more binders
     pub(super) fn binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
+        // Consumed with `take()`: the barrier applies to THIS binder list only.
+        // A nested `binders()` (inside a binder's TYPE, e.g. `(f : ∀ a b, P)`)
+        // must see `None`, or a multi-line type annotation would be cut short.
+        let barrier = self.binder_run_line_barrier.take();
+        let result = self.binders_barriered(barrier);
+        self.binder_run_line_barrier = None;
+        result
+    }
+
+    /// `true` when the cursor sits on the first token of a source line whose
+    /// column is at or left of `barrier` — i.e. where the NEXT top-level
+    /// command starts, so a bare-name binder run must not continue into it.
+    ///
+    /// See [`Parser::binder_run_line_barrier`] for why this exists.
+    fn at_binder_run_line_barrier(&self, barrier: Option<u32>) -> bool {
+        let Some(anchor) = barrier else {
+            return false;
+        };
+        let token = self.current();
+        token.preceded_by_newline && token.col <= anchor
+    }
+
+    fn binders_barriered(
+        &mut self,
+        barrier: Option<u32>,
+    ) -> Result<Vec<SurfaceBinder>, ParseError> {
         let mut binders = Vec::new();
 
         loop {
@@ -29,6 +55,12 @@ impl Parser {
                 TokenKind::LBracket => {
                     binders.extend(self.instance_binders()?);
                 }
+                TokenKind::Ident(_) | TokenKind::Underscore
+                    if self.at_binder_run_line_barrier(barrier) =>
+                {
+                    // A bare-name run may not START on the next command line.
+                    break;
+                }
                 TokenKind::Ident(_) | TokenKind::Underscore => {
                     // A run of consecutive bare binder names shares a single
                     // trailing type annotation, matching Lean: `∀ a b : Nat, …`,
@@ -43,6 +75,9 @@ impl Parser {
                     // before, so `∃ x ∈ S, …` / `∀ a b, …` are unaffected.
                     let mut run: Vec<(Span, String)> = Vec::new();
                     loop {
+                        if self.at_binder_run_line_barrier(barrier) {
+                            break;
+                        }
                         match self.current_kind() {
                             TokenKind::Ident(n) => {
                                 run.push((self.current_span(), n.clone()));
@@ -68,7 +103,14 @@ impl Parser {
                         // through or→and→…→arrow, so `a b : Nat → Bool` still
                         // parses, and none of those levels consume the comma
                         // that terminates the quantifier binder.
-                        Some(self.iff_expr()?)
+                        //
+                        // `with_term_slot` because Lean parses a binder type
+                        // with `termParser` (level 0): the annotation is a full
+                        // `term` even when the quantifier itself sits in an
+                        // arrow codomain, where `iff_expr` would otherwise leave
+                        // the `↔` of `a → ∀ h : p ↔ q, r h` to an enclosing
+                        // level that does not exist.
+                        Some(self.with_term_slot(Self::iff_expr)?)
                     } else {
                         None
                     };
@@ -574,11 +616,64 @@ impl Parser {
                 self.advance();
                 Ok("_invalid_".to_string())
             }
-            _ => Err(ParseError::UnexpectedToken {
-                line: self.current_line(),
-                col: self.current_span().start,
-                message: format!("expected identifier, got {:?}", self.current_kind()),
-            }),
+            // A KEYWORD token may head a dotted name — `theorem Prop.exists_iff`
+            // (Mathlib Logic/Basic:635) lexes as [Prop][Dot][Ident], and the
+            // dot-SUFFIX loop above already accepts keyword components via
+            // as_keyword_str, so rejecting the HEAD was pure inconsistency
+            // (control: `theorem Foo.rfl` parsed, `theorem Prop.foo` did not).
+            // Guarded on a byte-ADJACENT following Dot (the same contiguity
+            // idiom as the projection postfix), so a bare keyword in this
+            // position still errors exactly as before.
+            other => {
+                if let Some(kw_str) = other.as_keyword_str() {
+                    let head_end = self.current_span().end;
+                    let dot_adjacent = matches!(self.peek_kind(1), Some(TokenKind::Dot))
+                        && self
+                            .tokens
+                            .get(self.pos + 1)
+                            .is_some_and(|d| d.span.start == head_end);
+                    if dot_adjacent {
+                        let mut full_name = kw_str.to_string();
+                        self.advance();
+                        while self.check(&TokenKind::Dot) {
+                            if stop_before_universe_params
+                                && matches!(self.peek_kind(1), Some(TokenKind::LBrace))
+                            {
+                                break;
+                            }
+                            self.advance();
+                            match self.current_kind() {
+                                TokenKind::Ident(part) => {
+                                    full_name.push('.');
+                                    full_name.push_str(part);
+                                    self.advance();
+                                }
+                                other2 => {
+                                    if let Some(kw2) = other2.as_keyword_str() {
+                                        full_name.push('.');
+                                        full_name.push_str(kw2);
+                                        self.advance();
+                                    } else {
+                                        return Err(ParseError::UnexpectedToken {
+                                            line: self.current_line(),
+                                            col: self.current_span().start,
+                                            message: format!(
+                                                "expected identifier after '.', got {other2:?}"
+                                            ),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        return Ok(full_name);
+                    }
+                }
+                Err(ParseError::UnexpectedToken {
+                    line: self.current_line(),
+                    col: self.current_span().start,
+                    message: format!("expected identifier, got {:?}", self.current_kind()),
+                })
+            }
         }
     }
 
@@ -898,6 +993,15 @@ impl Parser {
                     self.advance();
                 }
                 Ok(Attribute::Unknown("-".to_string()))
+            }
+            // `class` keyword as attribute name: `attribute [class] Unique`
+            // is how Mathlib turns a structure into a class after the fact
+            // (Logic/Unique.lean:60). The Attribute::Class variant and its
+            // ClassAttrMacro already exist — only this parse arm was missing,
+            // so the whole file cascaded ("`Unique` is not a class").
+            TokenKind::Class => {
+                self.advance();
+                Ok(Attribute::Class)
             }
             // Handle `instance` keyword used as attribute name
             TokenKind::Instance => {

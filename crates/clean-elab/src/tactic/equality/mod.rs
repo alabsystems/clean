@@ -10,11 +10,15 @@
 //! Split into sub-modules for maintainability (#307):
 //! - `expr_utils`: Pure expression helpers (match_equality, contains_expr, etc.)
 //! - `rewrite`: Rewrite tactics (rewrite, rewrite_at, rewrite_ltr, rewrite_rtl)
+//! - `rewrite_delta`: `rw [<def>]` — rewriting by a DEFINITION name as a
+//!   bounded δβ unfold. Reached ONLY from `rewrite`/`rewrite_at`'s entry
+//!   points, never from the shared equation resolvers (see its header).
 //! - `structural`: Structural equality tactics (symm, trans, calc_trans)
 //! - `subst`: Substitution tactics (subst, subst_vars) — split from structural.rs
 
 mod expr_utils;
 mod rewrite;
+mod rewrite_delta;
 mod structural;
 mod subst;
 

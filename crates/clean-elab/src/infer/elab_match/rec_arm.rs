@@ -143,7 +143,7 @@ impl<'a> ElabCtx<'a> {
                 return Err(ElabError::TypeMismatch {
                     expected: "fully-applied inductive scrutinee type for recursive match"
                         .to_string(),
-                    actual: format!("{scrutinee_whnf:?}"),
+                    actual: format!("{scrutinee_whnf}"),
                 });
             }
         };
@@ -337,8 +337,8 @@ impl<'a> ElabCtx<'a> {
         {
             if !self.is_def_eq(actual, expected) {
                 return Err(ElabError::TypeMismatch {
-                    expected: format!("parameter `{expected:?}` of `{ind_name}`"),
-                    actual: format!("{actual:?}"),
+                    expected: format!("parameter `{expected}` of `{ind_name}`"),
+                    actual: format!("{actual}"),
                 });
             }
         }
@@ -505,8 +505,8 @@ impl<'a> ElabCtx<'a> {
         if !self.is_def_eq(&actual_ty, expected_ty) {
             return Err(ElabError::MatchArmTypeMismatch {
                 arm_index: arm_idx,
-                expected: format!("{expected_ty:?}"),
-                actual: format!("{actual_ty:?}"),
+                expected: format!("{expected_ty}"),
+                actual: format!("{actual_ty}"),
             });
         }
         Ok(())

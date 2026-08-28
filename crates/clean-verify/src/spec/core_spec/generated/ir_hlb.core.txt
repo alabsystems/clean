@@ -1,0 +1,36 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (call 1 (args 0)))
+            (node (results 2) (const (uint 32) (int 0)))
+            (node (results 3) (icmp ugt (uint 32) 1 2))
+            (node (results) (ret (vals 3)))
+          ))
+      ))
+    (func 1
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (extractfield (uint 64) 0 0))
+            (node (results 2) (const (uint 32) (int 44)))
+            (node (results 3) (const (uint 32) (int 64)))
+            (node (results 4) (icmp ult (uint 32) 2 3))
+            (node (results) (assert 4))
+            (node (results 5) (cast zext (uint 32) (uint 64) 2))
+            (node (results 6) (binop lshr (uint 64) 1 5))
+            (node (results 7) (cast trunc (uint 64) (uint 32) 6))
+            (node (results) (ret (vals 7)))
+          ))
+      ))
+  )
+  (globals)
+)

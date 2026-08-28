@@ -634,11 +634,35 @@ impl FetchManager {
         let input_rev = dep.rev.clone().or_else(|| dep.version.clone());
         let temp_pkg = GitPackage::new(&dep.name, url, input_rev.as_deref().unwrap_or("main"));
 
-        // Fetch the package
-        let pkg_dir = self.fetch_git_package(&temp_pkg)?;
+        // Fetch the package. A clone failure on a URL derived from a
+        // scope-only (Reservoir) require is attributed to that offline
+        // derivation instead of surfacing as a bare git error.
+        let pkg_dir = self
+            .fetch_git_package(&temp_pkg)
+            .map_err(|e| attribute_scope_only_fetch_error(dep, url, e))?;
 
-        // Get the actual commit SHA
+        // Get the actual commit SHA. This reads git metadata, so it must run
+        // against the CLONE root, never a `subDir` beneath it.
         let rev = self.get_git_rev(&pkg_dir)?;
+
+        // A `subDir` require names a package that lives inside the repository
+        // rather than at its root (how a monorepo publishes several Lake
+        // packages from one repo). The clone is only the transport; the package
+        // root is the subdirectory, and resolving to the clone root instead
+        // would silently build the wrong tree.
+        let package_dir = match &dep.sub_dir {
+            Some(sub) => {
+                let joined = pkg_dir.join(sub);
+                if !joined.is_dir() {
+                    return Err(LakeError::PackageNotFound {
+                        name: dep.name.clone(),
+                        path: joined,
+                    });
+                }
+                joined
+            }
+            None => pkg_dir,
+        };
 
         Ok((
             ResolvedPackage {
@@ -649,7 +673,7 @@ impl FetchManager {
                 path: None,
                 inherited: false,
             },
-            pkg_dir,
+            package_dir,
         ))
     }
 
@@ -679,6 +703,33 @@ impl FetchManager {
         }
 
         Ok((manifest, result))
+    }
+}
+
+/// Attribute a fetch failure to the interim offline scope-to-GitHub mapping
+/// when the failed URL was derived from a scope-only (Reservoir) require:
+/// the error must name the scope/name and state that the Reservoir registry
+/// API was not consulted. Failures on explicitly-written git URLs pass
+/// through unchanged (an explicit URL also wins this check when a scope was
+/// declared alongside it, because the derivation is only to blame for URLs
+/// it produced).
+fn attribute_scope_only_fetch_error(dep: &Dependency, url: &str, err: LakeError) -> LakeError {
+    let Some(scope) = dep.scope.as_deref() else {
+        return err;
+    };
+    if url != crate::toml_config::reservoir_offline_git_url(scope, &dep.name) {
+        return err;
+    }
+    LakeError::GitError {
+        operation: "fetch".to_string(),
+        message: format!(
+            "scope-only require '{scope}/{name}': clone of {url} failed: {err}. \
+             This URL was derived offline from the require's scope; the Reservoir \
+             registry API was not consulted (interim limitation). If the package's \
+             repository does not follow the github.com/{{scope}}/{{name}} convention, \
+             add an explicit `git = \"<url>\"` to the [[require]] entry.",
+            name = dep.name
+        ),
     }
 }
 
@@ -758,6 +809,8 @@ mod tests {
             rev: None,
             path: Some(PathBuf::from("nonexistent")),
             version: None,
+            scope: None,
+            sub_dir: None,
         };
 
         let result = fm.resolve_dependencies(&[dep]).unwrap();
@@ -782,12 +835,84 @@ mod tests {
             rev: None,
             path: None,
             version: None,
+            scope: None,
+            sub_dir: None,
         };
 
         let result = fm.resolve_dependencies(&[dep]).unwrap();
         assert!(result.resolved.is_empty());
         assert_eq!(result.errors.len(), 1);
         assert!(result.errors[0].1.contains("neither git nor path"));
+    }
+
+    /// A clone failure on a URL derived from a scope-only (Reservoir) require
+    /// must name the scope/name and say the Reservoir API was not consulted.
+    /// (No network: the attribution helper is exercised directly.)
+    #[test]
+    fn test_scope_only_fetch_error_names_scope_and_reservoir() {
+        let dep = Dependency {
+            name: "importGraph".to_string(),
+            // The URL the offline mapping derives for this (scope, name).
+            git: Some("https://github.com/leanprover-community/import-graph".to_string()),
+            rev: None,
+            path: None,
+            version: None,
+            scope: Some("leanprover-community".to_string()),
+            sub_dir: None,
+        };
+        let base = LakeError::GitError {
+            operation: "clone".to_string(),
+            message: "exit status 128".to_string(),
+        };
+        let msg = attribute_scope_only_fetch_error(
+            &dep,
+            dep.git.as_deref().expect("git URL set above"),
+            base,
+        )
+        .to_string();
+        assert!(
+            msg.contains("leanprover-community/importGraph"),
+            "must name scope/name: {msg}"
+        );
+        assert!(msg.contains("Reservoir"), "must mention Reservoir: {msg}");
+        assert!(
+            msg.contains("not consulted"),
+            "must state the API was not consulted: {msg}"
+        );
+        // The underlying git failure stays visible.
+        assert!(
+            msg.contains("exit status 128"),
+            "must keep the cause: {msg}"
+        );
+    }
+
+    /// A failure on an explicitly-written git URL passes through unchanged,
+    /// even when the require also declared a scope.
+    #[test]
+    fn test_explicit_git_fetch_error_passes_through() {
+        let dep = Dependency {
+            name: "importGraph".to_string(),
+            git: Some("https://example.com/fork/import-graph".to_string()),
+            rev: None,
+            path: None,
+            version: None,
+            scope: Some("leanprover-community".to_string()),
+            sub_dir: None,
+        };
+        let base = LakeError::GitError {
+            operation: "clone".to_string(),
+            message: "exit status 128".to_string(),
+        };
+        let msg = attribute_scope_only_fetch_error(
+            &dep,
+            dep.git.as_deref().expect("git URL set above"),
+            base,
+        )
+        .to_string();
+        assert!(
+            !msg.contains("Reservoir"),
+            "explicit URL must not be blamed on the offline mapping: {msg}"
+        );
     }
 
     /// Write a minimal `lakefile.toml` package into `dir`, with the given
@@ -846,6 +971,8 @@ mod tests {
             rev: None,
             path: Some(PathBuf::from(path)),
             version: None,
+            scope: None,
+            sub_dir: None,
         }
     }
 
@@ -935,6 +1062,8 @@ mod tests {
             rev: None,
             path: None,
             version: None,
+            scope: None,
+            sub_dir: None,
         };
 
         let (manifest, result) = fm

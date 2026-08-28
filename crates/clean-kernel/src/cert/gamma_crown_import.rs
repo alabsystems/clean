@@ -124,13 +124,13 @@ impl GammaCrownCert {
             .ok_or(GammaCrownImportError::MissingTrustedBridge)?;
 
         let inner_cert = ProofCert::App {
-            fn_cert: Box::new(ProofCert::Const {
+            fn_cert: Arc::new(ProofCert::Const {
                 name: NAME_TRUSTED_AY.clone(),
                 levels: vec![property_level],
                 type_: Box::new(trusted_type.clone()),
             }),
             fn_type: Box::new(trusted_type),
-            arg_cert: Box::new(ProofCert::Const {
+            arg_cert: Arc::new(ProofCert::Const {
                 name: property_name,
                 levels: vec![],
                 type_: Box::new(property_type),
@@ -140,7 +140,7 @@ impl GammaCrownCert {
 
         Ok(ProofCert::MData {
             metadata: self.metadata()?,
-            inner_cert: Box::new(inner_cert),
+            inner_cert: Arc::new(inner_cert),
             result_type: Box::new(property_expr),
         })
     }

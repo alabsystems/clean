@@ -15,6 +15,7 @@ use clean_kernel::cert::ProofCert;
 use clean_kernel::level::Level;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
+use std::sync::Arc;
 
 /// Create a Sort certificate for benchmarking
 fn sort_cert(level: u32) -> ProofCert {
@@ -32,9 +33,9 @@ fn nested_cert(depth: u32) -> ProofCert {
     } else {
         // Create a nested App structure
         ProofCert::App {
-            fn_cert: Box::new(nested_cert(depth - 1)),
+            fn_cert: Arc::new(nested_cert(depth - 1)),
             fn_type: Box::new(clean_kernel::expr::Expr::sort(Level::zero())),
-            arg_cert: Box::new(sort_cert(0)),
+            arg_cert: Arc::new(sort_cert(0)),
             result_type: Box::new(clean_kernel::expr::Expr::sort(Level::zero())),
         }
     }

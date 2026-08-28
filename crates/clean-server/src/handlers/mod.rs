@@ -18,6 +18,7 @@ mod admin;
 mod cert;
 mod check_decl_validation;
 mod core;
+mod env_merge;
 mod external_cert;
 mod external_cert_alethe;
 mod helpers;
@@ -27,7 +28,6 @@ mod search_proof;
 mod state;
 mod swarm;
 mod tactic;
-mod tla_handler;
 pub(crate) mod types;
 mod verify;
 mod widget;
@@ -99,12 +99,6 @@ pub use tactic::{
     ExtractProofResult, FailureBlocker, GetProofStateParams, InitProofStateParams,
     InitProofStateResult, OpenObligationParams, ProofStateGoalSearchParams, ProofVerification,
     RetainProofStateParams, RetainProofStateResult, SearchTacticsResult, SearchTheoremsResult,
-};
-
-// Re-export TLA+ handler types and functions
-pub use tla_handler::{
-    handle_batch_prove_tla, handle_prove_tla, BatchProveTlaItem, BatchProveTlaItemResult,
-    BatchProveTlaParams, BatchProveTlaResult, BatchProveTlaStats, ProveTlaParams, ProveTlaResult,
 };
 
 // Re-export premise selection types and handlers

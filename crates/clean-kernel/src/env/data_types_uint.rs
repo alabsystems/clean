@@ -503,15 +503,20 @@ impl Environment {
     }
 
     /// Trust: wrapping machine arithmetic for one UInt type — `<Name>.add`,
-    /// `.sub`, `.mul` over the BitVec-backed carrier, defined THROUGH the
+    /// `.sub`, `.mul`, `.div`, `.mod`, `.land`, `.lor` over the BitVec-backed
+    /// carrier, defined THROUGH the
     /// existing `.toNat` (carrier → Nat) and `.ofNat` (Nat → carrier, which
     /// wraps mod 2^w via `Fin.ofNat`), so no new arithmetic axioms are
     /// introduced and every op is kernel-checked at registration:
     ///
     /// ```text
-    /// <Name>.add a b := <Name>.ofNat (Nat.add a.toNat b.toNat)   -- wraps
-    /// <Name>.sub a b := <Name>.ofNat (Nat.add a.toNat (Nat.sub <Name>.size b.toNat))
-    /// <Name>.mul a b := <Name>.ofNat (Nat.mul a.toNat b.toNat)   -- wraps
+    /// <Name>.add  a b := <Name>.ofNat (Nat.add a.toNat b.toNat)   -- wraps
+    /// <Name>.sub  a b := <Name>.ofNat (Nat.add a.toNat (Nat.sub <Name>.size b.toNat))
+    /// <Name>.mul  a b := <Name>.ofNat (Nat.mul a.toNat b.toNat)   -- wraps
+    /// <Name>.div  a b := <Name>.ofNat (Nat.div  a.toNat b.toNat)  -- never wraps
+    /// <Name>.mod  a b := <Name>.ofNat (Nat.mod  a.toNat b.toNat)  -- never wraps
+    /// <Name>.land a b := <Name>.ofNat (Nat.land a.toNat b.toNat)  -- never wraps
+    /// <Name>.lor  a b := <Name>.ofNat (Nat.lor  a.toNat b.toNat)  -- never wraps
     /// ```
     ///
     /// `sub` uses the two's-complement identity `a - b ≡ a + (2^w - b)` so it
@@ -519,6 +524,48 @@ impl Environment {
     /// then `.ofNat` reduces mod `<Name>.size = 2^w`. This is the machine
     /// (wrapping) semantics the design's §1.1 domain-tagged arithmetic
     /// requires for `u32`/`u64` clauses — distinct from `Nat`/`Int`.
+    ///
+    /// ## Division and modulus are TOTAL, and nothing here can compute two answers
+    ///
+    /// `Nat.div`/`Nat.mod` are total, and Clean's OWN definitions say so — this
+    /// is read off `init_nat`, not assumed from Lean. `Nat.div`'s value is
+    /// `Nat.rec _ Nat.zero (fun nPred _ => Nat.divCore a a (succ nPred)) n`,
+    /// whose `n = 0` branch is literally `Nat.zero`; and `Nat.mod a n =
+    /// Nat.modCore a a n`, whose `n <= a` test (`n - a = 0`) is vacuously true
+    /// at `n = 0`, so it recurses on `a - 0 = a` until the fuel runs out and
+    /// yields `a`. That is exactly Lean 4's `Nat.div_zero` / `Nat.mod_zero`:
+    /// `n / 0 = 0`, `n % 0 = n`.
+    ///
+    /// A ground `<Name>.div x y` reduces as: delta on `<Name>.div` →
+    /// `<Name>.ofNat (Nat.div (<Name>.toNat x) (<Name>.toNat y))` → the `toNat`s
+    /// reach `Nat` literals → `Nat.div`'s NATIVE reducer fires (`checked_div_big`,
+    /// "div by zero => 0"). The `Nat`-level definition and the `Nat`-level
+    /// reducer already agree at the zero divisor, and that agreement predates
+    /// this overlay — no new decision is being taken here.
+    ///
+    /// The PER-WIDTH reducers `UInt{N}.div/.mod/.land/.lor`
+    /// (`native_reducers_uint.rs`) have been keyed on these names since before
+    /// any constant carried them. They do not in fact fire on well-typed terms:
+    /// `reduce_native` (`tc/def_eq/delta_helpers.rs`) pre-WHNFs operands only for
+    /// `decide` and the wrapper COMPARISON reducers, so an arithmetic reducer
+    /// sees `<Name>.ofNat 7` rather than a bare `Nat` literal and declines. They
+    /// were checked against these bodies anyway, because a name-keyed reducer
+    /// that DID fire and disagreed would give one ground term two values:
+    /// `reduce_uint_div` is `checked_div(b).unwrap_or(0)` and `reduce_uint_mod`
+    /// returns `a` at `b == 0` — the same answers as the `Nat` bodies, at the
+    /// zero divisor and everywhere else.
+    ///
+    /// The results are all `<= max(a.toNat, b.toNat) < <Name>.size`, so the
+    /// `.ofNat` wrap is the identity on them — machine `/`, `%`, `&&&` and
+    /// `|||` never overflow.
+    ///
+    /// `land`/`lor` are declared here even though `Nat.land`/`Nat.lor` are still
+    /// bare AXIOMS at this point in the prelude (`data_types_nat.rs`); the full
+    /// prelude DISCHARGES them to real `Nat.bitwise` definitions later
+    /// (`register_nat_bitwise_def`), and `Environment::axiom_deps` is computed
+    /// live against the environment as it stands, so `<Name>.land` is axiom-free
+    /// under `with_prelude()`. This is the same ordering `instHAndNat`
+    /// (registered even earlier) already relies on.
     ///
     /// The caller (`init_uint_arith`) requires a concrete-width `<Name>` already
     /// initialized (its `.toNat`/`.ofNat`/`.size`) plus `init_nat`. `USize` is
@@ -532,6 +579,10 @@ impl Environment {
         let nat_add = Expr::const_(Name::from_string("Nat.add"), vec![]);
         let nat_sub = Expr::const_(Name::from_string("Nat.sub"), vec![]);
         let nat_mul = Expr::const_(Name::from_string("Nat.mul"), vec![]);
+        let nat_div = Expr::const_(Name::from_string("Nat.div"), vec![]);
+        let nat_mod = Expr::const_(Name::from_string("Nat.mod"), vec![]);
+        let nat_land = Expr::const_(Name::from_string("Nat.land"), vec![]);
+        let nat_lor = Expr::const_(Name::from_string("Nat.lor"), vec![]);
 
         // Build `fun (a b : <Name>) => <Name>.ofNat (<combine> a.toNat b.toNat)`.
         let mk_binop = |combine: &dyn Fn(Expr, Expr) -> Expr| {
@@ -563,8 +614,20 @@ impl Environment {
         });
         let nat_mul_c = nat_mul.clone();
         let mul_val = mk_binop(&|x, y| Expr::apps(nat_mul_c.clone(), [x, y]));
+        let div_val = mk_binop(&|x, y| Expr::apps(nat_div.clone(), [x, y]));
+        let mod_val = mk_binop(&|x, y| Expr::apps(nat_mod.clone(), [x, y]));
+        let land_val = mk_binop(&|x, y| Expr::apps(nat_land.clone(), [x, y]));
+        let lor_val = mk_binop(&|x, y| Expr::apps(nat_lor.clone(), [x, y]));
 
-        for (op, value) in [("add", add_val), ("sub", sub_val), ("mul", mul_val)] {
+        for (op, value) in [
+            ("add", add_val),
+            ("sub", sub_val),
+            ("mul", mul_val),
+            ("div", div_val),
+            ("mod", mod_val),
+            ("land", land_val),
+            ("lor", lor_val),
+        ] {
             self.ensure_exact_checked_decl(Declaration::Definition {
                 name: Name::from_string(&format!("{name}.{op}")),
                 level_params: vec![],
@@ -576,7 +639,8 @@ impl Environment {
         Ok(())
     }
 
-    /// Trust: wrapping machine arithmetic + `HAdd`/`HSub`/`HMul` instances for
+    /// Trust: wrapping machine arithmetic + `HAdd`/`HSub`/`HMul`/`HDiv`/`HMod`/
+    /// `HAnd`/`HOr` instances for
     /// every concrete fixed-width UInt (`UInt8/16/32/64`, two-language design
     /// §1.1). After this,
     /// `x + 1 : UInt64` and friends elaborate against the single-file prelude,
@@ -584,6 +648,22 @@ impl Environment {
     /// intentionally unavailable until a platform-width-bound `USize.ofNat`
     /// exists; claiming portable wrap semantics without that binding would be
     /// unsound. Idempotent and retry-safe after any partially completed call.
+    ///
+    /// MEASURED GAP THIS CLOSES (2026-08-22): before `HDiv`/`HMod`/`HAnd`/`HOr`
+    /// joined the table, `def v (a b : UInt64) : UInt64 := a % b` did not
+    /// elaborate at ANY UInt width — not even between two variables — while the
+    /// same body at `Nat` did. The `H*` CLASSES already existed and the native
+    /// reducers for `UInt{N}.div/.mod/.land/.lor` were already registered; only
+    /// the backing constants and the instances were missing.
+    ///
+    /// `^^^` (`HXor`), `<<<` (`HShiftLeft`) and `>>>` (`HShiftRight`) are
+    /// deliberately NOT added here. `Nat.shiftRight` is still an admitted axiom
+    /// in the prelude (`register_nat_shiftright_def` is not on the
+    /// `with_prelude` path), so a `UInt{N}.shiftRight` built on it would be
+    /// axiom-BEARING, unlike every other constant in this overlay; and the shift
+    /// classes are `homogeneous: false` in the elaborator's binop desugaring
+    /// (independent shift-amount slot), so they are a different elaboration
+    /// problem, not a missing-instance one.
     pub fn init_uint_arith(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE: the UInt carrier family is deliberately withheld so the
         // genuine Lean declarations can enter through checked import. Arithmetic
@@ -600,6 +680,10 @@ impl Environment {
         self.init_hadd()?;
         self.init_hsub()?;
         self.init_hmul()?;
+        self.init_hdiv()?;
+        self.init_hmod()?;
+        self.init_hand()?;
+        self.init_hor()?;
         // Arithmetic literals (`x + 1`) require the OfNat resolver entry for
         // the actual carrier width, not merely the UInt64 instance.
         self.init_ofnat_uint8()?;
@@ -613,6 +697,10 @@ impl Environment {
                 ("HAdd", "HAdd.mk", "add"),
                 ("HSub", "HSub.mk", "sub"),
                 ("HMul", "HMul.mk", "mul"),
+                ("HDiv", "HDiv.mk", "div"),
+                ("HMod", "HMod.mk", "mod"),
+                ("HAnd", "HAnd.mk", "land"),
+                ("HOr", "HOr.mk", "lor"),
             ] {
                 let inst_name = format!("inst{class}{name}");
                 self.add_homogeneous_hetero_instance(
@@ -1006,10 +1094,20 @@ mod carrier_fidelity_tests {
         );
     }
 
-    /// `UInt8.toNat`/`ofNat`/`toBitVec` are axiom-free reducible defs; the
-    /// `<T>.mod` axioms are DELETED and `<T>.toFin` is not seeded.
+    /// `UInt8.toNat`/`ofNat`/`toBitVec` are axiom-free reducible defs, and the
+    /// whole fixed-width arithmetic overlay is axiom-free too.
+    ///
+    /// RESTATED 2026-08-22. This test used to assert `{w}.mod` was ABSENT. The
+    /// property it was defending is named in its own history — *"an opaque
+    /// modulus would add proof authority"*, i.e. the historical `UInt8.mod`
+    /// AXIOM must not come back. Absence was a proxy for that, and it was the
+    /// wrong proxy: it also forbade the axiom-FREE `Declaration::Definition`
+    /// built from `Nat.mod`, which is the thing that makes `a % b` elaborate at
+    /// a machine width at all. Assert the real property — every constant in the
+    /// overlay is a Definition with an EMPTY axiom closure — so a reintroduced
+    /// axiom still fails, and `USize` stays out entirely.
     #[test]
-    fn test_uint8_defs_axiom_free_and_mod_deleted() {
+    fn test_uint8_defs_axiom_free_and_arith_overlay_axiom_free() {
         let env = Environment::with_prelude();
         for cname in [
             "UInt8.toNat",
@@ -1026,11 +1124,33 @@ mod carrier_fidelity_tests {
                 "{cname} must be axiom-free, got {names:?}"
             );
         }
-        for w in ["UInt8", "UInt16", "UInt32", "UInt64", "USize"] {
+        for w in ["UInt8", "UInt16", "UInt32", "UInt64"] {
+            for op in ["add", "sub", "mul", "div", "mod", "land", "lor"] {
+                let cname = format!("{w}.{op}");
+                let name = Name::from_string(&cname);
+                let info = env
+                    .get_const(&name)
+                    .unwrap_or_else(|| panic!("{cname} must be registered"));
+                assert_eq!(
+                    info.kind,
+                    crate::env::types::ConstantKind::Definition,
+                    "{cname} must be a Definition, never an Axiom — an opaque \
+                     machine operation would add proof authority"
+                );
+                let deps = env.axiom_deps(&name).expect("registered above");
+                let names: Vec<String> = deps.iter().map(|n| n.to_string()).collect();
+                assert!(
+                    names.is_empty(),
+                    "{cname} must be axiom-free, got {names:?}"
+                );
+            }
+        }
+        // USize is width-abstract: NO arithmetic constant may exist for it.
+        for op in ["add", "sub", "mul", "div", "mod", "land", "lor"] {
             assert!(
-                env.get_const(&Name::from_string(&format!("{w}.mod")))
+                env.get_const(&Name::from_string(&format!("USize.{op}")))
                     .is_none(),
-                "{w}.mod axiom must be DELETED (P1)"
+                "USize.{op} must stay absent until platform width is bound"
             );
         }
     }
@@ -1067,6 +1187,71 @@ mod carrier_fidelity_tests {
         }
     }
 
+    /// The `/ % &&& |||` bodies compute, and — the load-bearing half — the
+    /// ZERO DIVISOR reduces to the same value the pre-registered native
+    /// reducers (`reduce_uint_div`, `reduce_uint_mod`) produce for these very
+    /// names. Had the two disagreed, declaring the constant would have given
+    /// one ground term two values.
+    #[test]
+    fn test_uint8_div_mod_bitwise_values_and_zero_divisor() {
+        let env = Environment::with_prelude();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        for (actual, expected, label) in [
+            (uint8_binop("div", 7, 2), uint8(3), "7 / 2 = 3"),
+            (uint8_binop("mod", 7, 3), uint8(1), "7 % 3 = 1"),
+            (uint8_binop("div", 255, 16), uint8(15), "255 / 16 = 15"),
+            (uint8_binop("mod", 255, 16), uint8(15), "255 % 16 = 15"),
+            (
+                uint8_binop("land", 0xF0, 0x3C),
+                uint8(0x30),
+                "0xF0 &&& 0x3C",
+            ),
+            (uint8_binop("lor", 0xF0, 0x0C), uint8(0xFC), "0xF0 ||| 0x0C"),
+            // Lean 4 total semantics: `n / 0 = 0`, `n % 0 = n`.
+            (uint8_binop("div", 7, 0), uint8(0), "7 / 0 = 0"),
+            (uint8_binop("mod", 7, 0), uint8(7), "7 % 0 = 7"),
+            (uint8_binop("div", 0, 0), uint8(0), "0 / 0 = 0"),
+            (uint8_binop("mod", 0, 0), uint8(0), "0 % 0 = 0"),
+        ] {
+            assert!(
+                tc.is_def_eq(&actual, &expected),
+                "UInt8 {label} must reduce to the stated value"
+            );
+        }
+    }
+
+    /// The same zero-divisor semantics at the widest carrier, where the native
+    /// reducer is a different function (`reduce_u64_*` rather than the
+    /// modulus-taking `reduce_small_*`).
+    #[test]
+    fn test_uint64_div_mod_zero_divisor() {
+        let env = Environment::with_prelude();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        let u64_of = |n: u64| {
+            Expr::app(
+                Expr::const_(Name::from_string("UInt64.ofNat"), vec![]),
+                Expr::nat_lit(n),
+            )
+        };
+        let binop = |op: &str, a: u64, b: u64| {
+            Expr::apps(
+                Expr::const_(Name::from_string(&format!("UInt64.{op}")), vec![]),
+                [u64_of(a), u64_of(b)],
+            )
+        };
+        for (actual, expected, label) in [
+            (binop("div", 7, 2), u64_of(3), "7 / 2 = 3"),
+            (binop("mod", 7, 3), u64_of(1), "7 % 3 = 1"),
+            (binop("div", 7, 0), u64_of(0), "7 / 0 = 0"),
+            (binop("mod", 7, 0), u64_of(7), "7 % 0 = 7"),
+        ] {
+            assert!(
+                tc.is_def_eq(&actual, &expected),
+                "UInt64 {label} must reduce to the stated value"
+            );
+        }
+    }
+
     /// Retry after an intentionally half-completed first width. The exact
     /// declaration gate must resume rather than duplicate/fail, and repeated
     /// complete calls must not duplicate resolver entries.
@@ -1093,7 +1278,15 @@ mod carrier_fidelity_tests {
                 "{of_nat} must be registered exactly once"
             );
 
-            for (class, op) in [("HAdd", "add"), ("HSub", "sub"), ("HMul", "mul")] {
+            for (class, op) in [
+                ("HAdd", "add"),
+                ("HSub", "sub"),
+                ("HMul", "mul"),
+                ("HDiv", "div"),
+                ("HMod", "mod"),
+                ("HAnd", "land"),
+                ("HOr", "lor"),
+            ] {
                 assert!(
                     env.get_const(&Name::from_string(&format!("{width}.{op}")))
                         .is_some(),
@@ -1159,14 +1352,14 @@ mod carrier_fidelity_tests {
     #[test]
     fn test_usize_arithmetic_is_honestly_unwired() {
         let env = Environment::with_prelude();
-        for op in ["add", "sub", "mul"] {
+        for op in ["add", "sub", "mul", "div", "mod", "land", "lor"] {
             assert!(
                 env.get_const(&Name::from_string(&format!("USize.{op}")))
                     .is_none(),
                 "USize.{op} must stay absent until platform width is bound"
             );
         }
-        for class in ["HAdd", "HSub", "HMul"] {
+        for class in ["HAdd", "HSub", "HMul", "HDiv", "HMod", "HAnd", "HOr"] {
             assert!(
                 !env.is_instance(&Name::from_string(&format!("inst{class}USize"))),
                 "inst{class}USize must not claim portable fixed-width semantics"

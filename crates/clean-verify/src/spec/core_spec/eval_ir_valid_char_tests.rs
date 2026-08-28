@@ -14,20 +14,30 @@
 
 use super::*;
 
+/// The minted `def` line for one name, from the committed script.
+fn minted_line(name: &str) -> &'static str {
+    let prefix = format!("def {name} ");
+    ir_vc_module_defs()
+        .iter()
+        .find(|l| l.starts_with(&prefix))
+        .unwrap_or_else(|| panic!("the minted script must define {name}"))
+}
+
 /// Two `condbr`s with the emitted targets, and the entry one has the
 /// OPPOSITE polarity to the fifth chain's.
 #[test]
 fn test_two_condbrs_with_the_emitted_targets() {
-    assert!(SRC_IR_VC_B0.contains("IRInst.condbr ir_d4 ir_d2 ir_nl0 ir_d1 ir_nl0"));
-    assert!(SRC_IR_VC_B1.contains("IRInst.condbr ir_d6 ir_d4 ir_nl0 ir_d5 ir_nl0"));
+    assert!(minted_line("ir_vc_b0").contains("IRInst.condbr ir_d4 ir_d2 ir_nl0 ir_d1 ir_nl0"));
+    assert!(minted_line("ir_vc_b1").contains("IRInst.condbr ir_d6 ir_d4 ir_nl0 ir_d5 ir_nl0"));
     assert!(
-        !SRC_IR_VC_B0.contains("IRInst.switch") && !SRC_IR_VC_B1.contains("IRInst.switch"),
+        !minted_line("ir_vc_b0").contains("IRInst.switch")
+            && !minted_line("ir_vc_b1").contains("IRInst.switch"),
         "this body dispatches with condbr, not with a switch"
     );
     // The entry condbr's THEN target is the higher-numbered block (bb2, the
     // immediate `true`) and its ELSE target the lower one. Exchanging them
     // negates what the body computes and changes no other lane.
-    assert!(SRC_IR_VC_B0.contains("condbr ir_d4 ir_d2 "));
+    assert!(minted_line("ir_vc_b0").contains("condbr ir_d4 ir_d2 "));
 }
 
 /// The constant is the LEFT operand of the second comparison. This is the
@@ -35,9 +45,12 @@ fn test_two_condbrs_with_the_emitted_targets() {
 /// residue has to be reduced rather than left stuck.
 #[test]
 fn test_the_second_comparison_has_its_constant_on_the_left() {
-    assert!(SRC_IR_VC_B1.contains("IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d5 ir_d0) ir_d6"));
-    assert!(SRC_IR_VC_B0.contains("IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d3) ir_d4"));
-    assert!(SRC_IR_VC_B4.contains("IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d8) ir_d9"));
+    assert!(minted_line("ir_vc_b1")
+        .contains("IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d5 ir_d0) ir_d6"));
+    assert!(minted_line("ir_vc_b0")
+        .contains("IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d0 ir_d3) ir_d4"));
+    assert!(minted_line("ir_vc_b4")
+        .contains("IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d0 ir_d8) ir_d9"));
     // …and the reflected predicate mirrors the operand order.
     assert!(SRC_IR_VC_C2.starts_with(
         "def ir_vc_c2 (n : Nat) : Bool := ir_nat_ltb (ir_wrap ir_d64 (ir_wrap ir_d64 57343))"
@@ -49,18 +62,18 @@ fn test_the_second_comparison_has_its_constant_on_the_left() {
 /// Two join blocks, and the inner one branches into the outer one.
 #[test]
 fn test_two_join_blocks_chained() {
-    assert!(SRC_IR_VC_B3.contains("IRBlock.mk ir_d3 (ir_nl1 ir_d1)"));
-    assert!(SRC_IR_VC_B6.contains("IRBlock.mk ir_d6 (ir_nl1 ir_d2)"));
+    assert!(minted_line("ir_vc_b3").contains("IRBlock.mk ir_d3 (ir_nl1 ir_d1)"));
+    assert!(minted_line("ir_vc_b6").contains("IRBlock.mk ir_d6 (ir_nl1 ir_d2)"));
     assert!(
-        SRC_IR_VC_B6.contains("IRInst.br ir_d3 (ir_nl1 ir_d2)"),
+        minted_line("ir_vc_b6").contains("IRInst.br ir_d3 (ir_nl1 ir_d2)"),
         "the inner join forwards its parameter to the outer join"
     );
     assert!(
-        SRC_IR_VC_B3.contains("IRInst.ret"),
+        minted_line("ir_vc_b3").contains("IRInst.ret"),
         "only the outer join returns"
     );
     // bb2 reaches the OUTER join directly, not through bb6.
-    assert!(SRC_IR_VC_B2.contains("IRInst.br ir_d3 (ir_nl1 ir_d7)"));
+    assert!(minted_line("ir_vc_b2").contains("IRInst.br ir_d3 (ir_nl1 ir_d7)"));
 }
 
 /// The reflected function must mirror the CFG, not the surface `||` / `&&`.
@@ -89,9 +102,9 @@ fn test_reflected_function_is_the_branch_shape() {
 /// hidden behind a name.
 #[test]
 fn test_the_literals_are_carried_not_named() {
-    assert!(SRC_IR_VC_B0.contains("IRConst.int_ 55296"));
-    assert!(SRC_IR_VC_B1.contains("IRConst.int_ 57343"));
-    assert!(SRC_IR_VC_B4.contains("IRConst.int_ 1114112"));
+    assert!(minted_line("ir_vc_b0").contains("IRConst.int_ 55296"));
+    assert!(minted_line("ir_vc_b1").contains("IRConst.int_ 57343"));
+    assert!(minted_line("ir_vc_b4").contains("IRConst.int_ 1114112"));
     assert!(SRC_IR_VC_M1.contains("IRScalar.int_ (ir_wrap ir_d64 55296)"));
     assert!(SRC_IR_VC_M4.contains("IRScalar.int_ (ir_wrap ir_d64 57343)"));
     for src in [SRC_IR_VC_C1, SRC_IR_VC_C2, SRC_IR_VC_C3] {

@@ -42,7 +42,7 @@ fn arith_decls() -> Vec<IRDecl> {
                 var: VarId(2),
                 ty: IRType::UInt64,
                 value: IRExpr::Apply {
-                    fn_id: crate::ir::FnId(Name::from_string("clean_add")),
+                    fn_id: FnId(Name::from_string("clean_add")),
                     args: vec![IRArg::Var(VarId(0)), IRArg::Var(VarId(1))],
                 },
                 rest: Box::new(IRBody::Ret(IRArg::Var(VarId(2)))),
@@ -68,7 +68,7 @@ fn test_emit_trust_ir_arithmetic_validates() {
     assert_eq!(module.functions.len(), 2);
 
     // Syntactic validity: validate_module must report no errors.
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(
         errors.is_empty(),
         "validate_module reported errors: {errors:?}"
@@ -89,7 +89,7 @@ fn tv_demo_decl() -> IRDecl {
             var: VarId(2),
             ty: IRType::UInt32,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("UInt32.add")),
+                fn_id: FnId(Name::from_string("UInt32.add")),
                 args: vec![IRArg::Var(VarId(0)), IRArg::Var(VarId(1))],
             },
             rest: Box::new(IRBody::VDecl {
@@ -100,7 +100,7 @@ fn tv_demo_decl() -> IRDecl {
                     var: VarId(4),
                     ty: IRType::UInt32,
                     value: IRExpr::Apply {
-                        fn_id: crate::ir::FnId(Name::from_string("UInt32.mul")),
+                        fn_id: FnId(Name::from_string("UInt32.mul")),
                         args: vec![IRArg::Var(VarId(2)), IRArg::Var(VarId(3))],
                     },
                     rest: Box::new(IRBody::Ret(IRArg::Var(VarId(4)))),
@@ -126,7 +126,7 @@ fn test_uint_arith_apply_lowers_to_native_binop() {
     use trust_ir::ty::Ty;
 
     let module = emit_trust_ir(&[tv_demo_decl()]).expect("UInt32 arithmetic should lower natively");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validation errors: {errors:?}");
 
     let func = &module.functions[0];
@@ -161,14 +161,25 @@ fn test_uint_arith_apply_lowers_to_native_binop() {
     );
 }
 
-/// A USER declaration named like a primitive shadows the native lowering —
-/// the existing call path is preserved verbatim (the primitive arm is only
-/// reached for otherwise-undefined names).
+/// POLICY INVERSION (2026-08-25, mirroring `emit_wasm::lower_module`): an
+/// in-slice decl named like a `UIntW.{add,sub,mul}` primitive is SKIPPED and
+/// every call site takes the native wrapping `BinOp`. The old pin ("a user
+/// decl must win — call, not BinOp") guarded a shape that cannot arise from a
+/// real kernel environment: `UInt32.add` there is the PRELUDE definition
+/// (re-registration is `DuplicateName`), whose Lean body is definitionally
+/// mod-2^32 add — the compiled-from-source body is dead weight that shadowed
+/// the native arm and made every UIntW-arithmetic root uncertifiable (its
+/// calls could never ground a Fragment-2/3 certificate). The equivalence is
+/// not taken on faith: the TV mint compares the emitted function against the
+/// ORIGINAL kernel definition, so a genuine divergence between the native
+/// BinOp and the kernel's semantics REFUSES fail-closed at certification.
 #[test]
-fn test_user_decl_shadows_uint_arith_primitive() {
+fn test_uint_arith_primitive_in_slice_is_skipped_for_native_binop() {
     use trust_ir::inst::Inst;
 
-    // A user-defined `UInt32.add` (just returns its first param).
+    // A hand-built in-slice `UInt32.add` (divergent body: returns its first
+    // param). Under the skip its body is never emitted, and call sites get
+    // the native BinOp.
     let user_add = IRDecl {
         name: Name::from_string("UInt32.add"),
         params: vec![(VarId(0), IRType::UInt32), (VarId(1), IRType::UInt32)],
@@ -176,7 +187,11 @@ fn test_user_decl_shadows_uint_arith_primitive() {
         body: IRBody::Ret(IRArg::Var(VarId(0))),
     };
     let module = emit_trust_ir(&[user_add, tv_demo_decl()])
-        .expect("user-shadowed primitive should lower as a call");
+        .expect("primitive-named decl skips; call sites lower natively");
+    assert!(
+        module.functions.iter().all(|f| f.name != "UInt32.add"),
+        "the primitive's compiled body must not be emitted"
+    );
     let func = module
         .functions
         .iter()
@@ -184,8 +199,11 @@ fn test_user_decl_shadows_uint_arith_primitive() {
         .expect("tv_demo emitted");
     let insts: Vec<&Inst> = func.blocks[0].body.iter().map(|n| &n.inst).collect();
     assert!(
-        insts.iter().any(|i| matches!(i, Inst::Call { .. })),
-        "a user decl named UInt32.add must win (call, not BinOp), got: {insts:?}"
+        insts
+            .iter()
+            .any(|i| matches!(i, Inst::BinOp { op: BinOp::Add, .. }))
+            && !insts.iter().any(|i| matches!(i, Inst::Call { .. })),
+        "call sites must be native BinOps, never calls: {insts:?}"
     );
 }
 
@@ -197,7 +215,7 @@ fn test_uint_arith_declared_type_mismatch_is_unsupported() {
         var: VarId(1),
         ty: IRType::UInt64, // disagrees with UInt32.add
         value: IRExpr::Apply {
-            fn_id: crate::ir::FnId(Name::from_string("UInt32.add")),
+            fn_id: FnId(Name::from_string("UInt32.add")),
             args: vec![IRArg::Var(VarId(0)), IRArg::Var(VarId(0))],
         },
         rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
@@ -272,17 +290,17 @@ fn test_uint_arith_value_reference_synthesizes_native_wrapper() {
             var: VarId(0),
             ty: IRType::Object,
             value: IRExpr::PartialApply {
-                fn_id: crate::ir::FnId(Name::from_string("UInt32.add")),
+                fn_id: FnId(Name::from_string("UInt32.add")),
                 arity: 2,
                 args: vec![],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(0)))),
         },
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[root], &c1_config())
+    let module = emit_trust_ir_with_config(&[root], &c1_config())
         .expect("UInt32.add closure value must synthesize a native wrapper, not UndefinedFunction");
     assert!(
-        trust_ir_build::validate_module(&module).is_empty(),
+        validate_module(&module).is_empty(),
         "synthesized-wrapper module must validate"
     );
     let wrapper = module
@@ -320,6 +338,11 @@ fn test_uint_arith_value_reference_synthesizes_native_wrapper() {
 /// it — fail-closed, no double-definition).
 #[test]
 fn test_user_decl_shadows_uint_value_reference() {
+    // POLICY INVERSION companion (see
+    // [`test_uint_arith_primitive_in_slice_is_skipped_for_native_binop`]):
+    // with the in-slice primitive SKIPPED, a function-VALUE reference to it
+    // must close over the synthesized native boxed-entry wrapper — exactly
+    // as if the primitive had never been in the slice.
     let user_add = IRDecl {
         name: Name::from_string("UInt32.add"),
         params: vec![(VarId(0), IRType::Object), (VarId(1), IRType::Object)],
@@ -334,21 +357,25 @@ fn test_user_decl_shadows_uint_value_reference() {
             var: VarId(0),
             ty: IRType::Object,
             value: IRExpr::PartialApply {
-                fn_id: crate::ir::FnId(Name::from_string("UInt32.add")),
+                fn_id: FnId(Name::from_string("UInt32.add")),
                 arity: 2,
                 args: vec![],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(0)))),
         },
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[user_add, root], &c1_config())
-        .expect("user-shadowed primitive value must lower over the user body");
+    let module = emit_trust_ir_with_config(&[user_add, root], &c1_config())
+        .expect("value reference to a skipped primitive lowers over the wrapper");
     assert!(
         module
             .functions
             .iter()
-            .all(|f| f.name != "UInt32.add.__clean_uint_arith_boxed"),
-        "no synthetic wrapper when the primitive is an in-slice user decl"
+            .any(|f| f.name == "UInt32.add.__clean_uint_arith_boxed"),
+        "the synthesized wrapper must exist for the value reference"
+    );
+    assert!(
+        module.functions.iter().all(|f| f.name != "UInt32.add"),
+        "the primitive's compiled body must not be emitted"
     );
 }
 
@@ -390,7 +417,7 @@ fn test_usize_uint64_decision_ops_lower_to_native_icmp() {
     for (name, operand, want_op) in cases {
         let module = emit_trust_ir(&[dec_decl(name, operand)])
             .unwrap_or_else(|e| panic!("{name} should lower to trust-ir: {e:?}"));
-        let errors = trust_ir_build::validate_module(&module);
+        let errors = validate_module(&module);
         assert!(errors.is_empty(), "{name}: validation errors: {errors:?}");
 
         let func = &module.functions[0];
@@ -507,7 +534,7 @@ fn test_emit_trust_ir_forward_reference_call() {
     let mut decls = arith_decls();
     decls.swap(0, 1); // now caller is index 0, callee is index 1
     let module = emit_trust_ir(&decls).expect("forward-referenced call should lower and validate");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validation errors: {errors:?}");
 }
 
@@ -615,7 +642,7 @@ fn join_point_decl() -> IRDecl {
 fn test_emit_trust_ir_join_point_and_case_validate() {
     let module = emit_trust_ir(&[join_point_decl()])
         .expect("join-point + case IRDecl should lower to trust-ir");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(
         errors.is_empty(),
         "join-point lowering must terminate every block; validate_module said: {errors:?}"
@@ -648,7 +675,7 @@ fn test_emit_trust_ir_rc_inc_emits_native_retain() {
         body,
     };
     let module = emit_trust_ir(&[decl]).expect("inc should lower natively");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validation errors: {errors:?}");
     let retains = module
         .functions
@@ -720,12 +747,12 @@ fn test_emit_trust_ir_extern_calls_managed_runtime_validates() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[decl], &config)
+    let module = emit_trust_ir_with_config(&[decl], &config)
         .expect("managed-runtime program should lower in ExternCalls mode");
 
     // Valid trust-ir: variadic clean_alloc_ctor + fixed-arity clean_inc /
     // clean_ctor_get calls all type/arity-check against their declared imports.
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(
         errors.is_empty(),
         "ExternCalls validation errors: {errors:?}"
@@ -785,7 +812,7 @@ fn c1_root_decl(callee: &str, args: Vec<IRArg>) -> IRDecl {
             var: VarId(1),
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string(callee)),
+                fn_id: FnId(Name::from_string(callee)),
                 args,
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
@@ -805,10 +832,10 @@ fn test_c1_dropped_callee_forward_declared_as_bodyless_extern() {
     use trust_ir::ty::Ty;
 
     let root = c1_root_decl("Nat.add", vec![IRArg::Var(VarId(0)), IRArg::Var(VarId(0))]);
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[root], &c1_config())
+    let module = emit_trust_ir_with_config(&[root], &c1_config())
         .expect("dropped-callee call site must lower via the extern boundary");
 
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validation errors: {errors:?}");
 
     // The mangled import: bodyless, External linkage, 2×Ptr -> Ptr.
@@ -853,9 +880,9 @@ fn test_c1_dropped_callee_erased_args_keep_c_shim_arity() {
         "toString",
         vec![IRArg::Erased, IRArg::Erased, IRArg::Var(VarId(0))],
     );
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[root], &c1_config())
+    let module = emit_trust_ir_with_config(&[root], &c1_config())
         .expect("erased-arg dropped-callee call site must lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     let ext = module
         .functions
@@ -894,9 +921,9 @@ fn test_c1_same_slice_callee_is_never_demoted_to_extern() {
         body: IRBody::Ret(IRArg::Var(VarId(0))),
     };
     let root = c1_root_decl("helper", vec![IRArg::Var(VarId(0))]);
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[helper, root], &c1_config())
+    let module = emit_trust_ir_with_config(&[helper, root], &c1_config())
         .expect("in-slice callee must lower as a plain call");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     let helper_fn = module
         .functions
@@ -935,13 +962,13 @@ fn test_c1_unfaithful_signature_keeps_undefined_function() {
             var: VarId(1),
             ty: IRType::UInt64,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                fn_id: FnId(Name::from_string("Foo.bar")),
                 args: vec![IRArg::Var(VarId(0))],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
         },
     };
-    let err = crate::emit_trust_ir::emit_trust_ir_with_config(&[scalar_result], &c1_config())
+    let err = emit_trust_ir_with_config(&[scalar_result], &c1_config())
         .expect_err("scalar result binding must be refused");
     assert!(
         matches!(&err, TrustIrError::UndefinedFunction(n) if n == "Foo.bar"),
@@ -957,13 +984,13 @@ fn test_c1_unfaithful_signature_keeps_undefined_function() {
             var: VarId(1),
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                fn_id: FnId(Name::from_string("Foo.bar")),
                 args: vec![IRArg::Var(VarId(0))],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
         },
     };
-    let err = crate::emit_trust_ir::emit_trust_ir_with_config(&[scalar_arg], &c1_config())
+    let err = emit_trust_ir_with_config(&[scalar_arg], &c1_config())
         .expect_err("scalar argument must be refused");
     assert!(
         matches!(&err, TrustIrError::UndefinedFunction(n) if n == "Foo.bar"),
@@ -988,21 +1015,21 @@ fn test_c1_arity_conflict_resolves_to_minimum_with_over_application() {
             var: VarId(1),
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                fn_id: FnId(Name::from_string("Foo.bar")),
                 args: vec![IRArg::Var(VarId(0))],
             },
             rest: Box::new(IRBody::VDecl {
                 var: VarId(2),
                 ty: IRType::Object,
                 value: IRExpr::Apply {
-                    fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                    fn_id: FnId(Name::from_string("Foo.bar")),
                     args: vec![IRArg::Var(VarId(0)), IRArg::Var(VarId(1))],
                 },
                 rest: Box::new(IRBody::Ret(IRArg::Var(VarId(2)))),
             }),
         },
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[root], &c1_config())
+    let module = emit_trust_ir_with_config(&[root], &c1_config())
         .expect("differing arities resolve to the minimum declaration");
     let foo = module
         .functions
@@ -1047,7 +1074,7 @@ fn test_c1_call_under_certified_full_arity_keeps_undefined_function() {
             ty: IRType::Object,
             // Certifies Foo.bar's FULL arity as 3.
             value: IRExpr::PartialApply {
-                fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                fn_id: FnId(Name::from_string("Foo.bar")),
                 arity: 3,
                 args: vec![IRArg::Var(VarId(0))],
             },
@@ -1056,14 +1083,14 @@ fn test_c1_call_under_certified_full_arity_keeps_undefined_function() {
                 ty: IRType::Object,
                 // 2-arg CALL site: under the certified full arity of 3.
                 value: IRExpr::Apply {
-                    fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                    fn_id: FnId(Name::from_string("Foo.bar")),
                     args: vec![IRArg::Var(VarId(0)), IRArg::Var(VarId(1))],
                 },
                 rest: Box::new(IRBody::Ret(IRArg::Var(VarId(2)))),
             }),
         },
     };
-    let err = crate::emit_trust_ir::emit_trust_ir_with_config(&[root], &c1_config())
+    let err = emit_trust_ir_with_config(&[root], &c1_config())
         .expect_err("under-application of a certified full arity must be refused");
     assert!(
         matches!(&err, TrustIrError::UndefinedFunction(n) if n == "Foo.bar"),
@@ -1089,8 +1116,7 @@ fn test_c1_dialect_mode_dropped_callee_still_undefined() {
 fn test_producer_provenance_stamped_clean_on_every_function() {
     // ExternCalls: user fn + runtime imports + a dropped-callee extern.
     let root = c1_root_decl("Nat.add", vec![IRArg::Var(VarId(0)), IRArg::Var(VarId(0))]);
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[root], &c1_config())
-        .expect("module should emit");
+    let module = emit_trust_ir_with_config(&[root], &c1_config()).expect("module should emit");
     for f in &module.functions {
         assert_eq!(
             f.producer,
@@ -1131,7 +1157,7 @@ fn c2_config() -> TrustIrConfig {
 /// A nullary-ctor `IRAlt` (the `Bool.false`/`Bool.true` shape).
 fn c2_alt(name: &str, tag: u32, body: IRBody) -> crate::ir::IRAlt {
     crate::ir::IRAlt {
-        ctor: crate::ir::CtorInfo {
+        ctor: CtorInfo {
             name: Name::from_string(name),
             tag,
             num_scalars: 0,
@@ -1215,7 +1241,7 @@ fn c2_bool_xor_decl() -> IRDecl {
 
 /// Execute `name` in `module` on Bool args via the trust-ir reference
 /// interpreter, returning its Bool result.
-fn c2_run_bool(module: &trust_ir::Module, name: &str, args: &[bool]) -> bool {
+fn c2_run_bool(module: &Module, name: &str, args: &[bool]) -> bool {
     use trust_ir::interpret::{InterpretValue, Interpreter};
     let f = module
         .functions
@@ -1233,7 +1259,7 @@ fn c2_run_bool(module: &trust_ir::Module, name: &str, args: &[bool]) -> bool {
 
 /// Count the `Inst::Call`s in `func` whose callee is the module function
 /// named `sym` (0 if `sym` is not even declared).
-fn c2_calls_to(module: &trust_ir::Module, func: &trust_ir::Function, sym: &str) -> usize {
+fn c2_calls_to(module: &Module, func: &trust_ir::Function, sym: &str) -> usize {
     use trust_ir::inst::Inst;
     let Some(target) = module.functions.iter().find(|f| f.name == sym) else {
         return 0;
@@ -1254,10 +1280,9 @@ fn test_c2_bool_case_lowers_to_condbr_not_obj_tag() {
             runtime_lowering: mode,
             ..c2_config()
         };
-        let module =
-            crate::emit_trust_ir::emit_trust_ir_with_config(&[c2_bool_not_decl()], &config)
-                .unwrap_or_else(|e| panic!("bool case must lower in {mode:?}: {e}"));
-        assert!(trust_ir_build::validate_module(&module).is_empty());
+        let module = emit_trust_ir_with_config(&[c2_bool_not_decl()], &config)
+            .unwrap_or_else(|e| panic!("bool case must lower in {mode:?}: {e}"));
+        assert!(validate_module(&module).is_empty());
         let f = module.functions.iter().find(|f| f.name == "not").unwrap();
         assert_eq!(
             f.instructions()
@@ -1285,12 +1310,12 @@ fn test_c2_bool_case_lowers_to_condbr_not_obj_tag() {
 /// the flipped module would still validate.
 #[test]
 fn test_c2_bool_case_polarity_truth_tables() {
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(
+    let module = emit_trust_ir_with_config(
         &[c2_bool_not_decl(), c2_bool_and_decl(), c2_bool_xor_decl()],
         &c2_config(),
     )
     .expect("bool truth-table module must lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     for b in [false, true] {
         assert_eq!(c2_run_bool(&module, "not", &[b]), !b, "not({b})");
@@ -1330,9 +1355,8 @@ fn test_c2_scalar_case_switches_on_value_directly() {
             default: Some(Box::new(ret_u32(VarId(3), 99))),
         },
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[decl], &c2_config())
-        .expect("scalar case must lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    let module = emit_trust_ir_with_config(&[decl], &c2_config()).expect("scalar case must lower");
+    assert!(validate_module(&module).is_empty());
     let f = module
         .functions
         .iter()
@@ -1347,10 +1371,7 @@ fn test_c2_scalar_case_switches_on_value_directly() {
     let interp = Interpreter::with_module(&module);
     for (input, expected) in [(0u64, 10u128), (1, 20), (7, 99)] {
         let out = interp
-            .execute_function(
-                f,
-                [InterpretValue::int(trust_ir::ty::Ty::U64, input as i128).unwrap()],
-            )
+            .execute_function(f, [InterpretValue::int(Ty::U64, input as i128).unwrap()])
             .unwrap_or_else(|e| panic!("dispatch({input}): {e}"));
         let got = out
             .returns
@@ -1386,9 +1407,9 @@ fn test_c2_scalar_carrier_sproj_is_identity() {
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
         },
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[decl], &c2_config())
-        .expect("scalar-carrier sproj must lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    let module =
+        emit_trust_ir_with_config(&[decl], &c2_config()).expect("scalar-carrier sproj must lower");
+    assert!(validate_module(&module).is_empty());
     let f = module
         .functions
         .iter()
@@ -1400,7 +1421,7 @@ fn test_c2_scalar_carrier_sproj_is_identity() {
         "identity projection must emit no runtime call"
     );
     let out = Interpreter::with_module(&module)
-        .execute_function(f, [InterpretValue::int(trust_ir::ty::Ty::U32, 65).unwrap()])
+        .execute_function(f, [InterpretValue::int(Ty::U32, 65).unwrap()])
         .expect("char_val(65)");
     assert_eq!(
         out.returns
@@ -1436,7 +1457,7 @@ fn test_c2_scalar_carrier_proj_object_reboxes() {
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
         },
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(
+    let module = emit_trust_ir_with_config(
         &[
             proj_decl("to_bitvec", IRType::UInt8),
             proj_decl("decidable_proof", IRType::Bool),
@@ -1444,7 +1465,7 @@ fn test_c2_scalar_carrier_proj_object_reboxes() {
         &c2_config(),
     )
     .expect("scalar-carrier object proj must lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     for name in ["to_bitvec", "decidable_proof"] {
         let f = module.functions.iter().find(|f| f.name == name).unwrap();
@@ -1492,7 +1513,7 @@ fn test_c2_scalar_carrier_proj_width_mismatch_refused() {
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
         },
     };
-    let err = crate::emit_trust_ir::emit_trust_ir_with_config(&[decl], &c2_config())
+    let err = emit_trust_ir_with_config(&[decl], &c2_config())
         .expect_err("width-changing scalar-carrier projection must be refused");
     assert!(
         matches!(&err, TrustIrError::Unsupported(m) if m.contains("scalar carrier")),
@@ -1526,7 +1547,7 @@ fn test_c2_in_slice_erased_args_materialized_not_dropped() {
             var: VarId(1),
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("And.right")),
+                fn_id: FnId(Name::from_string("And.right")),
                 args: vec![IRArg::Erased, IRArg::Erased, IRArg::Var(VarId(0))],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
@@ -1538,12 +1559,9 @@ fn test_c2_in_slice_erased_args_materialized_not_dropped() {
             runtime_lowering: mode,
             ..c2_config()
         };
-        let module = crate::emit_trust_ir::emit_trust_ir_with_config(
-            &[callee.clone(), root.clone()],
-            &config,
-        )
-        .unwrap_or_else(|e| panic!("erased-arg in-slice call must lower in {mode:?}: {e}"));
-        assert!(trust_ir_build::validate_module(&module).is_empty());
+        let module = emit_trust_ir_with_config(&[callee.clone(), root.clone()], &config)
+            .unwrap_or_else(|e| panic!("erased-arg in-slice call must lower in {mode:?}: {e}"));
+        assert!(validate_module(&module).is_empty());
 
         let target = module
             .functions
@@ -1604,7 +1622,7 @@ fn test_c2_over_application_lowers_via_clean_apply() {
             var: VarId(3),
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("Functor.map")),
+                fn_id: FnId(Name::from_string("Functor.map")),
                 args: vec![
                     IRArg::Erased,
                     IRArg::Var(VarId(0)),
@@ -1618,12 +1636,9 @@ fn test_c2_over_application_lowers_via_clean_apply() {
         },
     };
 
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(
-        &[callee.clone(), root.clone()],
-        &c2_config(),
-    )
-    .expect("over-applied in-slice call must lower via clean_apply");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    let module = emit_trust_ir_with_config(&[callee.clone(), root.clone()], &c2_config())
+        .expect("over-applied in-slice call must lower via clean_apply");
+    assert!(validate_module(&module).is_empty());
 
     let target = module
         .functions
@@ -1646,7 +1661,7 @@ fn test_c2_over_application_lowers_via_clean_apply() {
     );
 
     // Dialect mode has no closure runtime: refuse, never emit a wrong-arity call.
-    let err = crate::emit_trust_ir::emit_trust_ir_with_config(
+    let err = emit_trust_ir_with_config(
         &[callee, root],
         &TrustIrConfig {
             runtime_lowering: RuntimeLowering::Dialect,
@@ -1676,7 +1691,7 @@ fn test_c2_under_application_refused() {
         body: IRBody::Ret(IRArg::Var(VarId(0))),
     };
     let root = c1_root_decl("three", vec![IRArg::Var(VarId(0))]);
-    let err = crate::emit_trust_ir::emit_trust_ir_with_config(&[callee, root], &c2_config())
+    let err = emit_trust_ir_with_config(&[callee, root], &c2_config())
         .expect_err("under-application must be refused");
     assert!(
         matches!(&err, TrustIrError::Unsupported(m) if m.contains("under-applies")),
@@ -1705,9 +1720,9 @@ fn test_c2_box_bool_widens_via_select() {
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(1)))),
         },
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[decl], &c2_config())
-        .expect("Box{Bool} must lower validly");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    let module =
+        emit_trust_ir_with_config(&[decl], &c2_config()).expect("Box{Bool} must lower validly");
+    assert!(validate_module(&module).is_empty());
     let f = module
         .functions
         .iter()
@@ -1788,7 +1803,7 @@ fn test_c2_e2e_bool_case_native_returns_42() {
     }];
 
     let module = emit_trust_ir(&decls).expect("bool-case e2e decls should lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     let dir = tempfile::tempdir().expect("tempdir");
     let tmbc = dir.path().join("bool_case.tmbc");
@@ -1821,7 +1836,7 @@ fn test_c2_e2e_bool_case_native_returns_42() {
 
 /// Build the `ExternCalls` `build(x)` module (ctor + inc + proj) used by the
 /// object-compile e2e.
-fn extern_build_module() -> trust_ir::Module {
+fn extern_build_module() -> Module {
     use crate::emit_trust_ir::{RuntimeLowering, TrustIrConfig};
     use crate::ir::CtorInfo;
     let ctor = CtorInfo {
@@ -1864,8 +1879,7 @@ fn extern_build_module() -> trust_ir::Module {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    crate::emit_trust_ir::emit_trust_ir_with_config(&[decl], &config)
-        .expect("ExternCalls build module should lower")
+    emit_trust_ir_with_config(&[decl], &config).expect("ExternCalls build module should lower")
 }
 
 #[test]
@@ -1918,12 +1932,12 @@ fn test_emit_trust_ir_extern_calls_closures_validate() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&[add2, make, apply_it], &config)
+    let module = emit_trust_ir_with_config(&[add2, make, apply_it], &config)
         .expect("closures should lower in ExternCalls mode (no longer Unsupported)");
 
     // The fn-pointer (fn_addr -> bitcast to Ptr) and clean_alloc_closure /
     // clean_apply_1 calls all type/arity-check against their imports.
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "closure validation errors: {errors:?}");
 
     let names: Vec<&str> = module.functions.iter().map(|f| f.name.as_str()).collect();
@@ -1975,10 +1989,9 @@ fn test_emit_trust_ir_extern_calls_closure_apply_frontier_32_33() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module =
-        crate::emit_trust_ir::emit_trust_ir_with_config(&[wide_closure_apply_decl(32)], &config)
-            .expect("arity 32 must lower at the exact clean_invoke ceiling");
-    let errors = trust_ir_build::validate_module(&module);
+    let module = emit_trust_ir_with_config(&[wide_closure_apply_decl(32)], &config)
+        .expect("arity 32 must lower at the exact clean_invoke ceiling");
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "closure validation errors: {errors:?}");
     assert!(
         module
@@ -1988,9 +2001,8 @@ fn test_emit_trust_ir_extern_calls_closure_apply_frontier_32_33() {
         "arity 32 must route to the positional runtime ABI"
     );
 
-    let error =
-        crate::emit_trust_ir::emit_trust_ir_with_config(&[wide_closure_apply_decl(33)], &config)
-            .expect_err("arity 33 must be refused beyond the clean_invoke ceiling");
+    let error = emit_trust_ir_with_config(&[wide_closure_apply_decl(33)], &config)
+        .expect_err("arity 33 must be refused beyond the clean_invoke ceiling");
     assert!(
         matches!(&error, TrustIrError::Unsupported(message) if message.contains("33") && message.contains("32")),
         "expected the structured 33 > 32 refusal, got: {error:?}"
@@ -2149,10 +2161,9 @@ fn test_emit_trust_ir_e2e_closure_invocation_links_and_runs() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module =
-        crate::emit_trust_ir::emit_trust_ir_with_config(&e2e_closure_main_decls(), &config)
-            .expect("closure main should lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    let module = emit_trust_ir_with_config(&e2e_closure_main_decls(), &config)
+        .expect("closure main should lower");
+    assert!(validate_module(&module).is_empty());
 
     let dir = tempfile::tempdir().expect("tempdir");
     let tmbc = dir.path().join("c.tmbc");
@@ -2250,9 +2261,9 @@ fn test_emit_trust_ir_string_literal_emits_byte_global() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&e2e_string_main_decls(), &config)
+    let module = emit_trust_ir_with_config(&e2e_string_main_decls(), &config)
         .expect("string program should lower in ExternCalls mode");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(
         errors.is_empty(),
         "string module should validate: {errors:?}"
@@ -2281,7 +2292,7 @@ fn test_emit_trust_ir_string_literal_emits_byte_global() {
         other => panic!("string global initializer should be a byte Aggregate: {other:?}"),
     }
     match g.ty {
-        trust_ir::ty::Ty::Array(_, len) => {
+        Ty::Array(_, len) => {
             assert_eq!(len, expected.len() as u64, "Array length = byte count");
         }
         ref other => panic!("string global type should be Ty::Array: {other:?}"),
@@ -2352,9 +2363,9 @@ fn test_emit_trust_ir_e2e_string_links_and_runs() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(&e2e_string_main_decls(), &config)
+    let module = emit_trust_ir_with_config(&e2e_string_main_decls(), &config)
         .expect("string main should lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     let dir = tempfile::tempdir().expect("tempdir");
     let tmbc = dir.path().join("s.tmbc");
@@ -2548,10 +2559,9 @@ fn test_emit_trust_ir_e2e_inline_ops_link_and_run() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module =
-        crate::emit_trust_ir::emit_trust_ir_with_config(&e2e_inline_managed_decls(), &config)
-            .expect("inline managed program should lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    let module = emit_trust_ir_with_config(&e2e_inline_managed_decls(), &config)
+        .expect("inline managed program should lower");
+    assert!(validate_module(&module).is_empty());
 
     let dir = tempfile::tempdir().expect("tempdir");
     let tmbc = dir.path().join("m.tmbc");
@@ -2563,7 +2573,7 @@ fn test_emit_trust_ir_e2e_inline_ops_link_and_run() {
     std::fs::write(&tmbc, tmbc_envelope(&module)).expect("write .tmbc");
     std::fs::write(&shim_c, CLEAN_RUNTIME_SHIMS_C).expect("write shims.c");
 
-    let run_cc = |args: &[&std::ffi::OsStr]| -> std::process::Output {
+    let run_cc = |args: &[&OsStr]| -> std::process::Output {
         std::process::Command::new("cc")
             .args(args)
             .output()
@@ -2675,13 +2685,12 @@ fn test_emit_trust_ir_e2e_managed_runtime_links_and_runs() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module =
-        crate::emit_trust_ir::emit_trust_ir_with_config(&e2e_managed_main_decls(), &config)
-            .expect("managed main should lower");
+    let module = emit_trust_ir_with_config(&e2e_managed_main_decls(), &config)
+        .expect("managed main should lower");
     assert!(
-        trust_ir_build::validate_module(&module).is_empty(),
+        validate_module(&module).is_empty(),
         "validate errors: {:?}",
-        trust_ir_build::validate_module(&module)
+        validate_module(&module)
     );
 
     let dir = tempfile::tempdir().expect("tempdir");
@@ -2763,7 +2772,7 @@ fn test_emit_trust_ir_extern_calls_compiles_to_object() {
     };
 
     let module = extern_build_module();
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     let dir = tempfile::tempdir().expect("tempdir");
     let tmbc = dir.path().join("build.tmbc");
@@ -2832,7 +2841,7 @@ fn e2e_main_decls() -> Vec<IRDecl> {
             var: VarId(0),
             ty: IRType::UInt64,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("forty_two")),
+                fn_id: FnId(Name::from_string("forty_two")),
                 args: vec![],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(0)))),
@@ -2843,7 +2852,7 @@ fn e2e_main_decls() -> Vec<IRDecl> {
 
 /// Wrap a serialized trust-ir module in the `.tmbc` envelope trust-cg reads:
 /// `b"tMBC" ++ 1u32_le ++ serialize_module(module)`.
-fn tmbc_envelope(module: &trust_ir::Module) -> Vec<u8> {
+fn tmbc_envelope(module: &Module) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"tMBC");
     bytes.extend_from_slice(&1u32.to_le_bytes());
@@ -2904,7 +2913,7 @@ fn test_emit_trust_ir_e2e_native_binary_returns_42() {
 
     // 1. Lower + validate.
     let module = emit_trust_ir(&e2e_main_decls()).expect("e2e decls should lower");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validate_module errors: {errors:?}");
 
     // 2. Write the .tmbc envelope.
@@ -2986,7 +2995,7 @@ fn test_emit_trust_ir_e2e_join_point_native_returns_7() {
     };
 
     let module = emit_trust_ir(&e2e_join_point_decls()).expect("join-point main should lower");
-    assert!(trust_ir_build::validate_module(&module).is_empty());
+    assert!(validate_module(&module).is_empty());
 
     let dir = tempfile::tempdir().expect("tempdir");
     let tmbc = dir.path().join("jp.tmbc");
@@ -3033,8 +3042,8 @@ fn ctor_info(
     num_scalars: u32,
     num_objects: u32,
     field_types: Vec<IRType>,
-) -> crate::ir::CtorInfo {
-    crate::ir::CtorInfo {
+) -> CtorInfo {
+    CtorInfo {
         name: Name::from_string(name),
         tag,
         num_scalars,
@@ -3638,10 +3647,10 @@ fn diff_trust_ir_exit(
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let module = crate::emit_trust_ir::emit_trust_ir_with_config(decls, &config)
+    let module = emit_trust_ir_with_config(decls, &config)
         .expect("differential program should lower to trust-ir");
     assert!(
-        trust_ir_build::validate_module(&module).is_empty(),
+        validate_module(&module).is_empty(),
         "trust-ir module should validate"
     );
 
@@ -3869,12 +3878,12 @@ fn test_emit_trust_ir_scalar_field_ops_lower_and_validate() {
         ("uset", e2e_usize_field_decls(), "clean_ctor_set_usize"),
     ];
     for (label, decls, expected_call) in cases {
-        let module = crate::emit_trust_ir::emit_trust_ir_with_config(&decls, &cfg)
+        let module = emit_trust_ir_with_config(&decls, &cfg)
             .unwrap_or_else(|e| panic!("`{label}` should lower: {e:?}"));
-        let errors = trust_ir_build::validate_module(&module);
+        let errors = validate_module(&module);
         assert!(errors.is_empty(), "`{label}` should validate: {errors:?}");
         // The expected runtime symbol must be declared and called.
-        let called: std::collections::HashSet<&str> = module
+        let called: HashSet<&str> = module
             .functions
             .iter()
             .flat_map(|f| f.instructions())
@@ -4073,10 +4082,9 @@ fn test_emit_trust_ir_missing_target_info_is_rejected_fail_closed() {
     match err {
         TrustIrError::Invalid(errors) => {
             assert!(
-                errors.iter().any(|e| matches!(
-                    e,
-                    trust_ir_build::ValidationError::TargetInfoRequired { .. }
-                )),
+                errors
+                    .iter()
+                    .any(|e| matches!(e, ValidationError::TargetInfoRequired { .. })),
                 "expected TargetInfoRequired among: {errors:?}"
             );
         }
@@ -4120,7 +4128,7 @@ fn test_emit_trust_ir_invalid_module_construction_is_rejected() {
             // and forwards the raw scalar into the ptr slot.
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("gives_u64")),
+                fn_id: FnId(Name::from_string("gives_u64")),
                 args: vec![],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(0)))),
@@ -4132,10 +4140,9 @@ fn test_emit_trust_ir_invalid_module_construction_is_rejected() {
     match err {
         TrustIrError::Invalid(errors) => {
             assert!(
-                errors.iter().any(|e| matches!(
-                    e,
-                    trust_ir_build::ValidationError::ReturnTypeMismatch { .. }
-                )),
+                errors
+                    .iter()
+                    .any(|e| matches!(e, ValidationError::ReturnTypeMismatch { .. })),
                 "expected ReturnTypeMismatch among: {errors:?}"
             );
         }
@@ -4475,7 +4482,7 @@ fn test_emit_trust_ir_dialect_mode_has_exactly_the_known_violations() {
 ///   total > 0` per function — a partially-spanned body means an emission
 ///   path lost the thread), and each span points at file-table entry 0 with
 ///   `line`/`col` 0 (file granularity: L5IR carries no positions).
-fn assert_span_provenance(module: &trust_ir::Module, expected_file: &str) {
+fn assert_span_provenance(module: &Module, expected_file: &str) {
     assert_eq!(
         module.files,
         vec![expected_file.to_string()],
@@ -4610,7 +4617,7 @@ fn test_c2b_box_erased_produces_managed_pointer() {
     };
     let module = emit_trust_ir_with_config(&[decl], &c4_config())
         .expect("Box{Erased} must lower to a boxed unit, not a raw scalar");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validate_module: {errors:?}");
 }
 
@@ -4632,7 +4639,7 @@ fn test_c2b_scalar_return_into_object_signature_reboxed() {
     };
     let module = emit_trust_ir_with_config(&[decl], &c4_config())
         .expect("scalar return under an Object signature must re-box");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validate_module: {errors:?}");
 }
 
@@ -4667,7 +4674,7 @@ fn test_c2b_erased_return_boxed_when_signature_expects_ptr() {
     };
     let module = emit_trust_ir_with_config(&[decl], &c4_config())
         .expect("erased return under an Object signature must box the unit");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validate_module: {errors:?}");
 }
 
@@ -4694,7 +4701,7 @@ fn test_c4_value_ref_and_call_share_extern_fallback() {
             var: VarId(0),
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("Missing.le")),
+                fn_id: FnId(Name::from_string("Missing.le")),
                 args: vec![],
             },
             rest: Box::new(IRBody::Ret(IRArg::Var(VarId(0)))),
@@ -4702,7 +4709,7 @@ fn test_c4_value_ref_and_call_share_extern_fallback() {
     };
     let module = emit_trust_ir_with_config(&[root1, root2], &c4_config())
         .expect("value ref + agreeing call site must share one extern fallback");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validate_module: {errors:?}");
 
     // The fallback is declared once, with the CALL site's arity (2 Ptr params).
@@ -4734,7 +4741,7 @@ fn test_c4_partial_apply_of_dropped_callee_closes_over_fallback() {
             var: VarId(1),
             ty: IRType::Object,
             value: IRExpr::PartialApply {
-                fn_id: crate::ir::FnId(Name::from_string("Missing.mpr")),
+                fn_id: FnId(Name::from_string("Missing.mpr")),
                 arity: 2,
                 args: vec![IRArg::Var(VarId(0))],
             },
@@ -4743,7 +4750,7 @@ fn test_c4_partial_apply_of_dropped_callee_closes_over_fallback() {
     };
     let module = emit_trust_ir_with_config(&[decl], &c4_config())
         .expect("PartialApply of a dropped callee must close over the fallback");
-    let errors = trust_ir_build::validate_module(&module);
+    let errors = validate_module(&module);
     assert!(errors.is_empty(), "validate_module: {errors:?}");
 
     let fallback = module
@@ -4771,7 +4778,7 @@ fn test_c4_partial_apply_arity_conflict_refused() {
             var: VarId(1),
             ty: IRType::Object,
             value: IRExpr::PartialApply {
-                fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                fn_id: FnId(Name::from_string("Foo.bar")),
                 arity: 3,
                 args: vec![],
             },
@@ -4779,7 +4786,7 @@ fn test_c4_partial_apply_arity_conflict_refused() {
                 var: VarId(2),
                 ty: IRType::Object,
                 value: IRExpr::Apply {
-                    fn_id: crate::ir::FnId(Name::from_string("Foo.bar")),
+                    fn_id: FnId(Name::from_string("Foo.bar")),
                     args: vec![IRArg::Var(VarId(0))],
                 },
                 rest: Box::new(IRBody::Ret(IRArg::Var(VarId(2)))),
@@ -4822,7 +4829,7 @@ fn over_applied_decls() -> Vec<IRDecl> {
             var: VarId(3),
             ty: IRType::Object,
             value: IRExpr::Apply {
-                fn_id: crate::ir::FnId(Name::from_string("mapish")),
+                fn_id: FnId(Name::from_string("mapish")),
                 args: vec![
                     IRArg::Var(VarId(0)),
                     IRArg::Var(VarId(1)),
@@ -4957,7 +4964,7 @@ fn test_emit_trust_ir_erased_return_drops_materialized_value() {
         let module = emit_trust_ir(&[unit_shape(ret_ty.clone())])
             .unwrap_or_else(|e| panic!("Dialect emit for {ret_ty:?} return failed: {e}"));
         assert!(
-            trust_ir_build::validate_module(&module).is_empty(),
+            validate_module(&module).is_empty(),
             "Dialect validation errors for {ret_ty:?} return",
         );
 
@@ -4966,12 +4973,50 @@ fn test_emit_trust_ir_erased_return_drops_materialized_value() {
             runtime_lowering: RuntimeLowering::ExternCalls,
             ..TrustIrConfig::default()
         };
-        let module =
-            crate::emit_trust_ir::emit_trust_ir_with_config(&[unit_shape(ret_ty.clone())], &config)
-                .unwrap_or_else(|e| panic!("ExternCalls emit for {ret_ty:?} return failed: {e}"));
+        let module = emit_trust_ir_with_config(&[unit_shape(ret_ty.clone())], &config)
+            .unwrap_or_else(|e| panic!("ExternCalls emit for {ret_ty:?} return failed: {e}"));
         assert!(
-            trust_ir_build::validate_module(&module).is_empty(),
+            validate_module(&module).is_empty(),
             "ExternCalls validation errors for {ret_ty:?} return",
         );
     }
+}
+
+/// DRIFT GUARD: `to_ir::code::uint_arith_scalar_ty` (Seam A's name table,
+/// consulted in feature-less builds) and this emitter's `uint_arith_binop`
+/// (the native-BinOp realizer and skip set) must agree exactly — same names,
+/// same widths — or the slice-independent typing and the native lowering
+/// silently diverge.
+#[test]
+fn test_uint_arith_tables_agree() {
+    use trust_ir::ty::Ty;
+    let widths: &[(&str, IRType, Ty)] = &[
+        ("UInt8", IRType::UInt8, Ty::U8),
+        ("UInt16", IRType::UInt16, Ty::U16),
+        ("UInt32", IRType::UInt32, Ty::U32),
+        ("UInt64", IRType::UInt64, Ty::U64),
+    ];
+    for (prefix, ir_ty, ty) in widths {
+        for op in ["add", "sub", "mul"] {
+            let n = Name::from_string(&format!("{prefix}.{op}"));
+            assert_eq!(
+                crate::to_ir::code::uint_arith_scalar_ty(&n),
+                Some(ir_ty.clone()),
+                "{n:?} must be in the to_ir table"
+            );
+            let (_, got_ty) = uint_arith_binop(&n.to_string())
+                .unwrap_or_else(|| panic!("{n:?} must be in the emitter table"));
+            assert_eq!(got_ty, *ty, "{n:?} widths must agree");
+        }
+        // The tables must also DECLINE together: div/mod are deliberately not
+        // native (Lean div-by-zero = 0 differs from machine semantics).
+        for op in ["div", "mod"] {
+            let n = Name::from_string(&format!("{prefix}.{op}"));
+            assert!(crate::to_ir::code::uint_arith_scalar_ty(&n).is_none());
+            assert!(uint_arith_binop(&n.to_string()).is_none());
+        }
+    }
+    let outside = Name::from_string("USize.add");
+    assert!(crate::to_ir::code::uint_arith_scalar_ty(&outside).is_none());
+    assert!(uint_arith_binop("USize.add").is_none());
 }

@@ -9,7 +9,7 @@
 
 use super::common::{check_and_add_decl, check_expr};
 use clean_elab::{elaborate_decl, elaborate_decl_and_register_with_warning, ElabResult};
-use clean_kernel::{env::TrustedEnvExt, Environment, Expr, ExprKind, Name};
+use clean_kernel::{env::TrustedEnvExt, ConstantKind, Environment, Expr, ExprKind, Name};
 use clean_parser::parse_decl;
 
 /// Recursively check whether an elaborated term mentions a `sorry`/`sorryAx`
@@ -908,27 +908,50 @@ fn test_issue166_decidable_eq_in_prelude() {
     );
 }
 
-// Soundness regression: the old UInt8.mod axiom must stay deleted.
+// Soundness regression: the old UInt8.mod AXIOM must stay deleted.
 //
-// Fixed-width arithmetic is now provided by axiom-free wrapping definitions
-// (`add`/`sub`/`mul`).  Reintroducing the historical opaque `mod` constant would
-// silently widen the trusted base, so pin both sides of the replacement here.
+// RESTATED 2026-08-22. These two tests used to assert that `UInt8.mod` /
+// `UInt64.mod` were ABSENT. Their own comments name the property they defend —
+// "an opaque modulus would add proof authority" — and absence was a proxy for
+// it. The proxy was too strong: it also forbade the axiom-FREE
+// `Declaration::Definition` `UInt8.mod a b := UInt8.ofNat (Nat.mod a.toNat
+// b.toNat)`, whose absence was the reason `a % b` did not elaborate at ANY UInt
+// width. Assert the real property instead: the constant exists, it is a
+// Definition, and its transitive axiom closure is EMPTY. A reintroduced opaque
+// axiom still fails this test.
+fn assert_axiom_free_definition(env: &Environment, cname: &str) {
+    let name = Name::from_string(cname);
+    let info = env
+        .get_const(&name)
+        .unwrap_or_else(|| panic!("{cname} must be registered in the prelude"));
+    assert_eq!(
+        info.kind,
+        ConstantKind::Definition,
+        "{cname} must be a Definition, never an Axiom — an opaque machine \
+         operation would add proof authority"
+    );
+    let deps: Vec<String> = env
+        .axiom_deps(&name)
+        .expect("registered above")
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert!(deps.is_empty(), "{cname} must be axiom-free, got {deps:?}");
+}
+
 #[test]
-fn test_uint8_mod_axiom_deleted_and_wrapping_mul_available() {
+fn test_uint8_mod_is_axiom_free_and_wrapping_mul_available() {
     let mut env = Environment::with_prelude();
 
-    let rejected = check_and_add_decl(
+    let accepted = check_and_add_decl(
         &mut env,
         "def test_uint8_mod : UInt8 → UInt8 → UInt8 := UInt8.mod",
     );
     assert!(
-        rejected.is_err(),
-        "UInt8.mod must remain absent; an opaque modulus would add proof authority"
+        accepted.is_ok(),
+        "axiom-free UInt8.mod must be available: {accepted:?}"
     );
-    assert!(
-        env.get_const(&Name::from_string("UInt8.mod")).is_none(),
-        "UInt8.mod must not be registered in the prelude"
-    );
+    assert_axiom_free_definition(&env, "UInt8.mod");
 
     let wrapping = check_and_add_decl(
         &mut env,
@@ -942,24 +965,21 @@ fn test_uint8_mod_axiom_deleted_and_wrapping_mul_available() {
 
 // Same soundness lock at the widest fixed-width carrier.
 //
-// This catches partial initializers that delete UInt8.mod but accidentally retain
-// a width-specific UInt64.mod escape hatch.
+// This catches partial initializers that give UInt8 an axiom-free `mod` but
+// leave a width-specific opaque UInt64.mod escape hatch.
 #[test]
-fn test_uint64_mod_axiom_deleted_and_wrapping_mul_available() {
+fn test_uint64_mod_is_axiom_free_and_wrapping_mul_available() {
     let mut env = Environment::with_prelude();
 
-    let rejected = check_and_add_decl(
+    let accepted = check_and_add_decl(
         &mut env,
         "def test_uint64_mod : UInt64 → UInt64 → UInt64 := UInt64.mod",
     );
     assert!(
-        rejected.is_err(),
-        "UInt64.mod must remain absent; an opaque modulus would add proof authority"
+        accepted.is_ok(),
+        "axiom-free UInt64.mod must be available: {accepted:?}"
     );
-    assert!(
-        env.get_const(&Name::from_string("UInt64.mod")).is_none(),
-        "UInt64.mod must not be registered in the prelude"
-    );
+    assert_axiom_free_definition(&env, "UInt64.mod");
 
     let wrapping = check_and_add_decl(
         &mut env,

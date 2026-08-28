@@ -2,6 +2,7 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::env::native_reducers_bitvec::names as names_bitvec;
 use crate::env::TransparencyMode;
 use crate::expr::{Expr, ExprKind, LevelVec};
 use crate::name::Name;
@@ -32,8 +33,15 @@ static DECIDABLE_DECIDE_NAME: LazyLock<Name> =
 /// but real proof terms supply `OfNat.ofNat`-style literals). See the callsite
 /// in `reduce_native` for the soundness argument (WHNF is sound; non-`.mk`
 /// operands make the reducer decline → δι fallback).
-static WRAPPER_CMP_OPERAND_WHNF: LazyLock<[Name; 10]> = LazyLock::new(|| {
+static WRAPPER_CMP_OPERAND_WHNF: LazyLock<[Name; 12]> = LazyLock::new(|| {
     [
+        // Real `.olean` proof terms supply these operands as `OfNat.ofNat …` /
+        // `HPow.hPow …` applications, never bare `Lit(Nat)`. Without a
+        // pre-WHNF the Nat decision reducer declines and the decision falls
+        // through to δι on Clean's `Nat.rec`-based `Nat.decEq` overlay — a
+        // 2^32-step tower, reached via `USize.size_eq`.
+        Name::from_string("Nat.decEq"),
+        Name::from_string("instDecidableEqNat"),
         Name::from_string("UInt8.decEq"),
         Name::from_string("UInt16.decEq"),
         Name::from_string("UInt32.decEq"),
@@ -336,6 +344,32 @@ impl<'env> TypeChecker<'env> {
             let mut args_ref: Vec<&Expr> = args.iter().copied().collect();
             args_ref[0] = &a_whnf;
             args_ref[1] = &b_whnf;
+            return reducer(&args_ref);
+        }
+
+        // Pre-WHNF the two `Nat`-typed arguments of `BitVec.ofNat` (width,
+        // value). Composite operands like `Int.toNat (Int.ofNat 3)` — the
+        // shape every re-embed of a computed value takes — otherwise decline
+        // the native reducer and fall to δ, unfolding `BitVec.ofNat` into its
+        // checked `ofFin (Fin.mk (2^w) (Nat.mod v (2^w)) _)` definition where
+        // reduction sticks on the unreduced `HPow`/`Nat.mod` spine, while the
+        // SAME value spelled as a literal collapses to a raw payload — two
+        // normal forms for one value, and a closed-pipeline `rfl` that one
+        // Clean stack accepts and this one refused. WHNF is the kernel's own
+        // sound reduction (the operands it produces are def-eq to the
+        // originals, exactly the argument the two scoped passes above make),
+        // and both operands here are `Nat`-typed — this is NOT the BitVec-
+        // typed-operand hazard the note below guards: no `UInt*.toBitVec`
+        // projection can appear in a `Nat` argument position, so the
+        // `Init.Data.Char.Basic` normal-form desync cannot recur through this
+        // pass. If WHNF does not reach a literal the reducer still declines
+        // and δι proceeds exactly as before.
+        if *name == *names_bitvec::BITVEC_OF_NAT && args.len() >= 2 {
+            let w_whnf = self.whnf_impl(args[0]);
+            let v_whnf = self.whnf_impl(args[1]);
+            let mut args_ref: Vec<&Expr> = args.iter().copied().collect();
+            args_ref[0] = &w_whnf;
+            args_ref[1] = &v_whnf;
             return reducer(&args_ref);
         }
 

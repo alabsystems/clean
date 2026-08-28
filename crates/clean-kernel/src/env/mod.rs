@@ -75,13 +75,15 @@ pub use inductive_local_lift_bridge::{BridgeOutcome, LocalLiftBridgeError};
 pub use inductive_no_confusion::{
     NoConfusionRegenerationDiagnostic, NoConfusionRegenerationIssue, NoConfusionRegenerationReport,
 };
+pub use inductive_rel_family::{ContainerRelError, ContainerRelOutcome};
 pub use origin::{ConstantOrigin, DeclarationVerification, OriginTrust};
 pub use proof_quality::{ProofQualityError, ProofQualityFinding};
 #[cfg(any(test, feature = "math-overlays"))]
 pub use refute_axiom_body::{refute_friedgut_body, refute_or_ok, Counterexample, RefuteBudget};
 pub use serialization::{ConstantOriginInfo, JsonEnvironment, StructureFieldInfo};
 pub use snapshot::{
-    SnapshotError, SnapshotHeader, SnapshotLoadOutcome, ENV_SCHEMA_FINGERPRINT, SNAPSHOT_VERSION,
+    SnapshotAttestation, SnapshotError, SnapshotHeader, SnapshotLoadOutcome, SnapshotReceipt,
+    SnapshotReceiptPolicy, SnapshotReceiptViolation, ENV_SCHEMA_FINGERPRINT, SNAPSHOT_VERSION,
 };
 pub use sorry_summary::{DeclarationTrustSummary, SorrySummary};
 pub use sorry_tracer::SorryTracer;
@@ -1191,6 +1193,7 @@ mod data_getelem;
 mod data_getelem_list;
 mod data_insert_singleton;
 mod data_list_get;
+mod data_list_reverse_map_lemmas;
 mod data_monad;
 mod data_monad_control;
 mod data_monad_insts;
@@ -1319,6 +1322,7 @@ mod metric_continuity_uniform;
 mod metric_separable;
 #[cfg(any(test, feature = "math-overlays"))]
 mod metric_totally_bounded;
+mod nat_pos_of_ne_zero_proof;
 mod nn_verification;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nn_verification_c002;
@@ -1575,9 +1579,12 @@ mod nn_verify_tier_a_rat_min_le_max_zero_zero;
 mod nn_verify_tier_a_rat_min_min_zero_zero;
 // #3615: canonical `Rat.min_le_max` constructive lemma (general case).
 // Unblocks C004 Phase 2 γ-scale carrier body.
+mod nat_irrefl_instance_proof;
 mod nat_le_inversion_proof;
 mod nat_lt_irrefl_proof;
+mod nat_lt_succ_iff_proof;
 mod nat_lt_wf_proof;
+mod nat_mul_lt_mul_proof;
 mod nat_not_succ_lt_zero_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod nat_strong_rec_lt;
@@ -1874,6 +1881,7 @@ mod inductive_recursor_minor;
 mod inductive_recursor_rules;
 mod inductive_recursor_types;
 mod inductive_recursor_types_mutual;
+mod inductive_rel_family;
 mod rec_apply;
 
 // Type class, aesop rule, and attribute registries - extracted for organization (see #1161)
@@ -1891,7 +1899,7 @@ mod native_reducers_arith;
 #[cfg(test)]
 mod native_reducers_arith_tests;
 mod native_reducers_beq_shortcircuit;
-mod native_reducers_bitvec;
+pub(crate) mod native_reducers_bitvec;
 mod native_reducers_bool_ext;
 mod native_reducers_char;
 mod native_reducers_decidable;
@@ -4181,6 +4189,13 @@ impl Environment {
         // certified monitor (§1.1): `u64 a == b` decides via `decide (Eq a b)`
         // with the `<Carrier>.decEq` instance and cites these. Axiom-free.
         self.register_of_decide_lemmas()?;
+        // `of_not_decide_eq_true : ¬(decide p = true) → ¬p` — the NEGATIVE-branch
+        // member of the same family. A `dite` over a Bool test binds exactly
+        // `¬(decide p = true)` in its else branch, which `of_decide_eq_false`
+        // (an equation at `false`) does not accept; bridging the two would cost
+        // `propext` via `Bool.not_eq_true`, so this is proved directly by the
+        // same `Decidable.rec` casework. Axiom-free. Idempotent.
+        self.register_of_not_decide_eq_true()?;
         // Canonical `Decidable True` / `Decidable False` instances. Without
         // them `resolve_decidable(True/False)` falls back to a synthetic sorry
         // and `if True then a else b` never ι-reduces. Must run after
@@ -4315,6 +4330,15 @@ impl Environment {
         // the private `Nat.divmodAux.` namespace. Depends on the Nat ordering
         // lemmas seeded by the `init_nat_*` calls above. Idempotent.
         self.init_nat_div_mod_lemmas()?;
+        // `Nat.pos_of_ne_zero : ∀ n, n ≠ 0 → 0 < n` — the POSITIVITY bridge that
+        // feeds `Nat.mod_lt`'s side condition. Wired here, immediately after the
+        // div/mod lemmas, because it exists to be composed with `Nat.mod_lt`: a
+        // source-level `b == 0` test yields a disequality on the negative
+        // branch, and without this there is no route from that to `0 < b`, so
+        // the `gcd`-shaped decrease `a % b < b` is underivable. Constructive
+        // `@Nat.rec.{0}` casework over `Nat.zero_lt_succ`; axiom closure EMPTY.
+        // Idempotent, self-seeding.
+        self.register_nat_pos_of_ne_zero()?;
         // `USize.ofNat : Nat → USize` — the numeric-literal lowering target for
         // `(n : USize)`. A genuine kernel-checked def built from `USize.ofNatLT`
         // + `Nat.mod_lt` + the `Nat.pow_le_pow_right` positivity witness (needs
@@ -4854,7 +4878,20 @@ impl Environment {
     /// Skolemization pass. They have a type but no value. Declaring them
     /// as axioms allows the type checker to accept proof terms that
     /// reference Skolemized terms during superposition proof reconstruction.
-    pub fn add_skolem_axiom(&mut self, name: Name, ty: Expr) {
+    ///
+    /// Cross-crate exposure is only through the [`TrustedEnvExt`] choke trait
+    /// (`env/trusted_ext.rs`), so the env-bypass census's trait re-parse
+    /// structurally watches this door.
+    ///
+    // SOUNDNESS: registers an UNCHECKED axiom (DeclarationVerification::
+    // Unchecked) with no type check. The sole production caller (clean-auto
+    // superposition proof reconstruction, via TrustedEnvExt) operates on a
+    // dropped clone: recon_env is a scratch clone of the caller's env, and
+    // reconstructed proofs re-enter persistent envs only through checked
+    // add_decl, where unresolved Skolem references are UnknownConst. The
+    // isolation theorem is owed under R1-SKOLEM
+    // (data/env_bypass_census.json row "skolem-axiom").
+    pub(crate) fn add_skolem_axiom(&mut self, name: Name, ty: Expr) {
         let info = ConstantInfo {
             name: name.clone(),
             level_params: vec![],
@@ -5486,6 +5523,12 @@ impl Environment {
     /// streaming proof-value elision still FAILS such a constant). Hidden from
     /// docs and NOT for production paths — it is purely a soundness-test fixture
     /// builder. Mirrors `add_constant_for_test`.
+    ///
+    /// Compiled only under `cfg(test)` or the `test-fixtures` feature
+    /// (R1-TESTDOOR): downstream crates enable the feature exclusively via
+    /// `[dev-dependencies]`, so a production (non-dev-target) call cannot
+    /// compile — the door is structurally closed outside test builds.
+    #[cfg(any(test, feature = "test-fixtures"))]
     #[doc(hidden)]
     pub fn add_constant_unchecked_for_test(&mut self, info: ConstantInfo) {
         let name = info.name.clone();
@@ -5635,6 +5678,8 @@ mod tests_cutting_planes;
 mod tests_deep_induction;
 #[cfg(test)]
 mod tests_entropy_clause_quality;
+#[cfg(test)]
+mod tests_eq_rfl_fidelity;
 #[cfg(test)]
 mod tests_extension_rule;
 #[cfg(test)]
@@ -5885,6 +5930,8 @@ mod tests_pb_pigeonhole_length_bound;
 mod tests_persistent_ext;
 #[cfg(test)]
 mod tests_positivity;
+#[cfg(test)]
+mod tests_prelude_axiom_ratchet;
 #[cfg(test)]
 mod tests_proof_builder;
 #[cfg(test)]

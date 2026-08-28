@@ -546,3 +546,165 @@ fn test_unscoped_and_local_notation_remain_ungated() {
         "local notation must stay active in its file: {decls:#?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Nullary (constant) notations, and overlapping mixfixes.
+//
+// `notation "∞" => Nat` and mathlib4's three-way `‖`-leading family are both
+// ordinary closed-notation shapes that the registry used to drop or misselect.
+// The `‖` numbers quoted below are measured on the real file, not estimated;
+// the A/B recipe is in the module note on `matching_custom_mixfixes`.
+// ---------------------------------------------------------------------------
+
+/// The head constant a term is BUILT FROM — the question "which notation did
+/// this select?".
+///
+/// A multi-hole `notation` expands to an un-beta-reduced redex: `‖a‖` is
+/// `(fun e => norm e) a`, not `norm a` (the surface parser applies the
+/// abstracted template; the elaborator reduces it). So the head of a mixfix
+/// use is found by walking into the applied lambda's body, not by stopping at
+/// the application head.
+fn head_of(e: &SurfaceExpr) -> String {
+    match e {
+        SurfaceExpr::Paren(_, inner) => head_of(inner),
+        SurfaceExpr::App(_, f, _) => head_of(f),
+        SurfaceExpr::Lambda(_, _, body) => head_of(body),
+        SurfaceExpr::Ident(_, n) => n.clone(),
+        other => format!("{other:?}"),
+    }
+}
+
+/// [`head_of`] applied to the value of `def <name>`.
+fn def_head(decls: &[SurfaceDecl], name: &str) -> String {
+    head_of(def_value(decls, name))
+}
+
+#[test]
+fn test_nullary_notation_registers_and_parses() {
+    // `notation "∞" => Nat` names no operand. It was rejected twice over
+    // (`pattern.len() < 3`, then `vars.is_empty()`), so every use died as
+    // `unknown operator or character '∞'`. `∞` alone appears in 719 mathlib4
+    // files.
+    let code = "notation \"∞\" => Nat\ndef p : Type := ∞\n";
+    let decls = parse_file(code).expect("nullary notation file should parse");
+    assert_eq!(decls.len(), 2, "expected notation + def: {decls:#?}");
+    for decl in &decls {
+        assert!(
+            !matches!(decl, SurfaceDecl::RawDecl { .. }),
+            "no declaration may degrade to error-recovery: {decl:#?}"
+        );
+    }
+    assert_eq!(
+        as_ident(def_value(&decls, "p")),
+        "Nat",
+        "`∞` must expand to its template verbatim, not to an empty application spine"
+    );
+}
+
+#[test]
+fn test_nullary_notation_expands_inside_a_larger_term() {
+    let code = "notation \"⊛\" => 7\ndef q : Nat := ⊛ + 1\n";
+    let decls = parse_file(code).expect("nullary notation in an operand should parse");
+    assert_eq!(
+        def_head(&decls, "q"),
+        "HAdd.hAdd",
+        "a constant notation must be usable as an ordinary operand: {decls:#?}"
+    );
+}
+
+#[test]
+fn test_nullary_notation_with_a_non_free_symbol_stays_parse_only() {
+    // Control: the leading-literal guard is unchanged. A keyword/ident-leading
+    // constant notation would shadow real atoms, so it still registers nothing
+    // — a loud gap, never a silent shadow of the identifier `foo`.
+    let code = "notation \"foo\" => Nat\ndef r : Type := foo\n";
+    let decls = parse_file(code).expect("ident-leading notation should still parse the file");
+    assert_eq!(
+        as_ident(def_value(&decls, "r")),
+        "foo",
+        "an ident-leading constant notation must stay parse-only: {decls:#?}"
+    );
+}
+
+/// The three mathlib4 norm notations, in both registration orders.
+const NORM_NOTATIONS: [&str; 3] = [
+    "notation \"‖\" e \"‖\" => norm e\n",
+    "notation \"‖\" e \"‖₊\" => nnnorm e\n",
+    "notation \"‖\" e \"‖ₑ\" => enorm e\n",
+];
+
+#[test]
+fn test_overlapping_mixfixes_each_select_their_own_notation() {
+    // mathlib4 `Mathlib/Analysis/Normed/Group/Defs.lean:79-81` declares all
+    // three. Selection used to be a `max_by_key` over the LEADING literal — a
+    // three-way tie at one token — with no backtracking on the continuation,
+    // so exactly one of the three parsed and the others hard-errored.
+    for order in [[0usize, 1, 2], [2, 1, 0], [1, 2, 0]] {
+        let mut code = String::new();
+        for i in order {
+            code.push_str(NORM_NOTATIONS[i]);
+        }
+        code.push_str("def na (x : Nat) : Nat := ‖x‖\n");
+        code.push_str("def nb (x : Nat) : Nat := ‖x‖₊\n");
+        code.push_str("def nc (x : Nat) : Nat := ‖x‖ₑ\n");
+        let decls =
+            parse_file(&code).unwrap_or_else(|e| panic!("order {order:?} should parse, got: {e}"));
+        for decl in &decls {
+            assert!(
+                !matches!(decl, SurfaceDecl::RawDecl { .. }),
+                "order {order:?}: no declaration may degrade to error-recovery: {decl:#?}"
+            );
+        }
+        for (name, expected) in [("na", "norm"), ("nb", "nnnorm"), ("nc", "enorm")] {
+            assert_eq!(
+                def_head(&decls, name),
+                expected,
+                "order {order:?}: `{name}` must select the notation it spells, not a sibling"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_overlapping_mixfixes_compose_with_the_builtin_chain() {
+    // The candidate loop must not eat past its own closing literal: two
+    // different members of the family on either side of a builtin `+`.
+    let mut code = String::new();
+    for n in NORM_NOTATIONS {
+        code.push_str(n);
+    }
+    code.push_str("def sum (x y : Nat) : Nat := ‖x‖ + ‖y‖₊\n");
+    let decls = parse_file(&code).expect("mixed family members around `+` should parse");
+    let args = as_app_of(def_value(&decls, "sum"), "HAdd.hAdd");
+    assert_eq!(args.len(), 2, "expected a binary `+`: {decls:#?}");
+    assert_eq!(
+        (head_of(&args[0].expr), head_of(&args[1].expr)),
+        ("norm".to_string(), "nnnorm".to_string()),
+        "each operand must keep its own notation: {decls:#?}"
+    );
+}
+
+#[test]
+fn test_unmatched_overlapping_mixfix_stays_loud() {
+    // Backtracking must not become over-acceptance: `‖x§` closes NONE of the
+    // three notations (every candidate dies on its continuation literal), so
+    // exhausting the list is still a loud gap, never a silent parse.
+    let mut code = String::new();
+    for n in NORM_NOTATIONS {
+        code.push_str(n);
+    }
+    code.push_str("def bad (x : Nat) : Nat := ‖x§\n");
+    let decls = parse_file(&code).expect("file-level recovery keeps the earlier declarations");
+    assert!(
+        decls
+            .iter()
+            .any(|d| matches!(d, SurfaceDecl::RawDecl { .. })),
+        "an unmatched continuation must stay a loud gap, never a silent parse: {decls:#?}"
+    );
+    assert!(
+        !decls
+            .iter()
+            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name == "bad")),
+        "`bad` must not parse as a real `def`: {decls:#?}"
+    );
+}

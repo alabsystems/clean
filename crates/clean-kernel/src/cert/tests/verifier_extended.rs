@@ -19,6 +19,7 @@ use crate::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, Literal, MDataValu
 use crate::inductive::{ConstructorVal, InductiveVal};
 use crate::level::Level;
 use crate::name::Name;
+use std::sync::Arc;
 
 fn empty_env() -> Environment {
     Environment::new()
@@ -79,10 +80,10 @@ fn test_verify_bvar_basic() {
     // Build a Lam cert where the body is BVar
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -182,7 +183,7 @@ fn test_verify_mdata_basic() {
     let sort1 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
     let cert = ProofCert::MData {
         metadata,
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(sort1.clone()),
@@ -206,7 +207,7 @@ fn test_verify_mdata_type_mismatch() {
     let sort2 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::succ(Level::zero()))));
     let cert = ProofCert::MData {
         metadata,
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(sort2),
@@ -346,7 +347,7 @@ fn test_verify_proj_basic_fst() {
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_p,
             type_: Box::new(my_pair_type.clone()),
         }),
@@ -380,7 +381,7 @@ fn test_verify_proj_basic_snd() {
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
         idx: 1,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_p,
             type_: Box::new(my_pair_type.clone()),
         }),
@@ -418,7 +419,7 @@ fn test_verify_proj_polymorphic() {
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_b,
             type_: Box::new(my_box_prop.clone()),
         }),
@@ -454,7 +455,7 @@ fn test_verify_proj_polymorphic_missing_levels_rejected() {
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_b,
             type_: Box::new(my_box_prop_bad.clone()),
         }),
@@ -502,7 +503,7 @@ fn test_verify_proj_struct_name_mismatch() {
     let cert = ProofCert::Proj {
         struct_name: wrong_name,
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_p,
             type_: Box::new(my_pair_type.clone()),
         }),
@@ -538,7 +539,7 @@ fn test_verify_proj_index_mismatch() {
     let cert = ProofCert::Proj {
         struct_name,
         idx: 1,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_p,
             type_: Box::new(my_pair_type.clone()),
         }),
@@ -571,7 +572,7 @@ fn test_verify_proj_field_out_of_bounds() {
     let cert = ProofCert::Proj {
         struct_name,
         idx: 5,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_p,
             type_: Box::new(my_pair_type.clone()),
         }),
@@ -601,7 +602,7 @@ fn test_verify_proj_unknown_inductive() {
     let cert = ProofCert::Proj {
         struct_name,
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_g,
             type_: Box::new(ghost_type.clone()),
         }),
@@ -634,7 +635,7 @@ fn test_verify_proj_field_type_forgery() {
     let cert = ProofCert::Proj {
         struct_name,
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_p,
             type_: Box::new(my_pair_type.clone()),
         }),
@@ -671,7 +672,7 @@ fn test_verify_proj_expr_type_mismatch() {
     let cert = ProofCert::Proj {
         struct_name,
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_p,
             type_: Box::new(my_pair_type),
         }),
@@ -735,7 +736,7 @@ fn test_verify_proj_multiple_constructors() {
     let cert = ProofCert::Proj {
         struct_name,
         idx: 0,
-        expr_cert: Box::new(ProofCert::FVar {
+        expr_cert: Arc::new(ProofCert::FVar {
             id: fvar_m,
             type_: Box::new(mc_const.clone()),
         }),
@@ -765,7 +766,7 @@ fn test_verify_proj_cert_on_wrong_expr() {
     let cert = ProofCert::Proj {
         struct_name,
         idx: 0,
-        expr_cert: Box::new(ProofCert::Sort {
+        expr_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expr_type: Box::new(my_pair_type),

@@ -1,0 +1,17 @@
+fn @synth::fsign_probe(functy.925) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the float-residue semdiff
+    ; #synthetic: lane (data/evalir_float_residue.PENDING.md; the wave
+    ; #synthetic: evalir_w4.PENDING.md delta 5 named). No compiler emitted
+    ; #synthetic: this body; its registered Clean twin is ir_frs_module
+    ; #synthetic: (eval_ir_wfr_synth.rs). fneg and fabs run on the SAME f64
+    ; #synthetic: operand and both results return through the two-value ret,
+    ; #synthetic: so one row observes both sign-bit operations -- NaN rows
+    ; #synthetic: included, because a sign-bit operation answers on NaNs with
+    ; #synthetic: the payload preserved. Operands cross the boundary as
+    ; #synthetic: binary64 bit patterns. Do not add it to any emitted-fixture
+    ; #synthetic: census.
+bb0(%0: f64):
+    %1 = fneg f64 %0
+    %2 = fabs f64 %0
+    ret %1, %2
+}

@@ -144,7 +144,7 @@ fn test_struct_eta_single_field() {
 
     let tc = TypeChecker::new(&env);
     let wrap_name = Name::from_string("Wrap");
-    let s_id = tc.ctx.borrow_mut().push(
+    let s_id = tc.ctx_mut().push(
         Name::from_string("s"),
         Expr::const_(wrap_name.clone(), vec![]),
         BinderInfo::Default,
@@ -166,7 +166,7 @@ fn test_struct_eta_two_fields() {
 
     let tc = TypeChecker::new(&env);
     let name = Name::from_string("Pair2");
-    let s_id = tc.ctx.borrow_mut().push(
+    let s_id = tc.ctx_mut().push(
         Name::from_string("s"),
         Expr::const_(name.clone(), vec![]),
         BinderInfo::Default,
@@ -188,16 +188,15 @@ fn test_struct_eta_distinct_values_not_equal() {
 
     let tc = TypeChecker::new(&env);
     let w2_ty = Expr::const_(Name::from_string("W2"), vec![]);
-    let a = Expr::fvar(tc.ctx.borrow_mut().push(
+    let a = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("a"),
         w2_ty.clone(),
         BinderInfo::Default,
     ));
-    let b = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("b"),
-        w2_ty,
-        BinderInfo::Default,
-    ));
+    let b = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("b"), w2_ty, BinderInfo::Default),
+    );
     assert!(!tc.is_def_eq(&a, &b), "distinct FVars not def-eq");
 }
 
@@ -218,8 +217,7 @@ fn test_struct_eta_prod_nat_nat() {
     );
 
     let p_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("p"), prod_nat_nat, BinderInfo::Default);
     let p = Expr::fvar(p_id);
     let expanded = build_prod_eta(&nat, &nat, &p);
@@ -240,16 +238,14 @@ fn test_struct_eta_ctor_app_identity() {
 
     let tc = TypeChecker::new(&env);
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-    let a = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("a"),
-        nat.clone(),
-        BinderInfo::Default,
-    ));
-    let b = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("b"),
-        nat.clone(),
-        BinderInfo::Default,
-    ));
+    let a = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("a"), nat.clone(), BinderInfo::Default),
+    );
+    let b = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("b"), nat.clone(), BinderInfo::Default),
+    );
 
     let mk1 = build_prod_mk(&nat, &nat, a.clone(), b.clone());
     let mk2 = build_prod_mk(&nat, &nat, a, b);
@@ -269,7 +265,7 @@ fn test_struct_eta_ctor_vs_fvar() {
         Expr::app(Expr::const_(Name::from_string("Prod"), vec![]), nat.clone()),
         nat.clone(),
     );
-    let p = Expr::fvar(tc.ctx.borrow_mut().push(
+    let p = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("p"),
         prod_nat_nat,
         BinderInfo::Default,
@@ -291,7 +287,7 @@ fn test_struct_eta_both_sides_expanded() {
         Expr::app(Expr::const_(Name::from_string("Prod"), vec![]), nat.clone()),
         nat.clone(),
     );
-    let a = Expr::fvar(tc.ctx.borrow_mut().push(
+    let a = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("a"),
         prod_nat_nat,
         BinderInfo::Default,
@@ -328,14 +324,12 @@ fn test_struct_eta_unit_like() {
 
     let tc = TypeChecker::new(&env);
     let ty = Expr::const_(unit_name, vec![]);
-    let a = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("a"),
-        ty.clone(),
-        BinderInfo::Default,
-    ));
+    let a = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("a"), ty.clone(), BinderInfo::Default),
+    );
     let b = Expr::fvar(
-        tc.ctx
-            .borrow_mut()
+        tc.ctx_mut()
             .push(Name::from_string("b"), ty, BinderInfo::Default),
     );
     assert!(tc.is_def_eq(&a, &b), "two values of unit-like type def-eq");
@@ -373,7 +367,7 @@ fn test_struct_eta_nested_outer() {
     .expect("add Outer");
 
     let tc = TypeChecker::new(&env);
-    let o = Expr::fvar(tc.ctx.borrow_mut().push(
+    let o = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("o"),
         Expr::const_(outer_name.clone(), vec![]),
         BinderInfo::Default,
@@ -415,7 +409,7 @@ fn test_struct_eta_nested_inner() {
     .expect("add Outer");
 
     let tc = TypeChecker::new(&env);
-    let o = Expr::fvar(tc.ctx.borrow_mut().push(
+    let o = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("o"),
         Expr::const_(outer_name.clone(), vec![]),
         BinderInfo::Default,
@@ -474,16 +468,14 @@ fn test_struct_eta_projection_reduces_ctor() {
 
     let tc = TypeChecker::new(&env);
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-    let a = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("a"),
-        nat.clone(),
-        BinderInfo::Default,
-    ));
-    let b = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("b"),
-        nat.clone(),
-        BinderInfo::Default,
-    ));
+    let a = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("a"), nat.clone(), BinderInfo::Default),
+    );
+    let b = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("b"), nat.clone(), BinderInfo::Default),
+    );
 
     let mk = build_prod_mk(&nat, &nat, a.clone(), b.clone());
     let prod_name = Name::from_string("Prod");
@@ -507,7 +499,7 @@ fn test_struct_eta_16_fields() {
 
     let tc = TypeChecker::new(&env);
     let s16_name = Name::from_string("S16");
-    let x = Expr::fvar(tc.ctx.borrow_mut().push(
+    let x = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("x"),
         Expr::const_(s16_name.clone(), vec![]),
         BinderInfo::Default,

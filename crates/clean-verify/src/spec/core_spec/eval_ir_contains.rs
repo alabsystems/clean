@@ -102,13 +102,44 @@ const SRC_ENCODESFLATFLAGS: &str = "inductive EncodesFlatFlags : IRScalar -> Fla
 
 const SRC_IR_VL2: &str = "def ir_vl2 (a : IRScalar) (b : IRScalar) : IRList IRScalar := IRList.cons IRScalar a (ir_vl1 b)";
 
-const SRC_IR_FC_TFLAGS: &str = "def ir_fc_tflags : IRTy := IRTy.struct_ 1017";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_fc.core.txt` + `generated/ir_fc.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_fc.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — ONE divergent line of the four, one notation class, printed
+/// before adoption: `ir_fc_b0` inlines `(IRTy.uint_ ir_d8)` in its five typed
+/// slots where the hand line named the `ir_tU8` alias, and the two are
+/// definitionally equal. `ir_fc_tflags` — the interface-only struct pin the
+/// hand transcription already registered — minted BYTE-IDENTICAL, as did
+/// `ir_fc_func` and `ir_fc_module`.
+const MINTED_IR_FC: &str = include_str!("generated/ir_fc.defs.txt");
 
-const SRC_IR_FC_B0: &str = "def ir_fc_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd6 (ir_nd1 (IRInst.extractfield ir_tU8 ir_d0 ir_d0) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d3) (ir_nd1 (IRInst.binop IRBinOp.and_ ir_tU8 ir_d2 ir_d3) ir_d4) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d5) (ir_nd1 (IRInst.icmp IRICmpOp.eq_ ir_tU8 ir_d4 ir_d5) ir_d6) (ir_nd (IRInst.ret (ir_nl1 ir_d6))))";
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_FC_DOCS: &[&str] = &[
+    "ir_fc_tflags: struct.1017, the struct id the emitted body names in `bb0(%0: struct.1017, %1: struct.1017)`. Transcribed for fidelity; the value-addressed semantics never consults it, because ExtractField is a pure function of the VALUE. DerivedProved, zero axiom_deps.",
+    "ir_fc_b0: the ONE block, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fc.core.txt; reader B's copy of the same body is tests/fixtures/flat_flags_contains.trust-ir.txt). Read self.0 into %2, read other.0 into %3, AND them into %4, read other.0 AGAIN into %5, compare %4 with %5 into %6, return %6. \n\nThe third extractfield is not a typo and must not be common-subexpression-eliminated: the compiler emits `extractfield u8 %1, 0` twice, once for the operand of the AND and once for the operand of the comparison, and the CFG gate's extractfield lane compares the three reads IN ORDER precisely so that a tidier transcription fails. DerivedProved, zero axiom_deps.",
+    "ir_fc_func: FlatFlags::contains as EvalIR -- TWO parameters (self at SSA id 0, other at 1), entry block 0, a single block. DerivedProved, zero axiom_deps.",
+    "ir_fc_module: the module for FlatFlags::contains, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text, tests/fixtures/flat_flags_contains.trust-ir.txt) and reader C (this elaborated term) agree on it -- with an EMPTY unwitnessed ledger, like the float tranche's: the body has no switch. See crate::ir_mint. DerivedProved, zero axiom_deps.",
+];
 
-const SRC_IR_FC_FUNC: &str = "def ir_fc_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_fc_b0 ir_blk0)";
+/// The minted script's lines, in registration order.
+static MINTED_IR_FC_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_FC
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
 
-const SRC_IR_FC_MODULE: &str = "def ir_fc_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_fc_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+/// The minted `FlatFlags::contains` module definitions, in registration order.
+#[must_use]
+pub fn ir_fc_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_FC_LINES
+}
 
 const SRC_IR_FC_VAL: &str =
     "def ir_fc_val (n : Nat) : IRScalar := IRScalar.aggv (ir_sp1 (IRScalar.int_ n))";
@@ -151,10 +182,20 @@ impl Specification {
         self.add_recursive_def(SRC_FLAT_FLAGS_CONTAINS, "flat_flags_contains: the reflected FlatFlags::contains (flat/types.rs:89) -- `(self.0 & other.0) == other.0` at u8. \n\nStated in the machine's own width-8 vocabulary, and that is a LIMITATION worth naming rather than hiding: ir_nat_bitop Bool.and is the exact bitwise AND on width-8 residues and ir_wrap ir_d8 is the canonicalization ir_int_cmp performs on both operands, so this is what the shipped body computes -- but it is not an abstract subset predicate, and no theorem here converts it into one. The outer ir_wrap on the AND is present because ir_icmp_eq canonicalizes its left operand too; dropping it would need ir_wrap idempotence over ir_nat_bitop's already-canonical result, a lemma nobody has earned. It is the machine's arithmetic, transcribed, not simplified. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESFLATFLAGS, "EncodesFlatFlags v f: the runtime VALUE v represents the flag set f. \n\nBy value, not through the heap: the emitted body takes both arguments by value and performs NO load, so this premise mentions no memory at all -- the same heap-free shape EncodesSourceSystemVal has, for the same measured reason. \n\nSpine-agnostic beyond slot 0, deliberately: the body reads field 0 and nothing else (measured -- three extractfields, all at index 0), so `rest` is universally quantified and the relation says nothing about any later field. A relation that pinned the spine to ir_sp0 would smuggle in a fact the body never observes; ir_fc_on_junk_tail runs the machine with IRScalar.undef_ in slot 1 to show the weakness is real rather than decorative. \n\nSAME OPEN LAYOUT OBLIGATION as the other chains': `FlatFlags(u8)` is a one-field struct whose trust-ir value is an aggregate with the byte at slot 0. That correspondence is a layout fact about the producer, not something proved here. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_VL2, "ir_vl2: two-element value list. The first chain in the program with TWO function parameters needs one, and there was none. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FC_TFLAGS, "ir_fc_tflags: struct.1017, the struct id the emitted body names in `bb0(%0: struct.1017, %1: struct.1017)`. Transcribed for fidelity; the value-addressed semantics never consults it, because ExtractField is a pure function of the VALUE. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FC_B0, "ir_fc_b0: the ONE block, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/flat_flags_contains.trust-ir.txt). Read self.0 into %2, read other.0 into %3, AND them into %4, read other.0 AGAIN into %5, compare %4 with %5 into %6, return %6. \n\nThe third extractfield is not a typo and must not be common-subexpression-eliminated: the compiler emits `extractfield u8 %1, 0` twice, once for the operand of the AND and once for the operand of the comparison, and the CFG gate's extractfield lane compares the three reads IN ORDER precisely so that a tidier transcription fails. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FC_FUNC, "ir_fc_func: FlatFlags::contains as EvalIR -- TWO parameters (self at SSA id 0, other at 1), entry block 0, a single block. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FC_MODULE, "ir_fc_module: the module for FlatFlags::contains, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/flat_flags_contains.trust-ir.txt and checked graph-for-graph AND instruction-for-instruction against this module by tests/crystal_a1_lineage/flat_flags_contains.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_priority.rs posture.
+        let minted = ir_fc_module_defs();
+        if minted.len() != MINTED_IR_FC_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_fc script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_FC_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_FC_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_FC_VAL, "ir_fc_val: the runtime value of a FlatFlags -- a one-field aggregate carrying the byte. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FC_ON_SELF, "GATE WITNESS: VERIFIED contains VERIFIED. The kernel RUNS the emitted body for six steps -- two field reads, an AND, a third field read, a comparison, a return -- and computes Bool.true. Unlike every witness in the three earlier chains, the answer here is not a constant the body materializes: it is the output of ir_nat_bitop and ir_nat_eqb. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FC_ON_ABSENT, "GATE WITNESS: VERIFIED does NOT contain HAS_FVAR -- 0x01 AND 0x02 is 0, which differs from 0x02. The FALSE arm, executed. DerivedProved, zero axiom_deps.")?;
@@ -181,28 +222,37 @@ impl Specification {
 mod tests {
     use super::*;
 
+    /// The minted `def` line for one name, from the committed script.
+    fn minted_line(name: &str) -> &'static str {
+        let prefix = format!("def {name} ");
+        ir_fc_module_defs()
+            .iter()
+            .find(|l| l.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("the minted script must define {name}"))
+    }
+
     /// The emitted body reads `other.0` TWICE. A transcription that reuses the
     /// first read is one instruction shorter than the shipped artifact.
     #[test]
     fn test_the_duplicate_field_read_is_transcribed() {
         assert_eq!(
-            SRC_IR_FC_B0
-                .matches("IRInst.extractfield ir_tU8 ir_d1 ir_d0")
+            minted_line("ir_fc_b0")
+                .matches("IRInst.extractfield (IRTy.uint_ ir_d8) ir_d1 ir_d0")
                 .count(),
             2,
             "other.0 is read twice, once for the AND and once for the comparison"
         );
         assert_eq!(
-            SRC_IR_FC_B0
-                .matches("IRInst.extractfield ir_tU8 ir_d0 ir_d0")
+            minted_line("ir_fc_b0")
+                .matches("IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d0")
                 .count(),
             1,
             "self.0 is read once"
         );
         // …and they bind DIFFERENT SSA ids, which is what makes them two reads
         // rather than one written twice.
-        assert!(SRC_IR_FC_B0.contains("ir_d1 ir_d0) ir_d3)"));
-        assert!(SRC_IR_FC_B0.contains("ir_d1 ir_d0) ir_d5)"));
+        assert!(minted_line("ir_fc_b0").contains("ir_d1 ir_d0) ir_d3)"));
+        assert!(minted_line("ir_fc_b0").contains("ir_d1 ir_d0) ir_d5)"));
     }
 
     /// The answer is COMPUTED. No `IRConst` appears anywhere in this body —
@@ -210,18 +260,21 @@ mod tests {
     #[test]
     fn test_the_answer_is_computed_not_materialized() {
         assert!(
-            !SRC_IR_FC_B0.contains("IRConst"),
+            !minted_line("ir_fc_b0").contains("IRConst"),
             "this body materializes no constant at all; its answer comes out of a binop and an \
              icmp"
         );
-        assert!(SRC_IR_FC_B0.contains("IRInst.binop IRBinOp.and_ ir_tU8 ir_d2 ir_d3"));
-        assert!(SRC_IR_FC_B0.contains("IRInst.icmp IRICmpOp.eq_ ir_tU8 ir_d4 ir_d5"));
+        assert!(minted_line("ir_fc_b0")
+            .contains("IRInst.binop IRBinOp.and_ (IRTy.uint_ ir_d8) ir_d2 ir_d3"));
+        assert!(minted_line("ir_fc_b0")
+            .contains("IRInst.icmp IRICmpOp.eq_ (IRTy.uint_ ir_d8) ir_d4 ir_d5"));
         assert!(
-            !SRC_IR_FC_B0.contains("IRInst.switch") && !SRC_IR_FC_B0.contains("IRInst.condbr"),
+            !minted_line("ir_fc_b0").contains("IRInst.switch")
+                && !minted_line("ir_fc_b0").contains("IRInst.condbr"),
             "straight line: one block, no dispatch"
         );
         assert!(
-            !SRC_IR_FC_B0.contains("IRInst.load"),
+            !minted_line("ir_fc_b0").contains("IRInst.load"),
             "both arguments arrive BY VALUE; a load would mean a different body and a heap-bearing \
              premise"
         );

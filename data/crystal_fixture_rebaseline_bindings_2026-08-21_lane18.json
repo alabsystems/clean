@@ -1,0 +1,17 @@
+{
+ "schema": "clean.crystal.fixture_rebaseline_bindings/v1",
+ "binding_mode": "chain-addition-successor",
+ "what_this_binds": "Chain 18 (has_loose_bvars -> loose_bvar_range) enters the comparator body set: the first call-bearing chain, pinned byte-exactly from this dump under the c4e667ca51 producer. Every retained fixture body is byte-identical to the same dump, so no proof/spec/tag numeral moves and the reviewed a152 binding set is inherited through the authenticated successor chain. The two new fixtures have no committed predecessor pin; their evidence enters the ledger as reviewed chain additions.",
+ "clean_source_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
+ "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+ "dump_bin_sha256": "ce4ac168087ab6cbd61098dcadd9f67395d1eee828d43637cc05254c9cfc40bd",
+ "dump_ir_sha256": "17cecbc305122ef58e6ddf5e3ffad6eab759da39d1452cbe1d4d2dcc4f0ab78d",
+ "pre_report_sha256": "3cd86e1bc201181e160d8133175b9839df565a40bf20a83ebd493fa7284e71fb",
+ "prior_rebaseline_record": "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json",
+ "prior_binding_manifest": "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json",
+ "chain_additions": [
+  "has_loose_bvars",
+  "loose_bvar_range_callee"
+ ],
+ "bindings": []
+}

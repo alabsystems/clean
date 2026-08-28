@@ -14,6 +14,7 @@ use crate::level::Level;
 use crate::name::Name;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Errors that can occur during geometry certificate generation.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -291,9 +292,9 @@ impl GeometryCertGenerator {
             };
 
             result = ProofCert::App {
-                fn_cert: Box::new(result),
+                fn_cert: Arc::new(result),
                 fn_type: Box::new(fn_type),
-                arg_cert: Box::new(arg_cert),
+                arg_cert: Arc::new(arg_cert),
                 result_type: Box::new(result_type.clone()),
             };
 
@@ -305,9 +306,9 @@ impl GeometryCertGenerator {
             let (fn_type, result_type) = self.compute_app_types_for_proof(&current_type)?;
 
             result = ProofCert::App {
-                fn_cert: Box::new(result),
+                fn_cert: Arc::new(result),
                 fn_type: Box::new(fn_type),
-                arg_cert: Box::new(premise_cert),
+                arg_cert: Arc::new(premise_cert),
                 result_type: Box::new(result_type.clone()),
             };
 
@@ -619,7 +620,7 @@ impl GeometryCertGenerator {
             // Geometry constants become opaque constants with their type
             (ProofCert::Const { type_, .. }, ExprKind::Const(_, _)) => {
                 let micro_ty = MicroExpr::from_kernel(type_).ok()?;
-                let micro_expr = MicroExpr::Opaque(std::sync::Arc::new(micro_ty.clone()));
+                let micro_expr = MicroExpr::Opaque(Arc::new(micro_ty.clone()));
                 let micro_cert = MicroCert::Opaque {
                     ty: Box::new(micro_ty),
                 };
@@ -655,17 +656,14 @@ impl GeometryCertGenerator {
                     arg_cert: Box::new(arg_micro_cert),
                     result_ty: Box::new(result_micro),
                 };
-                let micro_expr = MicroExpr::App(
-                    std::sync::Arc::new(fn_micro_expr),
-                    std::sync::Arc::new(arg_micro_expr),
-                );
+                let micro_expr = MicroExpr::App(Arc::new(fn_micro_expr), Arc::new(arg_micro_expr));
                 Some((micro_cert, micro_expr))
             }
 
             // FVar certificates become opaque
             (ProofCert::FVar { type_, .. }, ExprKind::FVar(_)) => {
                 let micro_ty = MicroExpr::from_kernel(type_).ok()?;
-                let micro_expr = MicroExpr::Opaque(std::sync::Arc::new(micro_ty.clone()));
+                let micro_expr = MicroExpr::Opaque(Arc::new(micro_ty.clone()));
                 let micro_cert = MicroCert::Opaque {
                     ty: Box::new(micro_ty),
                 };
@@ -704,7 +702,7 @@ impl GeometryCertGenerator {
                     expr_cert: Box::new(inner_micro_cert),
                     field_ty: Box::new(field_ty_micro),
                 };
-                let micro_expr = MicroExpr::Proj(*i, std::sync::Arc::new(inner_micro_expr));
+                let micro_expr = MicroExpr::Proj(*i, Arc::new(inner_micro_expr));
                 Some((micro_cert, micro_expr))
             }
 
@@ -826,9 +824,9 @@ impl GeometryCertGenerator {
                     };
 
                     result_cert = ProofCert::App {
-                        fn_cert: Box::new(result_cert),
+                        fn_cert: Arc::new(result_cert),
                         fn_type: Box::new(fn_type),
-                        arg_cert: Box::new(arg_cert),
+                        arg_cert: Arc::new(arg_cert),
                         result_type: Box::new(result_type.clone()),
                     };
                     result_expr = Expr::app(result_expr, arg_expr);
@@ -841,9 +839,9 @@ impl GeometryCertGenerator {
                     let (fn_type, result_type) = self.compute_app_types_for_proof(&current_type)?;
 
                     result_cert = ProofCert::App {
-                        fn_cert: Box::new(result_cert),
+                        fn_cert: Arc::new(result_cert),
                         fn_type: Box::new(fn_type),
-                        arg_cert: Box::new(premise_cert),
+                        arg_cert: Arc::new(premise_cert),
                         result_type: Box::new(result_type.clone()),
                     };
                     result_expr = Expr::app(result_expr, premise_expr);

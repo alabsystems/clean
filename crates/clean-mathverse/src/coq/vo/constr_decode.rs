@@ -110,7 +110,7 @@ impl<'a> ConstrDecoder<'a> {
 
     // -- names --------------------------------------------------------------
 
-    pub fn dirpath(&self, v: MValue) -> ConstrResult<DirPath> {
+    pub(crate) fn dirpath(&self, v: MValue) -> ConstrResult<DirPath> {
         let items = self.list(v, "DirPath.t")?;
         let mut out = Vec::with_capacity(items.len());
         for it in items {
@@ -148,7 +148,7 @@ impl<'a> ConstrDecoder<'a> {
     }
 
     /// `Constant.t` / `MutInd.t` (KerPair: Same | Dual).
-    pub fn kerpair(&self, v: MValue) -> ConstrResult<KerPair> {
+    pub(crate) fn kerpair(&self, v: MValue) -> ConstrResult<KerPair> {
         let (tag, fields) = self.block(v, "KerPair")?;
         match (tag, fields) {
             (0, [kn]) => Ok(KerPair {
@@ -171,7 +171,7 @@ impl<'a> ConstrDecoder<'a> {
         })
     }
 
-    pub fn ctor_ref(&self, v: MValue) -> ConstrResult<CtorRef> {
+    pub(crate) fn ctor_ref(&self, v: MValue) -> ConstrResult<CtorRef> {
         let f = self.tagged(v, 0, 2, "constructor")?;
         Ok(CtorRef {
             ind: self.ind_ref(f[0])?,
@@ -181,7 +181,7 @@ impl<'a> ConstrDecoder<'a> {
 
     // -- universes / sorts ---------------------------------------------------
 
-    pub fn qvar(&self, v: MValue) -> ConstrResult<QVar> {
+    pub(crate) fn qvar(&self, v: MValue) -> ConstrResult<QVar> {
         let (tag, fields) = self.block(v, "QVar.t")?;
         match (tag, fields) {
             (0, [i]) => Ok(QVar::Idx(self.int(*i, "QVar var")?)),
@@ -329,7 +329,7 @@ impl<'a> ConstrDecoder<'a> {
     ///
     /// Returns `ConstrError` on shape mismatches, depth-limit violations,
     /// or `Meta`/`Evar` nodes (which never occur in checked `.vo` terms).
-    pub fn constr(&mut self, v: MValue) -> ConstrResult<Constr> {
+    pub(crate) fn constr(&mut self, v: MValue) -> ConstrResult<Constr> {
         self.constr_at(v, 0)
     }
 

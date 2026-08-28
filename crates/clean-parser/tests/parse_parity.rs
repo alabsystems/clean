@@ -279,8 +279,8 @@ fn parse_parity_no_unpinned_silent_divergence() {
     let rows = load_rows();
     assert_eq!(
         rows.len(),
-        228,
-        "expected 228 probe rows, got {}",
+        231,
+        "expected 231 probe rows, got {}",
         rows.len()
     );
 

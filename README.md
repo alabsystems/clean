@@ -3,7 +3,9 @@
 > A pure-Rust, Lean-shaped theorem-proving and verification stack built for
 > programs and AI agents.
 
-**Author:** Andrew Yates · **License:** Apache-2.0 · **Version:** 1.4.0
+**Author:** Andrew Yates · **License:** Apache-2.0 · **Version:** `0.4.0`
+(`[workspace.package] version` in `Cargo.toml`; regenerate with
+`pub version --release`)
 
 Clean is a from-scratch Rust implementation of a dependent-type-theory kernel,
 Lean 4 surface tooling, proof-producing automation, `.olean` import, native
@@ -17,7 +19,7 @@ tactic, compiler, Lake, and LSP implementations. Those surrounding surfaces do
 not yet have Lean-wide parity, and several official replacement-evidence lanes
 are missing or stubbed. This README carries the public summary. In the full
 development tree, the commit-pinned source assessment is
-`docs/AUDIT_LEAN4_REPLACEMENT_2026-07-23.md`.
+`docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md`.
 
 ## Why Clean?
 
@@ -59,17 +61,19 @@ means that row's scoped evidence file is present and non-stub; it is not a
 fraction of Lean and not a launch certificate. The command without
 `--informational` is the fail-closed replacement gate.
 
-At source baseline `e8cf70b2d` audited on 2026-07-23:
+At the audit's own source baseline `48350cc11`, audited on 2026-07-22. Rows
+re-measured since that date carry the newer artifact inline; where an artifact
+is named, read it rather than this cell:
 
 | Area | What is implemented | Honest boundary |
 |---|---|---|
 | Kernel and trust | Dependent checker, universes, inductives/recursors, quotients, literals, projections, explicit axiom/trust audits | C1–C5 passes, but differential evidence is scoped and the Rust kernel remains in the TCB |
 | Parser and elaborator | Broad Lean-shaped declaration, term, tactic, macro, notation, class, structure, recursion, and do-notation support | Governed frontend report is not launch-ready; imports and metaprogramming still have explicit fallback/unsupported paths |
 | Tactics and solvers | Large builtin registry, proof-term construction, strict reconstruction/rejection lanes | The parity artifact records 56 source-declared representative cases over 8 tactics; its command does not execute a full Lean-vs-Clean corpus |
-| `.olean` and Mathlib | Real target-value rechecking, environment replay, and large sampled runs | Sampled pre-elaborated targets are not source parity or a verified full dependency closure; native Mathlib evidence is stubbed and its generated-matrix check currently fails |
+| `.olean` and Mathlib | Real target-value rechecking, environment replay, and large sampled runs. Real Mathlib `.olean` targets do kernel-verify through Clean: the reproduced milestone run and its 40-module cross-section are recorded in `docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md`; the pinned non-regressing slice is `data/mathlib_kv_ratchet.json`, re-stamped by `scripts/kv_ratchet_gate.sh` on every full local gate | Rechecking pre-elaborated targets is **not** source elaboration and not a verified full dependency closure — elaborating Mathlib SOURCE is the open frontier, and its measured per-declaration rate lives in `data/source_elab_ratchet.json` with the dated run beside it in `reports/source-elab/`. The ratchet's own slice is not the full corpus. Native Mathlib evidence is `reports/native-library-replacement.json` = `{"stub": true}`, so `clean replacement native-library coverage-matrix --check-report reports/native-library-replacement.json --json` cannot pass against it |
 | Compiler/runtime | Substantial C, Rust, TrustIR, linking, and runtime machinery; object emission is feature-gated through external TrustCg | Official replacement evidence is one C-emission smoke; entry shapes and external/runtime coverage are bounded |
-| Lake and Cake | Clean-owned bounded Lake init/build/run/test paths; Cake project descriptors and verification/graduation | Lake still relies on Lean toolchain artifacts for important libraries; Cake's native backend does not yet build projects |
-| LSP/InfoView | A real LSP with completion, navigation, symbols, semantic tokens, actions, and more | Several behaviors are approximate and the parity artifact is a stub |
+| Lake and Cake | Clean-owned Lake init/build/run/test. On a `clean lake init` template, `init` + `build` + `test` run entirely in-process and never spawn Lean 4's `lean` or `lake`, even when both are on PATH — `reports/lake-replacement-smoke.json` (`no_lean4_delegation`), gated by `crates/clean-cli/tests/lake_replacement_delegation.rs` | That smoke is bounded: no transitive dependency resolution, no `lake serve`, no facets/custom targets, no Mathlib cloud cache (its own `non_claims`). Lake still loads Init/Std/Lean/Lake/Mathlib `.olean` data from a Lean toolchain. `clean cake` is the surface that still shells out: its `olean` backend runs external `lake build` (`crates/clean-cli/src/cmd_cake.rs`), and its `native` backend compiles nothing |
+| LSP/InfoView | A real LSP: 48 methods handled, and no handler is an unconditional null stub — each computes from live document/parse/elaboration state | The gap is depth, not coverage, and it is sharper than "approximate": goal state is one snapshot per theorem rather than per tactic step; hover is whole-declaration and ignores the cursor; the symbol index holds only OPEN documents and is purged on `didClose`, so goto-definition into an imported library returns nothing; and references/rename are whole-identifier text scans with no scope or shadowing awareness, so a rename can rewrite unrelated occurrences. The parity artifact `reports/lsp-infoview-parity.json` is `{"stub": true}` and the fail-closed validator holds the row at `pending_evidence` |
 | Self-verification | Three-foundational-axiom reflected metatheory with confluence, typed-context preservation/inference soundness, and a ten-rung recursor/SN program | Contextual theorems are conditional on explicit candidate/environment interfaces; constant level instantiation, projection/literal typing, and the Rust-state-to-context refinement bridge remain open |
 
 There is deliberately no single “percent complete.” The rows have different
@@ -82,10 +86,11 @@ distribution/provenance gap is part of release readiness.
 
 ## Quick start
 
-Clean requires Rust 1.90 or newer. A host C compiler is needed for C-backend
-link/run workflows; text emission itself does not need it.
+Clean's declared minimum is Rust 1.90 (`rust-version` in `Cargo.toml`). A host
+C compiler is needed for C-backend link/run workflows; text emission itself
+does not need it.
 
-There are two checkout shapes:
+There are two checkout shapes, and they do **not** share a toolchain:
 
 - The **standalone bootstrap projection** removes downstream
   Trust/TrustIR/TrustCg integration edges and resolves its solver dependencies
@@ -99,7 +104,13 @@ There are two checkout shapes:
   is `../ty`: the root `[patch]` table redirects `tla-core` to
   `../ty/crates/tla-core`, so that checkout must sit at a commit whose
   `tla-core` version matches this repository's `Cargo.lock`, or every
-  `--locked` cargo command fails at lock resolution before compiling.
+  `--locked` cargo command fails at lock resolution before compiling. It also
+  pins `channel = "trust"` in `rust-toolchain.toml` — the ALab verifying
+  compiler fork, resolved from a locally linked toolchain — so a development
+  checkout does not build on stock Rust as-is. The bootstrap projection swaps
+  that file and `.cargo/config.toml` for the stock-toolchain versions in
+  `publish/`; that swap, not the 1.90 floor alone, is what makes an ordinary
+  clone buildable.
 
 From a generated standalone bootstrap candidate:
 
@@ -233,11 +244,13 @@ certificates now cover selected reduction/compiler fragments. They do not yet
 certify the mutually recursive production `infer_type` / `whnf` / `is_def_eq`
 spine end to end.
 
-The last recorded independent Lean replay—3,309/3,309 exported spec definitions
-with zero skips—was run on 2026-07-14 at `2bcef0713`, modulo the documented Quot,
-structure/projection, and Nat-literal constructor-normalization adapter
-mappings. It is valuable dated evidence, not a claim that the current source
-baseline was rechecked.
+The last recorded independent Lean replay was rerun on **2026-08-11**, modulo
+the documented Quot, structure/projection, and Nat-literal
+constructor-normalization adapter mappings. The 2026-07-14 `2bcef0713` run that
+stood here (3,309 spec definitions) is superseded, and its total is stale: the
+spec has since grown. Read the counts from
+`docs/SELF_VERIFICATION_CERTIFICATE.md` §4 rather than from this paragraph — it
+is dated evidence, not a claim that the current source baseline was rechecked.
 
 The development tree contains the detailed claim ledger at
 `docs/SELF_VERIFICATION_CERTIFICATE.md` and architecture at
@@ -281,7 +294,7 @@ Major crates:
 | `clean-compiler`, `clean-runtime` | Lowering, code generation, and runtime |
 | `clean-lake`, `clean-cake`, `clean-lsp` | Project, compatibility, and editor surfaces |
 | `clean-mathverse` | Provenance-labeled cross-system mathematics |
-| `clean-c-sem`, `clean-rust-sem`, `clean-tla` | Program and specification verification |
+| `clean-c-sem`, `clean-rust-sem` | Program and specification verification; `clean-tla` (TLA+/TLAPS) is omitted from the bootstrap projection |
 | `clean-verify`, `clean-reflect` | Reflected metatheory and development-tree correspondence work; `clean-reflect` is omitted from the bootstrap projection |
 | `clean-server`, `clean-cli` | JSON-RPC and unified CLI |
 
@@ -318,7 +331,7 @@ that survive that projection. Full development checkouts additionally contain:
 
 | Topic | Document |
 |---|---|
-| Current Lean 4 replacement audit | `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-23.md` |
+| Current Lean 4 replacement audit | `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md` |
 | Soundness gate and TCB | `docs/SOUNDNESS_CERTIFICATE.md` |
 | Self-verification claim ledger | `docs/SELF_VERIFICATION_CERTIFICATE.md` |
 | Self-verification architecture | `docs/SELF_VERIFICATION_PROGRAM.md` |

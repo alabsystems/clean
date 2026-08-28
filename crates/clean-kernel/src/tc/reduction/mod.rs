@@ -50,6 +50,8 @@ pub(super) mod names {
         LazyLock::new(|| Name::from_string("Nat.shiftLeft"));
     pub static NAT_SHIFT_RIGHT: LazyLock<Name> =
         LazyLock::new(|| Name::from_string("Nat.shiftRight"));
+    pub static INT: LazyLock<Name> = LazyLock::new(|| Name::from_string("Int"));
+    pub static INT_REC: LazyLock<Name> = LazyLock::new(|| Name::from_string("Int.rec"));
     pub static INT_OF_NAT: LazyLock<Name> = LazyLock::new(|| Name::from_string("Int.ofNat"));
     pub static INT_NEG_SUCC: LazyLock<Name> = LazyLock::new(|| Name::from_string("Int.negSucc"));
     pub static INT_ADD: LazyLock<Name> = LazyLock::new(|| Name::from_string("Int.add"));
@@ -89,6 +91,25 @@ impl<'env> TypeChecker<'env> {
             eprintln!("[try_iota_reduction] head is not Const, returning None");
             return None;
         };
+
+        // PERF-CLASS FAST PATH (carrier tower) — the closed `Int`-predecessor
+        // fold `Nat.rec (fun _ => Int) z (fun _ ih => ih - 1) N`, which the
+        // `Int32`/`Int64`/`BitVec` `toInt` conversion lemmas elaborate to with
+        // `N = 2^32` / `2^64`. Expanding it one ι-step at a time is a ~4.3
+        // billion-step unary walk; this computes `z - N` in O(limbs). Declines
+        // (touching nothing) unless the whole recursor matches exactly and
+        // `N >= 512` — see `reduce_int_pred_fold` for the soundness argument.
+        if let Some(folded) = self.reduce_int_pred_fold(e, rec_name) {
+            return Some(folded);
+        }
+
+        // PERF-CLASS GUARD (carrier tower) — the same fold when its step is NOT
+        // the pinned predecessor above. Leave a huge closed `Nat.rec` fold stuck
+        // rather than walk it one ι-step at a time; sound by narrowing. See
+        // `native_closed_fold_grind_stuck`.
+        if self.native_closed_fold_grind_stuck(e, rec_name) {
+            return None;
+        }
 
         // Now collect args (only after confirming head is a Const)
         let args = e.get_app_args();

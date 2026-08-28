@@ -38,6 +38,10 @@ pub mod mathverse_bin_cmds;
 // The former top-level `coq_*` modules now live as flat submodules under
 // `coq::*` (e.g. `coq::alpha`, `coq::shard`). Callers use those paths directly.
 pub(crate) mod closure_source;
+/// R1-LAZY (census item 12): the lazy-source eager-parity + fresh()-invariance
+/// contracts, mechanized as a hermetic fail-closed falsification battery.
+#[cfg(test)]
+mod closure_source_parity_tests;
 pub mod coq;
 pub mod format;
 pub(crate) mod frozen_map;

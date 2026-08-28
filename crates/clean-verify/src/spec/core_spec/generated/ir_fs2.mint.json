@@ -1,0 +1,39 @@
+{
+ "prefix": "ir_fs2",
+ "body": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+ "core_digest": "fb94a1a3936aa0019dbb66502d23f085e41d2d247d001ac19b0922558923af84",
+ "defs_digest": "bfa9353e1996c66d0f8bf8dacb034976b5f812c149cb0369aee359cba74a61ba",
+ "def_count": 3,
+ "artifact_core_digest": "ce554bd9306eb2cf5de062b9a841647e11b98d50e1d50acca0079232572356e6",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 3399,
+  "artifact_func_id": 3399,
+  "artifact_functy_id": 378,
+  "artifact_functy_note": "378 on the dump this projection was taken from, where the COMMITTED fixture says 381: the whole-crate function-TYPE index moves under a producer re-interning with zero instructions changed, exactly like func_id (3399 here, in the same drift class). The interface pin compares reader B's header against the fixture-era 381; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [
+   3399
+  ],
+  "crate_func_names_seen": [
+   "env::native_reducers_float::reduce_float_sub::{closure#0}"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [
+   "Ptr",
+   "F64",
+   "F64"
+  ],
+  "block_param_tys_erased": []
+ },
+ "text_unwitnessed": [],
+ "text_unwitnessed_note": "EMPTY, and that is the first empty ledger in the tree: the body contains no `switch`, so the one field trust-ir's Display never prints does not occur, and the emitted TEXT fully determines the core module. M2 on this chain is therefore an EXACT comparison with no mask.",
+ "producer_dumps_observed": 1,
+ "producer_dumps_note": "ONE local dump (laneREG wc-REG dump_O3, 2026-08-21), which is less than ir_pv's two and ir_h2's three, and it is stated as such: what M2 establishes here is that this dump and the committed fixture project to ONE core module -- the committed fixture text itself was cut and revalidated by the a152 rebaseline (commit b03937e74) and re-measured on a second machine (a12c858ec). The functy index moved 381 -> 378 between the fixture era and this dump with the instruction text byte-identical, which is the drift class the core form absorbs."
+}

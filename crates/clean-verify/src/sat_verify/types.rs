@@ -352,7 +352,7 @@ impl Cnf {
 
     /// Convert to raw DIMACS clause vectors (for interop).
     #[must_use]
-    pub fn to_dimacs_clauses(&self) -> Vec<Vec<i32>> {
+    pub(crate) fn to_dimacs_clauses(&self) -> Vec<Vec<i32>> {
         self.clauses.iter().map(|c| c.to_dimacs()).collect()
     }
 }

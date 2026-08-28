@@ -120,9 +120,7 @@ impl ShardConstantSource {
     /// only after the per-shard content-binding verification passes.
     #[cfg(test)]
     pub(crate) fn mark_all_verified(&mut self) {
-        for slot in &mut self.shard_verified {
-            *slot = true;
-        }
+        self.shard_verified.fill(true);
     }
 
     /// Index every shard's lazily-servable (non-inductive) constants into one
@@ -892,6 +890,14 @@ mod tests {
     /// source) — `get_const` returns the same `ConstantInfo` either way, so the kernel
     /// check must be byte-for-byte verdict-identical. Any divergence = a real bug.
     /// Opt-in via `CLEAN_TEST_SHARD`; skips otherwise.
+    ///
+    /// R1-LAZY hardening (2026-08-24): TOTAL by default over every value-bearing
+    /// servable constant (`CLEAN_TEST_STRIDE=n` opts a huge shard back into
+    /// sampling, printed so a sampled run can never be quoted as total), and
+    /// FAIL-CLOSED on any servable non-prelude name the source refuses to serve —
+    /// an incomparable name fails the run instead of silently shrinking the
+    /// denominator. The hermetic, always-on falsification battery (adversarial
+    /// tamper/extra/dropped/fresh arms) lives in `closure_source_parity_tests`.
     #[test]
     fn lazy_closure_verdict_matches_eager() {
         let Ok(path) = std::env::var("CLEAN_TEST_SHARD") else {
@@ -922,16 +928,27 @@ mod tests {
         // `self.constants` with these; the lazy leg serves them from the source.
         // Excluding prelude names avoids the `extend_constants_unchecked` dup-assert.
         let mut infos: Vec<ConstantInfo> = Vec::new();
+        let mut unresolvable: Vec<Name> = Vec::new();
         let mut names: Vec<Name> = source.servable_names();
         names.sort();
         for name in names {
             if prelude_names.contains(&name) {
                 continue;
             }
-            if let Some(ci) = ConstantSource::get(source.as_ref(), &name) {
-                infos.push(ci.clone());
+            // FAIL-CLOSED: every servable non-prelude name must resolve. A
+            // refusal here (serve gate, name-binding mismatch, corrupt index)
+            // would silently shrink the comparison set, so it fails the run.
+            match ConstantSource::get(source.as_ref(), &name) {
+                Some(ci) => infos.push(ci.clone()),
+                None => unresolvable.push(name),
             }
         }
+        assert!(
+            unresolvable.is_empty(),
+            "fail-closed: {} servable name(s) could not be resolved for comparison: {:?}",
+            unresolvable.len(),
+            &unresolvable[..unresolvable.len().min(10)]
+        );
         assert!(!infos.is_empty(), "no servable constants");
 
         let target_idxs: Vec<usize> = infos
@@ -940,7 +957,15 @@ mod tests {
             .filter(|(_, c)| c.value.is_some())
             .map(|(i, _)| i)
             .collect();
-        let stride = (target_idxs.len() / 60).max(1);
+        // TOTAL by default (stride 1 = the invariant quantifies over EVERY
+        // value-bearing servable constant). `CLEAN_TEST_STRIDE=n` opts a huge
+        // shard back into 1-in-n sampling; the stride is printed with the
+        // result so a sampled run can never be quoted as a total one.
+        let stride: usize = std::env::var("CLEAN_TEST_STRIDE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|&s| s >= 1)
+            .unwrap_or(1);
         let (mut ok_eq, mut err_eq, mut divergence) = (0u64, 0u64, 0u64);
 
         for &t in target_idxs.iter().step_by(stride) {
@@ -1001,7 +1026,10 @@ mod tests {
                 );
             }
         }
-        eprintln!("INVARIANCE on {path}: ok_eq={ok_eq} err_eq={err_eq} divergence={divergence}");
+        eprintln!(
+            "INVARIANCE on {path}: stride={stride}{} ok_eq={ok_eq} err_eq={err_eq} divergence={divergence}",
+            if stride == 1 { " (TOTAL)" } else { " (SAMPLED)" }
+        );
         assert_eq!(
             divergence, 0,
             "lazy closure changed a kernel verdict vs eager"

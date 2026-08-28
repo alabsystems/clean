@@ -31,7 +31,13 @@
 //! discharges by reducing `disjPair` on the substituted ground forms — a
 //! `$d`-violating instance reduces to `Bool.false` and is REJECTED. Ground
 //! theorems are not schematically reusable, so they are NOT added to `cache`/
-//! `sigs` (dependents reusing them stay skipped, never wrongly accepted). The
+//! `sigs` (dependents reusing them stay skipped, never wrongly accepted) — in the
+//! SEQUENTIAL verifier. In the TWO-PASS verifier the same theorem may sit outside
+//! a worker's range and stand there as its cheap PASS-1 *schematic* type, which a
+//! dependent WILL accept; that is why every real verification records its
+//! `reusable` bit in [`KernelVerifyReport::ground_only`] and the
+//! dependency-closure gate drops dependents of ground-only theorems (issue
+//! R1-MM, `crates/clean-olean/src/metamath/gate.rs`). The
 //! `$d`-free fragment still takes the fast schematic path. The variable universe
 //! fed to `varsOf`/`disjPair` (every `$v`/`$f` variable) is the one soundness-
 //! critical input — see `collect_var_universe`. See
@@ -416,6 +422,23 @@ fn axiom_assertions(
 pub struct KernelVerifyReport {
     /// Labels the Clean kernel verified.
     pub verified: Vec<String>,
+    /// SUBSET of [`verified`](Self::verified): labels that verified only on the
+    /// GROUND (`verify_metamath_theorem_guarded`) fallback, after the
+    /// schematic-`$d` route failed. Such a theorem is verified but **not
+    /// reusable** — the sequential verifier leaves it out of its reuse `cache`,
+    /// so `apply_label` refuses to build any dependent and every dependent is
+    /// SKIPPED ("reuses $p theorem … that did not verify").
+    ///
+    /// This is the field the dependency-closure gate needs in order to reproduce
+    /// the sequential set exactly: a two-pass worker whose range EXCLUDES such a
+    /// theorem sees only its PASS-1 *light schematic* type and happily verifies
+    /// dependents against it. Without this list the gate cannot tell that apart
+    /// from a schematically-verified dependency (issue R1-MM §3).
+    ///
+    /// Populated on the same condition as `verified` (a REAL verification: the
+    /// sequential run, or an in-range pass-2 theorem). Pass 1 and out-of-range
+    /// pass-2 theorems contribute nothing here either.
+    pub ground_only: Vec<String>,
     /// `(label, error)` for theorems the kernel rejected.
     pub failed: Vec<(String, String)>,
     /// `(label, reason)` for theorems skipped (malformed proof, unsupported
@@ -465,8 +488,17 @@ pub fn kernel_verify_database_prefix_count_only(
 /// [`set_mm_axiom_only`](clean_kernel::set_mm_axiom_only) for the soundness
 /// argument. `range` is over PROVABLE ORDINALS (the 0-based index of a theorem
 /// among `$p` statements in source order), matching the `mm_verify_range` binary.
-/// Passing `range = 0..max_provables` re-verifies the whole prefix and is the
-/// COUNT-EQUIVALENCE check against the sequential verifier.
+///
+/// The RAW union of `report.verified` across disjoint ranges is a STRICT SUPERSET
+/// of the sequential verifier's set, in two ways: a dependent of a REJECTED
+/// theorem survives (its pass-1 axiom type carried it), and a dependent of a
+/// GROUND-ONLY theorem survives (its pass-1 *schematic* type carried it). Both are
+/// removed by [`dependency_closure_gate`](super::dependency_closure_gate), which
+/// needs `report.ground_only` for the second — so a consumer that unions
+/// `verified` across workers MUST union `ground_only` alongside it. Passing
+/// `range = 0..max_provables` (one worker over the whole prefix) is the
+/// configuration in which the second divergence is masked; it is NOT the
+/// production configuration and is not the equivalence check.
 ///
 /// # Errors
 /// See [`kernel_verify_database`].
@@ -1216,12 +1248,19 @@ fn kernel_verify_database_prefix_impl(
                 // The light path always registers the SCHEMATIC type and marks the
                 // theorem reusable — matching the full SUCCESS path. A `needs_schematic_dv`
                 // theorem whose full path would instead FALL BACK to the GROUND (non-
-                // reusable) shape is the only divergence; it is SOUND because pass-2
-                // RE-VERIFIES every in-range proof, and a wrong (schematic-vs-ground) type
-                // only ever makes a reusing proof FAIL-CLOSED (skip), never a false accept
-                // — exactly the sequential verifier's own behaviour for a ground theorem,
-                // so count-equivalence is preserved. Validated by the two-pass+gate ==
-                // sequential count check. See `register_metamath_theorem_type_light`.
+                // reusable) shape is the only divergence, and it is PERMISSIVE, not
+                // fail-closed: the light path hands a reuser exactly the schematic shape
+                // it wants, so the reuser SUCCEEDS where the sequential verifier SKIPS it
+                // (issue R1-MM §3 — an earlier version of this comment claimed the
+                // opposite and was refuted by execution).
+                //
+                // What makes the exported set equal to the sequential one is therefore
+                // NOT this path: it is that every REAL verification records its
+                // `reusable` bit in `report.ground_only`, `mm_verify_range` emits it
+                // (`G <label>`), and `mm_gate`'s dependency-closure gate drops every
+                // theorem citing a ground-only dependency. See
+                // `crates/clean-olean/src/metamath/gate.rs` and
+                // `register_metamath_theorem_type_light`.
                 if clean_kernel::mm_axiom_only() {
                     let (disj, fixd): (&[(u64, u64)], &[u64]) = if needs_schematic_dv {
                         (&full_disjoints, &dummies)
@@ -1354,6 +1393,16 @@ fn kernel_verify_database_prefix_impl(
                 Ok(()) => {
                     if real_verification {
                         report.verified.push(a.label.clone());
+                        // R1-MM: record the GROUND-fallback verifications separately.
+                        // `reusable == false` here means the schematic-`$d` route
+                        // failed and `verify_metamath_theorem_guarded` carried the
+                        // proof — so `cache.insert` below does NOT fire and the
+                        // sequential verifier skips every dependent. The gate needs
+                        // this to reproduce that behaviour when the dependency sits
+                        // outside the checking worker's range.
+                        if !reusable {
+                            report.ground_only.push(a.label.clone());
+                        }
                     }
                     // Flushed progress (opt-in) so a long run that is interrupted still
                     // yields a confirmed lower-bound count. `failed` is printed too: any
@@ -1537,6 +1586,14 @@ fn kernel_verify_database_prefix_impl(
                 buf.push_str(l);
                 buf.push('\n');
             }
+            // R1-MM: the GROUND-only subset must survive the fork boundary too,
+            // otherwise a forked PASS-2 loses exactly the fact the gate needs.
+            // `G` lines are ADDITIONAL to the `V` line for the same label.
+            for l in &report.ground_only {
+                buf.push_str("G ");
+                buf.push_str(l);
+                buf.push('\n');
+            }
             for (l, _) in &report.failed {
                 buf.push_str("F ");
                 buf.push_str(l);
@@ -1590,7 +1647,8 @@ enum ParallelRole {
 /// Fork `workers` PASS-2 children over disjoint contiguous sub-ranges of `full`, sharing the
 /// already-built PASS-1 env copy-on-write (1×env, not N×env). Each child returns
 /// [`ParallelRole::Child`] to verify its sub-range then write+exit; the parent `waitpid`s every
-/// child, unions their `V `/`F ` labels into `report`, and returns [`ParallelRole::ParentDone`].
+/// child, unions their `V `/`G `/`F ` labels into `report`, and returns
+/// [`ParallelRole::ParentDone`]. (`G ` marks the ground-only subset of `V ` — R1-MM.)
 ///
 /// SOUNDNESS: every child verifies its sub-range against the IDENTICAL post-PASS-1 env the
 /// sequential verifier uses (PASS-2 is the same checked path), so the unioned verified set is
@@ -1641,6 +1699,10 @@ fn fork_parallel_pass2(
             for line in s.lines() {
                 if let Some(l) = line.strip_prefix("V ") {
                     report.verified.push(l.to_string());
+                } else if let Some(l) = line.strip_prefix("G ") {
+                    // R1-MM: ground-only (non-reusable) verification; the `V ` line
+                    // for the same label is emitted too, so this only marks it.
+                    report.ground_only.push(l.to_string());
                 } else if let Some(l) = line.strip_prefix("F ") {
                     report
                         .failed

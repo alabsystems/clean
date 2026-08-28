@@ -201,6 +201,14 @@ fn push_header(
         fc.scoped_instance_map().clone(),
         fc.default_instance_entries(),
     );
+    // U2 rung-4 explicitness channel. Header staging never reaches
+    // `finalize_level_params` (it elaborates a signature and filters the
+    // surviving params; it does not generalize), so nothing here can be
+    // refused today. Wired anyway so the invariant holds by construction:
+    // every `ElabCtx` built from a `FileContext` learns which of its
+    // declaration's universe names came from a `universe` command rather than
+    // from a written `.{...}` list.
+    ctx.set_file_universe_params(fc.current_universe_params().to_vec());
     if let Ok((name, universe_params, ty)) =
         ctx.elab_decl_header_inner(name, universe_params, binders, ty)
     {

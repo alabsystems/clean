@@ -9,9 +9,17 @@
 //! "lake.<verb>"`, and the drift gate in
 //! `crates/clean-cli/tests/feature_coverage.rs`.
 //!
-//! Every descriptor here is `Stability::V1` because the Lake verbs have
-//! shipped through the `clean-cli` binary since the first release. Category
-//! is [`Category::Build`] for every verb — Lake is the build system.
+//! Category is [`Category::Build`] for every verb — Lake is the build system.
+//!
+//! **Stability is per-verb and earned, not inherited.** This block used to read
+//! "every descriptor here is `Stability::V1` because the Lake verbs have
+//! shipped since the first release" — that rationale is what produced the
+//! overstatement class the 2026-08-25 and 2026-08-26 CLI audits found: having
+//! shipped is not the same as keeping a v1 promise, and Lake supplied 45% of
+//! every v1 claim in the CLI while `cache get` fetched nothing and
+//! `check-build` wrote artifacts it said it would not. Grade each verb against
+//! what a probe of that verb actually does; see
+//! [`super::features_ext::FEATURES_EXT`] for the non-V1 rows.
 //!
 //! The descriptor set is split across two files to stay under the 500-line
 //! per-file cap: core verbs (`build`, `new`, `clean`, `init`, `fetch`,
@@ -82,8 +90,11 @@ pub(super) const FEATURES_CORE: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "clean"],
         summary: "Remove build artifacts for the project",
-        description: "Deletes `.lake/build` and `.lake/packages` for the current workspace so the next \
-                      build runs fresh. Use `--verbose` for a file-by-file report.",
+        description: "Deletes the workspace build directory (`.lake/build`) so the next build runs \
+                      fresh. Fetched dependencies under `.lake/packages` are PRESERVED — matching \
+                      Lean 4 Lake, whose `lake clean` removes build outputs only; re-fetch with \
+                      `lake fetch`/`lake update` or delete `.lake/packages` by hand. Use `--verbose` \
+                      for a file-by-file report of what is removed.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[Example {
@@ -224,9 +235,14 @@ pub(super) const FEATURES_CORE: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "exe"],
-        summary: "Run a pre-built native executable",
-        description: "Executes a previously-built native binary by target name, passing through any \
-                      trailing arguments. Unlike `lake run`, does not trigger a build first.",
+        summary: "Build an executable target and run it",
+        description: "Builds the named executable target and runs the resulting native binary, passing \
+                      through any trailing arguments and propagating its exit status. This matches \
+                      Lean 4 Lake, whose own `lake exe` is documented as \"build an exe and run it in \
+                      Lake's environment\" — it is NOT a run-only verb. The difference from \
+                      `lake run` is target selection, not building: `lake exe` requires an explicit \
+                      target name, while `lake run` falls back to the default target and honors \
+                      `--jobs`.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[Example {
@@ -360,8 +376,58 @@ mod tests {
         ensure_unique_paths(&refs).expect("lake descriptor paths must be unique");
     }
 
+    /// Lake verbs are all `Category::Build`, and their stability is PINNED
+    /// PER VERB rather than asserted uniformly.
+    ///
+    /// This test used to require `Stability::V1` for every verb, justified as
+    /// "Lake verbs have shipped for releases". Shipping is not the same as
+    /// working: `Stability::V1` is defined as "stable, public surface that is
+    /// covered by semver" (`clean-features::Stability`), and several verbs do
+    /// not meet it —
+    ///
+    /// - `lake upload` validates a build dir and then fails with an explicit
+    ///   "not yet implemented" error (#421). It cannot publish anything.
+    /// - `lake cache get` reports cache locations and fetches nothing.
+    /// - `lake cache put` copies into `.lake/cache` only; cloud upload is
+    ///   unimplemented and the command says so.
+    /// - `lake pack`/`unpack` use a Clean-local directory + `manifest.json`
+    ///   layout, not a Lake/Mathlib cache archive.
+    /// - `lake check-lint` verifies its targets ELABORATE; it runs no linter.
+    ///
+    /// A blanket assertion made the CLI advertise a semver promise the code
+    /// does not keep — and Lake supplied 45% of every `v1` claim in the whole
+    /// CLI. The invariant is kept (labels still cannot drift silently) but it
+    /// now pins the measured state; moving a verb between tiers is a
+    /// deliberate edit here, with the evidence.
     #[test]
-    fn every_feature_is_v1_build() {
+    fn lake_features_are_build_with_pinned_stability() {
+        let downgraded: &[(&[&str], Stability)] = &[
+            (&["lake", "upload"], Stability::Building),
+            (&["lake", "cache", "get"], Stability::Building),
+            (&["lake", "cache", "put"], Stability::Usable),
+            (&["lake", "pack"], Stability::Usable),
+            (&["lake", "unpack"], Stability::Usable),
+            (&["lake", "check-lint"], Stability::Usable),
+            // Added 2026-08-26, each from a probe of the shipped binary:
+            //
+            // - `check-build` is artifact-free again as of 2026-08-27 (the
+            //   `check_only` option is honored by redirecting the build to a
+            //   scratch directory), but it stays below V1 on cost, not on
+            //   truth: reading no artifact means reusing no previous work, so
+            //   it re-elaborates the whole project on every invocation.
+            // - the three `script` verbs read the CURRENT lakefile only;
+            //   scripts inherited from dependency packages are invisible to
+            //   all of them, where Lean's `lake script list` shows them.
+            //   `script run` additionally lowers to `main : IO Unit`, so it
+            //   holds to the bridge's bounded stdout IO subset and cannot bind
+            //   a declared `(args)` binder. (The `do`-form MIS-PARSE that put
+            //   these three here on 2026-08-26 is fixed: `script <name>
+            //   [(args)] do` now yields the bare name and keeps its body.)
+            (&["lake", "check-build"], Stability::Usable),
+            (&["lake", "script", "list"], Stability::Building),
+            (&["lake", "script", "run"], Stability::Building),
+            (&["lake", "script", "doc"], Stability::Building),
+        ];
         for d in FEATURES {
             assert_eq!(
                 d.category,
@@ -369,10 +435,14 @@ mod tests {
                 "{} should be Build",
                 d.path_display()
             );
+            let want = downgraded
+                .iter()
+                .find(|(path, _)| *path == d.path)
+                .map_or(Stability::V1, |(_, s)| *s);
             assert_eq!(
                 d.stability,
-                Stability::V1,
-                "{} should be V1 — Lake verbs have shipped for releases",
+                want,
+                "{} stability must match its measured implementation state",
                 d.path_display()
             );
         }

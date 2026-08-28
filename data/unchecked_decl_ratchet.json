@@ -1,9 +1,17 @@
 {
   "add_decl_structural_count": 0,
-  "add_decl_unchecked_count": 0,
+  "add_decl_unchecked_count": 1,
   "add_decl_structural_production_sites": [],
+  "add_decl_unchecked_production_sites": [
+    {
+      "file": "crates/clean-kernel/src/env/decl_add.rs",
+      "method": "add_decl_unchecked",
+      "occurrences": 1,
+      "trust": "SANCTIONED IMPORT-LANE PROOF-DROP (G6 reconciliation, 2026-08-23; count corrected 0 -> 1, see the G6 note below for why a correction is not a ratchet regression). fn Environment::add_decl, the `mm_axiom_only()` arm: an incoming Declaration::Theorem is converted to a Declaration::Axiom whose TYPE is registered WITHOUT infer_sort and whose proof value is dropped WITHOUT check_type. This is the Metamath two-pass importer's PASS-1, and it is the ONLY production (non-#[cfg(test)]) add_decl_unchecked / add_decl_structural dot-call in crates/**. SOUND because THREE independent in-tree mechanisms stand between it and any exported verdict - not because the flag is trusted. (1) FAIL-CLOSED ENTRY (Pillar-1 G1, 2026-07-01): the flag alone does not authorize the drop. The arm also requires mm_two_pass_active(), the thread-local sentinel only clean-olean's kernel_verify_two_pass_range establishes via the RAII MmAxiomOnlyGuard; a stray set_mm_axiom_only(true) anywhere else returns EnvError::AxiomOnlyMisuse instead of registering anything. The guard clears sentinel AND flag on drop (including a `?` early return), so the flag cannot leak into later checked work, and the thread-local default false keeps every other add_decl caller in the tree on the checked path. (2) PASS-2 RE-VERIFICATION: nothing pass-1 registers is ever a verification result - pass-1 leaves report.verified EMPTY. For each theorem in its range pass-2 forget_decl's the pass-1 axiom and re-adds it as a real Declaration::Theorem through the CHECKED add_decl, so that theorem's TYPE gets infer_sort and its PROOF gets check_type before it can be counted verified. Every exported theorem's type and proof were therefore kernel-checked. (3) DEPENDENCY-CLOSURE GATE: pass-2 checks a proof against an environment where OTHER theorems are still pass-1 axioms, so a theorem could type-check on an unproven dependency. crates/clean-olean/src/bin/mm_gate.rs removes, to a fixpoint, every verified theorem whose transitive $p-dependency closure is not itself verified; the surviving set is exactly what the sequential verifier accepts. Only that gated set is exported - crates/clean-mathverse/src/bin/mm_export_verified.rs emits ONLY labels present in V - so an unproven pass-1 axiom can appear neither as, nor beneath, a KernelVerified label. CONTAINMENT: pass-1 axioms live only in the importer's in-process Environment; they are never persisted, never re-exported, and carry no trust verdict (the Pass1Types export path is filtered to the already-verified wanted set). WHY IT IS NOT REMOVED: routing pass-1 through the checked path would not remove the deviation, it would HIDE it - pass-1 would still skip the proof, but as an ordinary axiom registration invisible to this ratchet - and it would re-run the applySubstV/MMThm reductions the light path exists to avoid (register_metamath_theorem_type_light). Counting it keeps the deviation named and pinned. CLASSIFIED INDEPENDENTLY since 2026-07-01 in data/trust_verdict_emitters.json as `add_decl_mm_axiom_only`, basis asserts-own-authority, soundness_comment true; docs/PILLAR_1_TRUST_MAP.md G1. TRACKING RECORD: audit finding 1 of commit 4d12619e8 (2026-08-22), reconciled here. ENFORCEMENT: scripts/check_add_decl_ratchet.py re-derives this from crates/**/*.rs on every scripts/local_gate.sh run and pins the sanctioned-site list IN CODE, so this row cannot be widened by editing JSON."
+    }
+  ],
   "extend_constants": {
-    "note": "Production call sites of the bulk extend_constants_unchecked / extend_constants_structural bypass. Addresses #4: these are NOT counted by add_decl_*_count above (which track only add_decl_structural/add_decl_unchecked). Each production site below carries a // SOUNDNESS: comment at its call. ENFORCEMENT: scripts/check_extend_constants_ratchet.py (wired into scripts/local_gate.sh) fails the pre-push gate if any source .extend_constants_*( call site is not accounted for in production_sites or test_excluded_sites, or if a production count exceeds the baseline. test_excluded_sites are listed explicitly because they live in inline #[cfg(test)] blocks that path globs do not catch. Counts are flat-or-down: removing a bypass should lower the baseline. G4 (2026-07-01): the GENUINE-DEBT generated_overlay.rs overlay lane was moved OFF extend_constants_unchecked onto the new kernel-checked extend_constants_checked (infer_sort every type + check_type every value-bearing record, UnknownConst-tolerant for legitimate forward/external refs) \u2014 the sole trust-bearing unchecked overlay bypass is CLOSED, dropping unchecked_production_count 2 -> 1 (only the isolated merge_check.rs scratch env remains as a production unchecked bypass).",
+    "note": "Production call sites of the bulk extend_constants_unchecked / extend_constants_structural bypass. Addresses #4: these are NOT counted by add_decl_*_count above (which track only add_decl_structural/add_decl_unchecked). Each production site below carries a // SOUNDNESS: comment at its call. ENFORCEMENT: scripts/check_extend_constants_ratchet.py (wired into scripts/local_gate.sh) fails the pre-push gate if any PRODUCTION .extend_constants_*( call site is not accounted for in production_sites, or if a production count exceeds the baseline. Since 2026-08-25 the scanner LEXES (comments and string literals blanked) and excludes inline #[cfg(test)] mod blocks by brace tracking, fail-closed on imbalance. Counts are flat-or-down: removing a bypass should lower the baseline. G4 (2026-07-01): the GENUINE-DEBT generated_overlay.rs overlay lane was moved OFF extend_constants_unchecked onto the new kernel-checked extend_constants_checked (infer_sort every type + check_type every value-bearing record, UnknownConst-tolerant for legitimate forward/external refs) — the sole trust-bearing unchecked overlay bypass is CLOSED, dropping unchecked_production_count 2 -> 1 (only the isolated merge_check.rs scratch env remains as a production unchecked bypass). 2026-08-25 (lane ANTICORR): test_excluded_sites RETIRED -- see test_excluded_sites_retired. 2026-08-25 (lane LOOSE): `production_sites` is no longer read as a (file, method) SET. Each row now CAPS the calls it covers via `occurrences` (default 1), and every accounted call must carry a `// SOUNDNESS:` comment within 40 lines above it -- both rules taken from the sibling check_add_decl_ratchet.py, whose SANCTIONED_SITES have capped per site since 2026-08-22. The set reading was itself a blanket suppression at file granularity and it was LIVE: cli/per_constant_load.rs carried TWO calls (lines 1762, 1767) under one row that declared no count, so a third would have been accepted with no entry of its own. Its `trust` text already SAID '2 call sites'; nothing checked it. `occurrences: 2` now states it where the gate reads it.",
     "unchecked_production_count": 1,
     "structural_production_count": 6,
     "production_sites": [
@@ -26,49 +34,66 @@
       {
         "file": "crates/clean-mathverse/src/cli/graduate_closure_cache.rs",
         "method": "extend_constants_structural",
-        "trust": "SAME IMPORT BOUNDARY, content-addressed: the content-addressed closure cache (graduate --env olean warm load) materializes the SAME definitional constants, from the SAME .olean set, that load_register.rs registers via this exact hook \u2014 the cache only changes the source of the bytes (a blake3-union-digest-bound, per-constant-recon-digest-stamped .mathverse shard) not the trust. Constants stored Unverified; every graduation candidate is re-type-checked from scratch downstream (graduate_with_base_keep_env -> add_decl check_type), so a wrong cached byte fails a candidate's recheck, it cannot mint a KernelVerified. Fail-closed: any union-digest / per-shard-binding / coverage / decode mismatch falls back to the eager .olean reconstruction. Opt-in via $CLEAN_CLOSURE_CACHE_DIR (off by default)."
+        "trust": "SAME IMPORT BOUNDARY, content-addressed: the content-addressed closure cache (graduate --env olean warm load) materializes the SAME definitional constants, from the SAME .olean set, that load_register.rs registers via this exact hook — the cache only changes the source of the bytes (a blake3-union-digest-bound, per-constant-recon-digest-stamped .mathverse shard) not the trust. Constants stored Unverified; every graduation candidate is re-type-checked from scratch downstream (graduate_with_base_keep_env -> add_decl check_type), so a wrong cached byte fails a candidate's recheck, it cannot mint a KernelVerified. Fail-closed: any union-digest / per-shard-binding / coverage / decode mismatch falls back to the eager .olean reconstruction. Opt-in via $CLEAN_CLOSURE_CACHE_DIR (off by default)."
       },
       {
         "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
         "method": "extend_constants_structural",
+        "occurrences": 2,
         "trust": "SOUND AS TRUSTED CLOSURE CONTEXT (2026-07-08, gate green-up after the P4 per-constant-verify landing left 2 unaccounted sites): fn insert_or_upgrade demand-loads the transitive CONSTANT closure of a per-constant-verify target into the shared kernel environment (2 call sites: the stale-entry re-insert arm and the fresh-insert arm). Closure constants are imported CONTEXT, trusted exactly like the eager import closure `stamp-verified --closure-root` loads: they are never stamped KernelVerified, never certified, and never enter a trust receipt. Only the named TARGET constant(s) run the kernel's add_decl-equivalent check_type gauntlet, and only kernel-accepted targets become receipt leaves. A corrupt or wrong closure constant can at worst fail the target's kernel check (fail closed) - it cannot mint a false KernelVerified or widen any certified claim."
       }
     ],
-    "test_excluded_sites": [
-      {
-        "file": "crates/clean-kernel/src/tc/monad_reduce.rs",
-        "method": "extend_constants_unchecked",
-        "reason": "inside #[cfg(test)] mod tests (install_stub): intentionally ill-typed stub giving the WHNF reducer a delta-unfoldable head. Compiled out of every non-test build."
-      },
-      {
-        "file": "crates/clean-cli/src/cmd_audit.rs",
-        "method": "extend_constants_unchecked",
-        "reason": "inside #[cfg(test)] mod tests: fabricated non-foundational axiom fixture asserting the trust-ledger audit REJECTS it. Compiled out of every non-test build."
-      },
-      {
-        "file": "crates/clean-mathverse/src/closure_source.rs",
-        "method": "extend_constants_unchecked",
-        "reason": "inside the #[cfg(test)] mod tests at closure_source.rs:523 (fn lazy_closure_verdict_matches_eager): builds a throwaway scratch env for the eager-vs-lazy closure consistency probe. Compiled out of every non-test build. Listed 2026-07-01 (previously unaccounted / stale ratchet)."
-      },
-      {
-        "file": "crates/clean-elab/src/infer/elab_monad_materialize.rs",
-        "method": "extend_constants_unchecked",
-        "reason": "inside the #[cfg(test)] mod tests (register helper): installs synthetic monad-stub and class-projection constants solely to exercise the materialization shape discriminator. Compiled out of every non-test build; cannot reach a stored environment, kernel verdict, or exported artifact."
-      },
-      {
-        "file": "crates/clean-olean/src/import/load_register.rs",
-        "method": "extend_constants_unchecked",
-        "occurrences": 3,
-        "reason": "inside the #[cfg(test)] mod at load_register.rs:1743 (seed_structure test helper + projection-index test fixtures). Compiled out of every non-test build. Previously unaccounted (stale ratchet after parallel work landed the projection-index tests); listed 2026-07-01."
-      },
-      {
-        "file": "crates/clean-verify/src/axiom_refutation_gate.rs",
-        "method": "extend_constants_unchecked",
-        "reason": "inside #[cfg(test)] mod tests (test_census_rejects_value_bearing_live_axiom): fabricates a deliberately ill-formed VALUE-BEARING axiom the kernel would refuse, so the axiom census can be asserted to REJECT it. The bypass is what makes the negative fixture constructible. Compiled out of every non-test build. Listed 2026-07-30 with the definitional-disagreement census port."
-      }
-    ]
+    "test_excluded_sites_retired": {
+      "retired": "2026-08-25",
+      "by": "lane-anticorr",
+      "rows_removed": 6,
+      "reason": "A hand-maintained (file, method) skip list, written because the scanner could not see inline #[cfg(test)] mod blocks. It is a BLANKET suppression of the pair, so it also hid any FUTURE PRODUCTION bypass in the same file: MEASURED 2026-08-25, a real `env.extend_constants_unchecked(cs)` planted in crates/clean-olean/src/import/load_register.rs -- one of the six listed files -- was accepted silently, exit 0. scripts/check_extend_constants_ratchet.py now excludes inline #[cfg(test)] mod blocks by brace tracking (fail-closed on imbalance), all six rows were measured DEAD (the gate is green with the list emptied: unchecked=1/1, structural=6/6), and the gate now REFUSES a non-empty test_excluded_sites rather than honouring it.",
+      "removed_rows": [
+        {
+          "file": "crates/clean-kernel/src/tc/monad_reduce.rs",
+          "method": "extend_constants_unchecked",
+          "reason": "inside #[cfg(test)] mod tests (install_stub): intentionally ill-typed stub giving the WHNF reducer a delta-unfoldable head. Compiled out of every non-test build."
+        },
+        {
+          "file": "crates/clean-cli/src/cmd_audit.rs",
+          "method": "extend_constants_unchecked",
+          "reason": "inside #[cfg(test)] mod tests: fabricated non-foundational axiom fixture asserting the trust-ledger audit REJECTS it. Compiled out of every non-test build."
+        },
+        {
+          "file": "crates/clean-mathverse/src/closure_source.rs",
+          "method": "extend_constants_unchecked",
+          "reason": "inside the #[cfg(test)] mod tests at closure_source.rs:523 (fn lazy_closure_verdict_matches_eager): builds a throwaway scratch env for the eager-vs-lazy closure consistency probe. Compiled out of every non-test build. Listed 2026-07-01 (previously unaccounted / stale ratchet)."
+        },
+        {
+          "file": "crates/clean-elab/src/infer/elab_monad_materialize.rs",
+          "method": "extend_constants_unchecked",
+          "reason": "inside the #[cfg(test)] mod tests (register helper): installs synthetic monad-stub and class-projection constants solely to exercise the materialization shape discriminator. Compiled out of every non-test build; cannot reach a stored environment, kernel verdict, or exported artifact."
+        },
+        {
+          "file": "crates/clean-olean/src/import/load_register.rs",
+          "method": "extend_constants_unchecked",
+          "occurrences": 3,
+          "reason": "inside the #[cfg(test)] mod at load_register.rs:1743 (seed_structure test helper + projection-index test fixtures). Compiled out of every non-test build. Previously unaccounted (stale ratchet after parallel work landed the projection-index tests); listed 2026-07-01."
+        },
+        {
+          "file": "crates/clean-verify/src/axiom_refutation_gate.rs",
+          "method": "extend_constants_unchecked",
+          "reason": "inside #[cfg(test)] mod tests (test_census_rejects_value_bearing_live_axiom): fabricates a deliberately ill-formed VALUE-BEARING axiom the kernel would refuse, so the axiom census can be asserted to REJECT it. The bypass is what makes the negative fixture constructible. Compiled out of every non-test build. Listed 2026-07-30 with the definitional-disagreement census port."
+        }
+      ]
+    }
   },
-  "note": "Counts are production call sites only (not definitions, trait impls, test files, or comments). The kernel definition (decl_add.rs) and trait delegation (trusted_ext.rs) are infrastructure, not usage. HONESTY (2026-06-14): the add_decl_*_count fields track ONLY add_decl_structural/add_decl_unchecked. RESOLVED 2026-06-17 (#4): the dominant extend_constants_unchecked / extend_constants_structural bulk-import bypass is now accounted in the `extend_constants` block above, every production site carries a // SOUNDNESS: comment, and a fail-closed code-scanning gate (scripts/check_extend_constants_ratchet.py via scripts/local_gate.sh) blocks a new unaccounted bypass. G3 CORRECTION (2026-07-01): the prior claim 'ZERO production code path registers via add_decl_structural/add_decl_unchecked' was INACCURATE — crates/clean-mathverse/src/bin/mathverse_shard/proof_commands.rs (fn add_shard_to_env) was a LIVE non-#[cfg(test)] production add_decl_structural site and was counted here with add_decl_structural_count=1. G5 DRAIN (2026-08-10): that last production site is MIGRATED to the #4-ratcheted import-boundary extend_constants_structural bulk class (same O(1) structural checks, StructuralOnly stamp, duplicate pre-filter preserving first-shard-wins; accounted in the extend_constants block above, structural_production_count 5 -> 6), so add_decl_structural_count is now genuinely 0/0 and the total bypass-site count across both ledgers stays flat (1+5 -> 0+6). ALL remaining add_decl_structural / add_decl_unchecked call sites are TEST-only (tests_axiom_audit.rs, tests_sorry_tracer.rs, #[cfg(test)] fixtures in axiom_audit.rs / cert/bundle.rs / soundness_certificate.rs / drift.rs / project_audit.rs / axiom_refutation_gate.rs / verify_batch.rs, tc/tests*, env/tests*, build_library_native.rs #[cfg(test)] helpers). Production axioms enter via add_decl with full check, or via the #4-gated extend_constants_* (generated_overlay.rs now kernel-checked via extend_constants_checked, G4). Re C1 (post-G2, 2026-07-01): a fabricated AXIOM's *value* is not re-type-checked by C1 (it skips non-Theorem/Definition kinds), but its declared TYPE is now re-checked for well-formedness by C1's symmetric infer_sort pass, and its truth is enumerated + golden-pinned by C2 (and refutation-tested by C4/C4'); see crates/clean-kernel/src/env/soundness_certificate.rs.",
+  "note": "Counts are production call sites only (not definitions, trait impls, test files, or comments). The kernel definition (decl_add.rs) and trait delegation (trusted_ext.rs) are infrastructure, not usage. HONESTY (2026-06-14): the add_decl_*_count fields track ONLY add_decl_structural/add_decl_unchecked. RESOLVED 2026-06-17 (#4): the dominant extend_constants_unchecked / extend_constants_structural bulk-import bypass is now accounted in the `extend_constants` block above, every production site carries a // SOUNDNESS: comment, and a fail-closed code-scanning gate (scripts/check_extend_constants_ratchet.py via scripts/local_gate.sh) blocks a new unaccounted bypass. G3 CORRECTION (2026-07-01): the prior claim 'ZERO production code path registers via add_decl_structural/add_decl_unchecked' was INACCURATE — crates/clean-mathverse/src/bin/mathverse_shard/proof_commands.rs (fn add_shard_to_env) was a LIVE non-#[cfg(test)] production add_decl_structural site and was counted here with add_decl_structural_count=1. G5 DRAIN (2026-08-10): that last production site is MIGRATED to the #4-ratcheted import-boundary extend_constants_structural bulk class (same O(1) structural checks, StructuralOnly stamp, duplicate pre-filter preserving first-shard-wins; accounted in the extend_constants block above, structural_production_count 5 -> 6), so add_decl_structural_count is now genuinely 0/0 and the total bypass-site count across both ledgers stays flat (1+5 -> 0+6). G6 CORRECTION (2026-08-23) - THE SENTENCE THAT STOOD HERE WAS FALSE. It read \"ALL remaining add_decl_structural / add_decl_unchecked call sites are TEST-only\". scripts/check_add_decl_ratchet.py - the source scanner this artifact went WITHOUT until 2026-08-22, so every count above was asserted and never measured - finds 48 inline #[cfg(test)] sites and ONE production site: crates/clean-kernel/src/env/decl_add.rs, the mm_axiom_only proof-drop arm of Environment::add_decl, which registers a Declaration::Axiom without type checking it. It is now an add_decl_unchecked_production_sites row and add_decl_unchecked_count is 1. THAT IS A CORRECTION, NOT A RATCHET REGRESSION: no bypass was added by this change - the count was wrong from the day the mm_axiom_only arm landed, and \"only goes down\" now binds against a MEASURED 1 rather than an asserted 0. The remaining sites are genuinely test-only (tests_axiom_audit.rs, tests_sorry_tracer.rs, #[cfg(test)] fixtures in axiom_audit.rs / cert/bundle.rs / soundness_certificate.rs / drift.rs / project_audit.rs / axiom_refutation_gate.rs / verify_batch.rs, tc/tests*, env/tests*, build_library_native.rs #[cfg(test)] helpers), and THAT claim is now re-derived from crates/**/*.rs on every gate run instead of asserted here. Production axioms enter via add_decl with full check, via the #4-gated extend_constants_* (generated_overlay.rs now kernel-checked via extend_constants_checked, G4), or - for Metamath two-pass PASS-1 only - via the sanctioned, sentinel-guarded mm_axiom_only arm counted above, whose registrations are re-verified in PASS-2 and dependency-closure-gated before anything is exported. Re C1 (post-G2, 2026-07-01): a fabricated AXIOM's *value* is not re-type-checked by C1 (it skips non-Theorem/Definition kinds), but its declared TYPE is now re-checked for well-formedness by C1's symmetric infer_sort pass, and its truth is enumerated + golden-pinned by C2 (and refutation-tested by C4/C4'); see crates/clean-kernel/src/env/soundness_certificate.rs. G6 MEASUREMENT CORRECTION (2026-08-22): the sentence above — \"ALL remaining add_decl_structural / add_decl_unchecked call sites are TEST-only\" — is REFUTED by the first scan that ever looked. scripts/check_add_decl_ratchet.py finds 48 inline #[cfg(test)] sites and ONE production site: crates/clean-kernel/src/env/decl_add.rs:657, the mm_axiom_only branch of Environment::add_decl. See add_decl_measured_disagreements below. Nothing could have caught the drift, because until that scanner landed no gate read a line of Rust for this rule: validate_unchecked_decl_ratchet checks this file against itself and scripts/deny_sorry_gate.sh asserts the two counts are the literal 0.",
   "files": [],
-  "last_updated": "2026-08-10"
+  "last_updated": "2026-08-23",
+  "add_decl_ratchet_scanner": "scripts/check_add_decl_ratchet.py — re-derives the production call sites from crates/**/*.rs on every run (wired into scripts/local_gate.sh and into the unchecked_decl_ratchet_accounted lane of scripts/deny_sorry_gate.sh). Before it, add_decl_structural_count / add_decl_unchecked_count were asserted, never measured. The sanctioned-site allowlist lives IN THAT SCRIPT (SANCTIONED_SITES), not here, so a row in this file cannot legalise a bypass on its own and a sanctioned site cannot gain a second call. Self-test: --selftest, 16 mutation arms, run by the gate before the scan on every invocation; arms 13/14 keep the 2026-08-22 snapshot.rs plant as a standing demonstration on the real file.",
+  "add_decl_reconciled_disagreements": [
+    {
+      "file": "crates/clean-kernel/src/env/decl_add.rs",
+      "method": "add_decl_unchecked",
+      "recorded": "2026-08-22",
+      "resolved": "2026-08-23",
+      "resolution": "COUNTED (option (a)). The scanner's first run recorded this as an add_decl_measured_disagreements row because the reconciliation was an owner decision the auditing lane declined to take. Taken here: the site is IN SCOPE - it is a real production verification skip, not a delegation like the Environment::add_decl_* forms in env/trusted_ext.rs - so it is now an add_decl_unchecked_production_sites row with add_decl_unchecked_count = 1. Option (b), removing the bypass, was rejected on the merits and not on cost: it would leave the proof-skip in place while making it invisible to this ledger. This row is HISTORY, not accounting: it contributes nothing to any count and the scanner ignores it."
+    }
+  ]
 }

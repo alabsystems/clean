@@ -9,6 +9,7 @@ use clean_kernel::cert::{
 };
 use clean_kernel::mode::CleanMode;
 use clean_kernel::{Environment, Expr, ExprKind, Level};
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_verify_cert_valid_sort() {
@@ -380,9 +381,9 @@ async fn test_verify_cert_invalid_pi_level_mismatch() {
 
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(arg_type_cert),
+        arg_type_cert: Arc::new(arg_type_cert),
         arg_level: Level::zero(), // WRONG: should be succ(zero)
-        body_type_cert: Box::new(body_type_cert),
+        body_type_cert: Arc::new(body_type_cert),
         body_level: Level::succ(Level::zero()),
     };
 
@@ -1064,16 +1065,16 @@ async fn test_verify_cert_timeout() {
     for _ in 0..100 {
         let lam_cert = ProofCert::Lam {
             binder_info: clean_kernel::BinderInfo::Default,
-            arg_type_cert: Box::new(ProofCert::Sort {
+            arg_type_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
-            body_cert: Box::new(cert.clone()),
+            body_cert: Arc::new(cert.clone()),
             result_type: Box::new(pi_type.clone()),
         };
         cert = ProofCert::App {
-            fn_cert: Box::new(lam_cert),
+            fn_cert: Arc::new(lam_cert),
             fn_type: Box::new(pi_type.clone()),
-            arg_cert: Box::new(ProofCert::Sort {
+            arg_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
             result_type: Box::new(sort_type.clone()),

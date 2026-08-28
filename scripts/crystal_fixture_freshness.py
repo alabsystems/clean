@@ -182,6 +182,10 @@ BODIES: dict[str, str] = {
     "strict_monads": "env::Environment::set_lean4_core_strict_monads",
     "flat_flags_with": "flat::types::FlatFlags::with",
     "node_id_index": "cert::builder::state::NodeId::index",
+    # Chain 18, 2026-08-21 — the FIRST call-bearing chain, pinned from the
+    # c4e667ca51 producer era (the prior 19 fixtures stay at their own eras;
+    # NUMBERING-ONLY against this producer, verified).
+    "has_loose_bvars": "expr::meta::ExprMeta::has_loose_bvars",
     # The ELEVENTH chain, 2026-08-20 -- the first chained body that computes an
     # address and dereferences it.  Its fixture was taken from a live dump on
     # the day it was committed, and it enters this table so the NEXT lane
@@ -202,6 +206,10 @@ BODIES: dict[str, str] = {
 # table or the other, so a thirteenth fixture cannot arrive uncompared.
 EXTRA_BODIES: dict[str, str] = {
     "level_is_zero_deref_callee": "<level::LevelArc as std::ops::Deref>::deref",
+    # Chain 18's SUPPORTING callee: its emitted IR is transcribed into the
+    # two-function reflected module and gated by has_loose_bvars.rs, so it must
+    # be compared against live dumps like every other committed fixture.
+    "loose_bvar_range_callee": "expr::meta::ExprMeta::loose_bvar_range",
 }
 
 # The emitted signature each body is found by in the dump text.  Derived from the
@@ -367,8 +375,34 @@ def extract(dump_text: str, sig: str) -> list[str]:
     return out
 
 
+def dump_provenance(path: Path) -> str:
+    """Return a stable directory label, never a machine-local path.
+
+    Preserve the spelling of an ordinary final component (including a symlink
+    name).  `.` has no final component in `pathlib`, so use the absolute
+    directory's basename for that one relative spelling.  A filesystem root
+    has no basename even after absolutizing and therefore receives an explicit
+    sentinel instead of leaking `/`, a drive root, or another host-specific
+    absolute spelling into a committed report.
+    """
+    return path.name or path.absolute().name or "filesystem-root"
+
+
+def selftest_dump_provenance() -> None:
+    assert dump_provenance(Path("/private/tmp/agent-session/irdumpB")) == "irdumpB"
+    assert dump_provenance(Path("relative/dump_O3")) == "dump_O3"
+    root = Path(Path.cwd().anchor)
+    assert dump_provenance(root) == "filesystem-root"
+    for label in (
+        dump_provenance(Path("/private/tmp/agent-session/irdumpB")),
+        dump_provenance(root),
+    ):
+        assert not Path(label).is_absolute(), label
+
+
 def main() -> int:
     selftest_classifier()
+    selftest_dump_provenance()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("dump", type=Path, help="a TRUST_IR_BUILD_DUMP directory")
     ap.add_argument(
@@ -404,7 +438,15 @@ def main() -> int:
 
     report: dict[str, object] = {
         "schema": "clean.crystal.fixture_freshness/v1",
-        "dump": str(args.dump),
+        # The dump directory's NAME, never its absolute path. A per-session
+        # scratch path under someone's home or temp directory tells a reader
+        # nothing they can reproduce — that directory exists on exactly one
+        # machine, for one session — and it is precisely the agent-session and
+        # personal-path residue the publication boundary refuses outright,
+        # which is how a committed one blocked a release. Nothing reads this
+        # field; it is provenance for a human, so record what identifies the
+        # dump rather than where it briefly sat.
+        "dump": dump_provenance(args.dump),
         "bodies": {},
     }
     red: list[str] = []

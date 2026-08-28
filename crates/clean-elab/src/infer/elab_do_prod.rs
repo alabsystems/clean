@@ -40,7 +40,7 @@ pub(crate) fn type_universe(ctx: &ElabCtx<'_>, ty: &Expr) -> Result<Level, ElabE
     if matches!(inferred.kind(), clean_kernel::ExprKind::SProp) {
         return Err(ElabError::TypeMismatch {
             expected: "Type-cumulative product/option component".to_string(),
-            actual: format!("{ty:?} inhabits SProp"),
+            actual: format!("{ty} inhabits SProp"),
         });
     }
     match ctx.infer_sort(ty)?.normalize() {
@@ -48,7 +48,7 @@ pub(crate) fn type_universe(ctx: &ElabCtx<'_>, ty: &Expr) -> Result<Level, ElabE
         Level::Succ(level) => Ok(level.as_ref().clone()),
         actual => Err(ElabError::TypeMismatch {
             expected: "Type-valued mutable-state component".to_string(),
-            actual: format!("{ty:?} inhabits Sort {actual:?}"),
+            actual: format!("{ty} inhabits Sort {actual}"),
         }),
     }
 }

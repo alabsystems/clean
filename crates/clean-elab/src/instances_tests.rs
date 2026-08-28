@@ -207,3 +207,47 @@ fn test_class_with_out_params() {
     assert_eq!(info.num_params, 1);
     assert_eq!(info.out_params, vec![0]);
 }
+
+/// The bulk loader (`push_instance_unsorted` + `sort_instances_by_priority`)
+/// must produce the SAME per-class order as repeated sorted inserts:
+/// priority descending, insertion order among equal priorities.
+#[test]
+fn test_bulk_load_order_equals_sorted_insert_order() {
+    let class = Name::from_string("C");
+    let prios = [100u32, 1000, 100, 50, 1000, 100, 2000, 50, 100];
+    let mut sorted = InstanceTable::new();
+    let mut bulk = InstanceTable::new();
+    for (i, p) in prios.iter().enumerate() {
+        let name = Name::from_string(&format!("inst{i}"));
+        sorted.add_instance_with_synth_order(
+            name.clone(),
+            class.clone(),
+            Expr::prop(),
+            Expr::prop(),
+            *p,
+            None,
+        );
+        bulk.push_instance_unsorted(name, class.clone(), Expr::prop(), Expr::prop(), *p, None);
+    }
+    bulk.sort_instances_by_priority();
+    let a: Vec<(String, u32)> = sorted
+        .get_instances(&class)
+        .iter()
+        .map(|i| (i.name.to_string(), i.priority))
+        .collect();
+    let b: Vec<(String, u32)> = bulk
+        .get_instances(&class)
+        .iter()
+        .map(|i| (i.name.to_string(), i.priority))
+        .collect();
+    assert_eq!(
+        a, b,
+        "bulk load must reproduce the sorted-insert order exactly"
+    );
+    assert_eq!(
+        a.iter().map(|(_, p)| *p).collect::<Vec<_>>(),
+        vec![2000, 1000, 1000, 100, 100, 100, 100, 50, 50]
+    );
+    assert_eq!(a[1].0, "inst1", "equal priorities keep insertion order");
+    assert_eq!(a[2].0, "inst4");
+}

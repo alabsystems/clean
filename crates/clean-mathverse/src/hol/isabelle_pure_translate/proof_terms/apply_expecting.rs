@@ -8,7 +8,6 @@
 //! verbatim.
 
 use super::super::super::isabelle_pure::{IsaProof, IsaTerm, IsaType};
-use super::super::*;
 use super::*;
 use clean_kernel::expr::FVarId;
 use clean_kernel::level::Level;

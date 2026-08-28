@@ -23,10 +23,10 @@
 //! `KExpr`, the reduction substrate, or anything else the full spec carries.
 //!
 //! What is NOT available here: `Level`, and therefore `EncodesLevelArc`
-//! (`add_eval_ir_repr`) and `ir_lz_cost` (`add_eval_ir_cost`, which needs
+//! (`add_eval_ir_repr`) and `ir_lzm_cost` (`add_eval_ir_cost`, which needs
 //! `level_is_zero`). Candidates mentioning those must go through the full
 //! `spec_scratchpad`. Everything reachable from `ir_steps`, `ir_step`,
-//! `ir_lz_module` and the activation leaves is fair game.
+//! `ir_lzm_module` (the hand model), `ir_lz_module` (the minted module) and the activation leaves is fair game.
 //!
 //! This is a development tool, not a gate. An absent or empty scratch file
 //! passes trivially and must never fail a clean tree.
@@ -118,7 +118,7 @@ fn evalir_scratchpad_candidates_elaborate() {
         "evalir scratchpad: {} candidate(s) failed to elaborate:\n  {}\n\n\
          Each is reported above with its own error, and the run did NOT stop at the first \
          failure. If a candidate fails with an unknown identifier for `Level`, `level_is_zero`, \
-         `EncodesLevelArc` or `ir_lz_cost`, that is expected — this bundle does not carry them; \
+         `EncodesLevelArc` or `ir_lzm_cost`, that is expected — this bundle does not carry them; \
          move that candidate to the full `spec_scratchpad`.",
         failures.len(),
         failures.join("\n  ")

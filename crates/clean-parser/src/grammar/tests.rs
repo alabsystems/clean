@@ -6792,3 +6792,163 @@ fn test_hom_arrow_does_not_disturb_ordinary_exprs() {
     let e = Parser::parse_expr("a + b").expect("+ parses");
     assert_eq!(app_head(&e), Some("HAdd.hAdd"));
 }
+
+// ---------------------------------------------------------------------------
+// `↔` / `→` precedence.
+//
+// Lean 4.30.0-rc2 pins both: `Lean/Parser/Term.lean:871` declares
+// `arrow := trailing_parser checkPrec 25 >> " → " >> termParser 25` (codomain
+// at level 25) and `Init/Core.lean:197` declares `infix:20 " ↔ " => Iff`.
+// 20 < 25, so `↔` binds LOOSER: `a → b ↔ c` is `(a → b) ↔ c` and
+// `a ↔ b → c` is `a ↔ (b → c)`.
+//
+// Clean's hand-written chain reaches `arrow_expr` BELOW `iff_expr`, so both
+// directions were inverted: the codomain's `expr()` re-entry swallowed the `↔`,
+// and `iff_expr` re-associated an arrow right operand out of the `↔`. A wrong
+// grouping here is SILENT — the statement elaborates against a different type —
+// so this battery pins the shape rather than a diagnostic.
+// ---------------------------------------------------------------------------
+
+/// The `i`-th argument of an application, with enclosing parentheses stripped.
+fn iff_arg(e: &SurfaceExpr, i: usize) -> Option<&SurfaceExpr> {
+    match e {
+        SurfaceExpr::App(_, _, args) => {
+            let mut arg = &args.get(i)?.expr;
+            while let SurfaceExpr::Paren(_, inner) = arg {
+                arg = inner.as_ref();
+            }
+            Some(arg)
+        }
+        _ => None,
+    }
+}
+
+#[test]
+fn test_iff_looser_than_arrow_on_the_left() {
+    // `a → b ↔ b` is `(a → b) ↔ b`, NOT `a → (b ↔ b)`.
+    let e = Parser::parse_expr("a → b ↔ b").expect("a → b ↔ b parses");
+    assert_eq!(app_head(&e), Some("Iff"), "top level is ↔, not →");
+    assert!(
+        matches!(iff_arg(&e, 0), Some(SurfaceExpr::Arrow(..))),
+        "left operand of ↔ is the arrow `a → b`"
+    );
+}
+
+#[test]
+fn test_iff_looser_than_arrow_on_the_right() {
+    // `a ↔ b → a` is `a ↔ (b → a)`, NOT `(a ↔ b) → a`.
+    let e = Parser::parse_expr("a ↔ b → a").expect("a ↔ b → a parses");
+    assert_eq!(app_head(&e), Some("Iff"), "top level is ↔, not →");
+    assert!(
+        matches!(iff_arg(&e, 1), Some(SurfaceExpr::Arrow(..))),
+        "right operand of ↔ keeps the arrow `b → a`"
+    );
+}
+
+#[test]
+fn test_iff_between_two_arrows() {
+    // The `Mathlib/Logic/Basic.lean:202` shape:
+    // `¬a → b ↔ ¬b → a` is `(¬a → b) ↔ (¬b → a)`.
+    let e = Parser::parse_expr("¬a → b ↔ ¬b → a").expect("not_imp_comm statement parses");
+    assert_eq!(app_head(&e), Some("Iff"));
+    assert!(
+        matches!(iff_arg(&e, 0), Some(SurfaceExpr::Arrow(..))),
+        "left side is `¬a → b`"
+    );
+    assert!(
+        matches!(iff_arg(&e, 1), Some(SurfaceExpr::Arrow(..))),
+        "right side is `¬b → a`"
+    );
+}
+
+#[test]
+fn test_arrow_stays_right_associative_before_iff() {
+    // `a → b → c ↔ d` is `(a → (b → c)) ↔ d`: the codomain still collects
+    // further arrows (level 25 ≥ 25), it just stops at `↔` (20).
+    let e = Parser::parse_expr("a → b → c ↔ d").expect("a → b → c ↔ d parses");
+    assert_eq!(app_head(&e), Some("Iff"));
+    let Some(SurfaceExpr::Arrow(_, _, codomain)) = iff_arg(&e, 0) else {
+        panic!("left operand of ↔ is an arrow");
+    };
+    assert!(
+        matches!(codomain.as_ref(), SurfaceExpr::Arrow(..)),
+        "the arrow chain is right-associative: `a → (b → c)`"
+    );
+}
+
+#[test]
+fn test_iff_inside_arrow_codomain_when_parenthesized() {
+    // Parentheses open a fresh `term` slot, so the `↔` belongs to the codomain:
+    // `a → (b ↔ a)` must stay an arrow at the top.
+    let e = Parser::parse_expr("a → (b ↔ a)").expect("a → (b ↔ a) parses");
+    let SurfaceExpr::Arrow(_, _, codomain) = &e else {
+        panic!("top level stays `→` when the ↔ is parenthesized");
+    };
+    let mut inner = codomain.as_ref();
+    while let SurfaceExpr::Paren(_, i) = inner {
+        inner = i.as_ref();
+    }
+    assert_eq!(app_head(inner), Some("Iff"), "codomain is the ↔");
+}
+
+#[test]
+fn test_iff_inside_arrow_codomain_under_a_quantifier() {
+    // A quantifier body is also a fresh `term` slot (Lean's `forall` takes
+    // `termParser`), so `∀`'s body keeps its own `↔`.
+    let e = Parser::parse_expr("a → ∀ x, p x ↔ q x").expect("a → ∀ x, p x ↔ q x parses");
+    assert!(
+        matches!(&e, SurfaceExpr::Arrow(..)),
+        "the ∀ body's ↔ does not float out of the arrow"
+    );
+    // A binder TYPE is a `term` slot too (Lean parses it with `termParser`),
+    // so its `↔` must be consumed there and not left for a level above the
+    // arrow — where nothing would take it and the `,` would fail to parse.
+    let e = Parser::parse_expr("a → ∀ h : p ↔ q, r h").expect("a → ∀ h : p ↔ q, r h parses");
+    assert!(
+        matches!(&e, SurfaceExpr::Arrow(..)),
+        "the binder type's ↔ does not float out of the arrow"
+    );
+}
+
+#[test]
+fn test_and_or_arrow_grouping_unchanged_by_iff_fix() {
+    // Controls: `∧` (35) and `∨` (30) bind TIGHTER than `→` (25) and keep
+    // using the arrow-aware re-association.
+    let e = Parser::parse_expr("a ∧ b → c").expect("a ∧ b → c parses");
+    let SurfaceExpr::Arrow(_, domain, _) = &e else {
+        panic!("`a ∧ b → c` is an arrow");
+    };
+    assert_eq!(app_head(domain.as_ref()), Some("And"), "domain is `a ∧ b`");
+
+    let e = Parser::parse_expr("a ∨ b → c").expect("a ∨ b → c parses");
+    let SurfaceExpr::Arrow(_, domain, _) = &e else {
+        panic!("`a ∨ b → c` is an arrow");
+    };
+    assert_eq!(app_head(domain.as_ref()), Some("Or"), "domain is `a ∨ b`");
+
+    let e = Parser::parse_expr("a → b ∧ c").expect("a → b ∧ c parses");
+    let SurfaceExpr::Arrow(_, _, codomain) = &e else {
+        panic!("`a → b ∧ c` is an arrow");
+    };
+    assert_eq!(
+        app_head(codomain.as_ref()),
+        Some("And"),
+        "codomain is `b ∧ c`"
+    );
+}
+
+#[test]
+fn test_iff_with_tighter_connective_in_the_arrow_codomain() {
+    // `a → b ∧ a ↔ b` is `(a → (b ∧ a)) ↔ b`: the codomain takes the `∧` and
+    // stops at the `↔`.
+    let e = Parser::parse_expr("a → b ∧ a ↔ b").expect("a → b ∧ a ↔ b parses");
+    assert_eq!(app_head(&e), Some("Iff"));
+    let Some(SurfaceExpr::Arrow(_, _, codomain)) = iff_arg(&e, 0) else {
+        panic!("left operand of ↔ is `a → b ∧ a`");
+    };
+    assert_eq!(
+        app_head(codomain.as_ref()),
+        Some("And"),
+        "the ∧ stayed inside the codomain"
+    );
+}

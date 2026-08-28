@@ -71,7 +71,7 @@ impl ValidationMode {
     ///   stated type with `infer_only=false`. A pass here is genuinely
     ///   Clean-kernel-verified (the kernel accepted the proof value).
     #[must_use]
-    pub fn honest_label(self) -> &'static str {
+    pub(crate) fn honest_label(self) -> &'static str {
         match self {
             ValidationMode::InferOnly => "type-only-infer",
             ValidationMode::Full => "kernel-verified-full",

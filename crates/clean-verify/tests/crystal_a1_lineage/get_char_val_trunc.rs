@@ -70,7 +70,7 @@ fn get_char_val_trunc_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_trunc.rs", "const SRC_IR_GC_B"),
+        &clean_block_sources("generated/ir_gc.defs.txt", "def ir_gc_b"),
         "def ir_gc_b",
     );
 
@@ -146,7 +146,7 @@ fn get_char_val_trunc_proved_module_matches_the_emitted_artifact() {
         "TWO parameters: the closure environment — whose emitted type is the UNIT type, because \
          this closure captures nothing — and the u64 operand"
     );
-    let func = clean_block_sources("eval_ir_trunc.rs", "const SRC_IR_GC_FUNC");
+    let func = clean_block_sources("generated/ir_gc.defs.txt", "def ir_gc_func");
     assert!(
         func.contains("IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0"),
         "the registered IRFunc must bind the same two parameter ids in the same order: {func}"
@@ -197,7 +197,7 @@ fn get_char_val_trunc_proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_trunc.rs", "const SRC_IR_GC_FUNC"),
+        &clean_block_sources("generated/ir_gc.defs.txt", "def ir_gc_func"),
         "get_char_val_trunc",
     );
     assert_lanes(&emitted, &clean, "get_char_val_trunc");

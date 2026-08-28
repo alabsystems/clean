@@ -280,6 +280,18 @@ impl<'a> ElabCtx<'a> {
                     AttributeCommandAttr::Add(attr) => {
                         // B21: `attribute [unknownAttr] foo` is a loud error too.
                         self.ensure_known_attributes(std::slice::from_ref(attr))?;
+                        // `attribute [class] Unique` — Mathlib's after-the-fact
+                        // class registration (Logic/Unique.lean:60). The
+                        // `collect_attributes` sink deliberately no-ops on
+                        // `Class` ("handled elsewhere"), but for the STANDALONE
+                        // command there is no elsewhere: register the structure
+                        // as a class exactly as `structure … class` does
+                        // (structure_cmd.rs), taking num_params from the
+                        // already-registered inductive. Without this the whole
+                        // file cascades ("`Unique` is not a class").
+                        if matches!(attr, Attribute::Class) {
+                            self.collected_class_attrs.push(resolved_name.clone());
+                        }
                         self.collect_attributes(&resolved_name, std::slice::from_ref(attr));
                     }
                     AttributeCommandAttr::Remove(attr_name) => {

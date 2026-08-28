@@ -1,0 +1,17 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (extractfield (uint 32) 0 0))
+            (node (results 2) (cast zext (uint 32) (uint 64) 1))
+            (node (results) (ret (vals 2)))
+          ))
+      ))
+  )
+  (globals)
+)

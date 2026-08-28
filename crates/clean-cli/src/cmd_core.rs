@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 
 const CHECK_REPORT_SCHEMA_VERSION: &str = "Clean-check-report-v1";
 
-#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
+#[allow(dead_code)] // 2026-07-31: no lib-build caller; the coinductive reachability pin calls it in lib-test.
 pub(crate) fn check_file(
     path: &Path,
     verbose: bool,
@@ -45,9 +45,19 @@ pub(crate) fn check_file_with_json(
     prelude: clean_kernel::cli::PreludeMode,
     json: bool,
 ) -> anyhow::Result<()> {
-    check_file_with_json_with_imports(path, verbose, allow_sorry, prelude, json, false)
+    check_file_with_json_with_imports(
+        path,
+        verbose,
+        allow_sorry,
+        prelude,
+        json,
+        false,
+        clean_elab::ImportPolicy::default(),
+        clean_kernel::cli::DEFAULT_DECL_BUDGET,
+    )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_file_with_json_with_imports(
     path: &Path,
     verbose: bool,
@@ -55,7 +65,56 @@ pub(crate) fn check_file_with_json_with_imports(
     prelude: clean_kernel::cli::PreludeMode,
     json: bool,
     imports_prefer_olean: bool,
+    import_policy: clean_elab::ImportPolicy,
+    decl_budget: u64,
 ) -> anyhow::Result<()> {
+    let (outcome, elapsed) = collect_check_outcome(
+        path,
+        verbose,
+        allow_sorry,
+        prelude,
+        json,
+        imports_prefer_olean,
+        import_policy,
+        decl_budget,
+    )?;
+
+    finalize_check_run(
+        path,
+        &outcome.module,
+        outcome.decl_count,
+        elapsed,
+        outcome.success_count,
+        outcome.errors,
+        outcome.trust_failures,
+        outcome.kernel_failures,
+        outcome.diverged,
+        outcome.structured_failures,
+        decl_budget,
+        outcome.peak_decl_ticks,
+        json,
+    )
+}
+
+/// Run the whole `clean check` pipeline and hand back the raw
+/// [`FileCheckOutcome`] instead of printing and exiting.
+///
+/// Split out of [`check_file_with_json_with_imports`] so the per-declaration
+/// budget's verdict rules are testable as VALUES — `success_count`,
+/// `errors`, `diverged` — rather than by scraping stdout. Rule 2 of this
+/// repo's method: a test that cannot see the three buckets separately cannot
+/// prove that a diverged declaration landed in the right one.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn collect_check_outcome(
+    path: &Path,
+    verbose: bool,
+    allow_sorry: bool,
+    prelude: clean_kernel::cli::PreludeMode,
+    json: bool,
+    imports_prefer_olean: bool,
+    import_policy: clean_elab::ImportPolicy,
+    decl_budget: u64,
+) -> anyhow::Result<(FileCheckOutcome, Duration)> {
     let _guard = check_file_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -105,9 +164,25 @@ pub(crate) fn check_file_with_json_with_imports(
         .map_err(|e| anyhow::anyhow!("failed to initialize ULift: {e}"))?;
     let mut state = ImportCheckState {
         imports_prefer_olean,
+        import_policy,
         ..ImportCheckState::default()
     };
     let mut outcome = FileCheckOutcome::default();
+
+    // Arm the AMBIENT per-declaration budget on THIS thread (it is
+    // thread-local by design — see `clean_kernel::tc::set_declaration_budget`)
+    // and disarm it on the way out, so a `clean check` call cannot leave fuel
+    // limits behind for whatever else runs on the thread afterwards (the
+    // in-process test harness reuses threads).
+    //
+    // Armed HERE, after the prelude/IO/ULift registrars have run, and not at
+    // the top of the function: the budget bounds the DECLARATIONS OF THE FILE
+    // UNDER CHECK, not the fixed cost of standing up the environment they are
+    // checked against. Arming it earlier made a tight `--decl-budget` starve
+    // `Environment::with_prelude()` itself, which fails the whole command
+    // instead of reporting a per-declaration verdict — the budget would have
+    // been bounding the wrong thing.
+    let _budget_scope = DeclBudgetScope::enter(decl_budget);
 
     check_file_recursive(
         path,
@@ -119,18 +194,43 @@ pub(crate) fn check_file_with_json_with_imports(
         json,
     )?;
 
-    finalize_check_run(
-        path,
-        &outcome.module,
-        outcome.decl_count,
-        start.elapsed(),
-        outcome.success_count,
-        outcome.errors,
-        outcome.trust_failures,
-        outcome.kernel_failures,
-        outcome.structured_failures,
-        json,
-    )
+    Ok((outcome, start.elapsed()))
+}
+
+/// Arms the kernel's ambient per-declaration budget for the duration of one
+/// `clean check` call and disarms it on drop.
+///
+/// The budget is thread-local, and `clean check` runs on a worker thread that
+/// the in-process test harness reuses; leaving a limit armed would silently
+/// apply it to unrelated later work on the same thread.
+struct DeclBudgetScope;
+
+impl DeclBudgetScope {
+    fn enter(limit: u64) -> Self {
+        clean_kernel::tc::set_declaration_budget(limit);
+        Self
+    }
+}
+
+impl Drop for DeclBudgetScope {
+    fn drop(&mut self) {
+        clean_kernel::tc::clear_declaration_budget();
+    }
+}
+
+/// Environment variable that turns on per-declaration budget tracing.
+///
+/// Set to `1` to print `decl-budget <module> <name> <ticks>` on stderr after
+/// every declaration. This is the per-declaration half of the calibration
+/// instrument `scripts/decl_budget_calibrate.sh`, which aggregates it into
+/// `reports/decl-budget-calibration.json` — the census that would turn
+/// [`clean_kernel::cli::DEFAULT_DECL_BUDGET`] from a deliberate over-estimate
+/// into a derived bound. See that constant's docs for what is and is not
+/// measured today.
+const DECL_BUDGET_TRACE_ENV: &str = "CLEAN_CHECK_DECL_BUDGET_TRACE";
+
+fn decl_budget_trace_enabled() -> bool {
+    std::env::var(DECL_BUDGET_TRACE_ENV).is_ok_and(|v| v == "1")
 }
 
 /// Schema tag for the `clean check --parse-only --json` report.
@@ -339,6 +439,15 @@ struct ImportCheckState {
     /// inside a large source tree (e.g. Mathlib) be checked against compiled
     /// dependency context. See `--imports-prefer-olean`.
     imports_prefer_olean: bool,
+    /// What an `import` that resolves to nothing real does. Fail-closed by
+    /// default; `--permissive-imports` relaxes it. See
+    /// [`clean_elab::ImportPolicy`].
+    import_policy: clean_elab::ImportPolicy,
+    /// Module names this run satisfied by elaborating their intra-project
+    /// `.lean` source. Copied onto each file's `FileContext` after that file's
+    /// import-resolution pass so the fail-closed policy does not refuse an
+    /// import whose declarations are demonstrably already in `env`.
+    satisfied_from_source: HashSet<String>,
 }
 
 /// Accumulator for the outcome of checking the entry file.
@@ -346,15 +455,105 @@ struct ImportCheckState {
 /// We only surface diagnostics from the entry file; per-import failures bump
 /// counts on the entry file's outcome (so exit-code contract still fires) but
 /// are also annotated with the originating module so the user sees the chain.
-#[derive(Default)]
-struct FileCheckOutcome {
+#[derive(Debug, Default)]
+pub(crate) struct FileCheckOutcome {
     module: String,
-    decl_count: usize,
-    success_count: usize,
-    errors: Vec<String>,
-    trust_failures: Vec<String>,
-    kernel_failures: Vec<String>,
+    pub(crate) decl_count: usize,
+    pub(crate) success_count: usize,
+    pub(crate) errors: Vec<String>,
+    pub(crate) trust_failures: Vec<String>,
+    pub(crate) kernel_failures: Vec<String>,
+    /// Declarations that spent the whole ambient per-declaration budget.
+    ///
+    /// Its OWN bucket, on purpose. A row here is not a pass (the work never
+    /// finished, so nothing was proved) and not a failure (nothing was
+    /// refuted either) — it is the absence of a verdict, recorded as such.
+    /// The same doctrine `docs/SUITE_STATE.md` applies to UNKNOWN: never
+    /// rounded up, never rounded down.
+    pub(crate) diverged: Vec<String>,
+    /// The largest ambient tick count any single declaration in this run
+    /// spent — i.e. how close the run came to the budget.
+    ///
+    /// This is the headroom number, and it is reported on EVERY run rather
+    /// than only when something diverges. A budget whose margin nobody can see
+    /// is a budget nobody can calibrate: this is what
+    /// `scripts/decl_budget_calibrate.sh` reads to derive
+    /// `clean_kernel::cli::DEFAULT_DECL_BUDGET` from measurement, and what
+    /// tells a reader of any report whether the default is still generous.
+    pub(crate) peak_decl_ticks: u64,
     structured_failures: Vec<CheckObligationFeedback>,
+}
+
+/// A snapshot of `FileCheckOutcome`'s accumulators taken before a declaration
+/// is processed, so everything that declaration contributed can be rolled back
+/// if it turns out not to have finished.
+///
+/// Needed because budget exhaustion is only observable *after* the fact: an
+/// intermediate elaborator layer may swallow the kernel's
+/// `DeclarationBudgetExhausted` and report an ordinary unsolved goal, or even
+/// return `Ok` off a `whnf` that silently under-reduced once the fuel ran out.
+/// Either way the honest record is "did not finish", so whatever the run
+/// recorded for this declaration is discarded and replaced.
+#[derive(Clone, Copy)]
+struct OutcomeMark {
+    errors: usize,
+    trust_failures: usize,
+    kernel_failures: usize,
+    structured_failures: usize,
+    success_count: usize,
+    counted_leaf_decls: usize,
+}
+
+impl OutcomeMark {
+    fn take(outcome: &FileCheckOutcome, counted_leaf_decls: usize) -> Self {
+        Self {
+            errors: outcome.errors.len(),
+            trust_failures: outcome.trust_failures.len(),
+            kernel_failures: outcome.kernel_failures.len(),
+            structured_failures: outcome.structured_failures.len(),
+            success_count: outcome.success_count,
+            counted_leaf_decls,
+        }
+    }
+
+    /// Discard everything the declaration recorded and replace it with one
+    /// `diverged` row.
+    ///
+    /// FAIL CLOSED: this runs whether the declaration appeared to pass or to
+    /// fail. An apparent pass off an exhausted budget is the dangerous case —
+    /// the kernel's `whnf` returns its input unreduced once the fuel is gone,
+    /// so a definitional-equality check can be answered on an under-reduced
+    /// term — and it is precisely the case a "only override failures" rule
+    /// would let through.
+    ///
+    /// Two things this deliberately does NOT roll back, because they are event
+    /// counters rather than verdicts:
+    ///
+    /// * `--verbose`'s streamed per-declaration lines, which were already
+    ///   printed. The authoritative record is the summary's `Did not finish:`
+    ///   section, which names every diverged declaration at the end.
+    /// * the global trust counters behind `trust_summary` (`sorry_axioms`,
+    ///   `kernel_check_failures`). If a `sorry` was minted before the fuel ran
+    ///   out, it WAS minted; hiding it would be the dishonest direction.
+    fn rollback_as_diverged(
+        self,
+        outcome: &mut FileCheckOutcome,
+        counted_leaf_decls: &mut usize,
+        row: String,
+    ) {
+        outcome.errors.truncate(self.errors);
+        outcome.trust_failures.truncate(self.trust_failures);
+        outcome.kernel_failures.truncate(self.kernel_failures);
+        outcome
+            .structured_failures
+            .truncate(self.structured_failures);
+        outcome.success_count = self.success_count;
+        // The declaration is still one unit that was looked at, so the
+        // "Checked N declarations" denominator does not shrink — a diverged
+        // declaration must stay visible in the count, not vanish from it.
+        *counted_leaf_decls = self.counted_leaf_decls + 1;
+        outcome.diverged.push(row);
+    }
 }
 
 /// Maximum import recursion depth — guards against pathological resolver loops
@@ -485,6 +684,13 @@ fn check_file_body(
         collect_intra_project_imports(decl, path, env, state, outcome, verbose, allow_sorry, json)?;
     }
 
+    // Hand the resolution record and the unresolved-import policy to the
+    // elaborator before the second pass runs the `Import` decls for real.
+    file_ctx.set_import_policy(state.import_policy);
+    for module in &state.satisfied_from_source {
+        file_ctx.mark_import_satisfied_from_source(module);
+    }
+
     // Second pass: regular elaboration of all decls. Intra-project Import
     // decls will be processed by `elaborate_decl_and_register_with_warning`
     // and routed to `process_imports_with_search_paths`. For intra-project
@@ -496,7 +702,23 @@ fn check_file_body(
     // a single top-level `decl` yet may contain many leaf declarations; counting
     // the surface `decls.len()` alone would under-report file progress (#3xxx).
     let mut counted_leaf_decls = 0usize;
+    let budget_trace = decl_budget_trace_enabled();
     for decl in &decls {
+        // PER-DECLARATION BUDGET. Refill the ambient fuel and snapshot the
+        // outcome so this declaration's contribution can be replaced wholesale
+        // if it turns out not to have finished.
+        //
+        // Granularity: the reset is per TOP-LEVEL surface declaration, which
+        // is the unit this loop iterates and the unit the `Err` arm below
+        // already counts as "one checked unit". A `namespace` / `section` /
+        // `mutual` block elaborates all of its members inside ONE call to
+        // `elaborate_decl_and_register_with_context_and_warning`, so such a
+        // block shares a single budget among its members rather than getting
+        // one each. That is a deliberate limitation of doing this from the
+        // caller: there is no per-member boundary to hook out here. The
+        // default budget is sized with that in mind.
+        clean_kernel::tc::reset_declaration_budget();
+        let mark = OutcomeMark::take(outcome, counted_leaf_decls);
         let kernel_failures_before = kernel_check_failure_count();
         let processed_decl = preprocess_decl_with_context(decl, &mut file_ctx);
         // Thread `file_ctx` through elaboration (gap sweep B13): the
@@ -596,11 +818,8 @@ fn check_file_body(
                     .and_then(|span| source_span(&content, span))
                     .map(|span| format!(" at line {}", span.line))
                     .unwrap_or_default();
-                let diagnostic = if is_entry_file {
-                    format!("{named}elaboration error{position}: {e:?}")
-                } else {
-                    format!("[{module}] {named}elaboration error{position}: {e:?}")
-                };
+                let diagnostic =
+                    elaboration_error_diagnostic(is_entry_file, &module, &named, &position, &e);
                 outcome
                     .structured_failures
                     .push(check_feedback_from_elab_error(
@@ -615,6 +834,42 @@ fn check_file_body(
                 // unit; keep it in the "Checked N declarations" tally.
                 counted_leaf_decls += 1;
             }
+        }
+
+        // ── The declaration is done. Did it actually finish? ──────────────
+        //
+        // Asked AFTER the fact and unconditionally, because the ambient budget
+        // latches: even if the kernel's typed `DeclarationBudgetExhausted` was
+        // swallowed on the way up and the declaration reported an ordinary
+        // pass or an ordinary failure, the latch still says the work was cut
+        // short. That reading wins over both.
+        let spent = clean_kernel::tc::declaration_budget_used();
+        outcome.peak_decl_ticks = outcome.peak_decl_ticks.max(spent);
+        if budget_trace {
+            let name = surface_decl_name(decl).unwrap_or_else(|| "(anonymous)".to_owned());
+            let _ = writeln!(std::io::stderr(), "decl-budget\t{module}\t{name}\t{spent}");
+        }
+        if clean_kernel::tc::declaration_budget_exhausted() {
+            let named = surface_decl_name(decl).unwrap_or_else(|| "(anonymous)".to_owned());
+            let position = surface_decl_span(decl)
+                .and_then(|span| source_span(&content, span))
+                .map(|span| format!(" at line {}", span.line))
+                .unwrap_or_default();
+            let limit = clean_kernel::tc::declaration_budget_limit();
+            let row = if is_entry_file {
+                format!(
+                    "{named}: did not finish{position} — spent the whole \
+                     per-declaration budget of {limit} kernel operations \
+                     (raise it with --decl-budget <n>, or 0 for unlimited)"
+                )
+            } else {
+                format!(
+                    "[{module}] {named}: did not finish{position} — spent the \
+                     whole per-declaration budget of {limit} kernel operations \
+                     (raise it with --decl-budget <n>, or 0 for unlimited)"
+                )
+            };
+            mark.rollback_as_diverged(outcome, &mut counted_leaf_decls, row);
         }
     }
 
@@ -662,11 +917,17 @@ fn process_single_leaf(
         error,
     } = leaf
     {
-        let diagnostic = if is_entry_file {
-            format!("{name}: {error}")
-        } else {
-            format!("[{module}] {name}: {error}")
-        };
+        let position = surface_decl_span(inner_decl)
+            .and_then(|span| source_span(content, span))
+            .map(|span| format!(" at line {}", span.line))
+            .unwrap_or_default();
+        let diagnostic = elaboration_error_diagnostic(
+            is_entry_file,
+            module,
+            &format!("{name}: "),
+            &position,
+            error,
+        );
         outcome.errors.push(diagnostic.clone());
         // Use the inner surface decl (not the enclosing block decl) so the
         // structured failure carries the failing member's own span/diagnostics.
@@ -806,6 +1067,12 @@ fn collect_intra_project_imports(
                         allow_sorry,
                         json,
                     )?;
+                    // This module's declarations are now in `env`, from its own
+                    // source. A project with no compiled artifacts has no
+                    // `.olean` for it and never will — record the resolution so
+                    // the fail-closed import policy does not read that absence
+                    // as an unresolvable module.
+                    state.satisfied_from_source.insert(module_name);
                 }
             }
         }
@@ -981,6 +1248,7 @@ pub(crate) fn emit_check_summary(
     total_time: Duration,
     success_count: usize,
     failed_count: usize,
+    diverged_count: usize,
 ) -> std::io::Result<()> {
     writeln!(
         out,
@@ -988,8 +1256,18 @@ pub(crate) fn emit_check_summary(
         decl_count, total_time
     )?;
     // Always emit "N passed, M failed" so external parsers (parse_lean) can
-    // classify the result without exit-code heuristics (#3078).
-    writeln!(out, "  {success_count} passed, {failed_count} failed")
+    // classify the result without exit-code heuristics (#3078). The
+    // `, K did not finish` clause is APPENDED only when K > 0, so every
+    // existing consumer of the two-number line keeps parsing it unchanged.
+    if diverged_count == 0 {
+        writeln!(out, "  {success_count} passed, {failed_count} failed")
+    } else {
+        writeln!(
+            out,
+            "  {success_count} passed, {failed_count} failed, \
+             {diverged_count} did not finish"
+        )
+    }
 }
 
 fn registration_warning_label(kind: &RegistrationWarningKind) -> &'static str {
@@ -1001,6 +1279,22 @@ fn registration_warning_label(kind: &RegistrationWarningKind) -> &'static str {
     }
 }
 
+/// The non-zero-exit message for a run that did not come out clean.
+///
+/// `"check failed"` is LOAD-BEARING TEXT, not prose: `clean check`'s own
+/// fail-closed import tests and the source-elaboration gate match on it. A
+/// diverged run gets its own wording — it did not fail — but the failing case
+/// keeps the exact string it has always had.
+pub(crate) fn check_failure_message(status: &str) -> &'static str {
+    match status {
+        "diverged" => {
+            "check did not finish: some declarations exhausted the per-declaration budget"
+        }
+        _ => "check failed",
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn finalize_check_run(
     path: &Path,
     module: &str,
@@ -1010,11 +1304,25 @@ fn finalize_check_run(
     errors: Vec<String>,
     trust_failures: Vec<String>,
     kernel_failures: Vec<String>,
+    diverged: Vec<String>,
     structured_failures: Vec<CheckObligationFeedback>,
+    decl_budget: u64,
+    peak_decl_ticks: u64,
     json: bool,
 ) -> anyhow::Result<()> {
     let kernel_failures_total = kernel_check_failure_count();
     let failed_count = errors.len() + trust_failures.len() + kernel_failures.len();
+    let diverged_count = diverged.len();
+    // Three-way, never two-way. `diverged` is not folded into `failed_count`
+    // (nothing was refuted) and emphatically not into `success_count` (nothing
+    // was proved), so a run that could not finish some declarations reports a
+    // status of its own — and still exits non-zero, because a caller that
+    // treats exit 0 as "the file checks out" must not be told that.
+    let status = match (failed_count, diverged_count) {
+        (0, 0) => "pass",
+        (0, _) => "diverged",
+        _ => "fail",
+    };
 
     if json {
         let report = CheckReport {
@@ -1022,10 +1330,13 @@ fn finalize_check_run(
             command: "clean check",
             file: path.display().to_string(),
             module: module.to_owned(),
-            status: if failed_count == 0 { "pass" } else { "fail" },
+            status,
             decl_count,
             success_count,
             failed_count,
+            diverged_count,
+            decl_budget,
+            peak_decl_ticks,
             trust_summary: CheckTrustSummary {
                 sorry_axioms: sorry_count(),
                 kernel_check_failures: kernel_failures_total,
@@ -1033,6 +1344,7 @@ fn finalize_check_run(
             errors,
             trust_failures,
             kernel_failures,
+            diverged,
             proof_state_feedback: structured_failures,
         };
         writeln!(
@@ -1040,10 +1352,10 @@ fn finalize_check_run(
             "{}",
             serde_json::to_string_pretty(&report)?
         )?;
-        if failed_count == 0 {
+        if status == "pass" {
             return Ok(());
         }
-        anyhow::bail!("check failed")
+        anyhow::bail!("{}", check_failure_message(status))
     }
 
     let mut out = std::io::stdout();
@@ -1053,15 +1365,22 @@ fn finalize_check_run(
         total_time,
         success_count,
         failed_count,
+        diverged_count,
     );
     let _ = emit_trust_summary(&mut out, sorry_count(), kernel_failures_total);
 
-    if errors.is_empty() && trust_failures.is_empty() && kernel_failures.is_empty() {
+    if status == "pass" {
         return Ok(());
     }
 
-    let _ = emit_check_failures(&mut out, &errors, &trust_failures, &kernel_failures);
-    anyhow::bail!("check failed")
+    let _ = emit_check_failures(
+        &mut out,
+        &errors,
+        &trust_failures,
+        &kernel_failures,
+        &diverged,
+    );
+    anyhow::bail!("{}", check_failure_message(status))
 }
 
 #[derive(Debug, Serialize)]
@@ -1070,14 +1389,30 @@ struct CheckReport {
     command: &'static str,
     file: String,
     module: String,
+    /// `pass` / `diverged` / `fail`. `diverged` is its own status: some
+    /// declaration did not finish, so the file has no verdict — not a passing
+    /// one and not a failing one.
     status: &'static str,
     decl_count: usize,
     success_count: usize,
     failed_count: usize,
+    /// Declarations that spent the whole ambient per-declaration budget.
+    /// Disjoint from both `success_count` and `failed_count`.
+    diverged_count: usize,
+    /// The ambient per-declaration budget this run used, in kernel
+    /// operations (`0` = unlimited). Recorded so a consumer can tell a
+    /// `diverged` row measured under a tight budget from one under the
+    /// default, and reproduce either.
+    decl_budget: u64,
+    /// The most ambient ticks any ONE declaration in this run spent. Read
+    /// against `decl_budget` this is the run's headroom, reported whether or
+    /// not anything diverged — see `scripts/decl_budget_calibrate.sh`.
+    peak_decl_ticks: u64,
     trust_summary: CheckTrustSummary,
     errors: Vec<String>,
     trust_failures: Vec<String>,
     kernel_failures: Vec<String>,
+    diverged: Vec<String>,
     proof_state_feedback: Vec<CheckObligationFeedback>,
 }
 
@@ -1132,6 +1467,40 @@ impl CheckFailureReason {
             Self::Tactic => "tactic_failed",
             Self::KernelValidation => "kernel_validation_failed",
         }
+    }
+}
+
+/// Render one declaration's elaboration failure.
+///
+/// THE SINGLE RENDERING SITE. Until 2026-08-27 there were two, and they did not
+/// agree: a TOP-LEVEL declaration's failure was rendered with `{e:?}` (Debug)
+/// and carried its line, while a declaration inside a namespace / section /
+/// mutual block was rendered with `{e}` (Display) and carried no line. Every
+/// Mathlib declaration is namespaced, so the corpus artifact carried the
+/// Display form while every terminal probe on a bare fixture showed the Debug
+/// form — which is why the source-elab recon's probe outputs did not match the
+/// committed evidence file, and why a probe could pin a string the corpus can
+/// never contain.
+///
+/// Display wins the unification, for the two reasons
+/// `tests/fixtures/source_frontier/p17` measures. The `#[error(...)]` strings
+/// are written to lead with the fact that matters (`Unknown identifier: <name>`),
+/// so they survive `per_error_class`'s 400-char truncation and are classified by
+/// `scripts/srcelab_classify.py` on the mechanism rather than falling into the
+/// residual `other` bucket, where every `Variant { field: … }` dump lands. The
+/// line number is added to BOTH paths for the same reason: the namespaced path
+/// is the one the corpus uses, and it was the one without a position.
+fn elaboration_error_diagnostic(
+    is_entry_file: bool,
+    module: &str,
+    named: &str,
+    position: &str,
+    error: &clean_elab::ElabError,
+) -> String {
+    if is_entry_file {
+        format!("{named}elaboration error{position}: {error}")
+    } else {
+        format!("[{module}] {named}elaboration error{position}: {error}")
     }
 }
 
@@ -1405,6 +1774,8 @@ fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::Section { span, .. }
         | SurfaceDecl::UniverseDecl { span, .. }
         | SurfaceDecl::Variable { span, .. }
+        | SurfaceDecl::IncludeVars { span, .. }
+        | SurfaceDecl::OmitVars { span, .. }
         | SurfaceDecl::Open { span, .. }
         | SurfaceDecl::Export { span, .. }
         | SurfaceDecl::DerivingInstance { span, .. }
@@ -1449,16 +1820,28 @@ fn emit_check_failures(
     errors: &[String],
     trust_failures: &[String],
     kernel_failures: &[String],
+    diverged: &[String],
 ) -> std::io::Result<()> {
-    writeln!(out, "\nErrors:")?;
-    for err in errors {
-        writeln!(out, "  ✗ {err}")?;
+    if !errors.is_empty() || !trust_failures.is_empty() || !kernel_failures.is_empty() {
+        writeln!(out, "\nErrors:")?;
+        for err in errors {
+            writeln!(out, "  ✗ {err}")?;
+        }
+        for failure in trust_failures {
+            writeln!(out, "  ✗ {failure}")?;
+        }
+        for failure in kernel_failures {
+            writeln!(out, "  ✗ {failure}")?;
+        }
     }
-    for failure in trust_failures {
-        writeln!(out, "  ✗ {failure}")?;
-    }
-    for failure in kernel_failures {
-        writeln!(out, "  ✗ {failure}")?;
+    if !diverged.is_empty() {
+        // Under its own heading, with its own marker. A `✗` here would read as
+        // "this declaration is wrong", which is exactly what the run does NOT
+        // know.
+        writeln!(out, "\nDid not finish:")?;
+        for row in diverged {
+            writeln!(out, "  ⏱ {row}")?;
+        }
     }
     Ok(())
 }
@@ -1836,7 +2219,7 @@ mod tests {
     // sibling `.lean` files brought in via `import M.X.Y`. See
     // `docs/mathbot/CLEAN-VERIFIER-AUDIT-2026-05-27.md` (item 5).
 
-    use super::{check_file_with_json, ImportCheckState};
+    use super::{check_file_with_json, check_file_with_json_with_imports, ImportCheckState};
     use clean_elab::resolve_intra_project_import;
     use clean_kernel::cli::PreludeMode;
     use std::fs;
@@ -1860,6 +2243,112 @@ mod tests {
         let b_path = root.join("B.lean");
         check_file_with_json(&b_path, false, false, PreludeMode::Builtin, false)
             .expect("B.lean should typecheck once intra-project imports resolve");
+    }
+
+    // -- Fail-closed imports (queue-B rank 1) ----------------------------
+    //
+    // Reproduction these pin, measured at `84129fce7` on the release binary:
+    //
+    //   $ printf 'import Mathlib.Utterly.Fake.Nonsense\ntheorem t3 …' > fake.lean
+    //   $ ./target/release/clean check fake.lean
+    //   Checked 1 declarations in 298.342125ms
+    //     1 passed, 0 failed                       # exit 0
+    //
+    // The module does not exist. A hand-written `Ring` was substituted by the
+    // `Mathlib.*` PREFIX WILDCARD in `clean-elab`'s prelude providers and the
+    // file reported green — so a `clean check` PASS could not be distinguished
+    // from a run against ~30 hand-written structures, and no aggregate measured
+    // through this command was falsifiable.
+
+    /// The exact negative control from the brick. Must FAIL now, naming the
+    /// module.
+    #[test]
+    fn check_file_fails_closed_on_nonexistent_mathlib_module() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("Fake.lean");
+        fs::write(
+            &path,
+            "import Mathlib.Utterly.Fake.Nonsense\n\
+             theorem t3 (R : Type) [Ring R] (a : R) : a = a := rfl\n",
+        )
+        .expect("write fixture");
+
+        let err = check_file_with_json_with_imports(
+            &path,
+            false,
+            false,
+            PreludeMode::Builtin,
+            false,
+            false,
+            clean_elab::ImportPolicy::FailClosed,
+            clean_kernel::cli::DEFAULT_DECL_BUDGET,
+        )
+        .expect_err("a file whose import names a nonexistent module must not report a pass");
+        assert!(
+            err.to_string().contains("check failed"),
+            "expected the run to fail, got: {err}"
+        );
+    }
+
+    /// A module that is not `Mathlib.*` and has no provider at all took the
+    /// same silent path (`let _ = init_prelude_for_module(…)?; Ok(())`), so the
+    /// hole was never Mathlib-specific. Measured green at `84129fce7` too:
+    /// `import Totally.Fake.Module` + `theorem t4 : 1 = 1 := rfl` reported
+    /// `1 passed, 0 failed`, exit 0.
+    #[test]
+    fn check_file_fails_closed_on_unknown_non_mathlib_module() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("Fake2.lean");
+        fs::write(
+            &path,
+            "import Totally.Fake.Module\ntheorem t4 : 1 = 1 := rfl\n",
+        )
+        .expect("write fixture");
+
+        check_file_with_json_with_imports(
+            &path,
+            false,
+            false,
+            PreludeMode::Builtin,
+            false,
+            false,
+            clean_elab::ImportPolicy::FailClosed,
+            clean_kernel::cli::DEFAULT_DECL_BUDGET,
+        )
+        .expect_err("an import that resolves to nothing at all must not report a pass");
+    }
+
+    /// POSITIVE CONTROL for both refusals above: the same file under
+    /// `--permissive-imports` must still pass. Without this, a fixture that
+    /// broke for an unrelated reason would satisfy the two `expect_err`s and
+    /// they would be measuring nothing.
+    ///
+    /// It deliberately uses the non-`Mathlib` fixture and a theorem that needs
+    /// no imported constant, because the `Mathlib.*` stub set is registered
+    /// behind a PROCESS-GLOBAL `MATHLIB_INIT` flag while the environment is
+    /// per-run — so asserting on it here would make the test depend on which
+    /// other test in this binary ran first.
+    #[test]
+    fn check_file_permissive_imports_accepts_the_unresolvable_module() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("FakePermissive.lean");
+        fs::write(
+            &path,
+            "import Totally.Fake.Module\ntheorem t4 : 1 = 1 := rfl\n",
+        )
+        .expect("write fixture");
+
+        check_file_with_json_with_imports(
+            &path,
+            false,
+            false,
+            PreludeMode::Builtin,
+            false,
+            false,
+            clean_elab::ImportPolicy::Permissive,
+            clean_kernel::cli::DEFAULT_DECL_BUDGET,
+        )
+        .expect("--permissive-imports must keep the legacy warn-and-continue behavior");
     }
 
     /// Run `check_file_body` on `source` written to a temp `.lean` file and
@@ -2071,5 +2560,42 @@ mod tests {
             state.resolved_modules.is_empty(),
             "fresh state has no resolved cache"
         );
+    }
+}
+
+#[cfg(test)]
+mod coinductive_reachability_tests {
+    use super::check_file;
+    use std::path::Path;
+
+    /// BRICK 0a of the rank-1 full-gfp plan
+    /// (`designs/2026-08-25-rank1-full-gfp-lowering.md`): the `coinductive`
+    /// surface must be reachable through the REAL check path — the plan's
+    /// recon found NO CLI-path test existed, and the nested-local-lift
+    /// episode proved green elaborator unit tests can coexist with a dead
+    /// CLI route. Measured live first (2026-08-25, release binary:
+    /// `Checked 13 declarations … 13 passed, 0 failed`; 16/16 since the
+    /// paco/accumulation rung grew the generated family to 10 companions —
+    /// `Bisim.acc` + `Bisim.coind_upto`, 2026-08-26; 24/24 since the paco
+    /// parameterized-tower rung grew it to 18 — the 8-companion
+    /// `Bisim.paco` tower, 2026-08-26); this pins it. The
+    /// fixture's `bisim_refl` is provable ONLY in the greatest fixpoint, so
+    /// this also guards against the route silently regressing to an lfp
+    /// reading.
+    #[test]
+    fn test_coinductive_v1_reachable_through_check_path() {
+        let fixture = Path::new("../../tests/fixtures/coinductive/bisim_v1_reachability.lean");
+        assert!(
+            fixture.is_file(),
+            "committed fixture missing: {}",
+            fixture.display()
+        );
+        check_file(
+            fixture,
+            false,
+            false,
+            clean_kernel::cli::PreludeMode::Builtin,
+        )
+        .expect("the v1 coinductive fixture must pass the real check path");
     }
 }

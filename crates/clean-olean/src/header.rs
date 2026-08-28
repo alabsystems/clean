@@ -215,7 +215,7 @@ impl OleanHeader {
     /// # ENSURES
     /// - Returns a 40-character string (or `"<invalid utf8>"` on corruption)
     /// - All characters are lowercase hex digits (0-9, a-f) for valid headers
-    pub fn git_hash_str(&self) -> &str {
+    pub(crate) fn git_hash_str(&self) -> &str {
         // The first 40 bytes are the hash, rest is null padding
         std::str::from_utf8(&self.git_hash[..GIT_HASH_LEN]).unwrap_or("<invalid utf8>")
     }

@@ -3,6 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+// `squeeze.rs` no longer names these itself (the traversal moved to
+// `squeeze/tracking.rs`), so the fixtures import them directly.
+use super::super::types::SimpLemmaSet;
+use crate::tactic::core::Goal;
 use crate::tactic::simp::collect_simp_lemmas;
 use clean_kernel::env::Declaration;
 use clean_kernel::{BinderInfo, ExprKind, Name};
@@ -120,6 +124,7 @@ fn applied_named_lemmas(fixture: &TrackingFixture, expr: &Expr) -> Vec<String> {
         expr,
         &fixture.simp_lemmas,
         &fixture.config,
+        &SimpBudget::unlimited(),
     )
     .applied_named_lemmas
 }

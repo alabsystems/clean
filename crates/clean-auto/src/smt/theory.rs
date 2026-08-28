@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 /// A theory literal - represents an atomic formula in a theory
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum TheoryLiteral {
+pub(crate) enum TheoryLiteral {
     /// Equality between two terms: t1 = t2
     Eq(TermId, TermId),
     /// Disequality: t1 ≠ t2
@@ -48,7 +48,7 @@ impl TheoryLiteral {
 /// Result of theory consistency check
 #[derive(Clone, Debug)]
 #[must_use = "theory check results affect SAT solver state"]
-pub enum TheoryCheckResult {
+pub(crate) enum TheoryCheckResult {
     /// Theory is consistent with current assignment
     Consistent,
     /// Theory found a conflict - returns the conflicting literals
@@ -72,7 +72,7 @@ pub enum TheoryCheckResult {
 /// allocation and learned-clause insertion required to materialize it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[must_use = "theory lemma requests must be materialized or discarded intentionally"]
-pub enum TheoryLemmaRequest {
+pub(crate) enum TheoryLemmaRequest {
     /// Request the standard lazy array extensionality lemma:
     /// `lhs = rhs OR select(lhs, k) != select(rhs, k)` for a fresh witness `k`.
     ArrayExtensionality {

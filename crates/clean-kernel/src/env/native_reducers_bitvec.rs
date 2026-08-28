@@ -24,7 +24,7 @@
 //! Part of #3232: fix 244 of 295 check_type failures in Init .olean validation.
 
 use crate::env::Environment;
-use crate::expr::{Expr, ExprKind, Literal};
+use crate::expr::{BigNat, Expr, ExprKind, Literal};
 
 /// Matches the native reducer signature used by `env::native_reducers`.
 type NativeReducerFn = fn(args: &[&Expr]) -> Option<Expr>;
@@ -42,6 +42,14 @@ pub(crate) mod names {
     // BitVec core operations
     name!(pub(crate) BITVEC_OF_NAT = "BitVec.ofNat");
     name!(pub(crate) BITVEC_TO_NAT = "BitVec.toNat");
+
+    // Numeral-literal wrapper the island parser / v4.30 use for a `Nat` numeral:
+    // `@OfNat.ofNat Nat n (instOfNatNat n)`. `reduce_bitvec_of_nat` peels this
+    // exact shape (a pure delta/projection step — `instOfNatNat n = ⟨n⟩`) so a
+    // wrapped operand reads the same as a bare `Nat` literal.
+    name!(pub(crate) OF_NAT_OF_NAT = "OfNat.ofNat");
+    name!(pub(crate) INST_OF_NAT_NAT = "instOfNatNat");
+    name!(pub(crate) NAT = "Nat");
     name!(pub(crate) BITVEC_TO_FIN = "BitVec.toFin");
     name!(pub(crate) BITVEC_OF_FIN = "BitVec.ofFin");
     name!(pub(crate) BITVEC_OF_NAT_LT = "BitVec.ofNatLT");
@@ -114,6 +122,92 @@ fn get_nat_val(e: &Expr) -> Option<u64> {
     }
 }
 
+/// The non-negative value of a closed `Nat` literal as `u128`, or `None` if it
+/// exceeds `2^128 - 1` (more than two 64-bit limbs). `BigNat::from_limbs` keeps
+/// `Big` at ≥2 significant limbs, so the two-limb arm only fires past `2^64`.
+/// Mirrors the `Int` path's `bignat_to_u128` (`native_reducers_int.rs`).
+fn bignat_to_u128(n: &BigNat) -> Option<u128> {
+    match n.limbs() {
+        [] => Some(0),
+        [lo] => Some(u128::from(*lo)),
+        [lo, hi] => Some(u128::from(*lo) | (u128::from(*hi) << 64)),
+        _ => None,
+    }
+}
+
+/// True iff the head of `e`'s application spine is the constant `target`.
+fn head_const_is(e: &Expr, target: &crate::name::Name) -> bool {
+    matches!(e.get_app_fn().kind(), ExprKind::Const(n, _) if *n == *target)
+}
+
+/// Peel the `@OfNat.ofNat Nat n (instOfNatNat n)` numeral-literal wrapper to the
+/// underlying bare `Nat` literal `n`.
+///
+/// This is the wrapped spelling the island parser / v4.30 emit for a `Nat`
+/// numeral. `instOfNatNat n = ⟨n⟩` and `OfNat.ofNat` projects that single field,
+/// so the wrapper is *definitionally* `n` — peeling it is exactly the kernel's
+/// own delta/beta/projection WHNF of this one numeral constructor, NOT a general
+/// operand WHNF (which the BitVec reducers deliberately avoid; see
+/// `tc/def_eq/delta_helpers.rs`). The instance head is checked to be
+/// `instOfNatNat` and the carrier to be `Nat`, so no other `OfNat` instance
+/// (whose field need not equal `n`) is ever peeled.
+///
+/// The value returned is the INSTANCE's own argument — the field the genuine
+/// projection chain `OfNat.ofNat → proj(OfNat, 0, instOfNatNat K) → K` would
+/// produce — and the peel additionally requires the `OfNat` index argument to
+/// be the syntactically identical literal. On every well-typed term the two
+/// agree (the instance's class index is defeq to the value argument), so this
+/// costs nothing; on an ill-typed term (which the kernel's discipline should
+/// never reduce, but which a buggy caller might) the two could differ, and
+/// trusting the index would return a value the term does not definitionally
+/// denote. Reading the instance argument makes the reducer locally faithful
+/// regardless of caller discipline. Returns `None` for any shape other than
+/// this exact, internally consistent numeral wrapper.
+fn peel_ofnat_nat_lit(e: &Expr) -> Option<&Expr> {
+    if !head_const_is(e, &names::OF_NAT_OF_NAT) {
+        return None;
+    }
+    let args = e.get_app_args();
+    // args = [carrier, value, instance]
+    if args.len() != 3 {
+        return None;
+    }
+    if !head_const_is(args[0], &names::NAT) || !head_const_is(args[2], &names::INST_OF_NAT_NAT) {
+        return None;
+    }
+    // The genuine definitional value is the instance's stored field, i.e. the
+    // argument of `instOfNatNat` — read THAT, and require the `OfNat` index
+    // (args[1]) to be the same literal, so an internally inconsistent
+    // (ill-typed) wrapper parks instead of reducing to either half.
+    let inst_args = args[2].get_app_args();
+    if inst_args.len() != 1 {
+        return None;
+    }
+    let (ExprKind::Lit(Literal::Nat(inst_lit)), ExprKind::Lit(Literal::Nat(idx_lit))) =
+        (inst_args[0].kind(), args[1].kind())
+    else {
+        return None;
+    };
+    if inst_lit != idx_lit {
+        return None;
+    }
+    Some(inst_args[0])
+}
+
+/// Read a closed `Nat` literal from `e`, transparently peeling the OfNat numeral
+/// wrapper. Recognises a bare `Lit(Nat)` (small or multi-limb) and the
+/// `@OfNat.ofNat Nat n (instOfNatNat n)` wrapper (via [`peel_ofnat_nat_lit`]).
+/// NOT a general WHNF: only the one numeral-constructor shape is peeled.
+fn get_nat_lit(e: &Expr) -> Option<&BigNat> {
+    if let ExprKind::Lit(Literal::Nat(n)) = e.kind() {
+        return Some(n);
+    }
+    match peel_ofnat_nat_lit(e)?.kind() {
+        ExprKind::Lit(Literal::Nat(n)) => Some(n),
+        _ => None,
+    }
+}
+
 // --- BitVec core operations ---
 
 /// Native reducer for `BitVec.ofNat (n : Nat) (i : Nat) : BitVec n`.
@@ -122,31 +216,79 @@ fn get_nat_val(e: &Expr) -> Option<u64> {
 /// arguments after the expression is partially applied.
 ///
 /// Argument layout: BitVec.ofNat takes 2 explicit args: n (width), i (value).
+///
+/// Trust (robust, arbitrary-magnitude read): both operands are read via
+/// [`get_nat_lit`], which recognises a bare `Nat` literal (small OR multi-limb)
+/// AND the `@OfNat.ofNat Nat k (instOfNatNat k)` numeral wrapper the island
+/// parser emits. The value is taken up to `2^128 - 1` (mirroring the `Int`
+/// path's `bignat_to_u128`) and the result is emitted via the multi-limb-capable
+/// `Expr::nat_lit_u128`. So `BitVec.ofNat w N` now reduces to the canonical
+/// payload `N mod 2^w` for the whole `0 ≤ N < 2^128` range regardless of which
+/// literal spelling the operand takes, instead of PARKING whenever the value is
+/// `≥ 2^64` or OfNat-wrapped. `BitVec.ofNat w N` is DEFINED as `N mod 2^w`
+/// (`env/data_types_bitvec.rs`), so this is pure evaluation of the constructor
+/// semantics: it can only reduce a term to the literal it already denotes, never
+/// equate two distinct BitVec values. Values `≥ 2^128` still decline and fall
+/// back to δι, exactly as before.
 pub(crate) fn reduce_bitvec_of_nat(args: &[&Expr]) -> Option<Expr> {
     if args.len() < 2 {
         return None;
     }
-    let width = get_nat_val(args[0])?;
-    let value = get_nat_val(args[1])?;
-    // BitVec.ofNat n i = i % 2^n
-    if width >= 64 {
-        // For width >= 64, no truncation needed for values that fit u64
-        Some(Expr::nat_lit(value))
+    let width = get_nat_lit(args[0])?.to_u64()?;
+    let value = bignat_to_u128(get_nat_lit(args[1])?)?;
+    // BitVec.ofNat w i = i % 2^w. `value < 2^128` (read cap), so for w ≥ 128 no
+    // truncation is needed; for w < 128 keep the low w bits (= i mod 2^w).
+    let result = if width >= 128 {
+        value
     } else {
-        let modulus = 1u64 << width;
-        Some(Expr::nat_lit(value % modulus))
-    }
+        value & ((1u128 << width) - 1)
+    };
+    Some(Expr::nat_lit_u128(result))
 }
 
 /// Native reducer for `BitVec.toNat (x : BitVec w) : Nat`.
 ///
-/// Identity on Nat literals -- the BitVec value IS a Nat internally.
+/// Identity on Nat literals -- the BitVec value IS a Nat internally -- at ANY
+/// magnitude (the former u64 cap is lifted, mirroring `reduce_bitvec_of_nat`).
 /// Takes 1 implicit arg (w) + 1 explicit arg (the BitVec value).
+///
+/// Trust (structural `ofNat` peel): when the operand is a stuck
+/// `BitVec.ofNat w n` / `BitVec.ofNatLT w n pf` application with literal
+/// arguments (bare or OfNat-wrapped, via [`get_nat_lit`]), the reducer
+/// computes `n mod 2^w` directly -- byte-for-byte the computation
+/// [`reduce_bitvec_of_nat`] performs when IT fires -- so
+/// `BitVec.toNat (BitVec.ofNat w n)` reduces to the literal the composed
+/// definition denotes. This is a STRUCTURAL peel of the operand expression,
+/// exactly like [`get_bitvec_operand`]'s, NOT an operand pre-WHNF pass (the
+/// no-pre-WHNF invariant in `tc/def_eq/delta_helpers.rs` guards a measured
+/// `Init.Data.Char.Basic` regression and is preserved). For `ofNatLT` the
+/// payload is already proved `< 2^w`, so the mask is the identity on it;
+/// applying it anyway keeps the two arms one computation. Anything else --
+/// `ofFin`, open operands, non-literal args -- parks and falls back to the
+/// sound delta-iota tower, exactly as before.
 pub(crate) fn reduce_bitvec_to_nat(args: &[&Expr]) -> Option<Expr> {
     // The last argument is the actual value; earlier args are implicit (width).
     let arg = args.last().copied()?;
-    get_nat_val(arg)?;
-    Some(arg.clone())
+    // Raw payload literal: identity, any magnitude.
+    if let ExprKind::Lit(Literal::Nat(_)) = arg.kind() {
+        return Some(arg.clone());
+    }
+    // Stuck `BitVec.ofNat w n` / `BitVec.ofNatLT w n pf`: compute `n mod 2^w`.
+    let ExprKind::Const(name, _) = arg.get_app_fn().kind() else {
+        return None;
+    };
+    if *name != *names::BITVEC_OF_NAT && *name != *names::BITVEC_OF_NAT_LT {
+        return None;
+    }
+    let inner = arg.get_app_args();
+    let width = get_nat_lit(inner.first()?)?.to_u64()?;
+    let value = bignat_to_u128(get_nat_lit(inner.get(1)?)?)?;
+    let result = if width >= 128 {
+        value
+    } else {
+        value & ((1u128 << width) - 1)
+    };
+    Some(Expr::nat_lit_u128(result))
 }
 
 /// Native reducer for `BitVec.toFin (x : BitVec w) : Fin (2^w)`.

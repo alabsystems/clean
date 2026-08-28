@@ -1,0 +1,378 @@
+{
+ "schema": "clean.crystal.gap_classification.v1",
+ "date": "2026-08-26",
+ "lane": "CRT",
+ "source": "trust/scratchpad/laneG17/wc-subj-null/dump_O3/clean_kernel.coverage.json",
+ "note": "SAY THE NAME, NOT THE NUMBER. This is the gap measured at THIS control dump (wc-subj-null) and it is 17. Lane G17's record says 15 at ITS control. Those are different sets measured at different controls; do not reconcile them by arithmetic.",
+ "gap_size": 17,
+ "the_whole_gap_is_ONE_shape": "every one of the 17 reads `built \\u0060mk b0.0:live s0:<TYPE>\\u0060 vs derived \\u0060<end>\\u0060` -- the derived side emits NO markers at all, not different ones. So none of these is a marker MISMATCH; all are a marker ABSENCE, i.e. no whole-body plan matched and predict returned an empty sequence.",
+ "partition_by_call_structure": {
+  "call_free": 6,
+  "has_unresolved": 6,
+  "has_extern_decls": 5,
+  "all_calls_resolved": 1
+ },
+ "MOST_TRACTABLE_FIRST": {
+  "why": "a CALL-FREE body cannot be refused for anything to do with callees, so its absence of markers is purely a plan-coverage question -- the smallest possible cause. These are where a wave should start.",
+  "bodies": [
+   "env::ext_instance::PRIORITY_BYTES",
+   "env::native_reducers_bitvec::to_signed",
+   "env::native_reducers_sint::to_signed",
+   "expr::types::BigNat::is_zero::{closure#0}",
+   "memory_model::MemoryRegion::new",
+   "tc::heartbeat_profiler::types::SourcePos::coalesced"
+  ]
+ },
+ "a_natural_PAIR": {
+  "bodies": [
+   "env::native_reducers_bitvec::to_signed",
+   "env::native_reducers_sint::to_signed"
+  ],
+  "why": "same function name in two modules, 37 and 38 instructions, both CALL-FREE, both first-slot type `()`. Two bodies for one shape is the cheapest wave arithmetic available in this set."
+ },
+ "rows": [
+  {
+   "def_path": "<env::ai_proof_search::AiSearchStats as std::default::Default>::default",
+   "kind": "fn",
+   "instr_count": 10,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 4,
+    "unresolved": 0
+   },
+   "call_free": false,
+   "first_slot_type": "usize"
+  },
+  {
+   "def_path": "<level::LevelArc as std::fmt::Debug>::fmt",
+   "kind": "fn",
+   "instr_count": 3,
+   "calls": {
+    "resolved": 1,
+    "extern_decls": 0,
+    "unresolved": 1
+   },
+   "call_free": false,
+   "first_slot_type": "opaque:Ref { mutable: false, inner: Datatype { name: \"clean_"
+  },
+  {
+   "def_path": "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq",
+   "kind": "fn",
+   "instr_count": 11,
+   "calls": {
+    "resolved": 2,
+    "extern_decls": 0,
+    "unresolved": 2
+   },
+   "call_free": false,
+   "first_slot_type": "bool"
+  },
+  {
+   "def_path": "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+   "kind": "fn",
+   "instr_count": 5,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 3,
+    "unresolved": 0
+   },
+   "call_free": false,
+   "first_slot_type": "opaque:Ref { mutable: false, inner: Adt { name: \"core::cell:"
+  },
+  {
+   "def_path": "env::ext_instance::PRIORITY_BYTES",
+   "kind": "const-init",
+   "instr_count": 8,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "call_free": true,
+   "first_slot_type": "u32"
+  },
+  {
+   "def_path": "env::native_reducers_bitvec::to_signed",
+   "kind": "fn",
+   "instr_count": 37,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "call_free": true,
+   "first_slot_type": "()"
+  },
+  {
+   "def_path": "env::native_reducers_sint::to_signed",
+   "kind": "fn",
+   "instr_count": 38,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "call_free": true,
+   "first_slot_type": "()"
+  },
+  {
+   "def_path": "env::origin::ConstantOrigin::is_unpinned_olean_import",
+   "kind": "fn",
+   "instr_count": 14,
+   "calls": {
+    "resolved": 2,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "call_free": false,
+   "first_slot_type": "bool"
+  },
+  {
+   "def_path": "expr::kind::arc_eq",
+   "kind": "fn",
+   "instr_count": 9,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 3,
+    "unresolved": 1
+   },
+   "call_free": false,
+   "first_slot_type": "bool"
+  },
+  {
+   "def_path": "expr::sorry::<impl expr::Expr>::sorry_scan",
+   "kind": "fn",
+   "instr_count": 9,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 1
+   },
+   "call_free": false,
+   "first_slot_type": "adt:clean_kernel::expr::sorry::SorryFlags"
+  },
+  {
+   "def_path": "expr::subst::<impl expr::Expr>::has_loose_bvar",
+   "kind": "fn",
+   "instr_count": 14,
+   "calls": {
+    "resolved": 1,
+    "extern_decls": 0,
+    "unresolved": 1
+   },
+   "call_free": false,
+   "first_slot_type": "()"
+  },
+  {
+   "def_path": "expr::types::BigNat::is_zero::{closure#0}",
+   "kind": "fn",
+   "instr_count": 4,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "call_free": true,
+   "first_slot_type": "u64"
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::new",
+   "kind": "fn",
+   "instr_count": 5,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "call_free": true,
+   "first_slot_type": "adt:clean_kernel::memory_model::AllocationId"
+  },
+  {
+   "def_path": "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+   "kind": "fn",
+   "instr_count": 5,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 3,
+    "unresolved": 0
+   },
+   "call_free": false,
+   "first_slot_type": "()"
+  },
+  {
+   "def_path": "tc::equiv_manager::EquivManager::add_equiv",
+   "kind": "fn",
+   "instr_count": 4,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 3
+   },
+   "call_free": false,
+   "first_slot_type": "u32"
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::SourcePos::coalesced",
+   "kind": "fn",
+   "instr_count": 13,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 0,
+    "unresolved": 0
+   },
+   "call_free": true,
+   "first_slot_type": "u32"
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::round_up_to_next",
+   "kind": "fn",
+   "instr_count": 14,
+   "calls": {
+    "resolved": 0,
+    "extern_decls": 3,
+    "unresolved": 0
+   },
+   "call_free": false,
+   "first_slot_type": "()"
+  }
+ ],
+ "hypothesis_TESTED_AND_REFUTED": {
+  "hypothesis": "the 6 call-free gap bodies are unmarked because every marker plan class is call-shaped, so nothing could match them",
+  "verdict": "REFUTED",
+  "evidence": "MfPlans (to_mir.rs:~6440) carries NON-call classes: operand, branch, write, borrow, payload, checked, loop_, dr, sw, swr -- alongside the call family (call, call_fwd, chain, agg_call, seq_call, bc, unit_chain).",
+  "and_the_body_is_in_their_territory": "env::native_reducers_sint::to_signed is 7 blocks, 2 params (u64 val, u32 bits), ZERO calls, and contains `sub.overflow u32` guarded by `assert #proof: no_overflow` (checked-plan territory) and two `condbr` (branch-plan territory), plus a join block bb6 taking an i64 block parameter.",
+  "so_the_open_question_is_sharper": "not 'is there a plan class for this?' but 'why does a body squarely inside checked/branch territory still produce an EMPTY predicted sequence?'. That needs a driver and a measurement; it cannot be answered from the artifact.",
+  "why_this_is_worth_recording": "it removes the most plausible cheap explanation, so the next wave does not spend a driver build confirming it."
+ },
+ "body_characterisation_to_signed": {
+  "blocks": 7,
+  "params": [
+   "%0: u64 (val)",
+   "%1: u32 (bits)"
+  ],
+  "calls": 0,
+  "shape": "bb0 icmp eq bits,64 -> early bitcast return | bb3 mask-and-test with sub.overflow + two asserts (no_overflow, shift_in_range) | bb4 subtract 1<<bits with a further shift_in_range + no_overflow | bb5 plain bitcast | bb6 join taking an i64 block parameter",
+  "sibling": "env::native_reducers_bitvec::to_signed, 37 instrs to this one's 38 -- same shape, two modules"
+ },
+ "hypothesis_2_TESTED_AND_REFUTED": {
+  "hypothesis": "the gap bodies get an EMPTY plan set from the names_this_body gate, which is documented to yield exactly this symptom",
+  "why_it_was_worth_testing": "to_mir.rs:6530-6533 says a name mismatch 'does not merely refuse the law -- it yields the EMPTY plan set, so no emitter site may push a marker at all ... the oracle then reads `derived <end>`'. That is VERBATIM the symptom all 17 gap bodies show, so it was the leading candidate.",
+  "verdict": "REFUTED for all 17",
+  "evidence": "16 of 17 gap def_paths appear VERBATIM as `rustcc fn @<def_path>` in the artifact, so their last path segments match by construction. The 17th, env::ext_instance::PRIORITY_BYTES, is named `env::ext_instance::PRIORITY_BYTES::{const-init}` -- and names_this_body explicitly steps over a `{const-init}` last segment before comparing (to_mir.rs:6537-6539). So every one passes the gate.",
+  "what_this_leaves": "MfPlans::seal is a PRIORITY CHAIN -- each class is attempted only if the earlier ones declined (`payload` only if write.is_none() && !borrow; `checked` only if write.is_none() && ...; `dr` only if write/borrow/payload/checked all declined; and so on). Passing the name gate and still predicting <end> means EVERY class in that chain declined on its own terms. So the wave question is per-class, not global: which class SHOULD match, and what does it refuse on?",
+  "two_cheap_explanations_now_eliminated": [
+   "'no plan class covers call-free bodies' -- refuted: operand/branch/write/borrow/payload/checked/loop_/dr/sw/swr are all non-call",
+   "'the name gate refuses them' -- refuted here"
+  ]
+ },
+ "THE_ACTIONABLE_PARTITION": {
+  "how_the_plans_actually_work": "each plan class is a NARROW WHOLE-BODY SHAPE RECOGNISER, not a general rule. Measured from their own first clauses: plan_checked_markers and plan_operand_marker_temps both require `let [blk] = func.blocks.as_slice()` i.e. EXACTLY ONE BLOCK (to_mir.rs:3116); plan_loop_markers requires `func.blocks.len() != 6 -> None` i.e. EXACTLY SIX. So the gap is the set of bodies no recogniser's template covers, and every wave from 90 -> 15 worked by adding one more recogniser.",
+  "block_count_histogram": {
+   "1": 10,
+   "4": 3,
+   "6": 1,
+   "7": 3
+  },
+  "partition": {
+   "shape_ELIGIBLE_refused_on_CONTENT": {
+    "count": 11,
+    "detail": "10 single-block bodies (the single-block plans accept that shape) plus 1 six-block body (plan_loop_markers accepts exactly six). These are NOT refused for shape -- a recogniser exists at their block count and declined on its content clauses. Cheaper class: a content clause to extend, not a new recogniser.",
+    "single_block": [
+     "<env::ai_proof_search::AiSearchStats as std::default::Default>::default",
+     "<level::LevelArc as std::fmt::Debug>::fmt",
+     "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+     "env::ext_instance::PRIORITY_BYTES",
+     "expr::sorry::<impl expr::Expr>::sorry_scan",
+     "expr::types::BigNat::is_zero::{closure#0}",
+     "memory_model::MemoryRegion::new",
+     "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+     "tc::equiv_manager::EquivManager::add_equiv",
+     "tc::heartbeat_profiler::types::SourcePos::coalesced"
+    ],
+    "six_block": [
+     "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq"
+    ]
+   },
+   "NO_recogniser_at_this_shape": {
+    "count": 6,
+    "detail": "3 four-block and 3 seven-block bodies. No plan template exists at those block counts, so these need a NEW recogniser, which is the more expensive class.",
+    "four_block": [
+     "expr::kind::arc_eq",
+     "expr::subst::<impl expr::Expr>::has_loose_bvar",
+     "tc::heartbeat_profiler::types::round_up_to_next"
+    ],
+    "seven_block": [
+     "env::native_reducers_bitvec::to_signed",
+     "env::native_reducers_sint::to_signed",
+     "env::origin::ConstantOrigin::is_unpinned_olean_import"
+    ]
+   }
+  },
+  "correction_to_my_own_earlier_note": "I flagged the 6 CALL-FREE bodies as 'most tractable'. That axis is real but it is NOT the one that decides cost -- shape-eligibility is. Two of the call-free bodies (both to_signed, 7 blocks) are in the EXPENSIVE class, and several call-carrying single-block bodies are in the cheap one. Use the shape partition, not the call partition, to pick a wave.",
+  "why_to_signed_specifically_is_refused": "it has sub.overflow guarded by `assert #proof: no_overflow`, which is textbook plan_checked_markers territory -- but that plan takes ONE block and to_signed has SEVEN, so it returns None at its first clause before looking at any of that."
+ },
+ "CANDIDATE_WAVE_aggregate_build": {
+  "shape": "single block, ending in a run of `insertfield` into a `const struct` seed, returning the chain's last result -- i.e. AGGREGATE CONSTRUCTION as the body's tail",
+  "bodies": [
+   {
+    "name": "<env::ai_proof_search::AiSearchStats as std::default::Default>::default",
+    "insertfields": 4
+   },
+   {
+    "name": "expr::sorry::<impl expr::Expr>::sorry_scan",
+    "insertfields": 3
+   },
+   {
+    "name": "memory_model::MemoryRegion::new",
+    "insertfields": 3
+   },
+   {
+    "name": "tc::heartbeat_profiler::types::SourcePos::coalesced",
+    "insertfields": 3
+   }
+  ],
+  "count": 4,
+  "why_this_is_the_best_candidate_in_the_set": "FOUR bodies for ONE recogniser, all single-block so they are already shape-eligible (no new block-count template needed), and the shape is syntactically crisp -- a `const struct` seed followed by consecutive insertfields ending in `ret`. Compare the alternatives: the two `to_signed` bodies are 2-for-1 but need a SEVEN-block template that does not exist, and the remaining single-block bodies do not share a tail shape with each other.",
+  "worked_examples": {
+   "memory_model::MemoryRegion::new": [
+    "bb0(%0: struct.1013, %1: usize, %2: usize):",
+    "%3 = const struct.1014 { { 0 }, 0, 0 }",
+    "%4 = insertfield struct.1014 %3, 0, %0",
+    "%5 = insertfield struct.1014 %4, 1, %1",
+    "%6 = insertfield struct.1014 %5, 2, %2",
+    "ret %6"
+   ],
+   "tc::heartbeat_profiler::types::SourcePos::coalesced": "same tail, preceded by two extractfields, an `assert #proof: div_nonzero` and a udiv -- so the recogniser must tolerate a PREFIX it does not model, or the plan must cover the prefix too. Which of those two is right is the design question this wave has to answer, and it is not answerable from the artifact."
+  },
+  "honest_caveat": "This is a SHAPE census from committed data, not a prediction that a plan will match. Whether the marker sequence the built side emits for these four is actually predictable from the insertfield chain is exactly what a driver build would measure, and it is the thing that could still refute the whole idea. Every wave from 90 -> 15 also had to show 0 LOST at both levels, which no amount of artifact reading establishes.",
+  "REFUTED_BY_MEASUREMENT": {
+   "verdict": "MY OWN PROPOSAL, REFUTED. It is ONE body for one recogniser, not four -- the worst arithmetic in the set, not the best.",
+   "what_I_missed": "I censused which bodies CONTAIN an insertfield chain ending in `ret`, and treated that as a shared shape. It is not: three of the four carry a PREFIX before the chain, and the prefixes have nothing in common.",
+   "measured_prefix_lengths": {
+    "memory_model::MemoryRegion::new": {
+     "total": 5,
+     "prefix": 0,
+     "note": "PURE const+3 inserts+ret"
+    },
+    "<env::ai_proof_search::AiSearchStats as std::default::Default>::default": {
+     "total": 10,
+     "prefix": 4,
+     "note": "three calls"
+    },
+    "expr::sorry::<impl expr::Expr>::sorry_scan": {
+     "total": 9,
+     "prefix": 4,
+     "note": "a call then extractfields"
+    },
+    "tc::heartbeat_profiler::types::SourcePos::coalesced": {
+     "total": 13,
+     "prefix": 8,
+     "note": "extractfields, a div_nonzero assert, a udiv"
+    }
+   },
+   "why_it_cannot_be_papered_over": "a recogniser in this tree is a STRICT template -- `let [head, arm_a, arm_b, join] = func.blocks.as_slice() else { return None }`, then an exact instruction sequence with operand threading checked link by link (plan_payload_markers, to_mir.rs:3339). One permissive enough to admit all four prefixes would stop being a template, and the strictness is the point: it is what makes the predicted marker sequence a PREDICTION rather than a fit.",
+   "what_this_leaves": "no 4-for-1 wave exists in the gap on this axis. The set is closer to one-recogniser-per-body than I claimed, which changes the cost of closing the gap by roughly the number of bodies. Whoever plans the next wave should re-derive the shared-shape question on a different axis rather than inherit my census.",
+   "lesson": "a census of a FEATURE (does it contain an insertfield chain?) is not a census of a SHAPE (is the whole body the same template?). I conflated them and recommended a target on that basis."
+  }
+ }
+}

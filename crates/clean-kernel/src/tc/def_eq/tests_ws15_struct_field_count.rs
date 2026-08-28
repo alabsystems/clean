@@ -163,8 +163,7 @@ fn test_ws15_saturated_ctor_overapplication_is_not_a_function() {
     );
     let tc = TypeChecker::new(&env);
     let op_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("op"), op_ty, BinderInfo::Default);
     let op = Expr::fvar(op_id);
 
@@ -256,14 +255,12 @@ fn test_ws15_parent_projection_reduces_when_fully_registered() {
         Expr::pi(BinderInfo::Default, nat.clone(), nat.clone()),
     );
     let tc = TypeChecker::new(&env);
-    let op_id =
-        tc.ctx
-            .borrow_mut()
-            .push(Name::from_string("op"), op_ty.clone(), BinderInfo::Default);
+    let op_id = tc
+        .ctx_mut()
+        .push(Name::from_string("op"), op_ty.clone(), BinderInfo::Default);
     let op = Expr::fvar(op_id);
     let extra_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("extra"), op_ty, BinderInfo::Default);
     let extra = Expr::fvar(extra_id);
 

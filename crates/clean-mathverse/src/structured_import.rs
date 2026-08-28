@@ -485,6 +485,15 @@ pub fn convert_coq_sexp_dir_with_context(
             for (uid, base) in bases.raised_entries() {
                 eprintln!("  [universe-relevel]   {uid} -> Type base {base}");
             }
+            let var_keys = bases
+                .raised_entries()
+                .iter()
+                .filter(|(k, _)| k.contains(crate::coq::universe_releveling::VAR_LEVEL_DIRPATH_TAG))
+                .count();
+            eprintln!(
+                "  [universe-relevel] var-relevel arm {}: {var_keys} re-keyed bound level(s) raised",
+                if crate::coq::universe_releveling::var_relevel_enabled() { "ON" } else { "OFF" }
+            );
         }
         registry.install_universe_bases(bases);
     }

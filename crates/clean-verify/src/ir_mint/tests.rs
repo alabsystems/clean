@@ -7,7 +7,7 @@
 //! particular the NAME-PARITY test that is the standing mitigation for the
 //! matched-pair residual named in the module docs.
 
-use super::{core, mint, read_emitted, shape, tags, Sx};
+use super::{core, mint, read_emitted, shape, tags, SelfFunc, Sx};
 
 /// Every declared shape names a DISTINCT Clean constructor and a distinct core
 /// mnemonic, in both directions.
@@ -252,6 +252,10 @@ fn reader_b_reads_every_committed_chain_fixture_or_says_why() {
             include_str!("../../tests/fixtures/flat_flags_contains.trust-ir.txt"),
         ),
         (
+            "flat_flags_with",
+            include_str!("../../tests/fixtures/flat_flags_with.trust-ir.txt"),
+        ),
+        (
             "float_div",
             include_str!("../../tests/fixtures/float_div.trust-ir.txt"),
         ),
@@ -267,9 +271,17 @@ fn reader_b_reads_every_committed_chain_fixture_or_says_why() {
             "meta_tag_shl",
             include_str!("../../tests/fixtures/meta_tag_shl.trust-ir.txt"),
         ),
+        (
+            "strict_monads",
+            include_str!("../../tests/fixtures/strict_monads.trust-ir.txt"),
+        ),
     ];
     let mut report = String::from("\nreader B over the committed chain fixtures\n");
     let mut ok = 0usize;
+    // `node_id_index` is read through its PIN, separately below: its body
+    // contains `usize`, which reader B refuses by design until the chain's
+    // tag table states the width. The pinned read is part of this
+    // denominator, not an exemption from it.
     for (name, text) in fixtures {
         match read_emitted(text) {
             Ok(sx) => {
@@ -280,12 +292,81 @@ fn reader_b_reads_every_committed_chain_fixture_or_says_why() {
             Err(e) => report.push_str(&format!("  {name:<22} REFUSED: {e}\n")),
         }
     }
+    let ni_text = include_str!("../../tests/fixtures/node_id_index.trust-ir.txt");
+    match super::emitted::read_with_pins(ni_text, SelfFunc::Unpinned, Some(64)) {
+        Ok((sx, tags)) => {
+            core::print(&sx).expect("a read fixture must print");
+            assert_eq!(tags.usize_seen, 1, "one resolved usize site");
+            ok += 1;
+            report.push_str("  node_id_index          READ (usize pinned at 64)\n");
+        }
+        Err(e) => report.push_str(&format!("  node_id_index          REFUSED: {e}\n")),
+    }
+    // The CALL chain's two bodies are read through the chain's tag table, not
+    // bare, and that is not a concession: its module holds TWO functions, so
+    // reader B has to be told how many bodies the text carries and which
+    // canonical index each occupies. Read bare, the pair would produce two
+    // `(func 0 …)` modules — right for neither, and a module whose two
+    // functions share an id is one `ir_func_find` cannot walk.
+    let hlb = include_str!("../../tests/fixtures/has_loose_bvars.trust-ir.txt");
+    let lbr = include_str!("../../tests/fixtures/loose_bvar_range_callee.trust-ir.txt");
+    let ht = tags::parse(super::IR_HLB_TAGS).expect("the hlb tag table must parse");
+    match super::project(&format!("{hlb}{lbr}"), &ht) {
+        Ok(p) => {
+            core::print(&p.core).expect("a read chain must print");
+            assert_eq!(p.interfaces.len(), 2, "one interface per body");
+            ok += 1;
+            report.push_str("  has_loose_bvars+callee READ (two bodies, one module)\n");
+        }
+        Err(e) => report.push_str(&format!("  has_loose_bvars+callee REFUSED: {e}\n")),
+    }
     println!("{report}");
     assert_eq!(
         ok,
-        fixtures.len(),
+        fixtures.len() + 2,
         "reader B must read every committed chain fixture:{report}"
     );
+}
+
+/// The CALL chain's tag table declares TWO bodies, and every lane the mint
+/// needs for the second one is pinned rather than defaulted.
+#[test]
+fn the_hlb_tag_table_declares_two_bodies() {
+    let t = tags::parse(super::IR_HLB_TAGS).expect("the hlb tag table must parse");
+    assert_eq!(
+        t.body_canonicals(),
+        vec![0, 1],
+        "the module holds the root and one sibling, in module order"
+    );
+    assert_eq!(t.self_func(), SelfFunc::Pinned(3658));
+    assert_eq!(t.func_pin(1).expect("callee").0, 3657);
+    assert_eq!(
+        t.func_pin(1).expect("callee").1,
+        "expr::meta::ExprMeta::loose_bvar_range"
+    );
+    // The sibling's Clean name prefix and its OWN interface — the two facts
+    // that would otherwise be hand choices inside the specification.
+    assert_eq!(t.body_prefix(1, "ir_hlb"), "ir_lbr");
+    assert_eq!(t.body_prefix(0, "ir_hlb"), "ir_hlb");
+    let callee = t.body_interface(1).expect("the sibling's interface");
+    assert_eq!(callee.functy, 433, "the callee's OWN signature index");
+    assert_ne!(
+        callee.functy, t.interface.functy,
+        "…and it is not the caller's"
+    );
+    assert!(
+        callee.clauses.contains("proof") && !t.interface.clauses.contains("proof"),
+        "only the callee carries `#proof: shift_in_range`"
+    );
+    // Every other committed chain declares ONE body, so nothing they mint moves.
+    for (name, table) in [
+        ("ir_h2", super::IR_H2_TAGS),
+        ("ir_lz", super::IR_LZ_TAGS),
+        ("ir_sm", super::IR_SM_TAGS),
+    ] {
+        let t = tags::parse(table).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(t.body_canonicals(), vec![0], "{name} declares one body");
+    }
 }
 
 /// The design's falsifiable prediction, run.
@@ -327,7 +408,7 @@ fn the_lz_tag_table_pins_the_whole_function_namespace() {
         2,
         "the body itself and its one foreign callee"
     );
-    assert_eq!(t.self_func(), super::SelfFunc::Pinned(4925));
+    assert_eq!(t.self_func(), SelfFunc::Pinned(3905));
     assert_eq!(
         t.func_pin(0).expect("self").1,
         "level::Level::is_zero",
@@ -337,7 +418,7 @@ fn the_lz_tag_table_pins_the_whole_function_namespace() {
         t.func_pin(1).expect("callee").1,
         "<level::LevelArc as std::ops::Deref>::deref"
     );
-    assert_eq!(t.func_canonical(4914).expect("invertible"), 1);
+    assert_eq!(t.func_canonical(3894).expect("invertible"), 1);
     assert!(
         t.func_pin(2).is_err(),
         "an index no row pins must refuse, never default"
@@ -352,7 +433,7 @@ fn an_empty_funcs_lane_is_unpinned_not_zero() {
     assert!(t.funcs.is_empty(), "has_cubical_layer calls nothing");
     assert_eq!(
         t.self_func(),
-        super::SelfFunc::Unpinned,
+        SelfFunc::Unpinned,
         "an absent own id must not be reported as id 0 — 0 is a real crate id somewhere"
     );
 }
@@ -375,13 +456,17 @@ fn mint_refuses_a_call_the_tag_table_does_not_pin() {
         "the refusal must name the namespace, not something downstream: {e}"
     );
 
-    // …and a lane that pins the namespace gets past this check, on to the
-    // atom-pool refusal that is the body's actual open item.
+    // …and a lane that pins the namespace gets past this check. Since the
+    // 2026-08-22 pool widening the pinned mint SUCCEEDS outright — the
+    // divergence-vs-hand story lives in tests/crystal_a2_mint/lz_wall.rs —
+    // and both callees land at their pinned canonical indices.
     let pinned = tags::parse(super::IR_LZ_TAGS).expect("the lz table");
-    let e = mint(&core, "ir_lz", &pinned).expect_err("still refused, for the numeral pool");
+    let minted = mint(&core, "ir_lz", &pinned)
+        .expect("the pinned lz body mints under the ir_d0..ir_d63 pool")
+        .text();
     assert!(
-        format!("{e}").contains("atom pool"),
-        "unexpected refusal: {e}"
+        minted.contains("IRInst.call ir_d0") && minted.contains("IRInst.call ir_d1"),
+        "self at 0 and the deref at 1: {minted}"
     );
 }
 
@@ -394,7 +479,7 @@ fn reader_b_shares_one_namespace_between_the_body_and_its_callees() {
     let (sx, obs) = super::read_emitted_with_self(LZ, t.self_func()).expect("reader B");
     assert_eq!(
         obs.funcs.get(&super::SELF_FUNC_INDEX),
-        Some(&4925),
+        Some(&3905),
         "the pinned own id takes the reserved index"
     );
     let text = core::print(&sx).expect("print");
@@ -407,7 +492,7 @@ fn reader_b_shares_one_namespace_between_the_body_and_its_callees() {
         "the deref is a FOREIGN callee (1) and the recursive call is the body itself (0):\n{text}"
     );
 
-    let (_, unpinned) = super::read_emitted_with_self(LZ, super::SelfFunc::Unpinned).expect("B");
+    let (_, unpinned) = super::read_emitted_with_self(LZ, SelfFunc::Unpinned).expect("B");
     assert!(
         !unpinned.funcs.contains_key(&super::SELF_FUNC_INDEX),
         "unpinned, the reserved index stays EMPTY: a callee interned there is the collision"

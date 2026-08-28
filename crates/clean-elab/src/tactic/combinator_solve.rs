@@ -6,6 +6,7 @@
 
 use clean_kernel::{Expr, ExprKind};
 
+use super::arith_push_neg::match_not;
 use super::core::{Goal, ProofState, TacticError, TacticResult};
 use super::proof_term::{apply, assumption};
 use crate::stack_safe;
@@ -90,8 +91,12 @@ fn solve_by_elim_aux(
     })
 }
 
+/// A hypothesis is applicable when `apply` can introduce subgoals for its
+/// arguments: any syntactic Pi, or a negation — the App spelling `Not p`
+/// hides its `p → False` Pi behind the definition, so a `¬p` hypothesis was
+/// never applied to a `False` goal (`match_not` claims both spellings).
 fn is_applicable_hyp(ty: &Expr) -> bool {
-    matches!(ty.kind(), ExprKind::Pi(_, _, _))
+    matches!(ty.kind(), ExprKind::Pi(_, _, _)) || match_not(ty).is_some()
 }
 
 fn could_match_goal(state: &ProofState, goal: &Goal, hyp_ty: &Expr) -> bool {

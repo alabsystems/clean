@@ -81,13 +81,11 @@ fn test_app_vs_struct_eta_expanded_app() {
 
     let tc = TypeChecker::new(&env);
     let f_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("f"), f_ty, BinderInfo::Default);
     let f = Expr::fvar(f_id);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat, BinderInfo::Default);
     let x = Expr::fvar(x_id);
 
@@ -124,13 +122,11 @@ fn test_app_vs_struct_eta_single_field() {
 
     let tc = TypeChecker::new(&env);
     let f_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("g"), f_ty, BinderInfo::Default);
     let f = Expr::fvar(f_id);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("y"), nat, BinderInfo::Default);
     let x = Expr::fvar(x_id);
 
@@ -159,18 +155,15 @@ fn test_app_vs_app_no_struct_eta_for_non_structure() {
 
     let tc = TypeChecker::new(&env);
     let f_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("f"), f_ty.clone(), BinderInfo::Default);
     let f = Expr::fvar(f_id);
     let g_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("g"), f_ty, BinderInfo::Default);
     let g = Expr::fvar(g_id);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat, BinderInfo::Default);
     let x = Expr::fvar(x_id);
 
@@ -206,18 +199,15 @@ fn test_app_vs_struct_eta_nested_app() {
 
     let tc = TypeChecker::new(&env);
     let h_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("h"), h_ty, BinderInfo::Default);
     let h = Expr::fvar(h_id);
     let f_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("f"), f_ty, BinderInfo::Default);
     let f = Expr::fvar(f_id);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat, BinderInfo::Default);
     let x = Expr::fvar(x_id);
 

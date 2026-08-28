@@ -1246,3 +1246,306 @@ fn test_extend_recursors_unchecked_batch_duplicate_panics_in_debug() {
         .into_iter(),
     );
 }
+
+// ============================================================================
+// R1-STUB: upgrade_axiom_stubs_checked — the checked tier that replaced the
+// unchecked door (census row `axiom-stub-upgrade`)
+// ============================================================================
+
+/// Register a value-free axiom stub `name : Type` through the CHECKED path.
+fn register_type_stub(env: &mut Environment, name: &Name) {
+    env.add_decl(Declaration::Axiom {
+        name: name.clone(),
+        level_params: vec![],
+        type_: Expr::type_(),
+    })
+    .expect("stub axiom must register through add_decl");
+}
+
+#[test]
+fn test_upgrade_axiom_stubs_checked_well_typed_value_upgrades() {
+    let mut env = Environment::new();
+    let name = Name::from_string("Test.StubOk");
+    register_type_stub(&mut env, &name);
+
+    // `Prop : Type` — the value checks against the stub's type.
+    let (upgraded, refused) = env.upgrade_axiom_stubs_checked(std::iter::once(ConstantInfo::new(
+        name.clone(),
+        vec![],
+        Expr::type_(),
+        Some(Expr::prop()),
+        false,
+    )));
+    assert_eq!(upgraded, 1, "a well-typed upgrade must land");
+    assert!(refused.is_empty(), "no refusals expected: {refused:?}");
+    let ci = env
+        .get_const(&name)
+        .expect("upgraded constant must be resident");
+    assert!(ci.value.is_some(), "the stub must now carry the value");
+}
+
+#[test]
+fn test_upgrade_axiom_stubs_checked_tampered_value_refuses() {
+    let mut env = Environment::new();
+    let name = Name::from_string("Test.StubTampered");
+    register_type_stub(&mut env, &name);
+
+    // TAMPERED value: `fun (x : Type) => x  :  Type -> Type`, NOT `Type` —
+    // it does not check_type against the stub's declared type.
+    let tampered = Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0));
+    let (upgraded, refused) = env.upgrade_axiom_stubs_checked(std::iter::once(ConstantInfo::new(
+        name.clone(),
+        vec![],
+        Expr::type_(),
+        Some(tampered),
+        false,
+    )));
+    assert_eq!(upgraded, 0, "a tampered value must NOT upgrade");
+    assert_eq!(refused.len(), 1, "the refusal must be named: {refused:?}");
+    assert_eq!(refused[0].0, name, "refusal must name the tampered record");
+    assert!(
+        matches!(refused[0].1, EnvError::TypeCheckFailed { .. }),
+        "refusal must be the kernel type-check, got: {:?}",
+        refused[0].1
+    );
+    let ci = env
+        .get_const(&name)
+        .expect("the stub must survive the refusal");
+    assert!(
+        ci.value.is_none(),
+        "fail-closed: the stub must stay value-free, never register unchecked"
+    );
+}
+
+#[test]
+fn test_upgrade_axiom_stubs_checked_type_mismatch_refuses() {
+    let mut env = Environment::new();
+    let name = Name::from_string("Test.StubTypeSwap");
+    register_type_stub(&mut env, &name);
+
+    // The incoming record is INTERNALLY consistent (`fun (x : Type) => x` does
+    // have type `Type -> Type`) but its declared type is not the stub's type —
+    // the anchor must refuse rather than let the upgrade change the constant's
+    // stated type.
+    let incoming_ty = Expr::pi(BinderInfo::Default, Expr::type_(), Expr::type_());
+    let value = Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0));
+    let (upgraded, refused) = env.upgrade_axiom_stubs_checked(std::iter::once(ConstantInfo::new(
+        name.clone(),
+        vec![],
+        incoming_ty,
+        Some(value),
+        false,
+    )));
+    assert_eq!(upgraded, 0, "a type-swapped record must NOT upgrade");
+    assert_eq!(refused.len(), 1, "the refusal must be named: {refused:?}");
+    assert!(
+        matches!(refused[0].1, EnvError::UpgradeTypeMismatch { .. }),
+        "refusal must be the type anchor, got: {:?}",
+        refused[0].1
+    );
+    let ci = env.get_const(&name).expect("stub must survive");
+    assert!(ci.value.is_none(), "fail-closed: stub stays value-free");
+    assert_eq!(ci.type_, Expr::type_(), "the stated type must be unchanged");
+}
+
+#[test]
+fn test_upgrade_axiom_stubs_checked_missing_stub_refuses() {
+    let mut env = Environment::new();
+    let name = Name::from_string("Test.StubAbsent");
+    let (upgraded, refused) = env.upgrade_axiom_stubs_checked(std::iter::once(ConstantInfo::new(
+        name.clone(),
+        vec![],
+        Expr::type_(),
+        Some(Expr::prop()),
+        false,
+    )));
+    assert_eq!(upgraded, 0, "an upgrade against nothing must NOT register");
+    assert_eq!(refused.len(), 1);
+    assert!(
+        matches!(refused[0].1, EnvError::UpgradeTargetMissing { .. }),
+        "got: {:?}",
+        refused[0].1
+    );
+    assert!(env.get_const(&name).is_none(), "nothing may register");
+}
+
+#[test]
+fn test_upgrade_axiom_stubs_checked_silent_no_op_lanes() {
+    let mut env = Environment::new();
+    // Lane 1: value-bearing resident is never overwritten (silently).
+    let kept = Name::from_string("Test.StubKept");
+    env.add_decl(Declaration::Definition {
+        name: kept.clone(),
+        level_params: vec![],
+        type_: Expr::type_(),
+        value: Expr::prop(),
+        is_reducible: false,
+    })
+    .expect("definition must register");
+    // Lane 2: a value-less incoming record installs nothing (silently).
+    let elided = Name::from_string("Test.StubElided");
+    register_type_stub(&mut env, &elided);
+
+    let (upgraded, refused) = env.upgrade_axiom_stubs_checked(
+        [
+            ConstantInfo::new(
+                kept.clone(),
+                vec![],
+                Expr::type_(),
+                Some(Expr::type_()),
+                false,
+            ),
+            ConstantInfo::new(elided.clone(), vec![], Expr::type_(), None, false),
+        ]
+        .into_iter(),
+    );
+    assert_eq!(upgraded, 0, "both lanes are no-ops");
+    assert!(
+        refused.is_empty(),
+        "no-ops are silent, not refusals: {refused:?}"
+    );
+    assert_eq!(
+        env.get_const(&kept).and_then(|c| c.value.clone()),
+        Some(Expr::prop()),
+        "the resident value must be untouched"
+    );
+    assert!(
+        env.get_const(&elided).is_some_and(|c| c.value.is_none()),
+        "the value-less stub must stay a stub"
+    );
+}
+
+// ============================================================================
+// R1-IND: extend_*_structural — the structural tier that replaced the
+// unchecked inductive-family doors (census row `ind-meta-bulk`)
+// ============================================================================
+
+fn structural_inductive(name: &str, level_params: Vec<Name>) -> InductiveVal {
+    InductiveVal {
+        name: Name::from_string(name),
+        level_params,
+        type_: Expr::type_(),
+        num_params: 0,
+        num_indices: 0,
+        all_names: vec![Name::from_string(name)],
+        constructor_names: vec![],
+        is_recursive: false,
+        is_reflexive: false,
+        is_large_elim: true,
+        is_nested: false,
+    }
+}
+
+#[test]
+fn test_extend_inductives_structural_dup_level_param_refuses() {
+    let mut env = Environment::new();
+    let u = Name::from_string("u");
+    let malformed = structural_inductive("Test.BadFamily", vec![u.clone(), u.clone()]);
+    let good = structural_inductive("Test.GoodFamily", vec![u]);
+
+    let rejected = env.extend_inductives_structural([malformed, good].into_iter());
+    assert_eq!(
+        rejected.len(),
+        1,
+        "the duplicate-level-param family must REFUSE structurally: {rejected:?}"
+    );
+    assert_eq!(rejected[0].0, Name::from_string("Test.BadFamily"));
+    assert!(
+        matches!(rejected[0].1, EnvError::DuplicateLevelParam { .. }),
+        "got: {:?}",
+        rejected[0].1
+    );
+    assert!(
+        env.get_inductive(&Name::from_string("Test.BadFamily"))
+            .is_none()
+            && env
+                .get_const(&Name::from_string("Test.BadFamily"))
+                .is_none(),
+        "a refused family must NOT be inserted anywhere"
+    );
+    assert!(
+        env.get_inductive(&Name::from_string("Test.GoodFamily"))
+            .is_some(),
+        "the well-formed sibling must still land"
+    );
+}
+
+#[test]
+fn test_extend_constructors_structural_fvar_type_refuses() {
+    let mut env = Environment::new();
+    let bad = ConstructorVal {
+        name: Name::from_string("Test.BadCtor"),
+        inductive_name: Name::from_string("Test.SomeInd"),
+        level_params: vec![],
+        type_: Expr::fvar(crate::expr::FVarId(7)), // leaked free variable
+        num_params: 0,
+        num_fields: 0,
+        constructor_idx: 0,
+    };
+    let rejected = env.extend_constructors_structural(std::iter::once(bad));
+    assert_eq!(rejected.len(), 1, "a leaked fvar must refuse: {rejected:?}");
+    assert!(
+        matches!(rejected[0].1, EnvError::ContainsFreeVar { .. }),
+        "got: {:?}",
+        rejected[0].1
+    );
+    assert!(env
+        .get_constructor(&Name::from_string("Test.BadCtor"))
+        .is_none());
+}
+
+#[test]
+fn test_extend_recursors_structural_rule_rhs_fvar_refuses() {
+    let mut env = Environment::new();
+    // The recursor TYPE is clean; the smuggle hides in a rule's rhs — the
+    // expression ι-reduction rewrites to. The structural tier must look there.
+    let bad = RecursorVal {
+        name: Name::from_string("Test.BadRec"),
+        arg_order: crate::inductive::RecursorArgOrder::MajorAfterMinors,
+        level_params: vec![],
+        type_: Expr::type_(),
+        inductive_name: Name::from_string("Test.SomeInd"),
+        num_params: 0,
+        num_indices: 0,
+        num_motives: 1,
+        num_minors: 0,
+        rules: vec![crate::inductive::RecursorRule {
+            constructor_name: Name::from_string("Test.SomeInd.mk"),
+            num_fields: 0,
+            recursive_fields: vec![],
+            rhs: Expr::fvar(crate::expr::FVarId(9)), // leaked free variable
+        }],
+        is_k: false,
+    };
+    let rejected = env.extend_recursors_structural(std::iter::once(bad));
+    assert_eq!(
+        rejected.len(),
+        1,
+        "a leaked fvar in a rule rhs must refuse: {rejected:?}"
+    );
+    assert!(
+        matches!(rejected[0].1, EnvError::ContainsFreeVar { .. }),
+        "got: {:?}",
+        rejected[0].1
+    );
+    assert!(
+        env.get_recursor(&Name::from_string("Test.BadRec"))
+            .is_none()
+            && env.get_const(&Name::from_string("Test.BadRec")).is_none(),
+        "a refused recursor must NOT be inserted anywhere"
+    );
+}
+
+#[test]
+fn test_extend_structural_variants_stamp_structural_only() {
+    let mut env = Environment::new();
+    let good = structural_inductive("Test.StampedFamily", vec![]);
+    let rejected = env.extend_inductives_structural(std::iter::once(good));
+    assert!(rejected.is_empty(), "clean record must land: {rejected:?}");
+    assert_eq!(
+        env.declaration_verification
+            .get(&Name::from_string("Test.StampedFamily")),
+        Some(&DeclarationVerification::StructuralOnly),
+        "the structural tier must stamp StructuralOnly"
+    );
+}

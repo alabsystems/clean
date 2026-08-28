@@ -125,7 +125,7 @@ fn test_elab_do_match_empty_discriminants_fail_closed_without_context_or_sorry_l
     ctx.match_index_discriminating_punit = Some(Level::zero());
 
     let locals_before = ctx.locals.clone();
-    let let_values_before = ctx.local_let_values.clone();
+    let let_values_before = ctx.locals.let_values().clone();
     let shared_before = ctx.shared_if_let_scrutinees.clone();
     let instances_before = ctx.local_instances.clone();
     let instance_cache_before = ctx.instance_cache.clone();
@@ -164,7 +164,7 @@ fn test_elab_do_match_empty_discriminants_fail_closed_without_context_or_sorry_l
         "failure emitted a synthetic sorry term"
     );
     assert_eq!(ctx.locals, locals_before);
-    assert_eq!(ctx.local_let_values, let_values_before);
+    assert_eq!(*ctx.locals.let_values(), let_values_before);
     assert_eq!(ctx.shared_if_let_scrutinees, shared_before);
     assert_eq!(ctx.local_instances, instances_before);
     assert_eq!(ctx.instance_cache, instance_cache_before);

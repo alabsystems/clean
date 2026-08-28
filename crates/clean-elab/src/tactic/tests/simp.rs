@@ -778,6 +778,9 @@ fn test_simp_expr_lam_body_produces_funext_proof() {
     let mut env = setup_env_with_nat();
     env.init_eq().unwrap();
     env.init_nat_arith_lemmas().unwrap();
+    // `mk_funext` refuses to name a constant the environment lacks, so the
+    // funext path is only reachable once `funext` is actually declared.
+    env.init_funext().unwrap();
 
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
 
@@ -818,12 +821,15 @@ fn test_simp_expr_lam_body_produces_funext_proof() {
 
 #[test]
 fn test_simp_expr_pi_body_produces_forall_congr_proof() {
-    // mk_forall_congr path: Prop-valued Pi body produces propext(forall_congr(...)) proof.
+    // mk_forall_congr path: a Prop-valued Pi body produces a `forall_congr` proof.
     // Input: ∀ n : Nat, Nat.add 0 0 = 0. Expected: ∀ n : Nat, 0 = 0.
     use crate::tactic::simp::{collect_simp_lemmas, simp_expr, SimpConfig};
     let mut env = setup_env_with_nat();
     env.init_eq().unwrap();
     env.init_nat_arith_lemmas().unwrap();
+    // Lean 4 core's `forall_congr` is Eq-in/Eq-out; simp emits no proof at all
+    // when the environment does not carry it (or carries a different shape).
+    add_lean_forall_congr(&mut env);
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
 
@@ -881,21 +887,27 @@ fn test_simp_expr_pi_body_produces_forall_congr_proof() {
         "Pi body should be simplified from (Nat.add 0 0 = 0) to (0 = 0)"
     );
 
-    // Structural proof check (Re: #2115): propext(pi_old, pi_new, forall_congr(α, p, q, h_iff))
+    // Structural proof check (Re: #2115): `@forall_congr.{u} α p q h`.
+    //
+    // This used to assert `propext(pi_old, pi_new, forall_congr(α, p, q, h_iff))`
+    // — the Mathlib-style Iff variant. Lean 4 core's `forall_congr` is
+    // `(h : ∀ a, p a = q a) : (∀ a, p a) = (∀ a, q a)`, so the body's Eq proof
+    // IS the argument and no `propext` is involved; the old term was ill-typed
+    // against the real constant and this shape assertion never caught it
+    // because it only ever read head names. Kernel-checked coverage of the
+    // corrected term lives in `simp_binder_congruence_proof`.
     let proof = result
         .proof
         .as_ref()
         .expect("should produce forall_congr proof");
     let head = proof.get_app_fn();
     let args = proof.get_app_args();
-    assert!(matches!(head.kind(), ExprKind::Const(n, _) if n.to_string() == "propext"));
-    assert_eq!(args.len(), 3, "propext expects 3 args, got {}", args.len());
-    let inner_head = args[2].get_app_fn();
-    assert!(matches!(inner_head.kind(), ExprKind::Const(n, _) if n.to_string() == "forall_congr"));
+    assert!(matches!(head.kind(), ExprKind::Const(n, _) if n.to_string() == "forall_congr"));
     assert_eq!(
-        args[2].get_app_args().len(),
+        args.len(),
         4,
-        "forall_congr expects 4 args"
+        "forall_congr expects 4 args, got {}",
+        args.len()
     );
 }
 
@@ -1319,6 +1331,216 @@ fn test_simp_star_tier_identity_siblings_survive_specific_tree_hit() {
             names.iter().any(|n| n == sibling),
             "star-tier identity sibling {sibling} must be offered at a \
              foreign specific tree hit; got candidates: {names:?}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Star-pattern whnf-rewrite noise guard pins (the B102/B103 residue the B7
+// permutative commit filed as its own lane). Mechanism and guard both live in
+// `simp/expr.rs`: `star_noise_head_guard_refuses` (cross-head half) and
+// `binding_is_whnf_absorption` (same-head half). The guard is purely
+// restrictive — these pins hold BOTH directions: the noise stays gone AND the
+// legitimate literal-operand identities keep firing in every spelling.
+// ---------------------------------------------------------------------------
+
+/// Full prelude plus two opaque `Nat` constants the noise class used to chew
+/// on (an opaque operand keeps `Nat.add`/`Nat.sub` applications stuck, which
+/// is exactly the shape whose WHNF is the unreadable `Nat.rec` re-spelling).
+fn star_noise_env() -> Environment {
+    let mut env = Environment::with_prelude();
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    for name in ["snA", "snB"] {
+        env.add_decl(Declaration::Axiom {
+            name: Name::from_string(name),
+            level_params: vec![],
+            type_: nat.clone(),
+        })
+        .expect("opaque Nat axiom must register");
+    }
+    env
+}
+
+#[test]
+fn test_simp_star_noise_guard_cross_head_add_not_respelled() {
+    // NEGATIVE (cross-head): the star-keyed `Nat.sub_zero` (`Nat.sub ?n 0`,
+    // whose pattern ι-collapses to bare `?n`) must NOT "rewrite" an unrelated
+    // `Nat.add`-headed subterm to its stuck `Nat.rec` WHNF. Measured pre-guard:
+    // `Nat.add snA snB` became `Nat.rec (fun _ => Nat) snA (fun _ n => n.succ)
+    // snB`, attributed to `Nat.sub_zero` by the squeeze tracker.
+    use crate::tactic::simp::{
+        collect_simp_lemmas, simp_expr, squeeze_simp_with_config, SimpConfig, SqueezeSimpConfig,
+    };
+
+    let env = star_noise_env();
+    let a = Expr::const_(Name::from_string("snA"), vec![]);
+    let b = Expr::const_(Name::from_string("snB"), vec![]);
+    let add_ab = Expr::app(
+        Expr::app(
+            Expr::const_(Name::from_string("Nat.add"), vec![]),
+            a.clone(),
+        ),
+        b,
+    );
+
+    let state = ProofState::new(env.clone(), Expr::const_(Name::from_string("True"), vec![]));
+    let goal = state
+        .current_goal()
+        .expect("fresh state has a goal")
+        .clone();
+    let config = SimpConfig::new();
+    let lemmas = collect_simp_lemmas(&state, &config);
+    let result = simp_expr(&state, &goal, &add_ab, &lemmas, &config);
+    assert_eq!(
+        result.expr, add_ab,
+        "an unrelated Nat.add subterm must keep its surface spelling (no whnf re-spell)"
+    );
+    assert!(
+        result.proof.is_none(),
+        "a no-op must not mint a rewrite proof"
+    );
+
+    // Same observation through the tracked traversal: no lemma may claim a
+    // rewrite on a goal whose only rewritable-looking subterm is that add.
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let eq_goal = Expr::app(
+        Expr::app(
+            Expr::app(
+                Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+                nat,
+            ),
+            add_ab,
+        ),
+        Expr::const_(Name::from_string("snA"), vec![]),
+    );
+    let mut sq_state = ProofState::new(env, eq_goal.clone());
+    let mut sq_config = SqueezeSimpConfig::new();
+    sq_config.simp_config.only_simplify = true;
+    let sq = squeeze_simp_with_config(&mut sq_state, sq_config)
+        .expect("squeeze in only-simplify mode reports rather than fails");
+    assert!(
+        sq.used_lemmas.is_empty(),
+        "no builtin may fire on `Nat.add snA snB = snA`; squeeze reported {:?}",
+        sq.used_lemmas
+    );
+    assert_eq!(
+        sq_state.current_goal().expect("goal stays open").target,
+        eq_goal,
+        "the goal spelling must be untouched"
+    );
+}
+
+#[test]
+fn test_simp_star_noise_guard_same_head_absorption_refused() {
+    // NEGATIVE (same-head): on `Nat.sub snA snA` the candidate order offers
+    // `Nat.sub_zero` BEFORE `Nat.sub_self`. Pre-guard, sub_zero's `0 =?= snA`
+    // argument mismatch sent the unifier down its reduction fallback and `?n`
+    // absorbed `whnf(Nat.sub snA snA)` — the stuck `Nat.rec` spelling — so the
+    // node was re-spelled and `Nat.sub_self` (refused on the `Nat.rec` head by
+    // the cross-head half) could never repair it. The binding-hygiene half
+    // must refuse the absorption so sub_self fires on the ORIGINAL spelling.
+    use crate::tactic::simp::{
+        collect_simp_lemmas, simp_expr, squeeze_simp_with_config, SimpConfig, SqueezeSimpConfig,
+    };
+
+    let env = star_noise_env();
+    let a = Expr::const_(Name::from_string("snA"), vec![]);
+    let sub_aa = Expr::app(
+        Expr::app(
+            Expr::const_(Name::from_string("Nat.sub"), vec![]),
+            a.clone(),
+        ),
+        a,
+    );
+
+    let state = ProofState::new(env.clone(), Expr::const_(Name::from_string("True"), vec![]));
+    let goal = state
+        .current_goal()
+        .expect("fresh state has a goal")
+        .clone();
+    let config = SimpConfig::new();
+    let lemmas = collect_simp_lemmas(&state, &config);
+    let result = simp_expr(&state, &goal, &sub_aa, &lemmas, &config);
+    let zero_const = Expr::const_(Name::from_string("Nat.zero"), vec![]);
+    let zero_lit = Expr::nat_lit(0);
+    assert!(
+        result.expr == zero_const || result.expr == zero_lit,
+        "Nat.sub snA snA must rewrite to zero via Nat.sub_self, got {:?}",
+        result.expr
+    );
+
+    // Attribution check: sub_self fired, sub_zero did not.
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let sub_aa2 = Expr::app(
+        Expr::app(
+            Expr::const_(Name::from_string("Nat.sub"), vec![]),
+            Expr::const_(Name::from_string("snA"), vec![]),
+        ),
+        Expr::const_(Name::from_string("snA"), vec![]),
+    );
+    let eq_goal = Expr::app(
+        Expr::app(
+            Expr::app(
+                Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+                nat,
+            ),
+            sub_aa2,
+        ),
+        zero_const,
+    );
+    let mut sq_state = ProofState::new(env, eq_goal);
+    let mut sq_config = SqueezeSimpConfig::new();
+    sq_config.simp_config.only_simplify = true;
+    let sq = squeeze_simp_with_config(&mut sq_state, sq_config)
+        .expect("squeeze in only-simplify mode reports rather than fails");
+    assert!(
+        sq.used_lemmas.iter().any(|l| l == "Nat.sub_self"),
+        "Nat.sub_self must be the lemma that fires; squeeze reported {:?}",
+        sq.used_lemmas
+    );
+    assert!(
+        !sq.used_lemmas.iter().any(|l| l == "Nat.sub_zero"),
+        "Nat.sub_zero must NOT fire on `snA - snA`; squeeze reported {:?}",
+        sq.used_lemmas
+    );
+}
+
+#[test]
+fn test_simp_star_noise_guard_sub_zero_still_fires_raw_spellings() {
+    // POSITIVE: the guard is restrictive-only — `Nat.sub_zero` keeps rewriting
+    // a genuinely `Nat.sub`-headed zero-subtraction in BOTH raw spellings of
+    // the literal (`Nat.zero` const and `Lit 0`). The surface spelling
+    // (`a - 0`, `HSub.hSub`-projection-headed) is pinned end-to-end by
+    // `test_b103_simp_sub_zero` and the star-noise corpus pins.
+    use crate::tactic::simp::{collect_simp_lemmas, simp_expr, SimpConfig};
+
+    let env = star_noise_env();
+    let a = || Expr::const_(Name::from_string("snA"), vec![]);
+    let state = ProofState::new(env, Expr::const_(Name::from_string("True"), vec![]));
+    let goal = state
+        .current_goal()
+        .expect("fresh state has a goal")
+        .clone();
+    let config = SimpConfig::new();
+    let lemmas = collect_simp_lemmas(&state, &config);
+
+    for zero in [
+        Expr::const_(Name::from_string("Nat.zero"), vec![]),
+        Expr::nat_lit(0),
+    ] {
+        let sub_a0 = Expr::app(
+            Expr::app(Expr::const_(Name::from_string("Nat.sub"), vec![]), a()),
+            zero.clone(),
+        );
+        let result = simp_expr(&state, &goal, &sub_a0, &lemmas, &config);
+        assert_eq!(
+            result.expr,
+            a(),
+            "Nat.sub snA {zero:?} must still rewrite to snA (guard is restrictive-only)"
+        );
+        assert!(
+            result.proof.is_some(),
+            "the sub_zero rewrite must carry its proof"
         );
     }
 }

@@ -7,6 +7,7 @@
 use crate::cert::*;
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
+use std::sync::Arc;
 
 #[test]
 fn test_dict_from_bytes() {
@@ -89,11 +90,11 @@ fn test_dict_compress_complex_cert() {
             } else if i < 10 {
                 ProofCert::Pi {
                     binder_info: BinderInfo::Default,
-                    arg_type_cert: Box::new(ProofCert::Sort {
+                    arg_type_cert: Arc::new(ProofCert::Sort {
                         level: Level::zero(),
                     }),
                     arg_level: Level::zero(),
-                    body_type_cert: Box::new(ProofCert::Sort {
+                    body_type_cert: Arc::new(ProofCert::Sort {
                         level: Level::zero(),
                     }),
                     body_level: Level::zero(),
@@ -101,10 +102,10 @@ fn test_dict_compress_complex_cert() {
             } else {
                 ProofCert::Lam {
                     binder_info: BinderInfo::Default,
-                    arg_type_cert: Box::new(ProofCert::Sort {
+                    arg_type_cert: Arc::new(ProofCert::Sort {
                         level: Level::zero(),
                     }),
-                    body_cert: Box::new(ProofCert::BVar {
+                    body_cert: Arc::new(ProofCert::BVar {
                         idx: 0,
                         expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::zero()))),
                     }),
@@ -122,12 +123,12 @@ fn test_dict_compress_complex_cert() {
 
     // Complex nested certificate
     let complex_cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Lam {
+        fn_cert: Arc::new(ProofCert::Lam {
             binder_info: BinderInfo::Default,
-            arg_type_cert: Box::new(ProofCert::Sort {
+            arg_type_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
-            body_cert: Box::new(ProofCert::BVar {
+            body_cert: Arc::new(ProofCert::BVar {
                 idx: 0,
                 expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::zero()))),
             }),
@@ -142,7 +143,7 @@ fn test_dict_compress_complex_cert() {
             Expr::from_kind(ExprKind::Sort(Level::zero())),
             Expr::from_kind(ExprKind::Sort(Level::zero())),
         )),
-        arg_cert: Box::new(ProofCert::Sort {
+        arg_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::zero()))),

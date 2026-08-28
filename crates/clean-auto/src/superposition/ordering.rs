@@ -29,7 +29,7 @@ pub trait TermOrdering: Send + Sync {
 }
 
 /// Knuth-Bendix Ordering
-pub struct KBO {
+pub(crate) struct KBO {
     /// Weight of each function symbol
     weights: HashMap<Symbol, u32>,
     /// Precedence of function symbols (higher = greater)
@@ -51,7 +51,7 @@ impl Default for KBO {
 
 impl KBO {
     /// Create a new KBO with default settings
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         KBO {
             weights: HashMap::new(),
             precedence: HashMap::new(),
@@ -62,12 +62,12 @@ impl KBO {
     }
 
     /// Set the weight of a symbol
-    pub fn set_weight(&mut self, sym: Symbol, weight: u32) {
+    pub(crate) fn set_weight(&mut self, sym: Symbol, weight: u32) {
         self.weights.insert(sym, weight);
     }
 
     /// Set the precedence of a symbol
-    pub fn set_precedence(&mut self, sym: Symbol, prec: u32) {
+    pub(crate) fn set_precedence(&mut self, sym: Symbol, prec: u32) {
         self.precedence.insert(sym, prec);
     }
 
@@ -178,7 +178,7 @@ impl TermOrdering for KBO {
 }
 
 /// Lexicographic Path Ordering
-pub struct LPO {
+pub(crate) struct LPO {
     /// Precedence of function symbols (higher = greater)
     precedence: HashMap<Symbol, u32>,
 }
@@ -191,14 +191,14 @@ impl Default for LPO {
 
 impl LPO {
     /// Create a new LPO with default precedence
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         LPO {
             precedence: HashMap::new(),
         }
     }
 
     /// Set the precedence of a symbol
-    pub fn set_precedence(&mut self, sym: Symbol, prec: u32) {
+    pub(crate) fn set_precedence(&mut self, sym: Symbol, prec: u32) {
         self.precedence.insert(sym, prec);
     }
 
@@ -269,7 +269,7 @@ impl TermOrdering for LPO {
 
 /// Clause selection strategy
 #[derive(Clone, Copy, Debug)]
-pub enum SelectionStrategy {
+pub(crate) enum SelectionStrategy {
     /// First-in-first-out
     FIFO,
     /// Prefer smaller clauses

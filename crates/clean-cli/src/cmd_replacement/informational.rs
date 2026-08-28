@@ -23,6 +23,10 @@ pub(crate) enum EvidenceState {
     Stub,
     /// The declared evidence file does not exist.
     Missing,
+    /// The file exists and is not a stub, but does not satisfy the contract its
+    /// row declares: unparseable, wrong `schema_version`, blank, undeclared, or
+    /// reporting its own failure. Opening is not backing.
+    Invalid,
     /// The "evidence" is a schema/version name, not a repo path.
     SchemaName,
 }
@@ -33,6 +37,7 @@ impl EvidenceState {
             Self::Present => "present",
             Self::Stub => "STUB",
             Self::Missing => "MISSING",
+            Self::Invalid => "INVALID",
             Self::SchemaName => "schema-name",
         }
     }
@@ -49,6 +54,10 @@ pub(crate) struct InformationalRow {
     pub(crate) effective_status: ReplacementStatus,
     pub(crate) evidence_artifact: &'static str,
     pub(crate) evidence_state: EvidenceState,
+    /// Every declared evidence path, the ONE location it was read from, and why
+    /// it is not `Present` when it is not. Without this a reader cannot tell
+    /// which file on which tree produced the verdict.
+    pub(crate) evidence_artifacts: Vec<EvidenceArtifactResolution>,
     pub(crate) gate_command: &'static str,
     /// The zero-trust gate that actually backs this row, when one does.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -63,6 +72,10 @@ pub(crate) struct InformationalRow {
 pub(crate) struct InformationalScorecard {
     pub(crate) schema_version: &'static str,
     pub(crate) note: &'static str,
+    /// The single tree every declared artifact was resolved against.
+    pub(crate) evidence_root: String,
+    /// On whose authority that root was chosen.
+    pub(crate) evidence_root_source: &'static str,
     pub(crate) rows: Vec<InformationalRow>,
 }
 
@@ -76,6 +89,7 @@ impl InformationalScorecard {
         // This view must never fail closed, so a trust-core report that cannot be
         // built simply leaves every gate verdict unknown and the rows unchanged.
         let gate_status = zero_trust_gate_status_map();
+        let (evidence_root, evidence_root_source) = repo_root_provenance();
         let rows = replacement_rows()
             .into_iter()
             .map(|row| {
@@ -92,6 +106,7 @@ impl InformationalScorecard {
                     ),
                     evidence_artifact: row.evidence_artifact,
                     evidence_state: row.evidence_state,
+                    evidence_artifacts: assess_evidence(row.evidence_artifact).artifacts,
                     gate_command: row.gate_command,
                     zero_trust_gate,
                     zero_trust_gate_status,
@@ -102,8 +117,12 @@ impl InformationalScorecard {
             schema_version: "clean-replacement-informational-v1",
             note: "INFORMATIONAL ONLY — not a launch gate. The launch gate is the \
                    fail-closed `clean replacement status`. A `green` here means the \
-                   row's own evidence file is present and non-stub AND, where the \
+                   row's own evidence file resolves under evidence_root, satisfies \
+                   the contract declared for it (parses, carries the expected \
+                   schema_version, does not report its own failure) AND, where the \
                    row is backed by a zero-trust gate, that gate reports passed.",
+            evidence_root: evidence_root.to_string_lossy().replace('\\', "/"),
+            evidence_root_source: evidence_root_source.label(),
             rows,
         }
     }
@@ -173,48 +192,32 @@ pub(crate) fn effective_status_for(
     evidence_state: EvidenceState,
 ) -> ReplacementStatus {
     match evidence_state {
-        EvidenceState::Missing | EvidenceState::Stub if declared == ReplacementStatus::Green => {
+        EvidenceState::Missing | EvidenceState::Stub | EvidenceState::Invalid
+            if declared == ReplacementStatus::Green =>
+        {
             ReplacementStatus::PendingEvidence
         }
         _ => declared,
     }
 }
 
+/// Assess a row's declared evidence against the resolved repo root.
+///
+/// Some rows list SEVERAL artifacts, semicolon-separated (e.g.
+/// "docs/RELEASE_READINESS.md; scripts/trust_boundary_expected_tests.txt").
+/// Each is resolved and validated on its own and combined fail-closed, so a
+/// present sibling never masks a missing, invalid, or stub artifact.
+pub(crate) fn assess_evidence(evidence_artifact: &str) -> EvidenceAssessment {
+    assess_evidence_in_root(&repo_root(), evidence_artifact)
+}
+
 /// Classify a row's declared evidence artifact.
-pub(crate) fn evidence_state_of(evidence_artifact: &'static str) -> EvidenceState {
-    // Schema-name evidence (e.g. "clean-replacement-status-v1") carries no path
-    // separator.
-    if !evidence_artifact.contains('/') {
-        return EvidenceState::SchemaName;
-    }
-    // Some rows list SEVERAL artifacts, semicolon-separated (e.g.
-    // "docs/RELEASE_READINESS.md; scripts/trust_boundary_expected_tests.txt").
-    // Reading the joined string as one path always failed, so those rows
-    // reported Missing even when every listed file was present. Evaluate each
-    // path and combine fail-closed: any missing path => Missing, else any stub
-    // => Stub, else Present. A row is only Present when it really has all of
-    // its declared evidence.
-    let mut saw_stub = false;
-    let mut saw_any = false;
-    for path in evidence_artifact.split(';') {
-        let path = path.trim();
-        if path.is_empty() || !path.contains('/') {
-            continue;
-        }
-        saw_any = true;
-        match read_optional_repo_artifact(path) {
-            Ok(Some(contents)) if is_stub_evidence(&contents) => saw_stub = true,
-            Ok(Some(_)) => {}
-            _ => return EvidenceState::Missing,
-        }
-    }
-    if !saw_any {
-        return EvidenceState::SchemaName;
-    }
-    if saw_stub {
-        return EvidenceState::Stub;
-    }
-    EvidenceState::Present
+///
+/// A file that merely OPENS is not evidence: it must also satisfy the contract
+/// declared for it in `evidence_contract_for`. See that module for the measured
+/// substitutions this closes.
+pub(crate) fn evidence_state_of(evidence_artifact: &str) -> EvidenceState {
+    assess_evidence(evidence_artifact).state
 }
 
 /// A `{"stub": true}` JSON placeholder is not real evidence.
@@ -246,6 +249,12 @@ pub(crate) fn render_informational_human(
     writeln!(out)?;
     writeln!(
         out,
+        "evidence root: {} ({})",
+        scorecard.evidence_root, scorecard.evidence_root_source
+    )?;
+    writeln!(out)?;
+    writeln!(
+        out,
         "  {:<28} {:<16} {:<12} ARTIFACT",
         "AREA", "STATUS", "EVIDENCE"
     )?;
@@ -258,6 +267,13 @@ pub(crate) fn render_informational_human(
             row.evidence_state.label(),
             row.evidence_artifact,
         )?;
+        // Never leave a downgrade unexplained: the reason an artifact failed its
+        // contract is the actionable half of the verdict.
+        for artifact in &row.evidence_artifacts {
+            if let Some(detail) = &artifact.detail {
+                writeln!(out, "  {:<28} └─ {}: {}", "", artifact.declared, detail)?;
+            }
+        }
     }
     Ok(())
 }

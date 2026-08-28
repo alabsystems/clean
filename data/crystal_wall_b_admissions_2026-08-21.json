@@ -1,0 +1,129 @@
+{
+ "schema": "clean.crystal.wall_b_admissions/1",
+ "date": "2026-08-21",
+ "lane": "LANE WB \u2014 the wall-B admissions: the never-flip partition's 8 fragment-refused bodies, taken as three fail-closed admissions in gate_derived_body (wave-WB, trust d2da911e03e31a019d53bee1a43e2c9893bc9dce)",
+ "question": "The never-flip partition (clean 5bdb4ee6a) priced wall B's honest work in three sub-classes: (1) lone call-dest thin ref temps, (2) str fat-pointer in-transit temps, (3) fieldless-enum call-result temps. Size each crate-wide, admit checked-not-assumed, mutation-prove both directions, measure whole-crate at both levels against this lane's own sealed control.",
+ "method": "Detached trust worktree at origin/main 47236131c9 (laneWB/wt), clean submodule pinned d93b2fbb9. CONTROL driver sealed from the pristine tree; SUBJECT = control + the wave-WB flip.rs (blob a5888e4e1e, recorded in the seal's provenance blobs); M-COR = subject with the mentions==2 wall weakened to <=3 AND the FIELDLESS clause deleted. All three drivers sealed (seal_driver.sh), sysroot-v13 (4-fact sysrootcheck OK incl. MIR decode probe), guard-passed before every run; whole-crate clean-kernel lib at -O3 / -O0 / -O3-noflip with RUSTC_LOG=trust_ir_flip=info; row-exact comparison by def_index (laneFR's compare.py).",
+ "census_per_class_from_control_O0_fallback_log": {
+  "rule": "the whole-crate -O0 FALLBACK census names every fragment refusal; each admission unlocks EXACTLY its named bodies, none beyond",
+  "class_1_lone_calldest_thin": {
+   "count": 3,
+   "bodies": [
+    "<level::LevelArc as std::cmp::PartialEq>::eq (17051, &Level)",
+    "<level::LevelArc as std::fmt::Debug>::fmt (17057, &Level)",
+    "expr::kind::arc_eq (16141, &Expr)"
+   ]
+  },
+  "class_2_str_fat_in_transit": {
+   "count": 2,
+   "bodies": [
+    "<mode::AxiomId as std::fmt::Display>::fmt (17992, &str)",
+    "<mode::CleanMode as std::fmt::Display>::fmt (17994, &str)"
+   ]
+  },
+  "class_3_enum_call_result_temps": {
+   "count": 3,
+   "bodies": [
+    "env::origin::ConstantOrigin::needs_recheck (3061, OriginTrust)",
+    "env::origin::ConstantOrigin::is_unpinned_olean_import (3060, OriginTrust)",
+    "<expr::types::BinderData as std::default::Default>::default (33223, BinderInfo + Multiplicity)"
+   ]
+  }
+ },
+ "subject_vs_control": {
+  "base": "wc-base",
+  "subject": "wc-subj",
+  "O3": {
+   "codegen_base": 201,
+   "codegen_subject": 201,
+   "ctfe_base": 41,
+   "ctfe_subject": 41,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 606,
+   "codegen_subject": 614,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 8,
+   "lost": 0,
+   "gained_names": [
+    "env::origin::ConstantOrigin::is_unpinned_olean_import",
+    "env::origin::ConstantOrigin::needs_recheck",
+    "expr::kind::arc_eq",
+    "<level::LevelArc as std::cmp::PartialEq>::eq",
+    "<level::LevelArc as std::fmt::Debug>::fmt",
+    "<mode::AxiomId as std::fmt::Display>::fmt",
+    "<mode::CleanMode as std::fmt::Display>::fmt",
+    "<expr::types::BinderData as std::default::Default>::default"
+   ],
+   "lost_names": []
+  },
+  "channel_moves": {},
+  "verdict_regressions": [],
+  "markers_gained": [],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1559,
+   "subject_agreed": 1559,
+   "base_markers_exact": 1118,
+   "subject_markers_exact": 1118
+  }
+ },
+ "mutation_delete": "gate-only wave: admission-deleted == the sealed control byte-for-byte in behavior; the subject_vs_control row diff IS the deletion direction, name-exact (+8/0 at -O0, 0/0 at -O3)",
+ "mutation_corrupted_admissions": {
+  "mutations": [
+   "calldest predicate: mentions == 2 weakened to mentions <= 3",
+   "temp_enum_ty_ok: FIELDLESS clause (all variants field-free) deleted"
+  ],
+  "whole_crate": {
+   "base": "wc-subj",
+   "subject": "wc-mcor",
+   "O3": {
+    "codegen_base": 201,
+    "codegen_subject": 201,
+    "ctfe_base": 41,
+    "ctfe_subject": 41,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "O0": {
+    "codegen_base": 614,
+    "codegen_subject": 614,
+    "ctfe_base": 42,
+    "ctfe_subject": 42,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "channel_moves": {},
+   "verdict_regressions": [],
+   "markers_gained": [],
+   "markers_lost": [],
+   "totals": {
+    "base_agreed": 1559,
+    "subject_agreed": 1559,
+    "base_markers_exact": 1118,
+    "subject_markers_exact": 1118
+   }
+  },
+  "whole_crate_verdict": "row-exact IDENTICAL to the subject at both levels (0 gained, 0 lost, 0 channel moves) \u2014 the corpus contains no body the weakened clauses would additionally admit; the walls are defense-in-depth against shapes not present today",
+  "unit_test_kill": "on the M-COR tree, flip::w3_regression_tests::wb_any_forbidden_calldest_shape_is_refused FAILS at the third-mention assert (718 passed / 1 failed); on the subject tree 719/719 pass (cargo test -p trust-thir-lower --lib, isolated target dir)"
+ },
+ "oracle_and_controls": "mir_differential 709a7794 frozen and untouched; 0 oracle refusals in all four flip logs; O3_noflip control runs: 0 flip events on both drivers; verdict channel agreed 1559->1559 and marker channel markers_exact 1118->1118 byte-untouched (gate-only change)",
+ "what_stays_refused": {
+  "wall_A_generic_abi": "5 bodies (27 expecting rows + CertExprEqContext::level_eq) \u2014 an Instance-level flip seam, not an admission; unchanged",
+  "cf_str_family_sizing_corrected": "the 351 agreed serde `expecting` bodies stay marker-refused at -O (324 of them already flip at -O0). Measured at this tip: their derived marker channel is `<end>` \u2014 the CF_STR emission is compiled in (to_mir CF_STR=true since a75907ef0d) but the call-forward plan measurably does not fire on any of them (the missing built marker is the &mut Formatter reborrow span). So the WB brief's 'the fat temp is the last refusal' is NOT yet the binding wall for that family \u2014 the plan/source-gate refusal comes first. The -O prize (~324 bodies) is an EMISSION item: make plan_call_fwd_markers actually fire on the write_str shape, THEN the str-const temp admission becomes non-vacuous",
+  "other": "every non-str wide pointee (&[T], &dyn, &mut str), every multi-mention temp, every payload-enum temp (fieldless wall), read-only stores through any admitted temp (mentions==2 / confinement guards refuse)"
+ },
+ "landed": {
+  "trust": "d2da911e03e31a019d53bee1a43e2c9893bc9dce (flip.rs only, +321/-2, Measured-on stamp a5888e4e1e)",
+  "parent": "c6b5ba49a7"
+ }
+}

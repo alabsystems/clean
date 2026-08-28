@@ -1,0 +1,87 @@
+{
+ "prefix": "ir_hlb",
+ "body": "expr::meta::ExprMeta::has_loose_bvars",
+ "second_body": "expr::meta::ExprMeta::loose_bvar_range",
+ "core_digest": "2ce58cc08262f605cf22377175a8332d2a6892e9a00d3044f242280dacd03eb5",
+ "defs_digest": "05c2425dce14255d6698778c0dfd1fdb4244631d2fa2e8620c25751b71f57fc7",
+ "def_count": 6,
+ "def_count_note": "ONE interface-only alias (ir_hlb_tself, struct.29 -- the receiver both headers name and neither body's instructions do), then the CALLER's block and func, then the CALLEE's block and func, then the module. THE FIRST MINTED SCRIPT THAT DEFINES TWO FUNCTIONS: the second body's Clean name prefix (ir_lbr) and its own interface come from the tag table's extra_bodies lane, so nothing about the callee is a hand choice inside the specification.",
+ "artifact_core_digest": "785811f612dad2137d9077688d5e55e41849214013797d342b25f3266bbfa1ef",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "command": "a2project <dump> 'expr::meta::ExprMeta::has_loose_bvars' <out> ir_hlb --with 'expr::meta::ExprMeta::loose_bvar_range'",
+  "command_note": "`--with` is NEW with this chain: it projects an ADDITIONAL function into the same core module under ONE interning namespace, root first. That is what makes the caller's `(call 1 ...)` and the callee's `(func 1 ...)` the same numeral BY CONSTRUCTION rather than by two agreeing hands -- the 2026-08-20 level_is_zero namespace collision, refused at the source of the numbering. Every earlier chain projects byte-identically without the flag (re-measured 2026-08-23 over all eighteen committed cores).",
+  "chain_functions": [
+   {
+    "module_index": 0,
+    "canonical": 0,
+    "name": "expr::meta::ExprMeta::has_loose_bvars",
+    "artifact_func_id": 3650,
+    "artifact_functy_id": 432,
+    "linkage": "external",
+    "calling_conv": "rustcc"
+   },
+   {
+    "module_index": 1,
+    "canonical": 1,
+    "name": "expr::meta::ExprMeta::loose_bvar_range",
+    "artifact_func_id": 3649,
+    "artifact_functy_id": 430,
+    "linkage": "external",
+    "calling_conv": "rustcc"
+   }
+  ],
+  "artifact_functy_note": "432 and 430 on the dump this chain was minted from, where the COMMITTED FIXTURES say 435 and 433, and the func ids are 3650/3649 against the fixtures' 3658/3657. The whole-crate function-TYPE and function indices move under a producer re-interning with zero instructions changed -- the recorded drift class. The interface pins compare reader B's headers against the FIXTURE-ERA values; reader A's are RECORDED here, NEVER COMPARED, like observed_ty.",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [],
+  "crate_struct_ids_seen_note": "EMPTY, and that is a measurement: struct.29 occurs in the two HEADERS and in no instruction of either body (the callee's extractfield names the u64 it reads out, not the aggregate it reads from). The tag table's structs row is therefore INTERFACE-ONLY, like ir_fc_tflags and ir_fs_tsrc.",
+  "crate_func_ids_seen": [
+   3650,
+   3649
+  ],
+  "crate_func_names_seen": [
+   "expr::meta::ExprMeta::has_loose_bvars",
+   "expr::meta::ExprMeta::loose_bvar_range"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [
+   "Struct(StructId(29))",
+   "Struct(StructId(29))"
+  ],
+  "block_param_tys_erased": [],
+  "reproduced_on_a_second_dump": {
+   "dump": "$HOME/trust/scratchpad/laneF8/wc-ctl/dump_O3/clean_kernel.trust-ir.bin",
+   "dump_sha256": "84b723b8bcf40c02427b13c007d530f28d23b2f504db168f1c7584472077db6e",
+   "measured": "2026-08-23",
+   "core_digest": "785811f612dad2137d9077688d5e55e41849214013797d342b25f3266bbfa1ef",
+   "core_text": "BYTE-IDENTICAL to the committed generated/ir_hlb.core.txt",
+   "artifact_func_ids": [
+    3665,
+    3664
+   ],
+   "artifact_functy_ids": [
+    438,
+    436
+   ],
+   "note": "A SECOND, INDEPENDENT whole-crate dump -- a different lane (laneF8 wc-ctl), a different day, a different producer build -- projects the SAME core module byte for byte. EVERY crate-level id this chain names moved: the caller 3650 -> 3665, the callee 3649 -> 3664, the two functy indices 432/430 -> 438/436. That is the drift class the core form exists to absorb, measured on this chain rather than inherited from the eleven producer A/B rows -- and it is what makes the caller's `(call 1 ...)` a producer-invariant fact rather than a numeral from one build. It is NOT the three-producer invariance record the original eleven carry: two dumps, not three, and both from the same trust line."
+  }
+ },
+ "text_unwitnessed": [],
+ "text_unwitnessed_note": "EMPTY: neither body contains a `switch`, so the emitted TEXT fully determines the core module and M2 is an EXACT comparison with no mask.",
+ "producer_dumps_observed": 2,
+ "producer_dumps_note": "TWO dumps, stated as such: laneREG wc-REG/dump_O3 (2026-08-21, the projection this chain was minted from) and laneF8 wc-ctl/dump_O3 (2026-08-23, the independent reproduction above). This chain postdates generated/ir_mint.producer_ab.json, so it has no three-producer record; what these two establish is that the core module is invariant across a producer change that moved all four of its crate-level indices with zero instructions changed. The COMMITTED FIXTURES are a THIRD era (func 3658/3657, functy 435/433) and are reader B's independent copy of the same two bodies, compared exactly by M2.",
+ "migration": {
+  "from": "the hand transcription registered by spec/core_spec/eval_ir_has_loose_bvars.rs until 2026-08-23 (SRC_IR_HLB_TSELF / SRC_IR_HLB_B0 / SRC_IR_HLB_FUNC / SRC_IR_LBR_B0 / SRC_IR_LBR_FUNC / SRC_IR_HLB_MODULE)",
+  "verdict": "NO SEMANTIC DIVERGENCE. FOUR of the six lines minted BYTE-IDENTICAL (ir_hlb_tself, ir_hlb_func, ir_lbr_func, ir_hlb_module -- the module line included, so the two-function list order and both own ids were already right). TWO lines differ, both block bodies, and every difference is one of THREE definitionally-equal NOTATION classes.",
+  "notation_classes": [
+   "BORROWED SIBLING TYPE ALIASES: the hand lines named ir_br_tu32 (registered by the bvar_in_range chain) and ir_vc_tu64 (by is_valid_char); the mint inlines (IRTy.uint_ 32) and (IRTy.uint_ 64). Same class the ko/fs/fc/fw/br/vc/gc migrations printed -- and, as in flat_flags_with, the borrowing is the part worth reading twice: this chain owned neither alias.",
+   "BORROWED NODE-LIST BUILDERS: the hand caller used (ir_bd3 ...) inside a raw cons and the hand callee used the meta_tag chain's (ir_mt_bd9 ...); the mint spells both as raw IRList.cons spines, because ir_mint::node_list has builders at 1/2/3/6 nodes and neither 4 nor 9 is one of them.",
+   "THE ATOM POOL: the hand caller wrote (IRConst.int_ 0) and the mint writes (IRConst.int_ ir_d0) -- the data-pool cutoff is 16, so 0 renders through the pool while the callee's 44 and 64 stay bare literals in both. The ir_mt class, again."
+  ],
+  "proof_that_the_classes_are_notation_only": "tests/crystal_a2_mint_hlb.rs::the_hand_transcription_and_the_mint_are_the_same_program unfolds every alias by its REGISTERED definition (ir_br_tu32, ir_vc_tu64, ir_bd1/2/3/6, ir_mt_bd9, the ir_dN atom pool) on both sides and requires the results to be BYTE-IDENTICAL, and prints the verbatim diff first. It also compares the two through the A1 CFG comparator. 6 of 6 lines equal after unfolding.",
+  "downstream": "Every ir_hlb_* and ir_lbr_* theorem keeps proving unchanged: the composition (ir_hlb_call_step, ir_lbr_activation, ir_hlb_resume, ir_hlb_exact), both A4s, both A5s, both never-faults, the seam theorem and all eighteen witnesses."
+ }
+}

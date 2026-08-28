@@ -20,7 +20,7 @@ struct CongruenceBuf {
 
 /// The E-graph data structure
 #[derive(Clone, Debug)]
-pub struct EGraph {
+pub(crate) struct EGraph {
     /// Union-find for e-class membership
     uf: UnionFind,
     /// E-classes indexed by their canonical ID
@@ -51,7 +51,7 @@ impl EGraph {
     /// **ENSURES:**
     /// - Returns empty e-graph with no e-classes
     /// - No pending congruence closure work
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         EGraph {
             uf: UnionFind::new(),
             classes: HashMap::new(),
@@ -73,17 +73,17 @@ impl EGraph {
     /// - Returns canonical representative of `id`'s equivalence class
     /// - `find(find(x)) == find(x)` (idempotent)
     /// - `find(x) == find(y)` iff `x` and `y` are in same class
-    pub fn find(&mut self, id: EClassId) -> EClassId {
+    pub(crate) fn find(&mut self, id: EClassId) -> EClassId {
         self.uf.find(id)
     }
 
     /// Get the canonical representative without mutation
-    pub fn find_const(&self, id: EClassId) -> EClassId {
+    pub(crate) fn find_const(&self, id: EClassId) -> EClassId {
         self.uf.find_const(id)
     }
 
     /// Check if two e-class IDs are in the same equivalence class
-    pub fn are_equal(&mut self, a: EClassId, b: EClassId) -> bool {
+    pub(crate) fn are_equal(&mut self, a: EClassId, b: EClassId) -> bool {
         self.find(a) == self.find(b)
     }
 
@@ -95,7 +95,7 @@ impl EGraph {
     /// - Returns e-class ID for the constant
     /// - Hashconsed: multiple calls with same name return same canonical e-class
     /// - Constant is leaf node (no children)
-    pub fn add_const(&mut self, name: impl Into<Symbol>) -> EClassId {
+    pub(crate) fn add_const(&mut self, name: impl Into<Symbol>) -> EClassId {
         let node = ENode::constant(name);
         self.add_node(node)
     }
@@ -110,7 +110,11 @@ impl EGraph {
     /// - Returns e-class ID for `symbol(children...)`
     /// - Hashconsed: structurally equal nodes map to same e-class
     /// - Children are canonicalized before lookup
-    pub fn add_app(&mut self, symbol: impl Into<Symbol>, children: Vec<EClassId>) -> EClassId {
+    pub(crate) fn add_app(
+        &mut self,
+        symbol: impl Into<Symbol>,
+        children: Vec<EClassId>,
+    ) -> EClassId {
         // Canonicalize children first
         let canonical_children: Vec<EClassId> = children.iter().map(|&id| self.find(id)).collect();
         let node = ENode::app(symbol, canonical_children);
@@ -155,12 +159,17 @@ impl EGraph {
     /// - `find(a) == find(b)` after call
     /// - Triggers congruence closure
     /// - Returns canonical representative of merged class
-    pub fn union(&mut self, a: EClassId, b: EClassId) -> EClassId {
+    pub(crate) fn union(&mut self, a: EClassId, b: EClassId) -> EClassId {
         self.union_with_reason(a, b, MergeReason::External)
     }
 
     /// Merge two e-classes with a specified reason
-    pub fn union_with_reason(&mut self, a: EClassId, b: EClassId, reason: MergeReason) -> EClassId {
+    pub(crate) fn union_with_reason(
+        &mut self,
+        a: EClassId,
+        b: EClassId,
+        reason: MergeReason,
+    ) -> EClassId {
         let a = self.find(a);
         let b = self.find(b);
 
@@ -280,13 +289,13 @@ impl EGraph {
     }
 
     /// Get an e-class by ID (returns the canonical class)
-    pub fn get_class(&mut self, id: EClassId) -> Option<&EClass> {
+    pub(crate) fn get_class(&mut self, id: EClassId) -> Option<&EClass> {
         let canonical = self.find(id);
         self.classes.get(&canonical)
     }
 
     /// Get the number of e-classes
-    pub fn num_classes(&self) -> usize {
+    pub(crate) fn num_classes(&self) -> usize {
         self.classes
             .keys()
             .filter(|&&id| self.uf.find_const(id) == id)
@@ -294,7 +303,7 @@ impl EGraph {
     }
 
     /// Get the total number of e-nodes
-    pub fn num_nodes(&self) -> usize {
+    pub(crate) fn num_nodes(&self) -> usize {
         self.classes
             .values()
             .filter(|c| self.uf.find_const(c.id) == c.id)
@@ -303,7 +312,7 @@ impl EGraph {
     }
 
     /// Get all canonical e-class IDs
-    pub fn classes(&self) -> impl Iterator<Item = EClassId> + '_ {
+    pub(crate) fn classes(&self) -> impl Iterator<Item = EClassId> + '_ {
         self.classes
             .keys()
             .copied()
@@ -311,13 +320,13 @@ impl EGraph {
     }
 
     /// Check if the e-graph contains an e-node
-    pub fn contains(&self, node: &ENode) -> bool {
+    pub(crate) fn contains(&self, node: &ENode) -> bool {
         let canonical = node.canonicalize(|id| self.uf.find_const(id));
         self.hashcons.contains_key(&canonical)
     }
 
     /// Lookup an e-node in the e-graph
-    pub fn lookup(&mut self, node: &ENode) -> Option<EClassId> {
+    pub(crate) fn lookup(&mut self, node: &ENode) -> Option<EClassId> {
         let canonical = node.canonicalize(|id| self.uf.find(id));
         if let Some(&id) = self.hashcons.get(&canonical) {
             Some(self.find(id))
@@ -327,7 +336,7 @@ impl EGraph {
     }
 
     /// Get all e-nodes in an e-class
-    pub fn get_nodes(&mut self, id: EClassId) -> Vec<ENode> {
+    pub(crate) fn get_nodes(&mut self, id: EClassId) -> Vec<ENode> {
         let canonical = self.find(id);
         self.classes
             .get(&canonical)
@@ -336,7 +345,7 @@ impl EGraph {
     }
 
     /// Extract a representative term from an e-class (smallest by default)
-    pub fn extract(&mut self, id: EClassId) -> Option<Term> {
+    pub(crate) fn extract(&mut self, id: EClassId) -> Option<Term> {
         let mut visited = HashSet::new();
         self.extract_with_visited(id, &mut visited)
     }
@@ -390,7 +399,7 @@ impl EGraph {
     }
 
     /// Clear the e-graph
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.uf = UnionFind::new();
         self.classes.clear();
         self.hashcons.clear();
@@ -401,12 +410,12 @@ impl EGraph {
     }
 
     /// Get the merge history for proof reconstruction
-    pub fn merge_history(&self) -> &[MergeRecord] {
+    pub(crate) fn merge_history(&self) -> &[MergeRecord] {
         &self.merge_history
     }
 
     /// Clear the merge history (useful after extracting for proofs)
-    pub fn clear_merge_history(&mut self) {
+    pub(crate) fn clear_merge_history(&mut self) {
         self.merge_history.clear();
     }
 }

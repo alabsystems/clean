@@ -1,0 +1,43 @@
+{
+ "prefix": "ir_br",
+ "body": "expr::bvar_in_range",
+ "core_digest": "48ae8f87145135bf18b87a238af9beb6e4999ca8c5f035d264f0aed8f3575db2",
+ "defs_digest": "cddd4963127bd1171d21471ac9488b42919ba44c4476e1d2d6e5d4de7a745426",
+ "def_count": 9,
+ "artifact_core_digest": "9a42f74fa57dcaaecd04f99d29af29b7d4a38aa8093af9d51f5279a346dade8c",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the bvar_in_range row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 3751,
+  "artifact_func_id": 3751,
+  "artifact_functy_id": 464,
+  "artifact_functy_note": "464 on the dump this migration was revalidated against, where the COMMITTED fixture says 467 and the producer A/B record says 641/641/465: the whole-crate function-TYPE index moves under a producer re-interning with zero instructions changed, exactly like func_id (3751 here, after 4776/4776/3749 -- the same drift class). The interface pin compares reader B's header against the fixture-era 467; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [
+   3751
+  ],
+  "crate_func_names_seen": [
+   "expr::bvar_in_range"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [
+   "U32",
+   "U32",
+   "U32"
+  ],
+  "block_param_tys_erased": [
+   "bb3:Bool",
+   "bb6:Bool"
+  ]
+ },
+ "text_unwitnessed": [
+ ],
+ "text_unwitnessed_note": "EMPTY: this body carries no `switch`, so the one field trust-ir's Display never prints (Switch.exhaustive_enum_unreachable) does not occur and the emitted text fully determines the core module. M2 is an exact comparison with no mask -- the float-tranche posture, reached here for the first time by a chain with CONTROL FLOW (two condbrs, which the text prints completely).",
+ "producer_dumps_observed": 4,
+ "producer_dumps_note": "The three dumps of generated/ir_mint.producer_ab.json (trust wave-tr-fix 2026-08-12 v36, mfclose 2026-08-13 v36, lane2rv 2026-08-19 v37) plus the laneREG wc-REG dump_O3 2026-08-21 projection this migration ran (recorded verbatim under reader_a above). All four project to the byte-identical committed core text: func_id moved on two of the four boundaries and functy on three, and no core digest moved -- the drift class the core form exists to absorb, re-observed on the freshest dump on this machine."
+}

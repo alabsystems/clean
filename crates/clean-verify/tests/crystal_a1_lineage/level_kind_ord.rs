@@ -32,8 +32,10 @@
 //! Structural correspondence, not a semantic proof that Clean's `IRInst`
 //! encoding means what trust-ir's does. The lineage digest is RECORDED, not
 //! recomputed from the artifact here; verifying it at flip time is the
-//! compiler's job. And `ir_ko_module` is hand-transcribed: this makes an
-//! incorrect transcription FAIL, it does not make a correct one automatic.
+//! compiler's job. And since 2026-08-21 `ir_ko_module` is MINTED rather than
+//! hand-transcribed (`tests/crystal_a2_mint_ko.rs`, `src/ir_mint`): this gate
+//! reads the same generated script the spec replays, so it now cross-checks
+//! the generation instead of a transcription.
 
 use super::*;
 
@@ -47,7 +49,9 @@ fn kind_ord_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_kind_ord.rs", "const SRC_IR_KO_B"),
+        // The registered blocks are the MINTED script (crystal A2,
+        // `src/ir_mint`) as of 2026-08-21 — the same lines the spec replays.
+        &clean_block_sources("generated/ir_ko.defs.txt", "def ir_ko_b"),
         "def ir_ko_b",
     );
 
@@ -154,7 +158,7 @@ fn kind_ord_proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_kind_ord.rs", "const SRC_IR_KO_FUNC"),
+        &clean_block_sources("generated/ir_ko.defs.txt", "def ir_ko_func"),
         "level_kind_ord",
     );
     assert_lanes(&emitted, &clean, "level_kind_ord");

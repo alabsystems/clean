@@ -510,6 +510,28 @@ fn lower_module(decls: &[IRDecl]) -> Result<Vec<WasmFunc>, WasmEmitError> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut funcs = Vec::with_capacity(decls.len());
     for decl in decls {
+        // SKIP THE PRIMITIVES THEMSELVES.
+        //
+        // `lower_expr` already lowers a saturated CALL to `UIntW.{add,sub,mul}`
+        // into the native `i32`/`i64` instruction, so the callee's body is never
+        // needed. But the prelude defines those operations in Lean and the
+        // pipeline compiles them FROM SOURCE, routing through boxed `Nat`
+        // (`clean_box_uint32` → `UInt32.toNat` → `Nat.add` → `UInt32.ofNat`).
+        // Their `IRDecl`s therefore carry `Object`-typed bindings, and trying to
+        // lower them failed the whole module with "type Object is outside the
+        // Wasm fragment" — for `def duo (a b : UInt32) := UInt32.add a b`, whose
+        // OWN body is a single native add.
+        //
+        // This is the same shape as `native_build::is_primitive_denylisted` on
+        // the C side: a symbol the backend realizes itself must not also be
+        // compiled from source, or the two definitions race and the weaker one
+        // wins. Here the native lowering always wins and the body is dead.
+        //
+        // Deliberately keyed on the SAME `wasm_arith` table that lowers the call
+        // sites, so the skip set and the realized set cannot drift apart.
+        if wasm_arith(&decl.name.to_string()).is_some() {
+            continue;
+        }
         let func = lower_decl(decl)?;
         if !seen.insert(func.export.clone()) {
             return Err(WasmEmitError::DuplicateExport { name: func.export });

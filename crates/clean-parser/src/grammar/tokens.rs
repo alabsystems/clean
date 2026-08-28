@@ -67,6 +67,12 @@ impl Parser {
         self.tokens.get(self.pos + offset).map(|t| &t.kind)
     }
 
+    /// The whole token `offset` ahead, when the caller needs more than its
+    /// kind — `col` / `preceded_by_newline` for a line-discipline decision.
+    pub(super) fn peek_token(&self, offset: usize) -> Option<&Token> {
+        self.tokens.get(self.pos + offset)
+    }
+
     /// True when the `Dot` token at `self.pos` is a *contiguous* qualified-name
     /// separator: the dot immediately follows the previous token (no whitespace
     /// gap) and the following identifier immediately follows the dot. This

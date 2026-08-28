@@ -45,8 +45,6 @@ use super::{
     UpdateArgs,
 };
 
-const DEFAULT_CLEAN_TOOLCHAIN: &str = "clean:stable\n";
-
 /// Run a portable Lake command and return a human-readable summary.
 ///
 /// This is the library entry point for the portable subset of Lake verbs (see
@@ -221,7 +219,7 @@ fn write_lakefile(dir: &Path, name: &str, is_lib: bool) -> LakeResult<()> {
 
 /// Write `lean-toolchain` for a new project.
 fn write_lean_toolchain(dir: &Path) -> LakeResult<()> {
-    std::fs::write(dir.join("lean-toolchain"), DEFAULT_CLEAN_TOOLCHAIN)?;
+    std::fs::write(dir.join("lean-toolchain"), super::DEFAULT_CLEAN_TOOLCHAIN)?;
     Ok(())
 }
 
@@ -664,44 +662,15 @@ pub(super) fn lake_env(args: &EnvArgs) -> LakeResult<String> {
 }
 
 /// Render the resolved Lake environment for [`Workspace`] as `key=value` lines.
+///
+/// The environment itself is defined once, by [`Workspace::env_pairs`], so this
+/// reporting path and the CLI's child-process path cannot drift apart.
 pub(super) fn format_env(ws: &Workspace) -> String {
     let mut out = String::new();
-
-    out.push_str(&format!("LAKE_PACKAGE={}\n", ws.config().package.name));
-    out.push_str(&format!("LAKE_ROOT={}\n", ws.root().display()));
-    out.push_str(&format!("LEAN_PATH={}\n", format_lean_path(ws)));
-    out.push_str(&format!("LEAN_SRC_PATH={}\n", ws.src_dir().display()));
-
-    match ws.toolchain_version().or_else(|| ws.toolchain()) {
-        Some(toolchain) => out.push_str(&format!("LEAN_TOOLCHAIN={toolchain}\n")),
-        None => out.push_str("LEAN_TOOLCHAIN=\n"),
+    for (key, value) in ws.env_pairs() {
+        out.push_str(&format!("{key}={value}\n"));
     }
-
     out
-}
-
-/// Assemble the `LEAN_PATH` search list: the workspace lib (`.olean`) directory
-/// first, then each fetched/path dependency package directory, joined by the
-/// platform path separator.
-fn format_lean_path(ws: &Workspace) -> String {
-    let mut entries: Vec<PathBuf> = vec![ws.lib_dir()];
-    entries.extend(ws.package_dirs());
-
-    let joined = entries
-        .iter()
-        .map(|p| p.display().to_string())
-        .collect::<Vec<_>>()
-        .join(lean_path_separator());
-    joined
-}
-
-/// Platform path-list separator (`;` on Windows, `:` elsewhere).
-fn lean_path_separator() -> &'static str {
-    if cfg!(windows) {
-        ";"
-    } else {
-        ":"
-    }
 }
 
 // ---------------------------------------------------------------------------

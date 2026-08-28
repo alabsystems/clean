@@ -25,7 +25,7 @@
 
 use crate::unify::{MetaState, Unifier, UnifyResult};
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprKind};
+use clean_kernel::{Expr, ExprKind, FVarId};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 
@@ -79,8 +79,18 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
         };
         match unify_result {
             UnifyResult::Success => {
-                // Value is valid - add to context as a let-binding with value retained
-                let fvar = state.fresh_fvar();
+                // Value is valid - add to context as a let-binding with value retained.
+                // GOAL-DERIVED minting (see existential.rs by_cases): this local
+                // reaches the continuation subgoal's context and is bound by the
+                // `let` binder (depth 1) wrapping the continuation meta, so its
+                // id must sit exactly at the destination meta's binder base —
+                // the global cursor drifts past that base whenever anything
+                // minted since the goal's meta was created.
+                let fvar = {
+                    let base = state.goal_binder_base(&goal);
+                    state.next_fvar = state.next_fvar.max(base + 1);
+                    FVarId::new(base)
+                };
 
                 let local_decl = LocalDecl {
                     fvar,
@@ -122,7 +132,7 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
                 Ok(())
             }
             UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-                expected: format!("{ty_inst:?}"),
+                expected: format!("{ty_inst}"),
                 actual: msg,
             }),
             UnifyResult::Stuck => Err(TacticError::UnificationFailed(
@@ -134,7 +144,12 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
         // 1. Prove T (the value)
         // 2. Continue original proof with x : T := <val> available
 
-        let fvar = state.fresh_fvar();
+        // GOAL-DERIVED minting (see existential.rs by_cases).
+        let fvar = {
+            let base = state.goal_binder_base(&goal);
+            state.next_fvar = state.next_fvar.max(base + 1);
+            FVarId::new(base)
+        };
 
         // Create the value metavariable in the original context.
         let val_meta_id = state.fresh_meta(ty.clone());

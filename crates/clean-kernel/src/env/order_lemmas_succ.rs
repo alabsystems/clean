@@ -204,6 +204,11 @@ impl Environment {
         self.register_nat_le_of_succ_le_succ_theorem()?;
         self.register_nat_lt_of_succ_lt_succ_theorem()?;
 
+        // #49: `Nat.lt_succ_iff` is the `Iff` pairing of the two theorems just
+        // registered. Register the constructive form FIRST so the legacy
+        // `Declaration::Axiom` below sees the name taken and no-ops.
+        self.register_nat_lt_succ_iff_theorem()?;
+
         self.add_nat_lt_succ_iff()?;
         self.add_nat_succ_lt_succ()?;
         self.add_nat_lt_of_succ_lt_succ()?;
@@ -215,6 +220,16 @@ impl Environment {
     }
 
     fn add_nat_lt_succ_iff(&mut self) -> Result<(), EnvError> {
+        // #49: `Nat.lt_succ_iff` is now registered as a constructive
+        // `Declaration::Theorem` by `register_nat_lt_succ_iff_theorem`. If it is
+        // already present, skip this legacy Axiom registration so the Theorem
+        // form wins — the same guard shape `add_nat_succ_lt_succ` below uses.
+        if self
+            .get_const(&Name::from_string("Nat.lt_succ_iff"))
+            .is_some()
+        {
+            return Ok(());
+        }
         let nat = Expr::const_(Name::from_string("Nat"), vec![]);
         let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
         let lt = Expr::const_(Name::from_string("Nat.lt"), vec![]);

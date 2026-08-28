@@ -386,6 +386,20 @@ impl Walk<'_> {
                 }
                 self.push_lexical_marker(unit, decl);
             }
+            // `include x` / `omit x`: a lexical directive on the FILE CONTEXT,
+            // applied in authored order like `variable`. Handled here rather
+            // than through `apply_lexical` because it must take effect at every
+            // nesting — `apply_lexical` only preprocesses at top level and in
+            // sections, and an `include` inside a `namespace` (which is where
+            // Mathlib puts them) would otherwise be dropped on the floor.
+            SurfaceDecl::IncludeVars { names, .. } => {
+                self.fc.include_variables(names);
+                self.push_lexical_marker(unit, decl);
+            }
+            SurfaceDecl::OmitVars { names, .. } => {
+                self.fc.omit_variables(names);
+                self.push_lexical_marker(unit, decl);
+            }
             SurfaceDecl::Export {
                 namespace, names, ..
             } => {

@@ -14,31 +14,35 @@
 //! MUTATIONS: a FALSE identity (producer `NoRefutation`); and a tampered proof
 //! closed against the WRONG goal (kernel rejects).
 
-use super::{bv4_binop, reconstruct_bv_compute_blast};
+use super::{bv4_binop, reconstruct_bv_compute_blast_with_context};
 use crate::bridge::ay_backend::proof_reconstruct::certified_proof::{
     certify_reconstruction, deserialize_term, false_expr, CertifiedPayload, NotCertified,
 };
 use crate::bridge::ay_backend::proof_reconstruct::ReconstructionResult;
-use ay_proof::bv_blast_export::BvOp;
 use ay_proof::bv_blast_solver::{export_bv_blast_proof_solved, SolvedObligation};
 use clean_kernel::bitvec_compute;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Declaration, Environment, Expr, FVarId, LocalContext, TypeChecker};
+use clean_kernel::{BinderInfo, Environment, Expr, FVarId, LocalContext, TypeChecker};
 
-/// Fresh env with the COMPUTATIONAL bv layer + two symbolic `Clean.BV4` operands.
-fn compute_env() -> (Environment, Expr, Expr) {
+/// Fresh env with the COMPUTATIONAL bv layer + two local symbolic `Clean.BV4`
+/// operands. The operands are context binders rather than environment axioms,
+/// so certification closes them into the audited judgment.
+fn compute_env() -> (Environment, LocalContext, Expr, Expr) {
     let mut env = Environment::with_prelude();
     env.init_bv_compute().expect("init_bv_compute");
     env.init_classical().expect("init_classical");
-    for n in ["a", "b"] {
-        env.add_decl(Declaration::Axiom {
-            name: Name::from_string(n),
-            level_params: vec![],
-            type_: Expr::const_str(bitvec_compute::names::BV),
-        })
-        .expect("operand");
-    }
-    (env, Expr::const_str("a"), Expr::const_str("b"))
+    let mut ctx = LocalContext::new();
+    let bv = Expr::const_str(bitvec_compute::names::BV);
+    let a_id = FVarId::new(880);
+    let b_id = FVarId::new(881);
+    ctx.push_with_id(
+        a_id,
+        Name::from_string("a"),
+        bv.clone(),
+        BinderInfo::Default,
+    );
+    ctx.push_with_id(b_id, Name::from_string("b"), bv, BinderInfo::Default);
+    (env, ctx, Expr::fvar(a_id), Expr::fvar(b_id))
 }
 
 fn lhs_rhs(proof: &ay_proof::bv_blast_export::BvBlastProof, a: &Expr, b: &Expr) -> (Expr, Expr) {
@@ -50,7 +54,7 @@ fn lhs_rhs(proof: &ay_proof::bv_blast_export::BvBlastProof, a: &Expr, b: &Expr) 
 
 #[test]
 fn headline_width4_commutativity_certifies_zero_trust_and_roundtrips() {
-    let (env, a, b) = compute_env();
+    let (env, mut ctx, a, b) = compute_env();
     let proof = export_bv_blast_proof_solved(SolvedObligation::AddCommutes { width: 4 })
         .expect("width-4 commutativity is UNSAT, producer must export");
     proof.validate().expect("producer proof validates");
@@ -66,8 +70,9 @@ fn headline_width4_commutativity_certifies_zero_trust_and_roundtrips() {
     assert_ne!(lhs, rhs, "operand-swapped sides are syntactically distinct");
 
     let neg_fvar = FVarId::new(900);
-    let rec = reconstruct_bv_compute_blast(&env, &proof, &lhs, &rhs, &a, &b, neg_fvar)
-        .unwrap_or_else(|e| panic!("reconstruct_bv_compute_blast: {e}"));
+    let rec =
+        reconstruct_bv_compute_blast_with_context(&env, &ctx, &proof, &lhs, &rhs, &a, &b, neg_fvar)
+            .unwrap_or_else(|e| panic!("reconstruct_bv_compute_blast_with_context: {e}"));
     eprintln!("{}", rec.report());
 
     // Every gate clause kernel-proved (none assumed).
@@ -107,7 +112,6 @@ fn headline_width4_commutativity_certifies_zero_trust_and_roundtrips() {
         );
     }
 
-    let mut ctx = LocalContext::new();
     ctx.push_with_id(
         neg_fvar,
         Name::from_string("h_neg"),
@@ -156,11 +160,13 @@ fn mutation_false_identity_has_no_producer_proof() {
 /// preserved, i.e. non-commuted) goal is REJECTED by the kernel.
 #[test]
 fn mutation_wrong_goal_is_kernel_rejected() {
-    let (env, a, b) = compute_env();
+    let (env, mut ctx, a, b) = compute_env();
     let proof = export_bv_blast_proof_solved(SolvedObligation::AddCommutes { width: 4 }).unwrap();
     let (lhs, rhs) = lhs_rhs(&proof, &a, &b);
     let neg_fvar = FVarId::new(901);
-    let rec = reconstruct_bv_compute_blast(&env, &proof, &lhs, &rhs, &a, &b, neg_fvar).unwrap();
+    let rec =
+        reconstruct_bv_compute_blast_with_context(&env, &ctx, &proof, &lhs, &rhs, &a, &b, neg_fvar)
+            .unwrap();
 
     // WRONG goal: Not (bvEq (bvAdd a b) (bvAdd a b)) — a reflexive (always-true)
     // equality, so its negation is unprovable and the proof (which discharges the
@@ -169,7 +175,6 @@ fn mutation_wrong_goal_is_kernel_rejected() {
         Expr::const_str("Not"),
         bitvec_compute::bv_eq(lhs.clone(), lhs.clone()),
     );
-    let mut ctx = LocalContext::new();
     ctx.push_with_id(
         neg_fvar,
         Name::from_string("h_neg_wrong"),

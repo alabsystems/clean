@@ -249,26 +249,55 @@ impl<'a> ElabCtx<'a> {
         // Resolve the constructor name and its type info.
         let (ctor_name, ctor_levels) = if let Some(ind) = self.env.get_inductive(&ind_name) {
             // Registered inductive (e.g., Option, List, Bool, Nat, user-defined, etc.)
-            let ctor = ind
+            if let Some(ctor) = ind
                 .constructor_names
                 .iter()
                 .find(|ctor| ctor.last_component().as_deref() == Some(ctor_suffix))
                 .cloned()
-                .ok_or_else(|| ElabError::UnknownIdent(name.to_string()))?;
-            let levels = match expected_whnf.get_app_fn().kind() {
-                ExprKind::Const(_, levels) if !levels.is_empty() => levels.to_vec(),
-                // Either a `Const` head with no explicit levels, or a non-`Const`
-                // head (suffix-recovered inductive, where the expected type was a
-                // metavariable). In both cases the universe levels are unknown up
-                // front, so allocate fresh universe params and let return-type
-                // unification below pin them. (trk-gh extends the latter arm.)
-                _ => ind
+            {
+                let levels = match expected_whnf.get_app_fn().kind() {
+                    ExprKind::Const(_, levels) if !levels.is_empty() => levels.to_vec(),
+                    // Either a `Const` head with no explicit levels, or a non-`Const`
+                    // head (suffix-recovered inductive, where the expected type was a
+                    // metavariable). In both cases the universe levels are unknown up
+                    // front, so allocate fresh universe params and let return-type
+                    // unification below pin them. (trk-gh extends the latter arm.)
+                    _ => ind
+                        .level_params
+                        .iter()
+                        .map(|_| self.fresh_universe_param())
+                        .collect(),
+                };
+                (ctor, levels)
+            } else {
+                // `.suffix` names no constructor of the expected inductive. Widen
+                // to the accessible namespace constant `Ind.suffix`, mirroring
+                // the unregistered-type arm below — Lean's generalized field
+                // notation resolves non-constructor members too (`.symm h`
+                // under an expected `Eq` type is the THEOREM `Eq.symm`).
+                // Suffixes with no namespace constant stay UnknownIdent, which
+                // is why `.rfl` under an expected `Eq` type correctly fails:
+                // Lean has no `Eq.rfl` (see `tests/leading_dot_theorem.rs`).
+                // Universe
+                // params are minted fresh from the CONSTANT's own arity — a
+                // member's level count need not match the inductive's — and
+                // pinned by return-type unification below. A suffix-recovered
+                // `ind_name` (meta-headed expected type) cannot reach this arm:
+                // recovery only returns an inductive that owns the constructor,
+                // so that path stays constructor-only and fail-closed.
+                let ctor = Name::append(&ind_name, ctor_suffix);
+                let info = self
+                    .env
+                    .get_const(&ctor)
+                    .filter(|_| self.is_const_accessible(&ctor))
+                    .ok_or_else(|| ElabError::UnknownIdent(name.to_string()))?;
+                let levels: Vec<_> = info
                     .level_params
                     .iter()
                     .map(|_| self.fresh_universe_param())
-                    .collect(),
-            };
-            (ctor, levels)
+                    .collect();
+                (ctor, levels)
+            }
         } else {
             // Fallback: type is not a registered inductive (e.g., Except is declared
             // as an axiom with its constructors as separate axiom constants). Look up
@@ -505,7 +534,7 @@ impl<'a> ElabCtx<'a> {
                             "constructor telescope for {} with {} parameters",
                             struct_name, ind.num_params
                         ),
-                        actual: format!("{result_ty:?}"),
+                        actual: format!("{result_ty}"),
                     })
                 }
             };
@@ -634,8 +663,8 @@ impl<'a> ElabCtx<'a> {
         let result_ty = self.metas.instantiate(&result_ty);
         if !self.try_unify(&result_ty, &expected_ty) {
             return Err(ElabError::TypeMismatch {
-                expected: format!("{expected_ty:?}"),
-                actual: format!("{result_ty:?}"),
+                expected: format!("{expected_ty}"),
+                actual: format!("{result_ty}"),
             });
         }
 
@@ -1018,7 +1047,13 @@ impl<'a> ElabCtx<'a> {
     /// instantiated term, so this cannot weaken the kernel check. A rigid
     /// mismatch (a deliberately heterogeneous user instance) fails the
     /// speculative unify harmlessly and leaves the slot untouched.
-    fn pin_hetero_binop_slots(&mut self, slots: &[&Expr], carrier: &Expr) {
+    ///
+    /// Used both by the `binop%` homogenization passes (α/β/γ of a desugared
+    /// `@HOp.hOp`) and by the head-agnostic carrier-first pass
+    /// [`Self::pin_open_slots_from_carrier_operand`], which pins the shared
+    /// type parameter of an ordinary polymorphic application (`LT.lt`, `Eq`,
+    /// `BEq.beq`, a user `{α} → α → α → …`).
+    fn pin_open_type_slots(&mut self, slots: &[&Expr], carrier: &Expr) {
         let carrier = self.whnf(&self.metas.instantiate(carrier));
         // Only propagate a concrete carrier; a flex type would just pin our
         // metas to another metavar with no benefit.
@@ -1032,6 +1067,218 @@ impl<'a> ElabCtx<'a> {
                 let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
                 let _ = unifier.unify(&slot_inst, &carrier);
             }
+        }
+    }
+
+    /// Is `e` a *bare* numeric literal — a numeral with no ascription, no
+    /// operator around it, nothing but parentheses?
+    ///
+    /// A bare numeral is the canonical CARRIER-FREE argument: it carries no
+    /// type of its own and must READ the type of the slot it lands in (Lean
+    /// elaborates it through `OfNat α n`, Clean through
+    /// `elab_nat_literal_with_expected`). Everything else — an ascription
+    /// `(10 : Nat)`, a variable, an application — carries or determines a type
+    /// and is therefore a usable carrier.
+    ///
+    /// Deliberately NON-recursive, unlike
+    /// [`Self::surface_contains_bare_nat_literal`]: `f 10` determines its own
+    /// type from `f`, so it is a carrier even though it contains a numeral.
+    fn arg_is_bare_numeral(e: &SurfaceExpr) -> bool {
+        matches!(
+            Self::unwrap_surface_parens(e),
+            SurfaceExpr::Lit(_, SurfaceLit::Nat(_) | SurfaceLit::BigNat(_))
+        )
+    }
+
+    /// Read the explicit-argument domains of `func_ty`'s binder telescope.
+    ///
+    /// Pure read: creates no metavariables and assigns nothing. Stops early —
+    /// returning a SHORT vector, which the caller must tolerate — at the first
+    /// binder that is not `Default` (positional alignment with the surface
+    /// arguments would no longer hold) and after the first DEPENDENT binder (a
+    /// later domain that mentions an earlier argument cannot be read before
+    /// that argument has a value).
+    fn leading_explicit_arg_domains(&mut self, func_ty: &Expr, n: usize) -> Vec<Expr> {
+        let mut cur = self.whnf(&self.metas.instantiate(func_ty));
+        let mut doms = Vec::with_capacity(n);
+        for _ in 0..n {
+            let ExprKind::Pi(bi, dom, body) = cur.kind() else {
+                break;
+            };
+            if bi.info != BinderInfo::Default {
+                break;
+            }
+            doms.push(self.metas.instantiate(dom));
+            let body = body.as_ref().clone();
+            if body.has_loose_bvar(0) {
+                break;
+            }
+            cur = self.whnf(&body);
+        }
+        doms
+    }
+
+    /// Carrier-first ordering: pin an argument slot that a CARRIER-FREE operand
+    /// would otherwise have to guess, using a sibling operand that names the
+    /// type.
+    ///
+    /// ## The defect this repairs
+    ///
+    /// Clean's argument loop is strictly left-to-right. A bare numeral in a
+    /// slot whose type is still an open metavariable is therefore COMMITTED —
+    /// by the `@[default_instance]` `Nat` pin at the literal seam
+    /// (`infer/coercion.rs`, step 0) — before the sibling operand that actually
+    /// names the carrier has been looked at. For `10 < a` with `a : UInt64`
+    /// that pins `?α := Nat` and the second operand then mismatches
+    /// ("expected Nat, got UInt64"), while the mirror image `a < 10` elaborates
+    /// fine because operand 0 pins the carrier first. Real Lean has no such
+    /// asymmetry: `binop%` (`Elab/Extra.lean`) elaborates the operands that
+    /// CARRY a type first, fixes the shared type, and only then elaborates the
+    /// type-directed leaves against it — and a numeral at a metavariable type
+    /// is postponed, not defaulted.
+    ///
+    /// This is that ordering, in lookahead form. Two narrow instances of the
+    /// same idea already exist — [`Self::try_elab_eq_struct_lit_reorder`] (a
+    /// struct literal under `Eq`/`Ne`) and the `[]`-operand pre-pass in
+    /// `elab_app_inner` (a homogeneous `HOp` binop) — but neither covers a
+    /// numeral, and neither is head-agnostic.
+    ///
+    /// ## What links two slots
+    ///
+    /// Nothing about the operator is hard-coded. Two argument positions share a
+    /// carrier when either
+    ///
+    ///   * their domains are literally the SAME unassigned metavariable — the
+    ///     shape of every homogeneous polymorphic head (`LT.lt`/`LE.le`/`Eq`/
+    ///     `BEq.beq : {α} → α → α → …`, and any user function of that shape); or
+    ///   * the head is a recognised HOMOGENEOUS `binop%` desugaring, whose
+    ///     `?α ?β ?γ` are distinct metavariables that Lean's
+    ///     `@[default_instance] instHOp : HOp α α α` forces equal. Power and
+    ///     shift (`homogeneous == false`) keep an independent exponent /
+    ///     shift-amount type and are deliberately excluded, exactly as in the
+    ///     other homogenization passes.
+    ///
+    /// ## Why this cannot launder a genuine mismatch
+    ///
+    /// ELAB-only, and strictly weaker than what the operand loop already does:
+    /// it assigns an OPEN metavariable from the type of an operand the loop
+    /// would have elaborated anyway, one position later
+    /// ([`Self::pin_open_type_slots`] refuses a non-ground carrier and refuses
+    /// to reshape an already-pinned slot). It fires only when some argument is
+    /// a bare numeral — an argument with no type of its own — so a genuinely
+    /// heterogeneous comparison of two typed operands (`a < b` with `a : Nat`,
+    /// `b : UInt64`) never reaches it and still fails closed, as does an
+    /// ascribed literal (`(10 : Nat) < a`), which is a carrier and not a leaf.
+    /// The assembled term is kernel-re-checked on registration.
+    fn pin_open_slots_from_carrier_operand(
+        &mut self,
+        func_ty: &Expr,
+        args: &[SurfaceArg],
+        hetero_slots: Option<&HeteroBinopSlots>,
+    ) {
+        // Only a carrier-free leaf can be committed to the wrong type by the
+        // left-to-right order; without one there is nothing to repair.
+        if !args.iter().any(|a| Self::arg_is_bare_numeral(&a.expr)) {
+            return;
+        }
+        let doms = self.leading_explicit_arg_domains(func_ty, args.len());
+        if doms.len() < 2 {
+            return;
+        }
+        // A slot is "open" when its domain is a bare, still-unassigned
+        // metavariable. `instantiate` has already been applied, so a surviving
+        // meta-tagged `FVar` is by construction unassigned (same invariant the
+        // literal seam relies on).
+        let open_slot_fvar = |d: &Expr| match d.kind() {
+            ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some() => Some(*id),
+            _ => None,
+        };
+        let homogeneous_binop = hetero_slots.is_some_and(|s| s.homogeneous);
+
+        for (lit_idx, dom) in doms.iter().enumerate() {
+            if !Self::arg_is_bare_numeral(&args[lit_idx].expr) {
+                continue;
+            }
+            let Some(lit_fvar) = open_slot_fvar(dom) else {
+                continue;
+            };
+            // A sibling that (a) can name a type at all and (b) shares this
+            // slot's carrier. Excluded from (a): every other type-DIRECTED leaf
+            // — another numeral, `[]`, a leading-dot constructor, a bare
+            // structure literal — which reads its slot rather than naming it;
+            // and an unascribed `by`/`calc` block, whose goal IS the open slot
+            // (running its tactic script speculatively to learn a type it does
+            // not have would be both wrong and expensive).
+            let carrier_idx = doms.iter().enumerate().position(|(j, dom_j)| {
+                j != lit_idx
+                    && !Self::arg_is_bare_numeral(&args[j].expr)
+                    && !Self::arg_needs_result_type_pinned(&args[j].expr)
+                    && !Self::is_bare_struct_lit(&args[j].expr)
+                    && !Self::arg_contains_unascribed_by_block(&args[j].expr)
+                    // Linked either by the `binop%` default instance (the two
+                    // operands of a homogeneous `@HOp.hOp ?α ?β ?γ`, whose
+                    // slots are DISTINCT metavariables) or, head-agnostically,
+                    // by being literally the same open metavariable.
+                    && ((homogeneous_binop && args.len() == 2)
+                        || open_slot_fvar(dom_j) == Some(lit_fvar))
+            });
+            let Some(carrier_idx) = carrier_idx else {
+                continue;
+            };
+            // Speculatively elaborate the carrier operand for its TYPE only.
+            // The term is discarded — the operand loop re-elaborates it
+            // normally — and the scope is popped so a failed attempt leaves no
+            // assignments behind.
+            //
+            // Elaborated the way the ARGUMENT LOOP will elaborate it — against
+            // this slot's own (still open) domain — not bare. A bare
+            // `self.elaborate` stops at the head for anything whose leading
+            // binders are implicit or instance-implicit: a class projection
+            // `C.lo : [self : C] → Nat` infers as that PI, and pinning the
+            // shared slot to a `Pi(InstImplicit …)` breaks `C.lo = 3`
+            // (measured: `class_extends_instance_e2e::
+            // b24_multilevel_grandparent_field_flattens`). Passing the slot as
+            // the expected type routes through
+            // `apply_implicit_to_expected_type`, exactly as the loop does, so
+            // the projection is applied and its type reads `Nat`.
+            self.metas.push_scope();
+            let carrier_type = self
+                .elaborate_arg_with_expected_type(
+                    &args[carrier_idx].expr,
+                    Some(doms[carrier_idx].clone()),
+                )
+                .ok()
+                .and_then(|e| self.infer_type(&e).ok())
+                .map(|t| self.whnf(&self.metas.instantiate(&t)));
+            self.metas.pop_scope();
+            let Some(carrier_type) = carrier_type else {
+                continue;
+            };
+            if self.has_metavars(&carrier_type) {
+                continue;
+            }
+            // Belt and braces for the same failure mode: a type whose leading
+            // binder is implicit / instance-implicit is an UNAPPLIED head, not
+            // the type this operand will have in its slot. Decline rather than
+            // pin it.
+            if matches!(carrier_type.kind(), ExprKind::Pi(bi, _, _) if bi.info != BinderInfo::Default)
+            {
+                continue;
+            }
+            match hetero_slots {
+                // A homogeneous `binop%`: α, β and γ all collapse onto the
+                // carrier, exactly as `@[default_instance] instHOp : HOp α α α`
+                // would.
+                Some(slots) if slots.homogeneous => {
+                    let targets = [&slots.alpha, &slots.beta, &slots.gamma];
+                    self.pin_open_type_slots(&targets, &carrier_type);
+                }
+                // An ordinary polymorphic head: pin the one shared slot. Every
+                // other position whose domain IS that metavariable follows by
+                // instantiation.
+                _ => self.pin_open_type_slots(&[dom], &carrier_type),
+            }
+            return;
         }
     }
 
@@ -1050,7 +1297,7 @@ impl<'a> ElabCtx<'a> {
         if slots.homogeneous {
             targets.push(&slots.beta);
         }
-        self.pin_hetero_binop_slots(&targets, &expected);
+        self.pin_open_type_slots(&targets, &expected);
     }
 
     /// B104: retry a failed binop% application with the homogeneous slot
@@ -2329,12 +2576,34 @@ impl<'a> ElabCtx<'a> {
                             if let Some(carrier_type) = carrier_type {
                                 if !self.has_metavars(&carrier_type) {
                                     let targets = [&slots.alpha, &slots.beta, &slots.gamma];
-                                    self.pin_hetero_binop_slots(&targets, &carrier_type);
+                                    self.pin_open_type_slots(&targets, &carrier_type);
                                 }
                             }
                         }
                     }
                 }
+            }
+
+            // Carrier-first ordering for a bare NUMERAL operand (head-agnostic).
+            //
+            // The block above only fires for a recognised homogeneous `HOp`
+            // binop and only for the two value-less container literals. A bare
+            // numeral is the same kind of leaf — it carries no type and must
+            // read the slot it lands in — but it appears under ANY polymorphic
+            // head (`LT.lt`, `Eq`, `BEq.beq`, a user `{α} → α → α → …`) as well
+            // as under the arithmetic binops, and it does not fail loudly: the
+            // literal seam DEFAULTS it to `Nat`, which then rigidly mismatches
+            // the sibling operand ("expected Nat, got UInt64"). See
+            // `pin_open_slots_from_carrier_operand` for the full rationale.
+            //
+            // Suppressed on the B104 heterogeneous retry, which deliberately
+            // elaborates each operand at its own type.
+            if !self.explicit_mode && !suppress_binop_homogenize {
+                self.pin_open_slots_from_carrier_operand(
+                    &current_type,
+                    remaining_args,
+                    hetero_binop_slots.as_ref(),
+                );
             }
 
             // Pre-arg expected-result unification — narrowly gated.
@@ -2753,7 +3022,7 @@ impl<'a> ElabCtx<'a> {
                                 // Pop scope before returning error
                                 self.metas.pop_scope();
                                 return Err(ElabError::TypeMismatch {
-                                    expected: format!("{expected_arg_ty:?}"),
+                                    expected: format!("{expected_arg_ty}"),
                                     actual: msg,
                                 });
                             }
@@ -2779,7 +3048,7 @@ impl<'a> ElabCtx<'a> {
                         if let Some(slots) = &hetero_binop_slots {
                             if slots.homogeneous {
                                 let targets = [&slots.beta, &slots.gamma];
-                                self.pin_hetero_binop_slots(&targets, &arg_type);
+                                self.pin_open_type_slots(&targets, &arg_type);
                             }
                         }
                     }
@@ -2793,14 +3062,14 @@ impl<'a> ElabCtx<'a> {
                     // retroactively solves the literal's `?α' := Nat`. This covers the
                     // `[] ++ xs` direction (carrier on the right); the idx==0 step
                     // above covers `xs ++ []` (carrier on the left). Only the
-                    // homogeneous arm fires, and `pin_hetero_binop_slots` only assigns
+                    // homogeneous arm fires, and `pin_open_type_slots` only assigns
                     // open slots from a metavar-free carrier, so this is a no-op when
                     // operand-0 already pinned the slots.
                     if idx == 1 {
                         if let Some(slots) = &hetero_binop_slots {
                             if slots.homogeneous {
                                 let targets = [&slots.alpha, &slots.gamma];
-                                self.pin_hetero_binop_slots(&targets, &arg_type);
+                                self.pin_open_type_slots(&targets, &arg_type);
                             }
                         }
                     }
@@ -2865,11 +3134,19 @@ impl<'a> ElabCtx<'a> {
                 } else {
                     // Function type is exhausted (not a Pi) but arguments remain.
                     // Return an error instead of silently applying (#1720).
+                    //
+                    // `over_applied_head_error` NAMES the head when auto-implicit
+                    // swallowed it in a signature position (the third mask,
+                    // frontier recon §2.6); every other head keeps the untouched
+                    // `TooManyArguments` message. Same failure, same span, same
+                    // verdict either way.
                     self.metas.pop_scope();
-                    return Err(ElabError::TooManyArguments {
-                        func_type: format!("{current_type:?}"),
-                        remaining_args: remaining_args.len() - idx,
-                    });
+                    let err = self.over_applied_head_error(
+                        &result,
+                        &current_type,
+                        remaining_args.len() - idx,
+                    );
+                    return Err(err);
                 }
             }
 

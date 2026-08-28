@@ -1,0 +1,23 @@
+fn @synth::ptrfromparts_probe(functy.918) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the W2b semdiff lane
+    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2b).
+    ; #synthetic: No compiler emitted this body; its registered Clean twin is
+    ; #synthetic: ir_w2b_pp_module (eval_ir_w2b_synth.rs). The bool selector picks
+    ; #synthetic: the rebuild arm: thin (unit metadata) dereferenced directly, or
+    ; #synthetic: fat (fatptr<str>, u64 length) dereferenced through its projected
+    ; #synthetic: data lane -- each rebuild observed by reading the stored value
+    ; #synthetic: back through it. Do not add it to any emitted-fixture census.
+bb0(%0: u32, %1: u64, %2: (), %3: bool):
+    %4 = alloca u32
+    store u32 %0, ptr %4
+    condbr %3, bb1, bb2
+bb1:
+    %5 = ptr_from_parts ptr ptr %4, () %2
+    %6 = load u32, ptr %5
+    ret %6
+bb2:
+    %7 = ptr_from_parts fatptr<str> ptr %4, u64 %1
+    %8 = ptr_data fatptr<str> %7
+    %9 = load u32, ptr %8
+    ret %9
+}

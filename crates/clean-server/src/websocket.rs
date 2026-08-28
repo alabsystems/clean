@@ -26,7 +26,7 @@
 //! Use [`crate::registry::progress_methods()`] to get the current list.
 //!
 //! Currently: `prove`, `batchCheck`, `batchVerifyCert`, `batchVerifyCertArchive`,
-//! `verifyC`, `batchProveTLA`, `batchGetPremises`
+//! `verifyC`, `batchGetPremises`
 //!
 //! # JSON-RPC Batch Mode and Progress Streaming
 //!
@@ -1346,102 +1346,6 @@ mod tests {
         assert!(
             saw_result,
             "Expected final response for batchGetPremises, got {seen:?}"
-        );
-
-        handle.shutdown();
-    }
-
-    #[tokio::test]
-    async fn test_websocket_batch_prove_tla_progress_streaming() {
-        use clean_tla::encoding::TlaFormula;
-        use clean_tla::obligation::TlaObligation;
-
-        let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
-        let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
-
-        let url = format!("ws://{addr}");
-        let (mut ws_stream, _) = connect_async(&url).await.unwrap();
-
-        // Create batch prove TLA request with multiple obligations
-        let item1 = crate::handlers::BatchProveTlaItem {
-            id: "ob1".to_string(),
-            obligation: TlaObligation::new(TlaFormula::Always(Box::new(TlaFormula::True))),
-        };
-        let item2 = crate::handlers::BatchProveTlaItem {
-            id: "ob2".to_string(),
-            obligation: TlaObligation::new(TlaFormula::Eventually(Box::new(TlaFormula::True))),
-        };
-        let item3 = crate::handlers::BatchProveTlaItem {
-            id: "ob3".to_string(),
-            obligation: TlaObligation::new(TlaFormula::LeadsTo(
-                Box::new(TlaFormula::True),
-                Box::new(TlaFormula::True),
-            )),
-        };
-
-        let params = crate::handlers::BatchProveTlaParams {
-            items: vec![item1, item2, item3],
-            threads: 0,
-            timeout_ms: None,
-        };
-        let params_json = serde_json::to_string(&params).unwrap();
-        let request = format!(
-            r#"{{"jsonrpc": "2.0", "method": "batchProveTLA", "params": {params_json}, "id": 99}}"#
-        );
-
-        ws_stream.send(Message::Text(request.into())).await.unwrap();
-
-        let mut saw_progress = false;
-        let mut saw_per_item_progress = false;
-        let mut saw_result = false;
-        let mut seen = Vec::new();
-
-        let timeout = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            while let Some(msg) = ws_stream.next().await {
-                match msg {
-                    Ok(Message::Text(text)) => {
-                        if text.contains("\"method\":\"progress\"") {
-                            saw_progress = true;
-                            // Check for per-item progress (contains item_id in details)
-                            if text.contains("\"item_id\"") {
-                                saw_per_item_progress = true;
-                            }
-                        }
-                        if text.contains("\"result\"") && text.contains("\"results\"") {
-                            saw_result = true;
-                            seen.push(text);
-                            break;
-                        }
-                        seen.push(text);
-                    }
-                    Ok(Message::Close(_)) => break,
-                    _ => {}
-                }
-            }
-        });
-        let _ = timeout.await;
-
-        ws_stream.close(None).await.ok();
-
-        assert!(
-            saw_progress,
-            "Expected progress notification for batchProveTLA, got {seen:?}"
-        );
-        assert!(
-            saw_per_item_progress,
-            "Expected per-item progress notifications with item_id details, got {seen:?}"
-        );
-        assert!(
-            saw_result,
-            "Expected final response for batchProveTLA, got {seen:?}"
-        );
-
-        // Verify all obligations proved
-        let final_response = &seen.last().unwrap();
-        assert!(
-            final_response.contains("\"all_proved\":true"),
-            "Expected all_proved:true in response, got {final_response}"
         );
 
         handle.shutdown();

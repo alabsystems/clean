@@ -1,0 +1,112 @@
+{
+ "schema": "trust.wholecrate.dump/v1-synthetic-fixture",
+ "_comment": "Synthesized fixture for scripts/spine_set.py --self-test. NOT a measurement: this dump imitates the trust-host whole-crate clean_kernel dump contract (see spine_set.py --describe) with the census def-path vocabulary, exercising closure computation, family tagging, dyn/fn-pointer exclusion, impl-form paths, debug twins, boundary cuts, external callees, and mode annotations.",
+ "provenance": {
+  "driver_dylib_sha256": "b6c32185902bab851d3a7ba10b15192acb41221a72f47529aa6d65ff23915c76",
+  "clean_rev": "0000000000000000000000000000000000000000",
+  "measured_utc": "2026-08-23T00:00:00Z",
+  "trust_rev": "synthetic-fixture-not-a-measurement",
+  "lane": "fixture"
+ },
+ "bodies": [
+  {
+   "def_path": "env::decl_add::<impl env::Environment>::add_decl",
+   "producer": {"classes": ["Call", "Borrow"]},
+   "calls": [
+    {"callee": "env::decl_add::<impl env::Environment>::check_decl_core", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "tc::infer::<impl tc::TypeChecker<'env>>::infer_type", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "env::decl_add::<impl env::Environment>::add_decl::{closure#0}", "kind": "closure", "via": "thir::ExprKind::Closure"},
+    {"callee": "<dyn tc::heartbeat::HeartbeatSink>::tick", "kind": "dyn-trait", "via": "thir::ExprKind::Call(dyn)"},
+    {"callee": "core::option::Option::<T>::ok_or", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "env::decl_add::debug_probe", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "<tc::whnf::WhnfCache as std::default::Default>::default", "kind": "static", "via": "thir::ExprKind::Call"}
+   ]
+  },
+  {
+   "def_path": "env::decl_add::<impl env::Environment>::check_decl_core",
+   "producer": {"classes": ["Try", "WeirdNewClass"]},
+   "calls": [
+    {"callee": "tc::whnf::<impl tc::TypeChecker<'env>>::whnf", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "tc::def_eq::delta::<impl tc::TypeChecker<'env>>::lazy_delta_step", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "tc::config::<impl tc::TypeChecker<'env>>::cache_lookup", "kind": "static", "via": "thir::ExprKind::Call"}
+   ]
+  },
+  {
+   "def_path": "tc::infer::<impl tc::TypeChecker<'env>>::infer_type",
+   "producer": {"classes": ["Call", "EnumMatch"]},
+   "calls": [
+    {"callee": "tc::whnf::<impl tc::TypeChecker<'env>>::whnf", "kind": "static", "via": "mir::TerminatorKind::Call"},
+    {"callee": "tc::infer_proj::<impl tc::TypeChecker<'env>>::infer_proj", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "tc::infer_cubical::<impl tc::TypeChecker<'env>>::infer_cubical", "kind": "static", "via": "thir::ExprKind::Call"},
+    {"callee": "fn(&expr::Expr) -> bool", "kind": "fn-pointer", "via": "mir::TerminatorKind::Call(indirect)"}
+   ]
+  },
+  {
+   "def_path": "tc::whnf::<impl tc::TypeChecker<'env>>::whnf",
+   "producer": {"classes": ["Borrow"]},
+   "calls": [
+    {"callee": "tc::infer::<impl tc::TypeChecker<'env>>::infer_type", "kind": "static", "via": "thir::ExprKind::Call (SCC back-edge)"},
+    {"callee": "tc::reduction::cofib::CofibAtom::value", "kind": "static", "via": "thir::ExprKind::Call"}
+   ]
+  },
+  {
+   "def_path": "tc::infer_proj::<impl tc::TypeChecker<'env>>::infer_proj",
+   "producer": {"classes": []},
+   "calls": []
+  },
+  {
+   "def_path": "tc::def_eq::delta::<impl tc::TypeChecker<'env>>::lazy_delta_step",
+   "producer": {"classes": ["StackSafe"]},
+   "calls": []
+  },
+  {
+   "def_path": "tc::reduction::cofib::CofibAtom::value",
+   "producer": {"classes": []},
+   "mode_gate": "extension-only: CleanMode::Cubical (cofib layer)",
+   "calls": []
+  },
+  {
+   "def_path": "tc::infer_cubical::<impl tc::TypeChecker<'env>>::infer_cubical",
+   "producer": {"classes": []},
+   "calls": []
+  },
+  {
+   "def_path": "env::decl_add::<impl env::Environment>::add_decl::{closure#0}",
+   "producer": {"classes": []},
+   "calls": []
+  },
+  {
+   "def_path": "<tc::whnf::WhnfCache as std::default::Default>::default",
+   "producer": {"classes": []},
+   "calls": []
+  },
+  {
+   "def_path": "tc::config::<impl tc::TypeChecker<'env>>::cache_lookup",
+   "producer": {"classes": ["HashMap"]},
+   "calls": [
+    {"callee": "tc::whnf_proj::<impl tc::TypeChecker<'env>>::whnf_core_proj", "kind": "static", "via": "thir::ExprKind::Call"}
+   ]
+  },
+  {
+   "def_path": "tc::whnf_proj::<impl tc::TypeChecker<'env>>::whnf_core_proj",
+   "producer": {"classes": []},
+   "calls": []
+  },
+  {
+   "def_path": "env::decl_add::debug_probe",
+   "debug_only": true,
+   "producer": {"classes": []},
+   "calls": []
+  },
+  {
+   "def_path": "<tc::heartbeat::NullSink as tc::heartbeat::HeartbeatSink>::tick",
+   "producer": {"classes": []},
+   "calls": []
+  },
+  {
+   "def_path": "expr::unreachable_helper",
+   "producer": {"classes": []},
+   "calls": []
+  }
+ ]
+}

@@ -32,23 +32,23 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
     );
     assert_eq!(
         record["provenance"]["clean_source_rev"].as_str(),
-        Some("b03937e748123cc115bfd159694fd64f0ce8538a")
+        Some("c6388730ed3a6f3c4169e7228218d68ab9b7582d")
     );
     assert_eq!(
         record["supersedes_for_current_source_scope"].as_str(),
-        Some("data/crystal_chain_revalidation_2026-08-20_a152ab39e.json")
+        Some("data/crystal_chain_revalidation_2026-08-21_b03937e74.json")
     );
     assert_eq!(
         record["provenance"]["trust_worktree_rev"].as_str(),
-        Some("8ea68367816ce49a7c3026f1e19c7ee4285e7737")
+        Some("c4e667ca51a4b6bd0bc3790e540cdabc707c45a1")
     );
     assert_eq!(
         record["provenance"]["trustc_sha256"].as_str(),
-        Some("c4b91deb28f50697883de56664595a5afc86f8ec8af8de9d357b6757a7867e80")
+        Some("044fb2df5ac0c18f795139f121e15094eea62135be81396aca62142004f9ba1f")
     );
     assert_eq!(
         record["provenance"]["librustc_driver_sha256"].as_str(),
-        Some("a2e495e3e4918964c071d18c420d24f69b781f55829ff63c72fdeaa904d9fce5")
+        Some("4e2a161f6e0d9f6ddf184d5d744c6f46fa9defba52028addfe31b4885fde510c")
     );
     assert_eq!(
         record["generator"]["script"].as_str(),
@@ -85,11 +85,22 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
     );
     assert_eq!(
         rebaseline["supersedes_for_current_source_scope"].as_str(),
-        Some("data/crystal_fixture_rebaseline_2026-08-20_a152ab39e.json")
+        Some("data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json")
     );
     assert_eq!(
         bindings["binding_mode"].as_str(),
-        Some("identical-fixtures-successor")
+        Some("chain-addition-successor"),
+        "chain 18 entered the comparator body set through the explicit reviewed \
+         chain-addition mode, never as a silent expansion"
+    );
+    assert_eq!(
+        bindings["chain_additions"],
+        serde_json::json!(["has_loose_bvars", "loose_bvar_range_callee"]),
+        "the addition event names exactly the two chain-18 fixtures"
+    );
+    assert_eq!(
+        rebaseline["chain_additions"], bindings["chain_additions"],
+        "the append-only ledger records the same reviewed addition set"
     );
     assert_eq!(
         bindings["prior_rebaseline_record"].as_str(),
@@ -97,7 +108,7 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
     );
     assert_eq!(
         bindings["prior_binding_manifest"].as_str(),
-        Some("data/crystal_fixture_rebaseline_bindings_2026-08-20_a152ab39e.json")
+        Some("data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json")
     );
     assert!(
         bindings["bindings"].as_array().is_some_and(Vec::is_empty),
@@ -292,32 +303,49 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
     }
 }
 
-/// The helper fixture is compared too, but it is not promoted into a chain:
-/// its derived-MIR lane remains unsupported and it does not flip.
+/// The helper fixtures are compared too, but they are not promoted into
+/// chains: their derived-MIR lanes remain unsupported and they do not flip.
+/// `loose_bvar_range_callee` is chain 18's callee — its executable link is
+/// carried by the caller's composition proof, not by a flip of its own.
 #[test]
-fn enum_tag_stage2_revalidation_keeps_the_deref_helper_fail_closed() {
+fn enum_tag_stage2_revalidation_keeps_the_helpers_fail_closed() {
     let record = read_json(CURRENT_RECORD);
-    let helper = &record["extra_fixtures"]["level_is_zero_deref_callee"];
+    for stem in ["level_is_zero_deref_callee", "loose_bvar_range_callee"] {
+        let helper = &record["extra_fixtures"][stem];
+        assert_eq!(
+            helper["emitted_body_vs_committed_fixture"]["verdict"].as_str(),
+            Some("IDENTICAL"),
+            "{stem}: the helper must be byte-identical under strict current-source freshness"
+        );
+        assert_eq!(
+            helper["emitted_body_vs_committed_fixture"]["drift_classes"]
+                .as_array()
+                .map(Vec::is_empty),
+            Some(true)
+        );
+        assert_eq!(
+            helper["emitted_body_vs_committed_fixture"]["instructions_moved"].as_u64(),
+            Some(0)
+        );
+        assert_eq!(
+            helper["links_at_head"]["derived_mir"]["verdict"].as_str(),
+            Some("unsupported"),
+            "{stem}: the helper's derived-MIR lane must stay fail-closed"
+        );
+        assert_eq!(
+            helper["links_at_head"]["flip_fired"].as_bool(),
+            Some(false),
+            "{stem}: a helper must not flip"
+        );
+    }
+    // The caller's record row must resolve exactly one call — the seam the
+    // chain-18 composition proof splits at.
+    let caller = &record["chains"]["has_loose_bvars"];
     assert_eq!(
-        helper["emitted_body_vs_committed_fixture"]["verdict"].as_str(),
-        Some("IDENTICAL"),
-        "the helper must be byte-identical under strict current-source freshness"
+        caller["links_at_head"]["calls"]["resolved"].as_u64(),
+        Some(1),
+        "chain 18's caller must keep its resolved call to the callee"
     );
-    assert_eq!(
-        helper["emitted_body_vs_committed_fixture"]["drift_classes"]
-            .as_array()
-            .map(Vec::is_empty),
-        Some(true)
-    );
-    assert_eq!(
-        helper["emitted_body_vs_committed_fixture"]["instructions_moved"].as_u64(),
-        Some(0)
-    );
-    assert_eq!(
-        helper["links_at_head"]["derived_mir"]["verdict"].as_str(),
-        Some("unsupported")
-    );
-    assert_eq!(helper["links_at_head"]["flip_fired"].as_bool(), Some(false));
 }
 
 /// The current pins cover every chain exactly once, retain every historical
@@ -333,7 +361,7 @@ fn source_bound_pins_are_one_to_one_and_history_remains_queryable() {
         ledger["primary_body_count"].as_u64(),
         Some(EVIDENCE.len() as u64)
     );
-    assert_eq!(ledger["helper_body_count"].as_u64(), Some(1));
+    assert_eq!(ledger["helper_body_count"].as_u64(), Some(2));
 
     let mut seen_records = BTreeSet::new();
     for (stem, file) in EVIDENCE {
@@ -383,7 +411,7 @@ fn source_bound_rebaseline_fail_closed_controls_pass() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("5 fail-closed controls"),
+        String::from_utf8_lossy(&output.stdout).contains("8 fail-closed controls"),
         "the selftest exited without running the complete control set"
     );
 }

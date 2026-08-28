@@ -93,10 +93,10 @@ fn nat_cubical_env() -> Environment {
 /// each individually well-typed even when the whole `hcomp` is cap-incoherent).
 fn hcomp_cert(tc: &TypeChecker<'_>, phi: &Expr, u: &Expr, base: &Expr) -> ProofCert {
     ProofCert::CubicalHComp {
-        ty_cert: Box::new(tc.infer_type_with_cert(&nat()).expect("Nat cert").1),
-        phi_cert: Box::new(tc.infer_type_with_cert(phi).expect("phi cert").1),
-        u_cert: Box::new(tc.infer_type_with_cert(u).expect("u cert").1),
-        base_cert: Box::new(tc.infer_type_with_cert(base).expect("base cert").1),
+        ty_cert: Arc::new(tc.infer_type_with_cert(&nat()).expect("Nat cert").1),
+        phi_cert: Arc::new(tc.infer_type_with_cert(phi).expect("phi cert").1),
+        u_cert: Arc::new(tc.infer_type_with_cert(u).expect("u cert").1),
+        base_cert: Arc::new(tc.infer_type_with_cert(base).expect("base cert").1),
         result_type: Box::new(nat()),
     }
 }

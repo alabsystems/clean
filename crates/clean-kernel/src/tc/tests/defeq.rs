@@ -255,12 +255,10 @@ fn test_whnf_cast_reduces_with_fvar_eq_proof() {
     );
 
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), prop.clone(), BinderInfo::Default);
     let h_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("h"), h_ty, BinderInfo::Default);
 
     let cast_h_x = Expr::app(
@@ -609,7 +607,7 @@ fn test_is_def_eq_core_reflection_let_bound_fvar_resolves() {
     let tc = TypeChecker::new(&env);
     let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
 
-    let local_box_id = tc.ctx.borrow_mut().push_let(
+    let local_box_id = tc.ctx_mut().push_let(
         Name::from_string("bx"),
         Expr::const_(box_name.clone(), vec![]),
         Expr::const_(closed_box_name, vec![]),
@@ -638,7 +636,7 @@ fn test_is_def_eq_core_reflection_truly_open_fvar_rejects() {
     let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
 
     // Push a local decl (not let-bound) — only has a type, no value.
-    let open_box_id = tc.ctx.borrow_mut().push(
+    let open_box_id = tc.ctx_mut().push(
         Name::from_string("bx_open"),
         Expr::const_(box_name.clone(), vec![]),
         BinderInfo::Default,
@@ -791,8 +789,7 @@ fn test_def_eq_offset_stuck_add_peels_against_genuine_succ() {
 
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat_ty, BinderInfo::Default);
     let x = Expr::fvar(x_id);
     let add = |a: Expr, b: Expr| {
@@ -847,8 +844,7 @@ fn test_def_eq_offset_stuck_add_peel_rejects_unequal_counts() {
 
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat_ty, BinderInfo::Default);
     let x = Expr::fvar(x_id);
     let add = |a: Expr, b: Expr| {

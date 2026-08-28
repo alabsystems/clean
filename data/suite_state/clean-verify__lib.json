@@ -1,6 +1,6 @@
 {
   "command": "cargo test --locked -p clean-verify --lib",
-  "declared_tests": 6984,
+  "declared_tests": 7149,
   "kind": "lib-rollup",
   "notes": "This target is SHARDED. Its bucket is derived by the runner from the shard records under data/suite_state/shards/, never from this file; this file exists so a reader of the parent id finds the plan and the superseded run instead of a stale status. GREEN requires every shard GREEN at the current digest and the shards' measured test counts to re-sum to the declared total.",
   "package": "clean-verify",

@@ -23,7 +23,9 @@ use clean_kernel::Name;
 use crate::{
     instances, register_aesop_rule, register_user_derive_handler, ElabCtx, ElabError, FileContext,
 };
-use clean_kernel::env::{Reducibility, SimpPriority as KernelSimpPriority, TrustedEnvExt};
+use clean_kernel::env::{
+    KernelClassInfo, Reducibility, SimpPriority as KernelSimpPriority, TrustedEnvExt,
+};
 use clean_parser::AesopAttr;
 
 /// Every attribute an elaboration collected, drained out of its `ElabCtx`.
@@ -53,6 +55,8 @@ pub(crate) struct CtxAttributes {
     init_attrs: Vec<Name>,
     default_instance_attrs: Vec<(Name, u32)>,
     instance_attrs: Vec<(Name, u32)>,
+    /// `attribute [class] X` — register X as a type class at register time.
+    class_attrs: Vec<Name>,
     derive_handler_attrs: Vec<Name>,
     attribute_removals: Vec<(Name, String)>,
 }
@@ -86,6 +90,7 @@ impl CtxAttributes {
             init_attrs: ctx.take_init(),
             default_instance_attrs: ctx.take_default_instance(),
             instance_attrs: ctx.take_instance_attrs(),
+            class_attrs: ctx.take_class_attrs(),
             derive_handler_attrs: ctx.take_derive_handler(),
             attribute_removals: ctx.take_attribute_removals(),
         }
@@ -131,6 +136,7 @@ impl CtxAttributes {
             init_attrs,
             default_instance_attrs,
             instance_attrs,
+            class_attrs,
             derive_handler_attrs,
             attribute_removals,
         } = self;
@@ -283,6 +289,26 @@ impl CtxAttributes {
         // read off the target type's conclusion; a non-class conclusion is a LOUD
         // error, exactly like Lean's "invalid 'instance' attribute". Duplicate
         // registration (e.g. re-running the attribute command) is a no-op.
+        // `attribute [class] X`: register X as a type class exactly as
+        // `structure … class` does at its own register site (register.rs),
+        // taking num_params from the already-registered inductive. Mathlib's
+        // Logic/Unique.lean declares `structure Unique` then
+        // `attribute [class] Unique`; without this the attribute parsed but
+        // registered nothing, and every later `instance : Unique _` failed
+        // with "`Unique` is not a class". Idempotent by construction —
+        // register_class overwrites with identical info on re-run.
+        for name in class_attrs {
+            let num_params = env
+                .get_inductive(&name)
+                .map_or(0, |ind| ind.num_params as usize);
+            env.register_class(KernelClassInfo {
+                name,
+                num_params,
+                out_params: Vec::new(),
+                semi_out_params: Vec::new(),
+            });
+        }
+
         for (name, priority) in instance_attrs {
             if env.is_instance(&name) {
                 continue;

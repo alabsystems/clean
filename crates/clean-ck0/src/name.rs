@@ -103,7 +103,7 @@ impl Name {
 
     /// The final string component, if this name ends in one.
     #[must_use]
-    pub fn last_str(&self) -> Option<&str> {
+    pub(crate) fn last_str(&self) -> Option<&str> {
         match &self.0 {
             NameRepr::Node(node) => match &node.component {
                 Component::Str(s) => Some(s),

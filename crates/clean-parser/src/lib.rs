@@ -17,6 +17,8 @@ pub mod surface_tactic_types;
 pub mod tactic_patterns;
 
 #[cfg(test)]
+mod include_omit_tests;
+#[cfg(test)]
 mod lean4_compat;
 #[cfg(test)]
 mod lean4_features;

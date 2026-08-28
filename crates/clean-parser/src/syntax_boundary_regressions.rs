@@ -356,3 +356,117 @@ fn test_parenthesised_and_non_argument_type_levels_still_parse() {
         "`Type u` outside argument position must still read its level; got: {ascription}"
     );
 }
+
+/// A SAME-LINE `ident :` at the top level of a structure-field type is the next
+/// FIELD, not an application argument.
+///
+/// `structure Point where x : Nat y : Nat` parsed `Nat y` as an application:
+/// the field-boundary break required the next field name to be
+/// newline-preceded, so single-line multi-field structures died with
+/// `TooManyArguments` plus a parser-recovery raw declaration. Sixteen of the
+/// eighteen long-standing integration failures (coercion, matp, structure
+/// regressions) were downstream of this one parse.
+///
+/// The boundary is gated on `field_delim_depth == 0`, so everything the
+/// newline rule protected stays protected: a parenthesized `(f x : T)`
+/// ascription or `(x y : T)` binder group inside a field type is inside a
+/// delimiter, where the same-line arm never fires — the control test below
+/// pins that direction.
+#[test]
+fn test_single_line_structure_fields_split_at_same_line_colon() {
+    let parsed = parse_file("structure Point where x : Nat y : Nat")
+        .expect("single-line multi-field structure should parse");
+    let dumped = format!("{parsed:?}");
+    assert!(
+        dumped.contains(r#""x""#) && dumped.contains(r#""y""#),
+        "both fields must survive; got: {dumped}"
+    );
+    assert!(
+        !dumped.contains("recovery"),
+        "no parser-recovery raw declaration; got: {dumped}"
+    );
+
+    // Three fields, projections downstream — the elaborator-visible shape.
+    let three = format!(
+        "{:?}",
+        parse_file("structure P5 where x : Nat y : Nat z : Nat").expect("three fields")
+    );
+    for f in ["\"x\"", "\"y\"", "\"z\""] {
+        assert!(three.contains(f), "field {f} must survive; got: {three}");
+    }
+}
+
+/// The other direction: a same-line ascription INSIDE a delimiter within a
+/// field type must NOT be split into a phantom field.
+#[test]
+fn test_field_type_ascription_inside_delimiters_stays_intact() {
+    let parsed = parse_file("structure P4 where\n  f : Nat → Nat\n  h : (2 : Nat) = 2")
+        .expect("ascription inside a field type should parse");
+    let dumped = format!("{parsed:?}");
+    assert!(
+        dumped.contains(r#""f""#) && dumped.contains(r#""h""#),
+        "exactly the two declared fields; got: {dumped}"
+    );
+}
+
+/// Parenthesized field binder groups inside a `where` block — Lean's
+/// `structFields` shape `structure P where (x : Nat) (y : Nat)`.
+///
+/// Before the LParen arm in the field loop, these groups fell OUT of the
+/// `where` block entirely: the structure was SILENTLY accepted with ZERO
+/// fields and the group tokens resurfaced as a junk `RawDecl` — the
+/// audit's "wrong program silently accepted" failure shape, measured on
+/// every spelling below.
+#[test]
+fn test_structure_where_paren_field_groups_parse_as_fields() {
+    for (src, want_fields) in [
+        ("structure P3 where (x : Nat) (y : Nat)", vec!["x", "y"]),
+        // A multi-name group expands to one field per name.
+        ("structure P4 where\n  (x y : Nat)", vec!["x", "y"]),
+        // Groups interleave with simple fields.
+        ("structure P5 where\n  (x : Nat)\n  y : Nat", vec!["x", "y"]),
+        (
+            "structure P7 where\n  a : Nat\n  (b c : Nat)",
+            vec!["a", "b", "c"],
+        ),
+    ] {
+        let decls = parse_file(src).expect("paren field groups must parse");
+        assert_eq!(decls.len(), 1, "{src}: exactly one decl, got {decls:?}");
+        let Some(SurfaceDecl::Structure { fields, .. }) = decls.first() else {
+            panic!("{src}: expected a structure, got {decls:?}");
+        };
+        let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, want_fields, "{src}: field names");
+    }
+}
+
+/// A paren group carries an optional GROUP default — `(x : Nat := 3)` — and
+/// the default applies to every name in its group.
+#[test]
+fn test_structure_where_paren_field_group_default() {
+    let decls = parse_file("structure P6 where (x y : Nat := 3)").expect("group default parses");
+    let Some(SurfaceDecl::Structure { fields, .. }) = decls.first() else {
+        panic!("expected a structure, got {decls:?}");
+    };
+    assert_eq!(fields.len(), 2, "one field per name in the group");
+    for f in fields {
+        assert!(
+            f.default.is_some(),
+            "the group default must apply to `{}`",
+            f.name
+        );
+    }
+}
+
+/// The same gap existed for `class` `where` blocks.
+#[test]
+fn test_class_where_paren_field_groups_parse_as_fields() {
+    let decls =
+        parse_file("class C1 (a : Type) where (op : a)\n").expect("class paren group parses");
+    assert_eq!(decls.len(), 1, "exactly one decl, got {decls:?}");
+    let Some(SurfaceDecl::Class { fields, .. }) = decls.first() else {
+        panic!("expected a class, got {decls:?}");
+    };
+    let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, vec!["op"], "class paren-group field names");
+}

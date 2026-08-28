@@ -30,6 +30,7 @@ mod db;
 mod error;
 mod header;
 pub mod reconstruct;
+pub mod reconstruct_level;
 mod types;
 
 #[cfg(test)]

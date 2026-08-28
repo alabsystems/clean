@@ -85,7 +85,15 @@ impl<'a> ReconstructionContext<'a> {
                     Ok(summary)
                 }
                 // Rules reconstructing to kernel primitives with no theory
-                // call — genuinely zero trust.
+                // call — zero LOCAL trust. NOTE: "zero trust" here is a count
+                // of `trustedAy`/`trustedArith` sub-terms, NOT a well-typedness
+                // claim: this context has no kernel environment, so the term is
+                // only established as a proof when the consumer runs the FULL
+                // `TypeChecker::check_type` (`infer_only = false`) against the
+                // goal — `certified_proof::certify_reconstruction` for the
+                // Trust router and `validate_proof_term` for the tactic. An
+                // infer-only `infer_type` does not validate application
+                // arguments and must never stand in for that gate.
                 RuleView::OrPos
                 | RuleView::OrNeg
                 | RuleView::EquivPos1

@@ -118,6 +118,18 @@ pub struct Dependency {
     pub path: Option<PathBuf>,
     /// Version constraint
     pub version: Option<String>,
+    /// Reservoir scope (`scope = "..."` in a `[[require]]` entry). Recorded so
+    /// the fetch layer can attribute a clone failure to the interim offline
+    /// scope-to-GitHub mapping (`toml_config::reservoir_offline_git_url`) when
+    /// the git URL was derived from the scope rather than written explicitly.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// Subdirectory of a git dependency holding the package root (Lake's
+    /// `subDir`). When set, the clone is only the transport: the package the
+    /// require names lives at `<clone>/<subDir>`, which is how monorepos
+    /// publish several Lake packages from one repository.
+    #[serde(default, rename = "subDir")]
+    pub sub_dir: Option<PathBuf>,
 }
 
 /// Lean library configuration
@@ -174,10 +186,45 @@ pub struct LeanTest {
 pub struct LakeScript {
     /// Script name
     pub name: String,
+    /// Argument binder declared by the script, verbatim and without the
+    /// surrounding parentheses (`args` for Lean's `script s (args) do`).
+    ///
+    /// `None` when the script declares no binder. Lake scripts have type
+    /// `List String → IO UInt32`, so the binder is the name the body uses for
+    /// its argv; a consumer that cannot bind it must say so rather than
+    /// elaborate a body with a free variable in it.
+    pub args: Option<String>,
     /// Script body (Lean code to execute)
     pub body: String,
     /// Script documentation
     pub doc: Option<String>,
+}
+
+/// A `script` declaration header, split into its parts.
+///
+/// Lean's Lake spells a script three ways, and all three reach this parser:
+///
+/// ```text
+/// script <name> [(args)] do    -- body on the following indented lines
+/// script <name> := <term>      -- `:= do` opens a do-block body
+/// script <name> where          -- Clean's declarative block form
+/// ```
+///
+/// The `do` form used to fall through the name split, so the WHOLE remainder
+/// (`greet (args) do`) became the name and the body was never collected —
+/// a silent drop, since the body lines are indented and therefore not recorded
+/// as skipped top-level constructs either.
+#[derive(Debug, PartialEq, Eq)]
+struct ScriptHeader<'a> {
+    /// Bare script name: never carries the binder or a trailing keyword.
+    name: &'a str,
+    /// Argument binder as written, parentheses stripped (`args`).
+    args: Option<&'a str>,
+    /// Text on the header line that already opens the body — `do` for the
+    /// `do` forms, or an inline term for `script s := <term>`.
+    inline_body: Option<&'a str>,
+    /// Whether a block continues on the following lines.
+    has_block: bool,
 }
 
 impl LakeConfig {
@@ -273,6 +320,9 @@ impl LakeConfig {
                             i += 1;
                             continue;
                         }
+                        if Self::skip_block_comment(&lines, &mut i) {
+                            continue;
+                        }
                         // Check for next top-level declaration
                         if !block_line.starts_with("--")
                             && (block_line.starts_with("@[")
@@ -286,7 +336,13 @@ impl LakeConfig {
                             break;
                         }
                         // Parse package fields
-                        Self::parse_package_field(&mut config.package, block_line);
+                        if !Self::parse_package_field(&mut config.package, block_line) {
+                            Self::record_unknown_block_field(
+                                &mut config.diagnostics,
+                                i,
+                                block_line,
+                            );
+                        }
                         i += 1;
                     }
                     continue;
@@ -321,6 +377,9 @@ impl LakeConfig {
                             i += 1;
                             continue;
                         }
+                        if Self::skip_block_comment(&lines, &mut i) {
+                            continue;
+                        }
                         // Check for next top-level declaration
                         if !block_line.starts_with("--")
                             && (block_line.starts_with("@[")
@@ -333,7 +392,13 @@ impl LakeConfig {
                         {
                             break;
                         }
-                        Self::parse_lib_field(&mut lib, block_line);
+                        if !Self::parse_lib_field(&mut lib, block_line) {
+                            Self::record_unknown_block_field(
+                                &mut config.diagnostics,
+                                i,
+                                block_line,
+                            );
+                        }
                         i += 1;
                     }
                 } else {
@@ -367,6 +432,9 @@ impl LakeConfig {
                             i += 1;
                             continue;
                         }
+                        if Self::skip_block_comment(&lines, &mut i) {
+                            continue;
+                        }
                         // Check for next top-level declaration
                         if !block_line.starts_with("--")
                             && (block_line.starts_with("@[")
@@ -379,7 +447,13 @@ impl LakeConfig {
                         {
                             break;
                         }
-                        Self::parse_exe_field(&mut exe, block_line);
+                        if !Self::parse_exe_field(&mut exe, block_line) {
+                            Self::record_unknown_block_field(
+                                &mut config.diagnostics,
+                                i,
+                                block_line,
+                            );
+                        }
                         i += 1;
                     }
                 } else {
@@ -417,6 +491,9 @@ impl LakeConfig {
                             i += 1;
                             continue;
                         }
+                        if Self::skip_block_comment(&lines, &mut i) {
+                            continue;
+                        }
                         // Check for next top-level declaration
                         if !block_line.starts_with("--")
                             && (block_line.starts_with("@[")
@@ -429,7 +506,13 @@ impl LakeConfig {
                         {
                             break;
                         }
-                        Self::parse_test_field(&mut test, block_line);
+                        if !Self::parse_test_field(&mut test, block_line) {
+                            Self::record_unknown_block_field(
+                                &mut config.diagnostics,
+                                i,
+                                block_line,
+                            );
+                        }
                         i += 1;
                     }
                 } else {
@@ -442,29 +525,35 @@ impl LakeConfig {
 
             // Parse script declaration
             if let Some(rest) = line.strip_prefix("script ") {
-                let rest = rest.trim();
-                let name = if let Some(idx) = rest.find(" where") {
-                    &rest[..idx]
-                } else if let Some(idx) = rest.find(" :=") {
-                    &rest[..idx]
-                } else {
-                    rest.trim()
-                };
+                let header = Self::split_script_header(rest);
 
                 let mut script = LakeScript {
-                    name: name.to_string(),
+                    name: header.name.to_string(),
+                    args: header.args.map(str::to_string),
                     ..Default::default()
                 };
 
                 // Parse script block if present
-                if rest.contains("where") || rest.contains(":=") {
+                if header.has_block {
                     i += 1;
-                    let mut body_lines = Vec::new();
+                    // A `do` (or an inline `:=` term) on the header line is
+                    // the first line of the body, not decoration: dropping it
+                    // turns `script s := do` into a bare statement sequence.
+                    let mut body_lines: Vec<String> =
+                        header.inline_body.map(str::to_string).into_iter().collect();
                     while i < lines.len() {
                         let block_line = lines[i].trim();
                         if block_line.is_empty() {
                             i += 1;
                             continue;
+                        }
+                        // The block ends at the first line that returns to
+                        // column 0: a script body is indented under its
+                        // header, and swallowing the next declaration would
+                        // both corrupt the body and hide that declaration from
+                        // the skipped-construct diagnostics.
+                        if !lines[i].starts_with(|c: char| c.is_whitespace()) {
+                            break;
                         }
                         // Check for next top-level declaration
                         if !block_line.starts_with("--")
@@ -597,8 +686,12 @@ impl LakeConfig {
         Ok(())
     }
 
-    /// Parse a field in the package block
-    fn parse_package_field(package: &mut PackageConfig, line: &str) {
+    /// Parse a field in the package block.
+    ///
+    /// Returns `false` when the field name is not in the modelled set, so the
+    /// caller can account for it instead of dropping it. See
+    /// [`LakeConfig::record_unknown_block_field`].
+    fn parse_package_field(package: &mut PackageConfig, line: &str) -> bool {
         if let Some(rest) = line.strip_prefix("version :=") {
             package.version = Some(rest.trim().trim_matches('"').to_string());
         } else if let Some(rest) = line.strip_prefix("description :=") {
@@ -616,11 +709,16 @@ impl LakeConfig {
             package.more_lean_args = Self::parse_string_array(rest.trim());
         } else if let Some(rest) = line.strip_prefix("moreLinkArgs :=") {
             package.more_link_args = Self::parse_string_array(rest.trim());
+        } else {
+            return false;
         }
+        true
     }
 
-    /// Parse a field in a lean_lib block
-    fn parse_lib_field(lib: &mut LeanLib, line: &str) {
+    /// Parse a field in a lean_lib block.
+    ///
+    /// Returns `false` for a field name outside the modelled set.
+    fn parse_lib_field(lib: &mut LeanLib, line: &str) -> bool {
         if let Some(rest) = line.strip_prefix("roots :=") {
             // Parse #[`Module1, `Module2] syntax
             lib.roots = Self::parse_name_array(rest.trim());
@@ -632,27 +730,171 @@ impl LakeConfig {
             lib.default_facets = Self::parse_string_array(rest.trim());
         } else if let Some(rest) = line.strip_prefix("preCompileHooks :=") {
             lib.pre_compile_hooks = Self::parse_string_array(rest.trim());
+        } else {
+            return false;
         }
+        true
     }
 
-    /// Parse a field in a lean_exe block
-    fn parse_exe_field(exe: &mut LeanExe, line: &str) {
+    /// Parse a field in a lean_exe block.
+    ///
+    /// Returns `false` for a field name outside the modelled set.
+    fn parse_exe_field(exe: &mut LeanExe, line: &str) -> bool {
         if let Some(rest) = line.strip_prefix("root :=") {
             exe.root = rest.trim().trim_start_matches('`').to_string();
         } else if let Some(rest) = line.strip_prefix("srcDir :=") {
             exe.src_dir = Some(PathBuf::from(rest.trim().trim_matches('"')));
         } else if let Some(rest) = line.strip_prefix("supportedBackends :=") {
             exe.supported_backends = Self::parse_string_array(rest.trim());
+        } else {
+            return false;
         }
+        true
     }
 
-    /// Parse a field in a lean_test block
-    fn parse_test_field(test: &mut LeanTest, line: &str) {
+    /// Parse a field in a lean_test block.
+    ///
+    /// Returns `false` for a field name outside the modelled set.
+    fn parse_test_field(test: &mut LeanTest, line: &str) -> bool {
         if let Some(rest) = line.strip_prefix("root :=") {
             test.root = rest.trim().trim_start_matches('`').to_string();
         } else if let Some(rest) = line.strip_prefix("srcDir :=") {
             test.src_dir = Some(PathBuf::from(rest.trim().trim_matches('"')));
+        } else {
+            return false;
         }
+        true
+    }
+
+    /// Skip a `/- … -/` or `/-- … -/` comment starting at `lines[*i]`,
+    /// advancing `*i` past its closing delimiter.
+    ///
+    /// Returns `true` when a comment was consumed. Lake allows doc comments and
+    /// section headers inside a `where` block, and the block loops previously
+    /// filtered only `--` line comments, so these lines reached the field
+    /// parsers and were silently ignored. Once an unmodelled field becomes a
+    /// diagnostic, ignoring them is no longer harmless: `/-! ## Libraries -/`
+    /// would be reported as a dropped field. Comments are not fields, so they
+    /// are consumed here rather than accounted for.
+    fn skip_block_comment(lines: &[&str], i: &mut usize) -> bool {
+        let start = lines[*i].trim();
+        if !start.starts_with("/-") {
+            return false;
+        }
+        // A comment that opens and closes on its own line consumes just that
+        // line; `/-` alone is not a closing delimiter for its own opener.
+        if start.len() > 2 && start.ends_with("-/") {
+            *i += 1;
+            return true;
+        }
+        *i += 1;
+        while *i < lines.len() {
+            let line = lines[*i].trim();
+            *i += 1;
+            if line.ends_with("-/") {
+                break;
+            }
+        }
+        true
+    }
+
+    /// Split the text after `script ` into name, argument binder, and body head.
+    ///
+    /// See [`ScriptHeader`] for the three spellings this must handle. The
+    /// `do` form is the one Lean itself prints in every `lake new` template,
+    /// and it is the one this parser used to swallow whole.
+    fn split_script_header(rest: &str) -> ScriptHeader<'_> {
+        let rest = rest.trim();
+
+        let (head, inline_body, has_block) = if let Some(idx) = rest.find(" where") {
+            (&rest[..idx], None, true)
+        } else if let Some(idx) = rest.find(" :=") {
+            let tail = rest[idx + " :=".len()..].trim();
+            let inline = if tail.is_empty() { None } else { Some(tail) };
+            (&rest[..idx], inline, true)
+        } else if let Some(head) = Self::strip_trailing_do(rest) {
+            // `script <name> [(args)] do` — `do` opens the body, whose
+            // statements follow on the indented lines beneath.
+            (head, Some("do"), true)
+        } else {
+            // Bare `script <name>`: a declaration with no body at all.
+            (rest, None, false)
+        };
+
+        // The binder (if any) starts at the first space or `(` after the name.
+        let head = head.trim();
+        let (name, args) = match head.find(|c: char| c.is_whitespace() || c == '(') {
+            Some(idx) => {
+                let binder = head[idx..]
+                    .trim()
+                    .trim_start_matches('(')
+                    .trim_end_matches(')');
+                let binder = binder.trim();
+                let binder = if binder.is_empty() {
+                    None
+                } else {
+                    Some(binder)
+                };
+                (head[..idx].trim(), binder)
+            }
+            None => (head, None),
+        };
+
+        ScriptHeader {
+            name,
+            args,
+            inline_body,
+            has_block,
+        }
+    }
+
+    /// Strip a trailing standalone `do` keyword from a `script` header.
+    ///
+    /// Returns `None` when the header does not end in a `do` TOKEN, so that a
+    /// name merely ending in those letters (`script tornado`) is left intact.
+    fn strip_trailing_do(header: &str) -> Option<&str> {
+        let head = header.strip_suffix("do")?;
+        // `script do` has no name; and `tornado` must not split as `torna`+`do`.
+        if !head.ends_with(|c: char| c.is_whitespace()) {
+            return None;
+        }
+        let head = head.trim_end();
+        if head.is_empty() {
+            return None;
+        }
+        Some(head)
+    }
+
+    /// Account for a `where`-block field the declarative subset does not model.
+    ///
+    /// Lake configuration lives as much INSIDE `where` blocks as at column 0,
+    /// and a dropped `testDriver` or `leanOptions` is not a cosmetic loss: it
+    /// silently changes what gets built and how. These entries therefore go
+    /// into the same [`LakeConfig::diagnostics`] as top-level skips, so
+    /// `CLEAN_LAKE_STRICT_LAKEFILE=1` refuses them too and the lenient path
+    /// still warns rather than under-parsing in silence.
+    ///
+    /// A `where` block is entered only after blank lines and `--` comments are
+    /// filtered and after the next top-level construct has been ruled out, so
+    /// every line reaching here is a real field the parser chose not to model.
+    fn record_unknown_block_field(
+        diagnostics: &mut Vec<SkippedConstruct>,
+        line_index: usize,
+        line: &str,
+    ) {
+        let leading = line
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches(":=");
+        if leading.is_empty() || matches!(leading, "]" | ")" | "}") {
+            return;
+        }
+        diagnostics.push(SkippedConstruct {
+            line: line_index + 1,
+            token: leading.to_string(),
+            text: line.to_string(),
+        });
     }
 
     /// Parse a Lean name array like #[`Name1, `Name2]
@@ -1231,6 +1473,8 @@ lean_lib Demo
             rev: None,
             path: None,
             version: Some("^1.2".to_string()),
+            scope: None,
+            sub_dir: None,
         };
 
         let manifest = LakeManifest {
@@ -1262,6 +1506,8 @@ lean_lib Demo
             rev: Some("main".to_string()),
             path: None,
             version: None,
+            scope: None,
+            sub_dir: None,
         };
 
         let manifest = LakeManifest {
@@ -1360,6 +1606,128 @@ script build_docs :=
             script.doc.is_none(),
             "default LakeScript should have no doc"
         );
+        assert!(
+            script.args.is_none(),
+            "default LakeScript should declare no argument binder"
+        );
+    }
+
+    /// Lean's `script <name> do` form: the name is the NAME, and the body is
+    /// kept.
+    ///
+    /// Measured 2026-08-27 against the shipped binary before this fix:
+    /// `clean lake script list` printed `hello do` and `clean lake script doc
+    /// "hello do"` printed an empty body — the whole header remainder became
+    /// the name and every indented body line was dropped without a
+    /// diagnostic (body lines are indented, so they are not recorded as
+    /// skipped top-level constructs either).
+    #[test]
+    fn test_parse_script_do_form_keeps_name_and_body() {
+        let content =
+            "package demo\n\nscript hello do\n  IO.println \"hello\"\n  IO.println \"again\"\n";
+        let config = LakeConfig::parse(content).expect("do-form script should parse");
+
+        assert_eq!(config.scripts.len(), 1);
+        assert_eq!(config.scripts[0].name, "hello", "name must not carry ` do`");
+        assert_eq!(
+            config.scripts[0].body, "do\nIO.println \"hello\"\nIO.println \"again\"",
+            "the `do` opens the body and both statements must survive"
+        );
+        assert!(config.scripts[0].args.is_none());
+    }
+
+    /// `script <name> (args) do`: the binder is recorded, not folded into the
+    /// name.
+    #[test]
+    fn test_parse_script_do_form_with_binder_records_binder_separately() {
+        let content = "package demo\n\nscript greet (args) do\n  IO.println \"hi\"\n";
+        let config = LakeConfig::parse(content).expect("binder do-form should parse");
+
+        assert_eq!(config.scripts.len(), 1);
+        assert_eq!(config.scripts[0].name, "greet");
+        assert_eq!(config.scripts[0].args.as_deref(), Some("args"));
+        assert!(config.scripts[0].body.contains("IO.println \"hi\""));
+    }
+
+    /// A name that merely ENDS in the letters `do` is not a `do` form.
+    #[test]
+    fn test_parse_script_name_ending_in_do_is_not_split() {
+        let config = LakeConfig::parse("package demo\n\nscript tornado\n")
+            .expect("bare script should parse");
+        assert_eq!(config.scripts.len(), 1);
+        assert_eq!(config.scripts[0].name, "tornado");
+        assert!(config.scripts[0].body.is_empty());
+    }
+
+    /// `script <name> := do` puts the `do` on the header line; dropping it
+    /// would leave a bare statement sequence that no longer sequences.
+    #[test]
+    fn test_parse_script_inline_assign_head_opens_the_body() {
+        let content = "package demo\n\nscript build := do\n  IO.println \"building\"\n";
+        let config = LakeConfig::parse(content).expect("`:= do` script should parse");
+
+        assert_eq!(config.scripts.len(), 1);
+        assert_eq!(config.scripts[0].name, "build");
+        assert_eq!(
+            config.scripts[0].body, "do\nIO.println \"building\"",
+            "the header-line `do` must head the body"
+        );
+    }
+
+    /// A single-expression `script <name> := <term>` keeps the term.
+    #[test]
+    fn test_parse_script_inline_assign_term_is_the_body() {
+        let config = LakeConfig::parse("package demo\n\nscript p := IO.println \"x\"\n")
+            .expect("inline-term script should parse");
+        assert_eq!(config.scripts[0].name, "p");
+        assert_eq!(config.scripts[0].body, "IO.println \"x\"");
+    }
+
+    /// A script block ends at column 0: a following declaration must not be
+    /// swallowed into the body (and must still be accounted as skipped).
+    #[test]
+    fn test_parse_script_block_stops_at_column_zero() {
+        let content =
+            "package demo\n\nscript hello do\n  IO.println \"hi\"\n\ndef leftover := 1\n\nlean_lib MyLib\n";
+        let config = LakeConfig::parse(content).expect("parse");
+
+        assert_eq!(config.scripts.len(), 1);
+        assert_eq!(config.scripts[0].body, "do\nIO.println \"hi\"");
+        assert_eq!(
+            config.libs.len(),
+            1,
+            "the lean_lib after the script is kept"
+        );
+        assert!(
+            config
+                .diagnostics
+                .iter()
+                .any(|d| d.token == "def" && d.text.contains("leftover")),
+            "the dedented `def` is a skipped top-level construct, not script body: {:?}",
+            config.diagnostics
+        );
+    }
+
+    #[test]
+    fn test_split_script_header_forms() {
+        let do_form = LakeConfig::split_script_header("hello do");
+        assert_eq!(do_form.name, "hello");
+        assert_eq!(do_form.args, None);
+        assert_eq!(do_form.inline_body, Some("do"));
+        assert!(do_form.has_block);
+
+        let binder = LakeConfig::split_script_header("greet (args) do");
+        assert_eq!(binder.name, "greet");
+        assert_eq!(binder.args, Some("args"));
+
+        let where_form = LakeConfig::split_script_header("hello where");
+        assert_eq!(where_form.name, "hello");
+        assert_eq!(where_form.inline_body, None);
+        assert!(where_form.has_block);
+
+        let bare = LakeConfig::split_script_header("hello");
+        assert_eq!(bare.name, "hello");
+        assert!(!bare.has_block);
     }
 
     #[test]
@@ -1456,11 +1824,38 @@ lean_exe mk_all where
         // Check default target
         assert!(config.default_targets.contains(&"Mathlib".to_string()));
 
-        // Every top-level construct in this fixture is modeled, so the
-        // skipped-construct accounting must stay empty.
+        // Every TOP-LEVEL construct in this fixture is modeled. The fields
+        // inside `where` blocks are not, and this assertion is the point of the
+        // fixture: a real Mathlib lakefile carries `testDriver`, `leanOptions`,
+        // `supportInterpreter` and `weakLinkArgs`, none of which the
+        // declarative subset models. They used to be dropped in silence, so the
+        // config looked fully understood while `lake test` reported "No test
+        // targets defined in lakefile.lean". They are now accounted for.
+        let skipped: Vec<&str> = config
+            .diagnostics
+            .iter()
+            .map(|d| d.token.as_str())
+            .collect();
+        assert_eq!(
+            skipped,
+            vec![
+                "testDriver",
+                "leanOptions",
+                "supportInterpreter",
+                "supportInterpreter",
+                "weakLinkArgs",
+            ],
+            "unmodelled `where`-block fields must be accounted for, not dropped: {:?}",
+            config.diagnostics
+        );
+        // Doc comments and section headers inside a `where` block are comments,
+        // not fields, and must not be reported as skipped.
         assert!(
-            config.diagnostics.is_empty(),
-            "no top-level construct should be skipped: {:?}",
+            !config
+                .diagnostics
+                .iter()
+                .any(|d| d.token.starts_with("/-") || d.token.starts_with("##")),
+            "comments inside a `where` block must not be reported: {:?}",
             config.diagnostics
         );
     }
@@ -1488,6 +1883,58 @@ lean_lib Demo
         assert_eq!(config.diagnostics[0].line, 6);
         assert_eq!(config.diagnostics[0].token, "abbrev");
         assert_eq!(config.diagnostics[0].text, "abbrev extraOptions := #[]");
+    }
+
+    #[test]
+    fn test_parse_records_unmodelled_where_block_fields() {
+        let content = r#"import Lake
+open Lake DSL
+
+package demo where
+  testDriver := "DemoTest"
+  moreLeanArgs := #["-DwarningAsError=true"]
+
+lean_lib Demo where
+  roots := #[`Demo]
+  precompileModules := true
+"#;
+        let config = LakeConfig::parse(content).expect("lenient parse should succeed");
+        // The modelled field is still parsed.
+        assert_eq!(config.package.more_lean_args, vec!["-DwarningAsError=true"]);
+        assert_eq!(config.libs[0].roots, vec!["Demo"]);
+        // The two unmodelled ones are accounted for rather than dropped.
+        let skipped: Vec<(usize, &str)> = config
+            .diagnostics
+            .iter()
+            .map(|d| (d.line, d.token.as_str()))
+            .collect();
+        assert_eq!(skipped, vec![(5, "testDriver"), (10, "precompileModules")]);
+    }
+
+    #[test]
+    fn test_parse_strict_mode_errors_on_unmodelled_where_block_field() {
+        // A dropped `testDriver` is why a TOML/lean project with a test driver
+        // reported "No test targets defined"; strict mode must refuse it rather
+        // than under-parse, exactly as it refuses an unmodelled top-level
+        // construct.
+        let content = r#"import Lake
+open Lake DSL
+
+package demo where
+  testDriver := "DemoTest"
+
+lean_lib Demo
+"#;
+        match LakeConfig::parse_with_mode(content, LakefileParseMode::Strict) {
+            Err(LakeError::UnrecognizedConstructs { count, summary }) => {
+                assert_eq!(count, 1, "only testDriver is unmodelled");
+                assert!(
+                    summary.contains("testDriver"),
+                    "summary should name the field: {summary}"
+                );
+            }
+            other => panic!("strict mode must reject an unmodelled field, got {other:?}"),
+        }
     }
 
     #[test]

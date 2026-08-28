@@ -17,6 +17,26 @@
 //   trustc --edition 2021 --crate-type lib -Ztrust-verify-output=human \
 //          tests/trust_verify/vacuity_sentinel.rs
 // No dependencies — keep it that way so the canary is fast and self-contained.
+//
+// THE FALSE-CANARY MARKER
+// ----------------------
+// Every canary's faulting expression carries a trailing marker comment of the
+// shape `<kind>#<family>` — the VC kind and the obligation-id family, and
+// NOTHING ELSE. (The marker token itself is not spelled out anywhere else in
+// this file: the gate treats any occurrence outside a canary body as an error,
+// so prose must not quote it.) The marker's LINE is the pin's line, so moving a
+// canary moves its pin automatically. The rest of the identity — the typed_kind
+// payload and the exact column span — lives in EXPECTED_FALSE_IDENTITY in
+// scripts/trust_verify_soundness_gate.py.
+//
+// DO NOT PUT AN ORDINAL BACK IN A MARKER. Markers used to read
+// `<kind>#<family>:<ordinal>`, and that ordinal is a producer-local per-function
+// emission counter: measured 2026-08-23 across trust 94147b34f and trust
+// 9f0757334, four of fifteen pins drifted 0 -> 1 (accumulator_overflow,
+// loop_off_by_one, lossy_narrowing_cast, mul_overflow) purely because the newer
+// producer emits `unreach`/`overflow` rows AHEAD of them, while every one of
+// those obligations was still correctly FAILED. Re-pinning 0 -> 1 drifts again
+// on the next producer change; the gate rejects a marker that carries one.
 
 #![allow(unconditional_panic, unused)]
 
@@ -24,14 +44,14 @@
 /// obligation is `a.len() < a.len()`, which is false. MUST NOT be proved.
 #[inline(never)]
 pub fn sentinel_oob_index_must_not_prove(a: &[u8]) -> u8 {
-    a[a.len()] // TRUST_FALSE_CANARY: slice#bounds_check:0
+    a[a.len()] // TRUST_FALSE_CANARY: slice#bounds_check
 }
 
 /// Guaranteed division by zero: `n - n` is always 0. The divisor-nonzero
 /// obligation is `0 != 0`, which is false. MUST NOT be proved.
 #[inline(never)]
 pub fn sentinel_div_by_zero_must_not_prove(x: u64, n: u64) -> u64 {
-    x / (n - n) // TRUST_FALSE_CANARY: divzero#arithmetic_safety:0
+    x / (n - n) // TRUST_FALSE_CANARY: divzero#arithmetic_safety
 }
 
 /// Guaranteed OOB produced through a LOSSY narrowing cast. Integer `as` itself is
@@ -46,7 +66,7 @@ pub fn sentinel_div_by_zero_must_not_prove(x: u64, n: u64) -> u64 {
 #[inline(never)]
 pub fn sentinel_lossy_narrowing_cast_must_not_prove(x: u64) -> u8 {
     let narrowed = ((x << 8) | 1) as u8;
-    [0u8; 1][narrowed as usize] // TRUST_FALSE_CANARY: bounds#bounds_check:0
+    [0u8; 1][narrowed as usize] // TRUST_FALSE_CANARY: bounds#bounds_check
 }
 
 /// Guaranteed arithmetic OVERFLOW (clean-kernel is compiled overflow-checks=ON, so a
@@ -55,14 +75,14 @@ pub fn sentinel_lossy_narrowing_cast_must_not_prove(x: u64) -> u8 {
 /// be proved — guards against an over-broad "treat arithmetic as total" lever.
 #[inline(never)]
 pub fn sentinel_unguarded_add_overflow_must_not_prove(x: u32) -> u32 {
-    x + u32::MAX // TRUST_FALSE_CANARY: overflow:add#arithmetic_safety:0
+    x + u32::MAX // TRUST_FALSE_CANARY: overflow:add#arithmetic_safety
 }
 
 /// Guaranteed REMAINDER-by-zero: `x % (n - n)` takes the remainder modulo 0. Its
 /// divisor-nonzero obligation is genuinely false. MUST NOT be proved.
 #[inline(never)]
 pub fn sentinel_remainder_by_zero_must_not_prove(x: u64, n: u64) -> u64 {
-    x % (n - n) // TRUST_FALSE_CANARY: remzero#arithmetic_safety:0
+    x % (n - n) // TRUST_FALSE_CANARY: remzero#arithmetic_safety
 }
 
 /// Guaranteed subtraction UNDERFLOW (overflow-checks ON): `(x & 0) - 1` computes `0 - 1`
@@ -70,7 +90,7 @@ pub fn sentinel_remainder_by_zero_must_not_prove(x: u64, n: u64) -> u64 {
 /// proved.
 #[inline(never)]
 pub fn sentinel_sub_underflow_must_not_prove(x: u32) -> u32 {
-    (x & 0) - 1 // TRUST_FALSE_CANARY: overflow:sub#arithmetic_safety:0
+    (x & 0) - 1 // TRUST_FALSE_CANARY: overflow:sub#arithmetic_safety
 }
 
 /// Guaranteed multiplication OVERFLOW: `big * big` with `big >= 2^20` is `>= 2^40 > u32::MAX`.
@@ -78,14 +98,14 @@ pub fn sentinel_sub_underflow_must_not_prove(x: u32) -> u32 {
 #[inline(never)]
 pub fn sentinel_mul_overflow_must_not_prove(x: u32) -> u32 {
     let big = x | (1u32 << 20); // big >= 2^20
-    big * big // TRUST_FALSE_CANARY: overflow:mul#arithmetic_safety:0
+    big * big // TRUST_FALSE_CANARY: overflow:mul#arithmetic_safety
 }
 
 /// Guaranteed slice-range OUT-OF-BOUNDS: `&a[..a.len() + 1]` has an end strictly past the
 /// slice length. Its end<=len obligation is genuinely false. MUST NOT be proved.
 #[inline(never)]
 pub fn sentinel_slice_range_oob_must_not_prove(a: &[u8]) -> &[u8] {
-    &a[..a.len() + 1] // TRUST_FALSE_CANARY: slice#bounds_check:0
+    &a[..a.len() + 1] // TRUST_FALSE_CANARY: slice#bounds_check
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +122,7 @@ pub fn sentinel_slice_range_oob_must_not_prove(a: &[u8]) -> &[u8] {
 #[inline(never)]
 pub fn sentinel_shift_overflow_must_not_prove(x: u32) -> u32 {
     let s = x | 64; // s >= 64 >= 32 (bit width of u32)
-    1u32 << s // TRUST_FALSE_CANARY: shift:left#arithmetic_safety:0
+    1u32 << s // TRUST_FALSE_CANARY: shift:left#arithmetic_safety
 }
 
 /// Guaranteed loop OFF-BY-ONE: `for i in 0..=a.len()` includes `i == a.len()`, so
@@ -112,7 +132,7 @@ pub fn sentinel_shift_overflow_must_not_prove(x: u32) -> u32 {
 pub fn sentinel_loop_off_by_one_must_not_prove(a: &[u8]) -> u8 {
     let mut acc = 0u8;
     for i in 0..=a.len() {
-        acc = acc.wrapping_add(a[i]); // TRUST_FALSE_CANARY: slice#bounds_check:0
+        acc = acc.wrapping_add(a[i]); // TRUST_FALSE_CANARY: slice#bounds_check
     }
     acc
 }
@@ -123,7 +143,7 @@ pub fn sentinel_loop_off_by_one_must_not_prove(a: &[u8]) -> u8 {
 #[inline(never)]
 pub fn sentinel_clamp_still_oob_must_not_prove(a: &[u8], x: usize) -> u8 {
     let idx = x.min(a.len()); // idx can == a.len()
-    a[idx] // TRUST_FALSE_CANARY: slice#bounds_check:0
+    a[idx] // TRUST_FALSE_CANARY: slice#bounds_check
 }
 
 /// Guaranteed MULTI-VARIABLE truncation-to-OOB path. At `a == 129 && b == 128`,
@@ -134,7 +154,7 @@ pub fn sentinel_clamp_still_oob_must_not_prove(a: &[u8], x: usize) -> u8 {
 pub fn sentinel_multivar_guard_lossy_must_not_prove(a: u16, b: u16) -> u8 {
     if a == 129 && b == 128 {
         let idx = (a + b) as u8;
-        [0u8; 1][idx as usize] // TRUST_FALSE_CANARY: bounds#bounds_check:1
+        [0u8; 1][idx as usize] // TRUST_FALSE_CANARY: bounds#bounds_check
     } else {
         0
     }
@@ -154,7 +174,7 @@ pub fn sentinel_stale_guard_must_not_prove(a: &[u8], x: usize, y: usize) -> u8 {
     let mut idx = x;
     if idx < a.len() {
         idx = y; // reassigned AFTER the guard; y is unbounded
-        return a[idx]; // TRUST_FALSE_CANARY: slice#bounds_check:0
+        return a[idx]; // TRUST_FALSE_CANARY: slice#bounds_check
     }
     0
 }
@@ -165,7 +185,7 @@ pub fn sentinel_stale_guard_must_not_prove(a: &[u8], x: usize, y: usize) -> u8 {
 #[inline(never)]
 pub fn sentinel_intrinsic_bound_must_not_prove(a: &[u8], x: u32) -> u8 {
     let i = x.leading_zeros() as usize; // in [0, 32], not bounded by len
-    a[i] // TRUST_FALSE_CANARY: slice#bounds_check:0
+    a[i] // TRUST_FALSE_CANARY: slice#bounds_check
 }
 
 /// Guaranteed LOOP-ACCUMULATOR overflow: summing an unbounded-length slice of u32 into a
@@ -176,7 +196,7 @@ pub fn sentinel_intrinsic_bound_must_not_prove(a: &[u8], x: u32) -> u8 {
 pub fn sentinel_accumulator_overflow_must_not_prove(a: &[u32]) -> u32 {
     let mut s: u32 = 0;
     for &x in a {
-        s += x; // TRUST_FALSE_CANARY: overflow:add#arithmetic_safety:0
+        s += x; // TRUST_FALSE_CANARY: overflow:add#arithmetic_safety
     }
     s
 }

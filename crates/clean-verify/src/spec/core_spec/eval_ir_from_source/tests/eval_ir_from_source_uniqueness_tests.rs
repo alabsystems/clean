@@ -18,7 +18,11 @@ fn test_declared_names_are_unique_across_core_spec() {
     use std::path::PathBuf;
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/spec/core_spec");
     let mut names: Vec<String> = Vec::new();
-    for src in ALL.iter().chain(BLOCKS.iter()) {
+    for src in ALL
+        .iter()
+        .copied()
+        .chain(ir_fs_module_defs().iter().copied())
+    {
         let mut it = src.split_whitespace();
         let kind = it.next().unwrap_or("");
         let name = it.next().unwrap_or("");

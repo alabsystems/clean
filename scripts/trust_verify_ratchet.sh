@@ -37,6 +37,11 @@ COVERAGE_DIFF="$REPO/scripts/trust_verify_coverage_diff.py"
 SOUNDNESS_GATE="$REPO/scripts/trust_verify_soundness_gate.py"
 SENTINEL="$REPO/tests/trust_verify/vacuity_sentinel.rs"
 fail() { echo "RATCHET FAIL: $*" >&2; exit 1; }
+# Same, but preserving the sub-gate's severity in THIS script's exit status. A
+# soundness certification and a broken existence pin are different findings; a
+# caller that only sees `exit 1` cannot tell them apart, which is precisely the
+# conflation the per-canary gate was rebuilt to end.
+fail_code() { local code="$1"; shift; echo "RATCHET FAIL: $*" >&2; exit "$code"; }
 
 # Locate one Trust stage1 without baking a developer username, host triple, or
 # checkout layout into the gate. Explicit configuration is authoritative and
@@ -144,6 +149,24 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 [ -x "$TRUSTC_BIN" ] || fail "stage1 trustc not built at $TRUSTC_BIN — run the trust toolchain build first"
 
+# NAME THE COMPILER THIS RUN MEASURED. A soundness verdict is a statement about
+# one particular verifier build, and this gate discovers that build OUTSIDE the
+# repo — a path that can silently resolve to a months-old toolchain. Printing
+# the identity is what makes a verdict attributable.
+#
+# Not hypothetical, measured 2026-08-24: `--locate-stage1` on the development
+# box resolved to a stage1 built from trust 94147b34f (2026-08-11), which
+# PREDATES the `divzero` vcgen fix (trust 18a0083876). Rebuilt at trust
+# 9f07573349, the same canary set moves: `divzero`/`remzero` stop being
+# certified, and other rows change. Same gate, same source, different program —
+# so a verdict that does not name its compiler cannot be compared to another.
+#
+# This adds information and gates nothing.
+TRUSTC_ID="$("$TRUSTC_BIN" -vV 2>/dev/null | sed -n 's/^commit-hash: //p' | head -1)"
+TRUSTC_DATE="$("$TRUSTC_BIN" -vV 2>/dev/null | sed -n 's/^commit-date: //p' | head -1)"
+echo "  trust stage1: $TRUSTC_BIN"
+echo "  trust stage1 identity: ${TRUSTC_ID:-<unreported>} ${TRUSTC_DATE:-}"
+
 # --- sum 'Trust verification: N proved, M failed, K unknown ... R runtime-checked' ---
 # Portable (BSD/macOS awk has no match()-with-array): grep the lines, sum fields.
 # proved/failed/unknown are always present (-> $3 $5 $7); runtime-checked is summed
@@ -168,46 +191,153 @@ sum_verdicts() { # $1=logfile -> echoes "proved failed unknown runtime_checked"
   echo "$pfu $rc"
 }
 
+# ------------------------------------------------------- STALE-PRODUCER ADVISORY
+# A soundness certification is a statement about ONE compiler build, and this gate
+# discovers that build OUTSIDE the repo. Four vcgen fixes for the SELF-GUARDED
+# (vacuous) obligation class have already landed in Trust. rustc lowers a checked
+# operation as `assert(cond) -> bb_success` with the operation in the success
+# block; BOTH arms emitted a VC at the same span, and the statement one inherits
+# the assert-passed guard, so its violation formula asserts a flag AND the
+# negation of that flag's own defining condition -- UNSAT by construction. Such a
+# row can only ever come back `proved`, at the exact span of a genuinely-false
+# property. A stage1 built before one of the fixes below reproduces exactly the
+# row that fix removed.
+#
+# That is STILL a real, blocking certification -- the program in your PATH really
+# does false-certify -- but it is NOT a new finding, and reading it as one costs a
+# lane. Measured 2026-08-25: the shared stage1 9f07573349 (2026-08-23 16:05 -0700)
+# predates c67021cd0d (2026-08-23 20:28 -0700) by four hours and reproduces
+# `sentinel_shift_overflow_must_not_prove` -> `arithmetic_safety:1` PROVED
+# (solver=clean-kernel-certified, SMT body binds `_3 = (_2 < 32)` then asserts
+# `_3` AND `_2 >= 32`), which is the single row c67021cd0d measured itself
+# removing. Its honest sibling `arithmetic_safety:0` was correctly FAILED in the
+# same run, so the canary is not mis-stated and the kernel proof is not unsound:
+# the producer minted a self-contradictory duplicate.
+#
+# ADVISORY ONLY. This prints and returns; it never changes an exit code, never
+# suppresses a row, and never fetches. Rows are appended, never removed: a fix
+# that has landed stays landed.
+KNOWN_PRODUCER_FIXES=(
+  "18a0083876bb8a362696cd69cca5dba3a1e6ce2b|fix(vcgen): zero-divisor obligation was SELF-GUARDED (divzero/remzero)"
+  "c67021cd0dc8bb06861290501f0cddca8e18b49b|fix(vcgen): SHIFT-overflow obligation was SELF-GUARDED (shift:left)"
+  "1baf0f3545c6ec5afbe5b9dbe196c30cbc8bed50|fix(vcgen): close the SELF-GUARDED class (neg, signed div/rem, projected div/rem, projected shift)"
+  "5c69166d8c8c8db6e76d741378ada341c7db5631|fix(vcgen): the shift assert lane binds PROJECTED comparison inputs"
+)
+
+# Best-effort local Trust checkout for the ancestry question. Never guesses a
+# remote and never fetches: if no local checkout carries the objects the answer is
+# UNKNOWN, and it says UNKNOWN rather than rounding to "not stale".
+locate_trust_repo() {
+  local root
+  for root in \
+    "${TRUST_REPO_ROOT:-}" \
+    "$STAGE1/../../../.." \
+    "$REPO/../trust" \
+    "$REPO/../../trust"
+  do
+    [[ -n "$root" && -e "$root/.git" ]] || continue
+    (cd "$root" && pwd -P) && return 0
+  done
+  return 1
+}
+
+report_producer_fix_ancestry() {
+  local root sha subject verdict row absent=0
+  echo "  --- KNOWN vcgen fixes for the SELF-GUARDED (vacuous) obligation class ---" >&2
+  if [[ -z "${TRUSTC_ID:-}" ]]; then
+    echo "  producer identity unreported -- cannot answer 'does this build contain the fix?'" >&2
+    return 0
+  fi
+  if ! root="$(locate_trust_repo)"; then
+    echo "  no local Trust checkout found -- ancestry UNKNOWN for producer $TRUSTC_ID" >&2
+    for row in "${KNOWN_PRODUCER_FIXES[@]}"; do
+      echo "    ${row%%|*}  UNKNOWN   ${row#*|}" >&2
+    done
+    return 0
+  fi
+  echo "  producer $TRUSTC_ID   Trust checkout $root" >&2
+  for row in "${KNOWN_PRODUCER_FIXES[@]}"; do
+    sha="${row%%|*}"; subject="${row#*|}"
+    if ! git -C "$root" cat-file -e "${sha}^{commit}" 2>/dev/null \
+      || ! git -C "$root" cat-file -e "${TRUSTC_ID}^{commit}" 2>/dev/null; then
+      verdict="UNKNOWN "
+    elif git -C "$root" merge-base --is-ancestor "$sha" "$TRUSTC_ID" 2>/dev/null; then
+      verdict="contains"
+    else
+      verdict="ABSENT  "; absent=1
+    fi
+    echo "    $sha  $verdict  $subject" >&2
+  done
+  if [[ "$absent" -eq 1 ]]; then
+    echo "  An ABSENT row means the measured producer PREDATES that landed fix, so a" >&2
+    echo "  certification here may be that KNOWN defect on a STALE toolchain rather" >&2
+    echo "  than a new one. Confirm which before opening an investigation -- and note" >&2
+    echo "  it BLOCKS either way: this build really does certify a false obligation." >&2
+  fi
+}
+
 run_soundness() {
   echo "== SOUNDNESS ratchet: verifying canaries =="
   local log="$SCRATCH/sentinel.log"
   local p f u rc total attempt counts gate_rc
   # WARM-UP RETRY: a cold solver/cache may occasionally under-emit structured
-  # transport on the first run. Retry incomplete inventories up to 3x warm. A
-  # genuinely-false row reported as Proved has a distinct exit code and blocks
-  # immediately on the first observation; it is never retried away.
+  # transport on the first run. ONLY that class is retried (gate exit 3). The
+  # two real verdicts are reported at their own severity and neither is retried
+  # away: a genuinely-false row reported as Proved (exit 2) blocks on the first
+  # observation, and an existence-pin failure (exit 1) is a canary that has
+  # vanished/moved/been retyped — re-running cannot change that.
+  #
+  # THE THREE CODES ARE NOT INTERCHANGEABLE. Before 2026-08-23 pin drift and
+  # transport under-emission shared exit 1, so four cosmetic ordinal drifts on
+  # a newer producer were retried three times and then reported as
+  # "verification incomplete" — while a `shift:left` obligation that the same
+  # run CERTIFIED went unmentioned. Keep the arms separate.
   for attempt in 1 2 3; do
     RUSTC_BOOTSTRAP=1 "$TRUSTC_BIN" --edition 2021 --crate-type lib \
       -Ztrust-verify-output=both "$SENTINEL" -o "$SCRATCH/sentinel.rlib" >"$log" 2>&1
     # The structured per-function gate is authoritative: every named canary
     # must emit its expected false VC family, and no row in that family may be
     # proved. Aggregate counts alone cannot detect a false proof hidden by an
-    # unrelated obligation disappearing or becoming unknown.
+    # unrelated obligation disappearing or becoming unknown. The gate reports
+    # EVERY failing canary, grouped by severity, on stderr — which flows
+    # straight through this command substitution to the operator.
     have python3 || fail "python3 required for the per-canary soundness gate ($SOUNDNESS_GATE)"
     [ -f "$SOUNDNESS_GATE" ] || fail "soundness-gate helper missing: $SOUNDNESS_GATE"
-    if counts=$(python3 "$SOUNDNESS_GATE" --log "$log" --source "$SENTINEL"); then
-      read -r p f u rc total <<<"$counts"
-    else
-      gate_rc=$?
-      # Exit 2 is an observed false proof and blocks immediately. Missing or
-      # incomplete transport may be the documented cold-cache under-emission,
-      # so it receives the same bounded warm retry as the aggregate floor.
-      [ "$gate_rc" -ne 2 ] || fail "individual soundness-canary FALSE-PROVE; see $log"
-      if [ "$attempt" -lt 3 ]; then
-        echo "  (attempt $attempt: individual canary transport incomplete — retrying warm)"
-        continue
-      fi
-      fail "individual soundness-canary verification incomplete after 3 attempts; see $log"
-    fi
+    counts=$(python3 "$SOUNDNESS_GATE" --log "$log" --source "$SENTINEL")
+    gate_rc=$?
+    case "$gate_rc" in
+      0)
+        read -r p f u rc total <<<"$counts"
+        ;;
+      2)
+        # Advisory only, printed BEFORE the verdict so the operator reads the
+        # producer's ancestry together with the finding. Never changes the code.
+        report_producer_fix_ancestry
+        fail_code 2 "individual soundness-canary FALSE-PROVE — one or more genuinely-false obligations were CERTIFIED. See the [2] SOUNDNESS CERTIFICATION section above (it lists EVERY certified canary, and any [1] pin drift is listed separately below it, never in its place); log: $log"
+        ;;
+      1)
+        fail_code 1 "soundness-canary EXISTENCE PIN failure — a canary row no longer matches its pinned identity (vanished, moved, renamed, or retyped), or the source/gate inventories disagree. This is NOT a soundness verdict. See the [1] EXISTENCE-PIN DRIFT section above; log: $log"
+        ;;
+      3)
+        if [ "$attempt" -lt 3 ]; then
+          echo "  (attempt $attempt: individual canary transport incomplete — retrying warm)"
+          continue
+        fi
+        fail_code 3 "individual soundness-canary transport incomplete after 3 attempts; see $log"
+        ;;
+      *)
+        fail "soundness gate returned unexpected exit $gate_rc; see $log"
+        ;;
+    esac
     break
   done
-  echo "  canary obligations: proved=$p failed=$f unknown=$u runtime-checked=$rc (total=$total)"
+  echo "  canary obligations: proved=$p failed=$f unknown=$u runtime-checked=$rc (total=$total)  [producer ${TRUSTC_ID:-<unreported>}]"
   # This is a defense-in-depth arithmetic consequence of the authoritative
   # per-function check: 15 distinct functions each supplied at least one exact,
   # non-Proved false row. Keep it explicit so future checker refactors cannot
   # accidentally weaken that invariant.
   [ $((f + u + rc)) -ge 15 ] || fail "individual gate returned fewer than 15 unproved false rows — checker invariant broken"
-  echo "  ✓ soundness canaries hold (all 15 exact false VC rows are present and individually unproved)"
+  echo "  ✓ soundness canaries hold (all 15 exact false VC rows are present and individually unproved)  [producer ${TRUSTC_ID:-<unreported>}]"
 }
 
 run_coverage() {

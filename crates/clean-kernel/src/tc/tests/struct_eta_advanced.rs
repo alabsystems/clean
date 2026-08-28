@@ -78,7 +78,7 @@ fn test_struct_eta_pprod_like() {
         nat.clone(),
     );
 
-    let p = Expr::fvar(tc.ctx.borrow_mut().push(
+    let p = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("p"),
         pprod_nat_nat,
         BinderInfo::Default,
@@ -167,11 +167,10 @@ fn test_struct_eta_sigma_like() {
         beta.clone(),
     );
 
-    let s = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("s"),
-        sigma_nat,
-        BinderInfo::Default,
-    ));
+    let s = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("s"), sigma_nat, BinderInfo::Default),
+    );
 
     let mut expanded = Expr::const_(Name::from_string("Sigma.mk"), vec![]);
     expanded = Expr::app(expanded, nat);
@@ -225,14 +224,12 @@ fn test_struct_eta_not_for_multi_constructor() {
 
     let tc = TypeChecker::new(&env);
     let ty = Expr::const_(either_name, vec![]);
-    let a = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("a"),
-        ty.clone(),
-        BinderInfo::Default,
-    ));
+    let a = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("a"), ty.clone(), BinderInfo::Default),
+    );
     let b = Expr::fvar(
-        tc.ctx
-            .borrow_mut()
+        tc.ctx_mut()
             .push(Name::from_string("b"), ty, BinderInfo::Default),
     );
     assert!(!tc.is_def_eq(&a, &b), "multi-ctor values not def-eq");
@@ -259,14 +256,12 @@ fn test_struct_eta_prop_guard() {
 
     let tc = TypeChecker::new(&env);
     let ty = Expr::const_(pst_name, vec![]);
-    let a = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("a"),
-        ty.clone(),
-        BinderInfo::Default,
-    ));
+    let a = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("a"), ty.clone(), BinderInfo::Default),
+    );
     let b = Expr::fvar(
-        tc.ctx
-            .borrow_mut()
+        tc.ctx_mut()
             .push(Name::from_string("b"), ty, BinderInfo::Default),
     );
     // Def-eq via proof irrelevance, not structure eta
@@ -285,16 +280,14 @@ fn test_struct_eta_ctor_concrete_fields_reflexive() {
 
     let tc = TypeChecker::new(&env);
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-    let x = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("x"),
-        nat.clone(),
-        BinderInfo::Default,
-    ));
-    let y = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("y"),
-        nat.clone(),
-        BinderInfo::Default,
-    ));
+    let x = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("x"), nat.clone(), BinderInfo::Default),
+    );
+    let y = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("y"), nat.clone(), BinderInfo::Default),
+    );
 
     let mk = struct_eta::build_prod_mk(&nat, &nat, x, y);
     assert!(tc.is_def_eq(&mk, &mk), "Prod.mk Nat Nat x y reflexive");
@@ -345,11 +338,10 @@ fn test_is_constructor_app_predicate() {
         "Wrap type is not ctor app"
     );
 
-    let fvar = Expr::fvar(tc.ctx.borrow_mut().push(
-        Name::from_string("x"),
-        nat,
-        BinderInfo::Default,
-    ));
+    let fvar = Expr::fvar(
+        tc.ctx_mut()
+            .push(Name::from_string("x"), nat, BinderInfo::Default),
+    );
     assert!(!tc.is_constructor_app(&fvar), "FVar is not ctor app");
 }
 
@@ -368,7 +360,7 @@ fn test_expand_eta_struct_direct() {
     let tc = TypeChecker::new(&env);
     let pt_name = Name::from_string("Pt");
     let pt_ty = Expr::const_(pt_name.clone(), vec![]);
-    let x = Expr::fvar(tc.ctx.borrow_mut().push(
+    let x = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("x"),
         pt_ty.clone(),
         BinderInfo::Default,
@@ -398,8 +390,7 @@ fn test_try_eta_struct_none_for_non_structure() {
     let tc = TypeChecker::new(&env);
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let x = Expr::fvar(
-        tc.ctx
-            .borrow_mut()
+        tc.ctx_mut()
             .push(Name::from_string("x"), nat, BinderInfo::Default),
     );
     assert!(tc.try_eta_struct(&Name::from_string("Nat"), &x).is_none());
@@ -432,7 +423,7 @@ fn test_try_eta_struct_some_for_fvar() {
     build_simple_struct(&mut env, "W1", 1, nat, Expr::type_());
 
     let tc = TypeChecker::new(&env);
-    let x = Expr::fvar(tc.ctx.borrow_mut().push(
+    let x = Expr::fvar(tc.ctx_mut().push(
         Name::from_string("x"),
         Expr::const_(Name::from_string("W1"), vec![]),
         BinderInfo::Default,

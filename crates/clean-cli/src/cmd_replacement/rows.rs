@@ -5,6 +5,146 @@
 //! Rust-first tooling status, Python migration rows, and replacement rows.
 
 use super::*;
+use std::sync::OnceLock;
+
+/// Where the scorecard's human-readable prose lives — `data/`, not this crate.
+///
+/// Every non-test `.rs` file under `crates/clean-cli/src/cmd_replacement/` is
+/// hashed by [`sha256_repo_module_tree`] into
+/// `reports/kernel-soundness-launch-evidence.json`, and
+/// `validate_trust_core_module_tree_sha` rejects that artifact the moment the
+/// digest moves. Measured by substitution over HEAD content on 2026-08-26:
+/// correcting the single stale phrase `while remaining blockers fail closed`
+/// inside one row's `blocker` sentence moved the digest
+/// `2a091c02…` → `5d83d13a…`. So the repo answered a *prose* fix with an amber
+/// `kernel-differential` row and a re-mint needing a HEAD-built binary plus the
+/// cargo lanes — which is precisely why this surface's prose rotted while its
+/// logic stayed maintained.
+///
+/// The fix is deliberately **not** to teach the digest to skip anything. It
+/// still hashes every byte of every non-test `.rs` file here, so any real logic
+/// change still stales the evidence. The prose merely moved to `data/`, which
+/// the code digest never covered in the first place — the same argument that
+/// already excludes `tests/` ("cannot change what the gate does at runtime").
+///
+/// **Only fields no predicate reads may live here.** Audited 2026-08-26, the
+/// decision-bearing fields are `ReplacementRow::{status, required_for_launch,
+/// gate_command, evidence_artifact}` (read by `is_wrapper_proof_surface`,
+/// `evidence_state_of`, `is_self_reported_gate_command`) and
+/// `PythonToolMigrationRow::{command, status, replacement_critical,
+/// planned_rust_surface}` (read by `is_python_wrapper_command` and a
+/// `starts_with("clean ")`). `blocker` and `removal_condition` reach nothing but
+/// `Serialize` derives and `writeln!`. `tests/part_16.rs` re-proves that by
+/// mutation rather than asserting it, so a future predicate on either field
+/// turns red instead of silently widening this boundary.
+pub(crate) const REPLACEMENT_ROW_PROSE_PATH: &str = "data/replacement_row_prose.json";
+
+pub(crate) const REPLACEMENT_ROW_PROSE_SCHEMA_VERSION: &str = "clean-replacement-row-prose-v1";
+
+/// What a row shows when its prose entry is absent. Self-announcing on purpose:
+/// an explanation that silently renders empty is how a scorecard row stops
+/// meaning anything without anyone noticing.
+pub(crate) const MISSING_ROW_PROSE: &str =
+    "MISSING PROSE: this row has no entry in data/replacement_row_prose.json. The scorecard is \
+     reporting a row whose explanation was never written; `cargo test --locked -p clean-cli \
+     --lib row_prose` names every such row.";
+
+#[derive(Debug, Deserialize)]
+struct RowProseFile {
+    schema_version: String,
+    replacement_rows: BTreeMap<String, String>,
+    python_tool_rows: BTreeMap<String, PythonToolRowProseEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PythonToolRowProseEntry {
+    removal_condition: String,
+    blocker: String,
+}
+
+/// The loaded prose, resolved to `'static` once per process.
+#[derive(Debug, Default)]
+pub(crate) struct RowProse {
+    replacement_rows: BTreeMap<&'static str, &'static str>,
+    python_tool_rows: BTreeMap<&'static str, (&'static str, &'static str)>,
+}
+
+impl RowProse {
+    #[cfg(test)]
+    pub(crate) fn replacement_row_ids(&self) -> Vec<&'static str> {
+        self.replacement_rows.keys().copied().collect()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn python_tool_row_ids(&self) -> Vec<&'static str> {
+        self.python_tool_rows.keys().copied().collect()
+    }
+}
+
+/// Leak once, at first read, so loaded prose can satisfy the `&'static str` row
+/// fields without threading a lifetime through every `Serialize` struct in this
+/// module. Bounded by the file: one allocation per entry, once per process.
+fn leak_prose(text: String) -> &'static str {
+    Box::leak(text.into_boxed_str())
+}
+
+pub(crate) fn row_prose() -> &'static RowProse {
+    static ROW_PROSE: OnceLock<RowProse> = OnceLock::new();
+    ROW_PROSE.get_or_init(|| {
+        // Deliberately does not fail closed. This is the *status report*, and
+        // refusing to print it because a sentence is missing would trade a
+        // documented gap for a dead command. A missing entry surfaces as
+        // MISSING_ROW_PROSE on the row itself, and the gate that refuses that
+        // is `tests/part_16.rs`, which fails the build instead.
+        let Ok(Some(source)) = read_optional_repo_artifact(REPLACEMENT_ROW_PROSE_PATH) else {
+            return RowProse::default();
+        };
+        let Ok(file) = serde_json::from_str::<RowProseFile>(&source) else {
+            return RowProse::default();
+        };
+        if file.schema_version != REPLACEMENT_ROW_PROSE_SCHEMA_VERSION {
+            return RowProse::default();
+        }
+        RowProse {
+            replacement_rows: file
+                .replacement_rows
+                .into_iter()
+                .map(|(id, text)| (leak_prose(id), leak_prose(text)))
+                .collect(),
+            python_tool_rows: file
+                .python_tool_rows
+                .into_iter()
+                .map(|(id, entry)| {
+                    (
+                        leak_prose(id),
+                        (
+                            leak_prose(entry.removal_condition),
+                            leak_prose(entry.blocker),
+                        ),
+                    )
+                })
+                .collect(),
+        }
+    })
+}
+
+/// The `blocker` sentence for a scorecard row.
+pub(crate) fn replacement_row_blocker(id: &str) -> &'static str {
+    row_prose()
+        .replacement_rows
+        .get(id)
+        .copied()
+        .unwrap_or(MISSING_ROW_PROSE)
+}
+
+/// The `(removal_condition, blocker)` prose for a Python-migration row.
+pub(crate) fn python_tool_row_prose(id: &str) -> (&'static str, &'static str) {
+    row_prose()
+        .python_tool_rows
+        .get(id)
+        .copied()
+        .unwrap_or((MISSING_ROW_PROSE, MISSING_ROW_PROSE))
+}
 
 pub(crate) fn rust_first_tooling_status() -> RustFirstToolingStatus {
     let commands = python_tool_migration_rows();
@@ -45,8 +185,6 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "non-launch diagnostic only; no replacement launch surface required",
             ToolMigrationStatus::Demoted,
             false,
-            "Demoted out of replacement launch evidence because static source-inventory freshness is not Lean4 replacement-critical.",
-            "scripts/sync_readme_metrics.py remains a non-launch diagnostic for SOURCE_INVENTORY.md static source-layout freshness and cannot satisfy or block Lean4 replacement readiness.",
         ),
         python_tool_row_with_status(
             "system-health-release-json",
@@ -54,8 +192,6 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "docs/RELEASE_READINESS.md",
             "clean factory status --json",
             ToolMigrationStatus::RustOwned,
-            "The Rust factory status command owns release health JSON, tracked Cargo.lock presence, stale git gc-log detection, local Rust toolchain availability, committed AY Git-graph validation, and fail-closed remote-main freshness.",
-            "Primary release health JSON uses clean factory status --json; scripts/system_health_check.py is no longer launch evidence for system health and remains only as a legacy diagnostic.",
         ),
         python_tool_row_with_status(
             "trust-boundary-audit-report",
@@ -63,8 +199,6 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "docs/RELEASE_READINESS.md; scripts/trust_boundary_expected_tests.txt",
             "clean replacement trust-boundary-audit --input <TSV> --expected scripts/trust_boundary_expected_tests.txt --json",
             ToolMigrationStatus::RustOwned,
-            "Rust-owned trust-boundary audit summarization parses CLEAN_TRUST_BOUNDARY_AUDIT_PATH TSV records, validates expected-test patterns, groups hits deterministically, reports expected versus unexpected hits, and emits JSON or Markdown without the Python wrapper.",
-            "No Python wrapper is required for trust-boundary audit release summarization; scripts/trust_boundary_audit.py remains a legacy diagnostic only.",
         ),
         python_tool_row_with_status_and_criticality(
             "benchmark-publication-check",
@@ -73,8 +207,6 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "non-launch diagnostic only; launch benchmark claims remain tracked by benchmark-publication-launch",
             ToolMigrationStatus::Demoted,
             false,
-            "Demoted out of replacement launch evidence because the ordinary benchmark publication --check lane accepts pending-publication development metadata; launch-critical public performance claims remain tracked by benchmark-publication-launch.",
-            "scripts/check_benchmark_publication.py --check remains a non-launch diagnostic for benchmark contract freshness and cannot satisfy or block Lean4 replacement readiness; use benchmark-publication-launch for public performance replacement launch evidence.",
         ),
         python_tool_row_with_status_and_criticality(
             "benchmark-publication-launch",
@@ -83,8 +215,6 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "clean bench publication-check --launch --json (accepted benchmark lane; non-launch diagnostic for Lean4 replacement readiness)",
             ToolMigrationStatus::Demoted,
             false,
-            "Demoted out of replacement launch evidence because benchmark publication evidence is accepted for this replacement pass; the Rust clean bench publication-check --launch --json surface remains useful audit evidence for published-status, freshness, reachable commits, current-run committed evidence, canonical command/input/artifact coverage, dirty-evidence rejection, required-artifact rejection, and publication_commit artifact hash rejection, but it is not a Lean4 replacement launch blocker.",
-            "Accepted benchmark lane: scripts/check_benchmark_publication.py --check --launch and clean bench publication-check --launch --json remain non-launch diagnostic audit checks for benchmark contract freshness and publication parity; they cannot satisfy or block Lean4 replacement readiness in this pass.",
         ),
         python_tool_row_with_status_and_criticality(
             "release-issue-hygiene",
@@ -93,8 +223,6 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "clean replacement release-issue-hygiene --fetch --json or --input <snapshot> --json (Rust-owned read-only live gh issue list fetch and offline snapshot parser; replacement status JSON alone is not sufficient)",
             ToolMigrationStatus::RustOwned,
             true,
-            "Rust-owned launch gate: clean replacement release-issue-hygiene --fetch --json runs read-only `gh issue list --state open --limit <N> --json number,title,url,labels,assignees,body,comments`; --input validates offline snapshots with the same comments, watched urgent/P1/blocked/local-maximum labels, owner evidence from assignees or Wn/Rn/Mn/provN labels, body/comment Release decision: evidence, non_ready_issues missing_fields, suggested_actions JSON, and fail-closed malformed-snapshot semantics. clean replacement status --json alone is not sufficient.",
-            "No Python wrapper is required for release issue hygiene launch evidence; use the Rust --fetch lane for live evidence and --input for reproducible snapshot review. The gate remains fail-closed on gh failures, malformed snapshots, missing owner evidence, or missing Release decision: notes.",
         ),
         python_tool_row_with_status_and_criticality(
             "mathverse-download-pytest",
@@ -103,8 +231,6 @@ pub(crate) fn python_tool_migration_rows() -> Vec<PythonToolMigrationRow> {
             "clean mathverse download --version <version> --output-dir <dir> --json verified launch gate with exact mathverse-library-v<version>.tar.zst asset selection, temp extraction failure reporting, manifest checksum verification, zero-shard/manifest drift rejection, and stale-shard cleanup",
             ToolMigrationStatus::RustOwned,
             true,
-            "Rust-owned Mathverse download verification gate covers the scripts/download_mathverse_library.sh launch contract: rejects missing or wrong-version mathverse-library-v*.tar.zst assets, invalid or zero-shard archives, manifest checksum/aggregate/path mismatches, temp-extract failures, and stale output shards before publishing.",
-            "Primary launch evidence is clean mathverse download --version <version> --output-dir <dir> --json plus cmd_mathverse Rust unit coverage. The referenced Python test was never tracked and is retired; no Python wrapper remains in this lane.",
         ),
     ]
 }
@@ -115,8 +241,6 @@ pub(crate) fn python_tool_row(
     command: &'static str,
     source_artifact: &'static str,
     planned_rust_surface: &'static str,
-    removal_condition: &'static str,
-    blocker: &'static str,
 ) -> PythonToolMigrationRow {
     python_tool_row_with_status(
         id,
@@ -124,8 +248,6 @@ pub(crate) fn python_tool_row(
         source_artifact,
         planned_rust_surface,
         ToolMigrationStatus::Transitional,
-        removal_condition,
-        blocker,
     )
 }
 
@@ -135,8 +257,6 @@ pub(crate) fn python_tool_row_with_status(
     source_artifact: &'static str,
     planned_rust_surface: &'static str,
     status: ToolMigrationStatus,
-    removal_condition: &'static str,
-    blocker: &'static str,
 ) -> PythonToolMigrationRow {
     python_tool_row_with_status_and_criticality(
         id,
@@ -145,8 +265,6 @@ pub(crate) fn python_tool_row_with_status(
         planned_rust_surface,
         status,
         true,
-        removal_condition,
-        blocker,
     )
 }
 
@@ -157,9 +275,9 @@ pub(crate) fn python_tool_row_with_status_and_criticality(
     planned_rust_surface: &'static str,
     status: ToolMigrationStatus,
     replacement_critical: bool,
-    removal_condition: &'static str,
-    blocker: &'static str,
 ) -> PythonToolMigrationRow {
+    // Prose is data, not code — see REPLACEMENT_ROW_PROSE_PATH.
+    let (removal_condition, blocker) = python_tool_row_prose(id);
     PythonToolMigrationRow {
         id,
         command,
@@ -185,9 +303,12 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             "Slot 6",
             IssueRef::new(3704, "Rust-first testing/tooling, scorecards, merge queue, and evidence dashboards"),
             ReplacementStatus::InProgress,
-            "clean replacement status --json",
+            // NOT `clean replacement status --json`: that command PRINTS this
+            // row, so citing it made the row its own evidence. The scorecard's
+            // invariants are checked by an independent harness instead.
+            "cargo test --locked -p clean-cli --lib cmd_replacement",
             "clean-replacement-status-v1",
-            "Initial Rust-owned scorecard exists; downstream rows still need generated gate artifacts.",
+            replacement_row_blocker("scorecard"),
         ),
         row(
             "proof-system-certification",
@@ -197,7 +318,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::InProgress,
             "clean replacement trust-core-evidence --kernel-soundness --evidence reports/kernel-soundness-launch-evidence.json --json && clean replacement trust-core-evidence --deny-sorry --evidence reports/deny-sorry-launch-evidence.json --json && clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json && clean replacement trust-core-evidence --json",
             TRUST_CORE_EVIDENCE_SCHEMA_VERSION,
-            "Zero-trust kernel, DENY_SORRY, axiom-audit, and strict reconstruction gates are passed; proof-system certification remains in progress on #464 plus tactic-parity and mathverse-replay blockers in reports/2026-04-27-proof-system-certification-blockers.md.",
+            replacement_row_blocker("proof-system-certification"),
         ),
         row(
             "fallback-denial",
@@ -207,7 +328,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::Green,
             "clean replacement trust-core-evidence --deny-sorry --evidence reports/deny-sorry-launch-evidence.json --json && clean replacement trust-core-evidence --json",
             "reports/deny-sorry-launch-evidence.json",
-            "Fresh DENY_SORRY launch evidence passed with the structural/unchecked fallback ratchet at zero; trust-core evidence keeps the checked artifact validated.",
+            replacement_row_blocker("fallback-denial"),
         ),
         row(
             "frontend-parity",
@@ -217,7 +338,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::InProgress,
             "clean replacement validate-report --report tests/lean4_compat/frontend_replacement_scorecard.json --kind frontend-parity --json && cargo test --locked -p clean-elab --test integration lean4_frontend_replacement_scorecard -- --nocapture",
             "tests/lean4_compat/frontend_replacement_scorecard.json",
-            "Rust-owned frontend scorecard validation now gates stable/canary corpus parse, elab, bounded kernel, trust, diagnostic, and failure classification evidence; full parity remains blocked by missing cross-check artifacts and tactic/macro/import/typeclass/structure coverage.",
+            replacement_row_blocker("frontend-parity"),
         ),
         row(
             "kernel-differential",
@@ -227,7 +348,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::Green,
             "clean replacement trust-core-evidence --kernel-soundness --evidence reports/kernel-soundness-launch-evidence.json --json && clean replacement trust-core-evidence --json",
             "reports/kernel-soundness-launch-evidence.json",
-            "Fresh kernel soundness launch evidence records differential preflight, Lean4 parity, and file-level soundness passing for this row.",
+            replacement_row_blocker("kernel-differential"),
         ),
         row(
             "tactic-parity",
@@ -237,7 +358,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::Green,
             "clean replacement tactic-parity --json",
             "reports/tactic-parity-counts.json",
-            "Rust-owned tactic matrix and generated Lean4-vs-clean count artifact pass with AESOP, grind, and strict reconstruction representative coverage complete.",
+            replacement_row_blocker("tactic-parity"),
         ),
         row(
             "strict-reconstruction",
@@ -247,7 +368,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::Green,
             "clean replacement tactic-parity --json",
             "reports/strict-solver-fragment-dashboard.json",
-            "Generated strict solver-fragment dashboard gate passes row-count, supported zero-trust, recovery, and residual-trust count checks for the strict reconstruction scope.",
+            replacement_row_blocker("strict-reconstruction"),
         ),
         row(
             "native-libraries",
@@ -257,7 +378,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::InProgress,
             "clean replacement validate-report --report reports/native-library-replacement.json --kind native-library --json && clean replacement native-library coverage-matrix --check-report reports/native-library-replacement.json --json && clean replacement native-library api-slice --slice nat-arithmetic --json && clean replacement native-library api-slice --slice nat-bitwise --json && clean replacement native-library api-slice --slice bool-nat-ext --json && clean replacement native-library api-slice --slice string-ext --json && clean replacement native-library api-slice --slice string-core --json && clean replacement native-library api-slice --slice string-transform --json && clean replacement native-library api-slice --slice string-hash --json && clean replacement native-library api-slice --slice name-core --json && clean replacement native-library api-slice --slice decidable-core --json && clean replacement native-library api-slice --slice decidable-eq-aliases --json && clean replacement native-library api-slice --slice int-order-decidable --json && clean replacement native-library api-slice --slice signed-decidable-eq-aliases --json && clean replacement native-library api-slice --slice hetero-ops --json && clean replacement native-library api-slice --slice beq-shortcircuit --json && clean replacement native-library api-slice --slice decidable-combinators --json && clean replacement native-library api-slice --slice nat-order-decidable --json && clean replacement native-library api-slice --slice char-core --json && clean replacement native-library api-slice --slice uint-of-nat --json && clean replacement native-library api-slice --slice fin-val --json && clean replacement native-library api-slice --slice uint-narrowing --json && clean replacement native-library api-slice --slice uint-widening --json && clean replacement native-library api-slice --slice bitvec-core --json && clean replacement native-library api-slice --slice uint-bitvec --json && clean replacement native-library api-slice --slice signed-bitvec --json && clean replacement native-library api-slice --slice uint8-core --json && clean replacement native-library api-slice --slice uint16-core --json && clean replacement native-library api-slice --slice uint32-core --json && clean replacement native-library api-slice --slice uint64-core --json && clean replacement native-library api-slice --slice usize-core --json && clean replacement native-library api-slice --slice uint8-bitwise --json && clean replacement native-library api-slice --slice uint16-bitwise --json && clean replacement native-library api-slice --slice uint32-bitwise --json && clean replacement native-library api-slice --slice uint64-bitwise --json && clean replacement native-library api-slice --slice usize-bitwise --json && clean replacement native-library api-slice --slice platform-core --json && clean replacement native-library api-slice --slice float-core --json && clean replacement native-library api-slice --slice float-classification --json && clean replacement native-library api-slice --slice float-functions --json && clean replacement native-library api-slice --slice float-input-conversions --json && clean replacement native-library api-slice --slice float-formatting --json && clean replacement native-library api-slice --slice float-output-conversions --json && clean replacement native-library api-slice --slice int-core --json && clean replacement native-library api-slice --slice int8-core --json && clean replacement native-library api-slice --slice int16-core --json && clean replacement native-library api-slice --slice int32-core --json && clean replacement native-library api-slice --slice int64-core --json && clean replacement native-library api-slice --slice isize-core --json && clean replacement native-library mathlib-api --expect-blocked --json && cargo test --locked -p clean-kernel native_reducers --lib",
             "reports/native-library-replacement.json",
-            "Partial native Init/Std reducer, Rust-owned API-slice, and native-shard gate evidence is recorded; Mathlib evidence is compatibility-only and full native Mathlib replacement remains blocked.",
+            replacement_row_blocker("native-libraries"),
         ),
         row(
             "mathverse-replay",
@@ -267,7 +388,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::InProgress,
             "clean mathverse replay-corpus --production --json --output reports/mathverse-replay-production-corpus.json && clean mathverse validate-replay-report --report reports/mathverse-replay-replacement.json --corpus reports/mathverse-replay-production-corpus.json && CARGO_TARGET_DIR=/tmp/clean-mathverse-native-gate-target cargo test --locked -p clean-mathverse --test native_gate_integration && cargo test --locked -p clean-elab --lib --features mathverse-library native_replay_gate -- --nocapture",
             "reports/mathverse-replay-replacement.json",
-            "Focused native shard replay, strict search-to-mathverse_use application gate evidence, and generated production-corpus accounting are recorded; 202 corpus obligations are found, but only 3 bounded native-gate verified witnesses, 0 strict mathverse_use applied, 6 rejected, and 193 unsupported.",
+            replacement_row_blocker("mathverse-replay"),
         ),
         row(
             "lake-workflow",
@@ -277,7 +398,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::InProgress,
             "clean lake smoke --report reports/lake-replacement-smoke.json",
             "reports/lake-replacement-smoke.json",
-            "Generated Lake init/build/test smoke passes without Lean4 delegation; full Lake-compatible workflows still must not delegate project semantics to Lean4 and remain limited to bounded native smoke evidence.",
+            replacement_row_blocker("lake-workflow"),
         ),
         row(
             "compile-runtime",
@@ -287,7 +408,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::Green,
             "clean compile demos/public/kernel_check_success.lean --decl main --emit c",
             "reports/compile-runtime-smoke.json",
-            "Public demo compile smoke emits C for `main` through the clean compiler/runtime path.",
+            replacement_row_blocker("compile-runtime"),
         ),
         row(
             "lsp-infoview",
@@ -297,17 +418,27 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::PendingEvidence,
             "cargo test --locked -p clean-lsp --lib",
             "reports/lsp-infoview-parity.json",
-            "Goal state, expected type, diagnostics, hover, completion, goto, references, rename, and code actions need parity evidence.",
+            replacement_row_blocker("lsp-infoview"),
         ),
         row(
             "rust-first-tooling",
             "Rust-first replacement gates",
             "Slot 6",
             IssueRef::new(3706, "Migrate replacement-critical Python tests and tooling into unified Rust harness"),
-            ReplacementStatus::Blocked,
-            "clean replacement status --json",
-            "reports/rust-first-tooling.json",
-            "Replacement-critical Python and shell gates referenced by launch/replacement evidence are inventoried; release readiness smoke, release issue hygiene, trust-boundary audit, system health, and mathverse download have Rust-owned surfaces while remaining blockers fail closed.",
+            // Measured 2026-08-26, not assumed: every one of the seven
+            // migration lanes is RustOwned or Demoted, so
+            // `rust_first_tooling_status()` computes launch_ready=true,
+            // overall_status=rust_owned, counts {demoted:3, rust_owned:4} and
+            // launch_blocking_python_wrapper_count=0. `Blocked` with "while
+            // remaining blockers fail closed" contradicted every one of those.
+            // What is genuinely outstanding is evidence, not work: the artifact
+            // was minted at 1f1075c9d, not at HEAD.
+            ReplacementStatus::PendingEvidence,
+            // Taken from the const the emitter itself writes into the artifact,
+            // so the row and reports/rust-first-tooling.json cannot drift apart.
+            RUST_FIRST_TOOLING_GATE_COMMAND,
+            RUST_FIRST_TOOLING_EVIDENCE_PATH,
+            replacement_row_blocker("rust-first-tooling"),
         ),
         row(
             "launch-docs",
@@ -317,7 +448,7 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             ReplacementStatus::Blocked,
             "clean release readiness-smoke --clean-clone-lite --launch --evidence /tmp/clean-release.json",
             "docs/RELEASE_READINESS.md; reports/benchmarks/publication/current.json",
-            "HN launch copy must remain blocked until every required scorecard row is green; refreshed benchmark publication evidence counts only after reports/benchmarks/publication/current.json and the current run artifacts are committed and the launch smoke passes from that release commit.",
+            replacement_row_blocker("launch-docs"),
         ),
     ]
 }

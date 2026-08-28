@@ -104,7 +104,7 @@ impl ResolutionDag {
 
     /// Classify all variables as A-only, B-only, or shared.
     #[must_use]
-    pub fn classify_variables(&self) -> std::collections::HashMap<u32, VarClass> {
+    pub(crate) fn classify_variables(&self) -> std::collections::HashMap<u32, VarClass> {
         let mut a_vars = HashSet::new();
         let mut b_vars = HashSet::new();
         for node in &self.nodes {
@@ -209,7 +209,7 @@ fn resolve_interpolant(
 /// Traverses the DAG bottom-up, computing partial interpolants per node.
 /// See [`a_input_interpolant`] and [`resolve_interpolant`] for per-node rules.
 #[must_use]
-pub fn extract_mcmillan_interpolant(dag: &ResolutionDag) -> PropFormula {
+pub(crate) fn extract_mcmillan_interpolant(dag: &ResolutionDag) -> PropFormula {
     let var_class = dag.classify_variables();
     if dag.nodes.is_empty() {
         return PropFormula::True;

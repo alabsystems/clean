@@ -292,7 +292,7 @@ impl VerifyLock {
     ///
     /// # Errors
     /// As [`VerifyLock::acquire`].
-    pub fn acquire_default() -> Result<Self, VerifyLockError> {
+    pub(crate) fn acquire_default() -> Result<Self, VerifyLockError> {
         Self::acquire(default_lock_path())
     }
 
@@ -348,7 +348,7 @@ fn bypass_requested() -> bool {
 /// `$ISA_VERIFY_LOCK_PATH`, else `$HOME/isabelle-work/.clean_verify.lock`, else
 /// (no `HOME`) a temp-dir fallback so acquisition never silently no-ops.
 #[must_use]
-pub fn default_lock_path() -> PathBuf {
+pub(crate) fn default_lock_path() -> PathBuf {
     if let Some(p) = std::env::var_os(LOCK_PATH_ENV) {
         return PathBuf::from(p);
     }
@@ -364,14 +364,14 @@ pub fn default_lock_path() -> PathBuf {
 /// (`.clean_verify.side.lock` in the same directory). Shared by the leaser and the
 /// doctor so both agree on where a side lease is recorded.
 #[must_use]
-pub fn side_lock_path_for(primary: &Path) -> PathBuf {
+pub(crate) fn side_lock_path_for(primary: &Path) -> PathBuf {
     primary.with_file_name(SIDE_LOCK_FILENAME)
 }
 
 /// The default side-lease sentinel path: `$ISA_SIDE_VERIFY_LOCK_PATH` if set, else
 /// [`side_lock_path_for`] applied to [`default_lock_path`].
 #[must_use]
-pub fn default_side_lock_path() -> PathBuf {
+pub(crate) fn default_side_lock_path() -> PathBuf {
     if let Some(p) = std::env::var_os(SIDE_LOCK_PATH_ENV) {
         return PathBuf::from(p);
     }
@@ -469,7 +469,7 @@ impl SideVerifyLease {
     ///
     /// # Errors
     /// As [`SideVerifyLease::acquire`].
-    pub fn acquire_default() -> Result<Self, SideLeaseError> {
+    pub(crate) fn acquire_default() -> Result<Self, SideLeaseError> {
         Self::acquire(default_lock_path(), default_side_lock_path())
     }
 
@@ -557,13 +557,13 @@ impl SideVerifyLease {
 
     /// The conservative free-RAM estimate (GiB) at acquire time.
     #[must_use]
-    pub fn free_ram_gb(&self) -> u64 {
+    pub(crate) fn free_ram_gb(&self) -> u64 {
         self.free_ram_gb
     }
 
     /// The RAM budget (GiB) this lease acquired under.
     #[must_use]
-    pub fn budget_gb(&self) -> u64 {
+    pub(crate) fn budget_gb(&self) -> u64 {
         self.budget_gb
     }
 }
@@ -664,7 +664,7 @@ fn primary_is_held(primary_path: &Path) -> bool {
 /// - **macOS:** parse `vm_stat` — page size × (free + inactive + speculative).
 /// - **Linux/other:** `/proc/meminfo` `MemAvailable` (the kernel's own estimate).
 #[must_use]
-pub fn free_ram_estimate_gb() -> Option<u64> {
+pub(crate) fn free_ram_estimate_gb() -> Option<u64> {
     #[cfg(test)]
     {
         if let Some(gb) = test_free_ram_override() {

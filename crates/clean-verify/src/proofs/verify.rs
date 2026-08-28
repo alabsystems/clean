@@ -130,7 +130,7 @@ impl ProofTerm {
     ///
     /// # Errors
     /// Returns `ProofError` if verification fails.
-    pub fn verify_with_deps(
+    pub(crate) fn verify_with_deps(
         &self,
         spec: &Specification,
     ) -> Result<(ProofStatus, HashSet<String>), ProofError> {

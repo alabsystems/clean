@@ -7,70 +7,9 @@
 
 use super::types::*;
 
-/// Standard amsthm-like theorem environments.
-const THEOREM_ENV_NAMES: &[&str] = &[
-    "theorem",
-    "lemma",
-    "proposition",
-    "corollary",
-    "conjecture",
-    "claim",
-    "fact",
-];
+mod classify;
 
-/// Standard definition-like environments.
-const DEFINITION_ENV_NAMES: &[&str] = &[
-    "definition",
-    "notation",
-    "convention",
-    "example",
-    "remark",
-    "assumption",
-    "axiom",
-];
-
-/// Theorem kind display names (lowercase) to TheoremKind mapping.
-fn classify_theorem(name: &str) -> Option<TheoremKind> {
-    let lower = name.to_lowercase();
-    if lower.contains("theorem") {
-        Some(TheoremKind::Theorem)
-    } else if lower.contains("lemma") {
-        Some(TheoremKind::Lemma)
-    } else if lower.contains("proposition") {
-        Some(TheoremKind::Proposition)
-    } else if lower.contains("corollary") {
-        Some(TheoremKind::Corollary)
-    } else if lower.contains("conjecture") {
-        Some(TheoremKind::Conjecture)
-    } else if lower.contains("claim") {
-        Some(TheoremKind::Claim)
-    } else if lower.contains("fact") {
-        Some(TheoremKind::Fact)
-    } else {
-        None
-    }
-}
-
-fn classify_definition(name: &str) -> Option<DefinitionKind> {
-    let lower = name.to_lowercase();
-    if lower.contains("definition") {
-        Some(DefinitionKind::Definition)
-    } else if lower.contains("notation") {
-        Some(DefinitionKind::Notation)
-    } else if lower.contains("convention") {
-        Some(DefinitionKind::Convention)
-    } else if lower.contains("example") {
-        Some(DefinitionKind::Example)
-    } else if lower.contains("remark") {
-        Some(DefinitionKind::Remark)
-    } else if lower.contains("assumption") || lower.contains("hypothesis") {
-        Some(DefinitionKind::Assumption)
-    } else if lower.contains("axiom") {
-        Some(DefinitionKind::Axiom)
-    } else {
-        None
-    }
-}
+use classify::{classify_definition, classify_theorem, DEFINITION_ENV_NAMES, THEOREM_ENV_NAMES};
 
 /// Find custom theorem-like environments from `\newtheorem` declarations.
 pub(crate) fn find_custom_environments(latex: &str) -> Vec<(String, String)> {

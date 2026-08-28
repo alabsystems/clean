@@ -527,6 +527,102 @@ impl<'env> TypeChecker<'env> {
         }
     }
 
+    /// Third member of the grind-guard family (`native_nat_binop_grind_stuck`,
+    /// `native_nat_grind_recursor_stuck`): the **CLOSED, arbitrarily-typed**
+    /// `Nat.rec` fold over a huge literal count.
+    ///
+    /// The two existing guards both require a *symbolic* accumulator, on the
+    /// stated ground that "a CLOSED `z` is a fully-closed computation that
+    /// yields a genuine literal (Lean computes it via GMP) — we must not block
+    /// it". That ground does not hold for the folds this guard covers: they are
+    /// closed, they do compute, and Lean *never* evaluates them this way. Lean
+    /// reaches the same values through GMP-accelerated literal operations on the
+    /// native-op spine; Clean gets here only after a native reducer has already
+    /// declined and δ has unfolded the definition into its `Nat.rec` seed.
+    /// Θ(count) unary ι-steps is the only route left, and at these counts that
+    /// route never terminates.
+    ///
+    /// Measured 2026-08-26 at `69f4f4a70` on `import Init.GrindInstances`, which
+    /// re-checks the `Int32`/`Int64`/`BitVec` conversion lemmas: the run reached
+    /// 10.4 GB RSS in 13 s and was killed, walking a count that decremented by
+    /// exactly 1 per ι-expansion from `2^32` (~4.3 billion steps). With this
+    /// guard the same import completes.
+    ///
+    /// Fires iff `e` is `Nat.rec motive z s major` with:
+    /// - **a constant motive** `fun _ => T` where `T` has no loose bvars — an
+    ///   ordinary N-fold. This EXCLUDES the course-of-values
+    ///   `brecOn`/`Nat.below` towers, whose motive `fun n => PProd (C n)
+    ///   (Nat.below C n)` mentions the index;
+    /// - **a step that genuinely consumes its induction hypothesis**. A step
+    ///   ignoring `ih` is a `Nat.casesOn` in disguise and reduces in ONE ι-step
+    ///   whatever the count — `Int.negOfNat`, `Nat.blt`-style decision folds and
+    ///   the `Int` predecessor's own inner case split are all of this kind, and
+    ///   all keep computing normally;
+    /// - **a count that whnfs to a closed literal `>= 2^16`**. That is 128x the
+    ///   `2^9` the sibling guards use — deliberately permissive, since unlike
+    ///   them this one can block a fold that would have produced a value. Below
+    ///   it nothing changes at all.
+    ///
+    /// SOUNDNESS: identical in kind to both siblings. The stuck `Nat.rec … major`
+    /// IS definitionally equal to its ι-normal form, so declining to expand it
+    /// strictly NARROWS reduction — a comparison can only fail to converge, never
+    /// wrongly ACCEPT. Both sides of a congruent comparison are left in the same
+    /// stuck form, so def-eq closes them structurally.
+    ///
+    /// Completeness note: this is the fallback. `reduce_int_pred_fold` runs
+    /// first and COMPUTES the fold's value for the one family whose step is
+    /// pinned exactly, so the common case still yields a literal rather than
+    /// going stuck.
+    pub(in crate::tc) fn native_closed_fold_grind_stuck(&self, e: &Expr, rec_name: &Name) -> bool {
+        /// See the doc comment: 128x the sibling guards' `2^9`, because this
+        /// guard can block a fold that would have produced a value.
+        const CLOSED_FOLD_GRIND_STUCK_THRESHOLD: u64 = 1 << 16;
+
+        if *rec_name != *names::NAT_REC {
+            return false;
+        }
+        // Nat has no params/indices: `Nat.rec {motive} z s major` = 4 app args.
+        if e.get_app_num_args() != 4 {
+            return false;
+        }
+        let args = e.get_app_args();
+
+        // Constant motive `fun _ => T`, T closed (O(1): cached metadata).
+        let ExprKind::Lam(_, _, motive_body) = &args[0].kind else {
+            return false;
+        };
+        if motive_body.has_loose_bvars() {
+            return false;
+        }
+
+        // Step `fun (n : Nat) (ih : T) => body`. Cheap pre-filter first: a body
+        // with no loose bvars at all cannot mention `ih`.
+        let ExprKind::Lam(_, _, step_inner) = &args[2].kind else {
+            return false;
+        };
+        let ExprKind::Lam(_, _, step_body) = &step_inner.kind else {
+            return false;
+        };
+        if !step_body.has_loose_bvars() {
+            return false;
+        }
+
+        // Large closed count.
+        let big_count = match self.get_nat_bignat_whnf(args[3]) {
+            Some(BigNat::Small(v)) => v >= CLOSED_FOLD_GRIND_STUCK_THRESHOLD,
+            Some(BigNat::Big(_)) => true,
+            None => false,
+        };
+        if !big_count {
+            return false;
+        }
+
+        // Exact test, run last because it walks the step: does the body really
+        // reference `ih` (de Bruijn 0 under the two step binders)? Only then is
+        // the fold a Θ(count) grind rather than a one-step case split.
+        references_bvar(step_body, 0)
+    }
+
     fn get_nat_bignat_whnf(&self, e: &Expr) -> Option<BigNat> {
         // Track probe nesting for the dynamic extent of this extraction (the
         // `whnf_impl` below can re-enter `reduce_nat`, whose arms re-enter
@@ -706,4 +802,29 @@ pub(crate) fn string_lit_to_constructor(s: &str) -> Expr {
 
     // String.ofList char_list
     Expr::app(string_of_list, char_list)
+}
+
+/// Does `e` reference the loose de Bruijn variable `idx` (indices shifting under
+/// binders)? Used by [`TypeChecker::native_closed_fold_grind_stuck`] to tell a
+/// genuine Θ(count) fold from a `Nat.casesOn` in disguise.
+///
+/// Short-circuits on the cached `loose_bvar_range` metadata, so whole closed
+/// subterms are skipped in O(1).
+fn references_bvar(e: &Expr, idx: u32) -> bool {
+    if e.loose_bvar_range() <= idx {
+        return false;
+    }
+    match e.kind() {
+        ExprKind::BVar(i) => *i == idx,
+        ExprKind::App(f, a) => references_bvar(f, idx) || references_bvar(a, idx),
+        ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
+            references_bvar(ty, idx) || references_bvar(body, idx + 1)
+        }
+        ExprKind::Let(_, ty, val, body, _) => {
+            references_bvar(ty, idx) || references_bvar(val, idx) || references_bvar(body, idx + 1)
+        }
+        ExprKind::Proj(_, _, inner) => references_bvar(inner, idx),
+        ExprKind::MData(_, inner) => references_bvar(inner, idx),
+        _ => false,
+    }
 }

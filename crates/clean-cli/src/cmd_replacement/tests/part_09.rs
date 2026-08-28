@@ -130,6 +130,57 @@ fn trust_core_evidence_rejects_misfiled_production_site_method() {
     ));
 }
 
+/// The sanctioned-bypass allowlist exists in two places by necessity: Rust
+/// enforces it on the launch-evidence path, python re-derives the sites from
+/// `crates/**/*.rs`. Two allowlists that can disagree are one allowlist and one
+/// hole, so this parses the python and fails closed on any drift — a site in
+/// one and not the other, or a different cap.
+#[test]
+fn sanctioned_add_decl_sites_match_the_source_scanner() {
+    let scanner = fs::read_to_string(repo_artifact_path("scripts/check_add_decl_ratchet.py"))
+        .expect("the source scanner must exist; it is half of this gate");
+    let body = scanner
+        .split_once("SANCTIONED_SITES: dict[tuple[str, str], int] = {")
+        .expect("SANCTIONED_SITES literal")
+        .1
+        .split_once('}')
+        .expect("SANCTIONED_SITES literal terminator")
+        .0;
+
+    let mut python_sites: Vec<(String, String, u32)> = Vec::new();
+    for line in body.lines().map(str::trim).filter(|l| l.starts_with('(')) {
+        let (key, cap) = line
+            .trim_end_matches(',')
+            .rsplit_once("): ")
+            .unwrap_or_else(|| panic!("unparsable SANCTIONED_SITES row: {line}"));
+        let mut parts = key.trim_start_matches('(').split(", ");
+        let file = parts.next().expect("file").trim_matches('"').to_string();
+        let method = parts.next().expect("method").trim_matches('"').to_string();
+        python_sites.push((file, method, cap.parse().expect("cap")));
+    }
+
+    let rust_sites: Vec<(String, String, u32)> = SANCTIONED_ADD_DECL_BYPASS_SITES
+        .iter()
+        .map(|(f, m, c)| ((*f).to_string(), (*m).to_string(), *c))
+        .collect();
+
+    assert_eq!(
+        rust_sites, python_sites,
+        "SANCTIONED_ADD_DECL_BYPASS_SITES and scripts/check_add_decl_ratchet.py's \
+         SANCTIONED_SITES have drifted; one of them is now a hole"
+    );
+}
+
+/// The live artifact must be CLOSED, not merely internally consistent. This is
+/// the assertion `deny_sorry_gate.sh` used to make against a JSON literal.
+#[test]
+fn current_unchecked_decl_ratchet_artifact_is_closed() {
+    let ratchet = load_unchecked_decl_ratchet().expect("unchecked-decl ratchet parses");
+
+    validate_unchecked_decl_ratchet_closed(&ratchet)
+        .expect("the checked-in ratchet's counted bypasses must all be sanctioned and capped");
+}
+
 #[test]
 fn current_unchecked_decl_ratchet_artifact_validates() {
     let ratchet = load_unchecked_decl_ratchet().expect("unchecked-decl ratchet parses");
@@ -176,18 +227,20 @@ fn deny_sorry_lane(id: &str) -> &'static DenySorryLaneExpectation {
         .expect("known DENY_SORRY lane id")
 }
 
+/// The generator's behaviour tracks whether the CHECKED-IN ratchet is closed.
+/// G6 (2026-08-23): "closed" is no longer "the counts are 0" — the tree's one
+/// production bypass is counted and sanctioned, so a nonzero count is closed
+/// and generation must proceed.
 #[test]
 fn rust_deny_sorry_generator_matches_current_ratchet_debt() {
     let ratchet = load_unchecked_decl_ratchet().expect("unchecked-decl ratchet");
-    let debt = ratchet
-        .add_decl_structural_count
-        .saturating_add(ratchet.add_decl_unchecked_count);
+    let closed = validate_unchecked_decl_ratchet_closed(&ratchet).is_ok();
 
     let result = generate_deny_sorry_launch_evidence_with(
         "2026-04-27T00:00:00Z",
         &deny_sorry_passing_lane_runner,
     );
-    if debt == 0 {
+    if closed {
         let artifact = result.expect("closed ratchet must generate deny-sorry evidence");
         assert_eq!(artifact.generated_by, DENY_SORRY_RUST_GATE_COMMAND);
         assert_eq!(artifact.gate_command, DENY_SORRY_RUST_GATE_COMMAND);
@@ -206,7 +259,7 @@ fn rust_deny_sorry_generator_matches_current_ratchet_debt() {
             .expect_err("open ratchet must fail deny-sorry evidence generation closed")
             .to_string();
         assert!(
-            err.contains("current ratchet is not closed at 0/0"),
+            err.contains("current ratchet is not closed"),
             "unexpected generator error: {err}"
         );
     }
@@ -219,7 +272,7 @@ fn rust_deny_sorry_generator_matches_current_ratchet_debt() {
 fn every_executable_deny_sorry_lane_declares_a_command() {
     for lane in DENY_SORRY_EXPECTED_LANES {
         match lane.id {
-            "lint_sorry_bypass" | "unchecked_decl_ratchet_zero" => {
+            "lint_sorry_bypass" | "unchecked_decl_ratchet_accounted" => {
                 assert!(
                     lane.command.is_none(),
                     "in-process lane {} must not declare a command",
@@ -323,14 +376,14 @@ fn deny_sorry_generator_fails_closed_on_wrong_test_count() {
         .to_string();
 
     let ratchet = load_unchecked_decl_ratchet().expect("unchecked-decl ratchet");
-    if ratchet.add_decl_structural_count == 0 && ratchet.add_decl_unchecked_count == 0 {
+    if validate_unchecked_decl_ratchet_closed(&ratchet).is_ok() {
         assert!(
             err.contains("kernel_deny_sorry_gate") && err.contains("matched_expected_count=false"),
             "unexpected generator error: {err}"
         );
     } else {
         assert!(
-            err.contains("current ratchet is not closed at 0/0"),
+            err.contains("current ratchet is not closed"),
             "unexpected generator error: {err}"
         );
     }
@@ -379,17 +432,24 @@ fn deny_sorry_launch_evidence_rejects_wrong_expected_count() {
     assert!(err.contains("kernel_deny_sorry_gate expected_tests"));
 }
 
+/// A count that no sanctioned production site accounts for is an OPEN ratchet,
+/// whatever the number is. (Pre-G6 this test read "nonzero"; a bare nonzero
+/// count is no longer the failure — an *unaccounted* one is.)
 #[test]
-fn deny_sorry_launch_evidence_rejects_nonzero_current_ratchet() {
+fn deny_sorry_launch_evidence_rejects_unaccounted_current_ratchet() {
     let mut ratchet = closed_unchecked_decl_ratchet();
     let mut artifact = valid_deny_sorry_launch_artifact(&ratchet);
     ratchet.add_decl_unchecked_count = 1;
     artifact.ratchet.add_decl_unchecked_count = 1;
 
     let err = validate_deny_sorry_launch_evidence(&artifact, &ratchet)
-        .expect_err("nonzero current ratchet must fail closed");
+        .expect_err("a count no sanctioned site accounts for must fail closed");
 
-    assert!(err.contains("current ratchet is not closed at 0/0"));
+    assert!(
+        err.contains("current ratchet is not closed")
+            && err.contains("sanctioned production sites account for"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]

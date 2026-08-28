@@ -14,7 +14,7 @@ use crate::error::CompilerError;
 use crate::lcnf::{Alt, Arg, Param};
 use clean_kernel::env::TrustedEnvExt;
 use clean_kernel::inductive::mentions_name;
-use clean_kernel::{Declaration, ExprKind, Level};
+use clean_kernel::{BinderInfo, Declaration, ExprKind, Level};
 
 pub(super) fn make_env() -> Environment {
     Environment::default()
@@ -418,7 +418,6 @@ fn test_classify_expr_arg_raw_sprop() {
 /// "Expression form: Pi(..)" error (the `BEq.beq` motive-body bucket).
 #[test]
 fn test_classify_expr_arg_open_pi_is_type() {
-    use clean_kernel::BinderInfo;
     let env = full_prelude_env();
     // `BVar(4) -> BVar(5) -> Bool` — the literal failing shape from BEq.beq.
     let open_pi = Expr::pi(
@@ -436,7 +435,6 @@ fn test_classify_expr_arg_open_pi_is_type() {
 /// `Normal` (fail-closed: the erasure never widens to runtime values).
 #[test]
 fn test_classify_expr_arg_type_valued_lambda() {
-    use clean_kernel::BinderInfo;
     let env = full_prelude_env();
 
     // `fun (t : Decidable (BVar 0)) => Bool` — Decidable.decide's motive
@@ -717,7 +715,7 @@ fn register_bool_inductive(env: &mut Environment) -> Name {
 /// Helper to register a Sigma-like inductive with a proof field
 /// Sigma (A : Type) (P : A → Prop) := mk : (a : A) → P a → Sigma A P
 fn register_subtype_inductive(env: &mut Environment) -> Name {
-    use clean_kernel::{BinderInfo, ConstructorVal, InductiveVal};
+    use clean_kernel::{ConstructorVal, InductiveVal};
 
     let subtype_name = Name::from_string("MySigma");
     let mk_name = Name::from_string("MySigma.mk");
@@ -1119,7 +1117,7 @@ fn test_lower_nat_caseson_to_cases_zero_ctor_plus_succ_default() {
     let env = make_env();
     let mut ctx = LcnfContext::new(&env);
     let succ_lambda = Expr::lam(
-        clean_kernel::BinderInfo::Default,
+        BinderInfo::Default,
         Expr::const_str("Nat"),
         Expr::const_str("succ_val"),
     );
@@ -1174,13 +1172,9 @@ fn test_nat_rec_routes_through_synthesized_recursion_not_enclosing_self_call() {
         vec![Expr::bvar(1), Expr::bvar(0)],
     );
     let succ_lambda = Expr::lam(
-        clean_kernel::BinderInfo::Default,
+        BinderInfo::Default,
         Expr::const_str("Nat"),
-        Expr::lam(
-            clean_kernel::BinderInfo::Default,
-            Expr::const_str("Nat"),
-            inner_body,
-        ),
+        Expr::lam(BinderInfo::Default, Expr::const_str("Nat"), inner_body),
     );
     // Nat.rec order (MajorAfterMinors): motive, zero, succ, major.
     let expr = apply_all(
@@ -1269,10 +1263,10 @@ fn test_multi_param_nat_rec_never_self_calls_enclosing_decl() {
     let env = Environment::with_prelude();
 
     let succ_lambda = Expr::lam(
-        clean_kernel::BinderInfo::Default,
+        BinderInfo::Default,
         Expr::const_str("Nat"),
         Expr::lam(
-            clean_kernel::BinderInfo::Default,
+            BinderInfo::Default,
             Expr::const_str("_"),
             // mkCons x ih — mentions the OUTER param x (BVar 3 here: under
             // pred+ih inside fun n x => .., x is BVar 2 + 0 minor depth.. use
@@ -1293,13 +1287,9 @@ fn test_multi_param_nat_rec_never_self_calls_enclosing_decl() {
         ],
     );
     let value = Expr::lam(
-        clean_kernel::BinderInfo::Default,
+        BinderInfo::Default,
         Expr::const_str("Nat"),
-        Expr::lam(
-            clean_kernel::BinderInfo::Default,
-            Expr::const_str("_"),
-            body,
-        ),
+        Expr::lam(BinderInfo::Default, Expr::const_str("_"), body),
     );
     let info = clean_kernel::ConstantInfo::new(
         Name::from_string("myrep"),
@@ -1401,7 +1391,7 @@ fn strip_lets(code: &Code) -> &Code {
 /// simplicity) with `MyOpt.none` (tag 0, 0 fields) and `MyOpt.some : Nat ->
 /// MyOpt` (tag 1, 1 field).
 fn register_myopt_inductive(env: &mut Environment) -> Name {
-    use clean_kernel::{BinderInfo, ConstructorVal, InductiveVal};
+    use clean_kernel::{ConstructorVal, InductiveVal};
 
     let ind = Name::from_string("MyOpt");
     let none = Name::from_string("MyOpt.none");
@@ -1448,7 +1438,6 @@ fn register_myopt_inductive(env: &mut Environment) -> Name {
 
 #[test]
 fn test_lower_generic_cases_on_binds_fields_per_ctor() {
-    use clean_kernel::BinderInfo;
     let mut env = make_env();
     register_myopt_inductive(&mut env);
     let mut ctx = LcnfContext::new(&env);
@@ -1519,7 +1508,6 @@ fn test_lower_generic_cases_on_binds_fields_per_ctor() {
 
 #[test]
 fn test_generic_cases_on_declines_nat_cases() {
-    use clean_kernel::BinderInfo;
     // A `Nat.casesOn`-shaped spine is handled by `nat_cases_branches`, not the
     // generic arm; confirm `generic_cases_on` declines a `Nat.casesOn` head so
     // Nat keeps its boxed-integer lowering.
@@ -1627,7 +1615,6 @@ fn test_noconfusion_family_emits_erased_stub() {
 /// error instead.
 #[test]
 fn test_user_data_returning_noconfusion_is_never_dropped() {
-    use clean_kernel::BinderInfo;
     let env = full_prelude_env();
     let nat = Expr::const_str("Nat");
     // Body: `fun (n : Nat) => <unbound BVar 5>` — well-shaped enough to reach
@@ -2015,5 +2002,91 @@ fn test_r1_synthesized_recursion_is_structural() {
     assert!(
         saw_structural_self_call,
         "the cons arm computes its IH by a structural self-call"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Beta-redex heads (the match-elaboration default-arm shape)
+// ---------------------------------------------------------------------------
+
+/// A lambda-headed application LOWERS instead of refusing.
+///
+/// Match elaboration leaves an unreduced beta-redex in DEFAULT arms — a
+/// wildcard arm arrives as `(fun _ : Nat => 0) k` — and the value-position
+/// `App` funnel refused it ("Application head: Lam"). Measured blast radius:
+/// every fixed multi-arm match (`| 0 => _ | 1 => _ | _ => _`) was blocked from
+/// the C extraction lane; the streams flagship's `stepCase` was the finder.
+#[test]
+fn test_beta_redex_head_lowers() {
+    let mut env = full_prelude_env();
+    let nat = Expr::const_str("Nat");
+    // def redex (k : Nat) : Nat := (fun _ : Nat => 0) k
+    let value = Expr::lam(
+        BinderInfo::Default,
+        nat.clone(),
+        Expr::app(
+            Expr::lam(BinderInfo::Default, nat.clone(), Expr::nat_lit(0)),
+            Expr::bvar(0),
+        ),
+    );
+    env.add_decl(Declaration::Definition {
+        name: Name::from_string("redex"),
+        level_params: vec![],
+        type_: Expr::pi(BinderInfo::Default, nat.clone(), nat.clone()),
+        value,
+        is_reducible: false,
+    })
+    .expect("redex must kernel-check");
+    assert!(
+        matches!(lower_named(&env, "redex"), Ok(Some(_))),
+        "a beta-redex head must lower, not refuse with `Application head: Lam`"
+    );
+}
+
+/// BIND-ONCE: a compound argument to a redex is let-bound once, however many
+/// times the binder occurs in the body.
+///
+/// `(fun x => Nat.add x x) (Nat.succ k)` must compute `Nat.succ k` ONCE.
+/// Substituting the raw argument would duplicate its work (and, in the
+/// extraction lanes, its overflow `.expect`); only the let-bound ATOM may be
+/// substituted. Pinned by counting `Nat.succ` in the lowered code: exactly one
+/// occurrence.
+#[test]
+fn test_beta_redex_compound_argument_is_bound_once() {
+    let mut env = full_prelude_env();
+    let nat = Expr::const_str("Nat");
+    let body = Expr::apps(Expr::const_str("Nat.add"), [Expr::bvar(0), Expr::bvar(0)]);
+    let value = Expr::lam(
+        BinderInfo::Default,
+        nat.clone(),
+        Expr::app(
+            Expr::lam(BinderInfo::Default, nat.clone(), body),
+            Expr::app(Expr::const_str("Nat.succ"), Expr::bvar(0)),
+        ),
+    );
+    env.add_decl(Declaration::Definition {
+        name: Name::from_string("redex2"),
+        level_params: vec![],
+        type_: Expr::pi(BinderInfo::Default, nat.clone(), nat.clone()),
+        value,
+        is_reducible: false,
+    })
+    .expect("redex2 must kernel-check");
+    let decl = lower_named(&env, "redex2")
+        .expect("must lower")
+        .expect("must produce a decl");
+    // The Debug format spells a name as `suffix: ["Nat", "succ"]`, so count
+    // that spelling, not the dotted one (which never appears and would make
+    // this assertion vacuous in the passing direction and wrong in this one).
+    let dumped = format!("{decl:?}");
+    assert_eq!(
+        dumped.matches(r#"["Nat", "succ"]"#).count(),
+        1,
+        "the compound argument must be computed ONCE and its atom reused; more \
+         than one `Nat.succ` means the argument's work was duplicated:\n{dumped}"
+    );
+    assert!(
+        dumped.matches(r#"["Nat", "add"]"#).count() >= 1,
+        "the body must survive the reduction:\n{dumped}"
     );
 }

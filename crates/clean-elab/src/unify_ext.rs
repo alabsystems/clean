@@ -366,7 +366,7 @@ impl<'a> UnifyExt<'a> {
             }
             (ExprKind::Lit(a), ExprKind::Lit(b)) if a == b => UnifyResult::Success,
             (ExprKind::Lit(a), ExprKind::Lit(b)) => {
-                UnifyResult::Failure(format!("literal mismatch: {a:?} vs {b:?}"))
+                UnifyResult::Failure(format!("literal mismatch: {a} vs {b}"))
             }
             (ExprKind::Proj(n1, i1, e1), ExprKind::Proj(n2, i2, e2)) if n1 == n2 && i1 == i2 => {
                 self.unify(e1, e2)

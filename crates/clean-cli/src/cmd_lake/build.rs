@@ -608,6 +608,16 @@ def hello := "world"
 "#;
     fs::write(project_dir.join("lake-manifest.json"), manifest)?;
 
+    // Pin the toolchain. Real Lake always writes this, and Clean's own library
+    // scaffold does too — only this CLI path did not, so every project created
+    // with `clean lake new` was toolchain-unpinned and resolved to whatever the
+    // operator's ambient state happened to be. Same constant as the library
+    // path, so the two scaffolds cannot drift.
+    fs::write(
+        project_dir.join("lean-toolchain"),
+        clean_lake::DEFAULT_CLEAN_TOOLCHAIN,
+    )?;
+
     // Generate .gitignore
     let gitignore = r"/.lake/
 *.olean
@@ -624,6 +634,7 @@ def hello := "world"
         println!("  {project_name}/Basic.lean");
     }
     println!("  lake-manifest.json");
+    println!("  lean-toolchain");
     println!("  .gitignore");
     println!("\nTo build:");
     println!("  cd {name}");
@@ -659,17 +670,51 @@ pub(super) fn lake_clean(verbose: bool, dir: Option<PathBuf>) -> anyhow::Result<
     let ws = Workspace::from_config(&cwd, config);
     let ctx = BuildContext::new(ws);
 
+    let build_dir = ctx.workspace().build_dir();
     if verbose {
-        println!(
-            "cleaning build directory: {:?}",
-            ctx.workspace().build_dir()
-        );
+        println!("cleaning build directory: {}", build_dir.display());
+        // The `--verbose` contract is a file-by-file report of what is removed,
+        // so enumerate BEFORE the removal — afterwards there is nothing to walk.
+        for file in collect_files_recursively(&build_dir) {
+            let shown = file.strip_prefix(&cwd).unwrap_or(&file);
+            println!("  removing {}", shown.display());
+        }
     }
 
     ctx.clean()?;
     println!("cleaned build artifacts.");
 
     Ok(())
+}
+
+/// Every non-directory entry under `root`, path-sorted for a stable report.
+///
+/// Best-effort by construction: an unreadable directory contributes nothing
+/// rather than aborting the clean. This only feeds the `--verbose` report —
+/// the removal itself is `BuildContext::clean`, which is not driven by this
+/// list, so a missed entry can never leave an artifact behind.
+fn collect_files_recursively(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            // `file_type` does not follow symlinks, so a symlinked directory is
+            // reported as a single entry instead of being descended into.
+            match entry.file_type() {
+                Ok(ft) if ft.is_dir() => stack.push(path),
+                Ok(_) => out.push(path),
+                Err(_) => {}
+            }
+        }
+    }
+
+    out.sort();
+    out
 }
 
 /// Initialize lake in current directory
@@ -721,12 +766,17 @@ pub(super) fn lake_init(name: Option<String>, dir: Option<PathBuf>) -> anyhow::R
 }
 "#;
     fs::write(cwd.join("lake-manifest.json"), manifest)?;
+    fs::write(
+        cwd.join("lean-toolchain"),
+        clean_lake::DEFAULT_CLEAN_TOOLCHAIN,
+    )?;
 
     println!("Initialized Lean project '{project_name}'");
     println!("  lakefile.lean");
     println!("  {module_name}.lean");
     println!("  Test.lean");
     println!("  lake-manifest.json");
+    println!("  lean-toolchain");
 
     Ok(())
 }
@@ -841,6 +891,38 @@ lean_test {test_name} where
 mod lakefile_template_tests {
     use super::*;
     use clean_lake::{LakeConfig, LakefileParseMode};
+
+    /// Real Lake always writes `lean-toolchain`, and Clean's own library
+    /// scaffold does; only these CLI paths did not, so every project created
+    /// through the binary was toolchain-unpinned and resolved to whatever the
+    /// operator's ambient elan state happened to be.
+    ///
+    /// `lake_init` takes an explicit directory and is exercised directly.
+    /// `lake_new` resolves against the process working directory, which a
+    /// parallel test must not mutate, so it is covered by sharing the single
+    /// `DEFAULT_CLEAN_TOOLCHAIN` constant with this path rather than by a
+    /// chdir'ing test.
+    #[test]
+    fn test_lake_init_pins_the_toolchain() {
+        let init_dir = tempfile::tempdir().expect("tempdir");
+        lake_init(
+            Some("initialized".to_string()),
+            Some(init_dir.path().to_path_buf()),
+        )
+        .expect("lake init should succeed");
+
+        let written = init_dir.path().join("lean-toolchain");
+        assert!(
+            written.is_file(),
+            "`lake init` must pin the toolchain at {}",
+            written.display()
+        );
+        assert_eq!(
+            std::fs::read_to_string(&written).expect("read toolchain"),
+            clean_lake::DEFAULT_CLEAN_TOOLCHAIN,
+            "`lake init` must write the identifier the library scaffold writes"
+        );
+    }
 
     #[test]
     fn test_lake_new_templates_strict_parse_with_zero_diagnostics() {

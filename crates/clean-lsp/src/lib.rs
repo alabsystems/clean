@@ -36,7 +36,17 @@
 pub mod backend;
 pub mod diagnostics;
 pub mod document;
+/// Wire-level regression guard: no editor surface may ship Rust `Debug`
+/// output. Test-only — it drives the real service over `tokio::io::duplex`
+/// and asserts on the bytes an editor would render.
+#[cfg(test)]
+mod editor_render_wire;
 pub mod file_progress;
+/// Wire-level regression guard: `textDocument/hover` must answer where a user
+/// hovers, not only on a declaration's command keyword. Test-only — it
+/// grid-sweeps the real service over `tokio::io::duplex`.
+#[cfg(test)]
+mod hover_wire;
 pub mod report_validation;
 pub mod rpc;
 

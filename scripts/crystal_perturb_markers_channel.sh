@@ -45,17 +45,36 @@ reason() { awk '/panicked at/{f=1} f{print "     | " $0} /^note: run with/{exit}
 # Anchored substitution that FAILS LOUDLY when the anchor does not match exactly one line —
 # a silent no-substitution would make a mutated run look green, which is the precise false
 # negative this script exists to rule out.
-sub() { python3 - "$1" "$2" "$3" <<'PY'
+sub() { python3 - "$1" "$2" "$3" "${4:-1}" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b, want = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 lines = open(p).read().split("\n")
-hits = [i for i, l in enumerate(lines) if a in l]
-assert len(hits) == 1, "anchor must match exactly one line, matched %d: %s" % (len(hits), a[:80])
-i = hits[0]
-assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
-lines[i] = lines[i].replace(a, b, 1)
+decl_only = p.endswith(".rs")
+hits = [i for i, l in enumerate(lines)
+        if a in l and (not decl_only or l.startswith("const SRC_"))]
+# `want` > 1 exists for ONE measured reason: the 2026-08-21 a152 rebaseline
+# (b03937e74) added a `current_source_bound_pin` stanza that RESTATES the
+# measured row's values, so those anchors now denote TWO lines that must move
+# together.  Still fail-closed: any other count aborts, naming pattern + count.
+assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+for i in hits:
+    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
+  rc=$?
+  # A FAILED substitution is the false negative this whole script exists to
+  # rule out: the file stays as it was, the next `expect` would run against an
+  # unchanged (or still-mutated) tree, and every case after it would be
+  # meaningless.  Abort loudly instead — the assertion above already named the
+  # pattern and the match count.  NOTE the binding: writing `|| exit 9` after
+  # the closing brace of the function DEFINITION binds to the (always-zero)
+  # definition itself, never to the calls — that construct let failed
+  # substitutions continue silently, which is why $? is captured HERE.
+  if [[ $rc -ne 0 ]]; then
+    echo "FATAL: substitution failed in $1 (anchor: $2)"
+    exit 9
+  fi
 }
 
 # Path-addressed mutation. `sub` anchors on a LINE, which silently becomes ambiguous the
@@ -74,6 +93,13 @@ assert cur == want, 'expected %s at %s, found %s' % (want, path, cur)
 node[keys[-1]] = json.loads(new)
 open(p, 'w').write(json.dumps(j, indent=1) + chr(10))
 PY
+  rc=$?
+  # Same binding rule as `sub`: a failed path-addressed mutation must ABORT,
+  # not let the next `expect` run against an unmutated tree.
+  if [[ $rc -ne 0 ]]; then
+    echo "FATAL: path-addressed mutation failed at $1 (see the assertion above)"
+    exit 9
+  fi
 }
 
 echo "== baseline =="

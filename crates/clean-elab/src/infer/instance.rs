@@ -28,8 +28,22 @@ use super::ElabCtx;
 use crate::stack_safe;
 use crate::unify::{MetaId, MetaState, Unifier, UnifyResult};
 use clean_kernel::expr::ZFCSetExpr;
-use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level, Name};
+use clean_kernel::{BinderData, BinderInfo, Expr, ExprKind, FVarId, Level, Name};
 use std::collections::{HashMap, HashSet};
+
+/// Cap on the ∀-telescope a LOCAL instance binder may be opened under by
+/// [`ElabCtx::resolve_local_instance_telescoped`]. `DecidableEq α` needs 2.
+/// The cap exists so a pathological local type cannot turn a failure path into
+/// an unbounded walk; a local needing more binders than this is refused, never
+/// truncated.
+const MAX_LOCAL_TELESCOPE: usize = 8;
+
+/// Cap on the ∀-telescope a Pi-shaped GOAL may be opened under by
+/// [`ElabCtx::resolve_pi_goal_by_abstraction`]. `DecidableEq α` needs 2. Same
+/// contract as [`MAX_LOCAL_TELESCOPE`]: a goal needing more binders than this
+/// is refused, never truncated — a truncated telescope would build a lambda of
+/// the wrong arity.
+const MAX_GOAL_TELESCOPE: usize = 8;
 
 /// Instance resolution methods for ElabCtx
 impl<'a> ElabCtx<'a> {
@@ -74,8 +88,56 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Returns Some(instance_expr) if found, None otherwise.
     pub fn resolve_instance(&mut self, goal_ty: &Expr) -> Option<Expr> {
+        // `strict` propagates the open-input postpone from the TOP-LEVEL goal's
+        // class to every SUB-goal the search generates, which is what Lean gets
+        // for free from `withNewMCtxDepth` (`Lean/Meta/SynthInstance.lean`:
+        // the whole search runs at a deeper metavariable-context depth, so the
+        // caller's metavariables are not assignable ANYWHERE inside it).
+        //
+        // Clean's phase-1 postpone (below) was one hop deep — it consulted only
+        // the class of the goal immediately in front of it — and the grab it
+        // refuses LAUNDERS through a sub-goal. Measured shape
+        // (`tests_instance_open_carrier_postpone.rs`): a polymorphic bridge
+        // `{a} → [C a] → Inhabited a` PASSES the one-hop guard, because its
+        // conclusion argument is itself a bare metavariable and flex/flex
+        // unification is legitimately deferred, not a wrong grab. Its `[C ?a]`
+        // sub-goal is then in class `C`, which the allowlist does not name, so
+        // THERE a concrete `C Decoy` candidate is committed and `?a := Decoy`.
+        // The bare `default` came back as a term at that carrier and the
+        // declaration failed against the type the author wrote
+        // ("expected FVar(..), got Const(..)").
+        //
+        // Deliberately keyed on the TOP-LEVEL class only, and deliberately ONE
+        // pass. A search whose root goal is outside
+        // `is_input_only_postpone_class` — `OfNat ?a 5`, `HAdd ?a ?b ?g`,
+        // `Monad ?m`, everything Clean resolves by grabbing where real Lean
+        // applies `@[default_instance]` — is byte-identical to before, at every
+        // depth, and pays nothing.
+        //
+        // A wider design was written and RETRACTED, for a structural reason
+        // worth recording: arming the postpone for every class and recovering
+        // the grabby classes with a SECOND, unguarded search. Instance
+        // resolution is not idempotent across two searches. Candidate
+        // universe-level unification pins level parameters in the
+        // DECLARATION-WIDE, Name-keyed union-find (`add_level_constraint`,
+        // see the freshening comment in the candidate loop below), which
+        // `metas.pop_scope()` does NOT undo — so a candidate REJECTED in pass 1
+        // can leave the goal's level parameter pinned to its own fresh
+        // parameter and make pass 2's genuine candidate fail on a level
+        // conflict. Propagating one flag through one search has no such
+        // exposure.
+        //
+        // LOCAL instance binders are never guarded, at any depth. A local
+        // `[inst : C t]` is a hypothesis of the declaration being elaborated,
+        // so matching it can only produce a carrier already named in its binder
+        // list — evidence, not invention. That is also what REPAIRS the
+        // laundering case rather than merely refusing it: with the global grab
+        // refused, the bridge's `[C ?a]` sub-goal reaches the local `[C a]`
+        // binder and pins the carrier CORRECTLY.
+        let strict = crate::instances::extract_class_app(&self.metas.instantiate(goal_ty))
+            .is_some_and(|(n, _)| is_input_only_postpone_class(&n));
         let mut goal_path = Vec::new();
-        self.resolve_instance_with_depth(goal_ty, 0, &mut goal_path)
+        self.resolve_instance_with_depth(goal_ty, 0, &mut goal_path, strict)
     }
 
     /// Depth- and cycle-bounded recursive entry point.
@@ -98,6 +160,7 @@ impl<'a> ElabCtx<'a> {
         goal_ty: &Expr,
         depth: usize,
         goal_path: &mut Vec<String>,
+        strict: bool,
     ) -> Option<Expr> {
         use crate::instances::extract_class_app;
 
@@ -115,7 +178,7 @@ impl<'a> ElabCtx<'a> {
         let goal_inst = self.metas.instantiate(goal_ty);
         let goal_ty =
             if extract_class_app(&goal_inst).is_some_and(|(n, _)| self.instances.is_class(&n)) {
-                goal_inst
+                goal_inst.clone()
             } else {
                 let w = self.whnf(&goal_inst);
                 self.metas.instantiate(&w)
@@ -160,9 +223,394 @@ impl<'a> ElabCtx<'a> {
             return None;
         }
         goal_path.push(cycle_key);
-        let result =
-            self.resolve_instance_candidates(goal_ty, &cache_key, goal_is_ground, depth, goal_path);
+        let mut result = self.resolve_instance_candidates(
+            &goal_ty,
+            &cache_key,
+            goal_is_ground,
+            depth,
+            goal_path,
+            strict,
+        );
+        // FRONTIER STAGE I-1, the candidate side. Runs ONLY on a search that
+        // has already returned `None`, which is the whole safety argument: no
+        // resolution that succeeded before this change can take a different
+        // answer after it, because the fallback is never consulted while an
+        // answer exists. See `resolve_local_instance_telescoped`.
+        if result.is_none() {
+            result = self.resolve_local_instance_telescoped(&goal_inst, &goal_ty);
+            // FRONTIER STAGE I-2, the GOAL side. Same safety argument, one rung
+            // further out: consulted only after the primary search AND the
+            // candidate-side match have both returned `None`, so it can add
+            // resolutions and never change one. See
+            // `resolve_pi_goal_by_abstraction`.
+            if result.is_none() {
+                result = self.resolve_pi_goal_by_abstraction(
+                    &goal_ty,
+                    goal_is_ground,
+                    depth,
+                    goal_path,
+                    strict,
+                );
+            }
+            if goal_is_ground {
+                if let Some(found) = &result {
+                    self.instance_cache.insert(cache_key, found.clone());
+                }
+            }
+        }
         goal_path.pop();
+        result
+    }
+
+    /// Candidate-side telescope for LOCAL instance binders — the half of
+    /// Lean's `Lean/Class.lean:isClass?` that Clean was missing.
+    ///
+    /// # The gap
+    ///
+    /// `DecidableEq α` is a `def`, not a `class`:
+    /// `DecidableEq α := (a b : α) → Decidable (a = b)`. Two consequences,
+    /// both measured (`tests/fixtures/source_frontier/p08,p11`, and 34 of the
+    /// 53 `instance synthesis` entries of the 2026-08-25 five-file
+    /// source-elaboration measurement):
+    ///
+    /// 1. The primary local-instance loop whnf's each local's type before
+    ///    matching it. For `[inst : DecidableEq α]` that yields a Pi,
+    ///    `extract_class_app` yields `None`, and the binder is passed over
+    ///    silently — so even the *syntactically identical* goal `DecidableEq α`
+    ///    cannot be answered by the binder that literally has that type.
+    /// 2. `is_class` is a plain lookup over names registered by the `class`
+    ///    keyword, so the `def`-based alias closes the door a second time.
+    ///
+    /// # What this adds
+    ///
+    /// Three matches, in order, all against locals only:
+    ///
+    /// - **(A) alias head.** The goal *as handed in* (`goal_pre_whnf`) against
+    ///   each local's type *as bound*, with no normalisation on either side.
+    ///   A local whose declared type unifies with the goal's declared type is
+    ///   evidence for it whatever the head reduces to. Answers `DecidableEq α`
+    ///   from `[DecidableEq α]`, which is also what lets the existing
+    ///   `Decidable (@Eq α a b)` bridge (which delegates to `DecidableEq α`)
+    ///   stop dying one level down.
+    /// - **(C) whole normalised type**, for a **Pi-shaped** goal with no class
+    ///   application at all — the alias the *caller* already unfolded. Unify
+    ///   goal and local outright; the term is the binder. The Pi restriction
+    ///   is a safety property, not tidiness — see the comment at the match.
+    /// - **(B) ∀-telescope.** The normalised goal against each local's
+    ///   normalised type opened under its ∀-telescope: binders become
+    ///   metavariables, the conclusion's class app is matched against the
+    ///   goal, and the term returned is `inst a b …` rather than the bare
+    ///   `inst`. This is Lean registering `[inst : DecidableEq α]` as an
+    ///   instance *of class `Decidable`, with binders*.
+    ///
+    /// # Why it cannot admit a wrong candidate
+    ///
+    /// - It is consulted only after the primary search returned `None`
+    ///   (see the call site), so it can add resolutions and never change one.
+    /// - It matches LOCALS only. A local `[inst : C t]` is a hypothesis of the
+    ///   declaration being elaborated, so its carrier is already named in the
+    ///   binder list — evidence, not invention (the same argument
+    ///   `resolve_instance` makes for leaving the local loop unguarded).
+    /// - Unification is per-candidate scoped: a local whose conclusion does not
+    ///   unify with the goal is rolled back and skipped, so a `[DecidableEq α]`
+    ///   in scope is NOT grabbed for a `Decidable (b = b)` goal at a different
+    ///   carrier (pinned: `p20_wrong_carrier_refused_MUST_FAIL`).
+    /// - Every telescope metavariable must end DETERMINED by the goal — the
+    ///   same hygiene check the global candidate loop applies — so a binder the
+    ///   goal does not pin fails the candidate instead of leaking an
+    ///   unassigned metavariable into the emitted term (pinned:
+    ///   `p22_undetermined_binder_refused_MUST_FAIL`).
+    /// - The emitted term is kernel-re-checked exactly as before. Zero TCB.
+    fn resolve_local_instance_telescoped(
+        &mut self,
+        goal_pre_whnf: &Expr,
+        goal_norm: &Expr,
+    ) -> Option<Expr> {
+        use crate::instances::extract_class_app;
+
+        // Hot path: no local instance binders in scope — the common case for
+        // non-generic code — costs one `len()`.
+        if self.local_instances.is_empty() {
+            return None;
+        }
+
+        // (A) alias head ↔ alias head, no `whnf` on either side.
+        if let Some((goal_class, goal_args)) = extract_class_app(goal_pre_whnf) {
+            for i in (0..self.local_instances.len()).rev() {
+                let (fvar, local_ty) = self.local_instances[i].clone();
+                let local_ty_inst = self.metas.instantiate(&local_ty);
+                let Some((local_class, local_args)) = extract_class_app(&local_ty_inst) else {
+                    continue;
+                };
+                if local_class != goal_class || local_args.len() != goal_args.len() {
+                    continue;
+                }
+                self.metas.push_scope();
+                let unified = local_args
+                    .iter()
+                    .zip(goal_args.iter())
+                    .all(|(l, g)| self.try_unify(l, g));
+                if unified {
+                    self.metas.commit();
+                    return Some(Expr::fvar(fvar));
+                }
+                self.metas.pop_scope();
+            }
+        }
+
+        // (C) The goal has NO class application at all — which today means the
+        // primary search bailed on its very first line
+        // (`extract_class_app_with_levels(&goal_ty)?`) and did no work
+        // whatsoever, so nothing here can interfere with anything. This is the
+        // `def`-based alias the CALLER already normalised into its Pi:
+        // `elab_app.rs`'s two `resolve_instance` call sites whnf the goal
+        // before handing it over, so a `[DecidableEq α]` argument arrives as
+        // `(x y : α) → Decidable (Eq α x y)` and the un-whnf'd head that (A)
+        // matches on is gone before the search starts.
+        //
+        // Match it the only way that is still available: unify the WHOLE
+        // normalised goal against each local's WHOLE normalised type. A local
+        // whose type unifies with the goal type inhabits the goal — the term
+        // is the binder itself, no telescope is opened and no lambda is
+        // synthesized. (Synthesizing `fun a b => …` for a Pi goal with no
+        // matching local is the separate goal-side increment; it is what still
+        // buys `DecidableEq Nat` from a global `Nat.decEq`, which no local can
+        // supply.)
+        //
+        // RESTRICTED TO A Pi-SHAPED GOAL, and that restriction is load-bearing
+        // rather than tidy. Unifying a WHOLE goal is the one match here that
+        // can SOLVE the goal expression instead of matching it: handed a goal
+        // that is still a bare metavariable, `try_unify` would cheerfully
+        // assign `?goal := <the first local's type>` and hand back that local —
+        // inventing the class rather than finding evidence for it, which is
+        // exactly the wrong-candidate failure this stage must not create. (A)
+        // and (B) cannot do that: both require a rigid `Const` head on the
+        // goal before they look at anything. A δ-unfolded class alias is
+        // always a Pi, so nothing this match exists for is lost.
+        let Some((goal_class, goal_args)) = extract_class_app(goal_norm) else {
+            if !matches!(goal_norm.kind(), ExprKind::Pi(..)) {
+                return None;
+            }
+            for i in (0..self.local_instances.len()).rev() {
+                let (fvar, local_ty) = self.local_instances[i].clone();
+                let local_ty_norm = self.whnf(&self.metas.instantiate(&local_ty));
+                self.metas.push_scope();
+                if self.try_unify(&local_ty_norm, goal_norm) {
+                    self.metas.commit();
+                    return Some(Expr::fvar(fvar));
+                }
+                self.metas.pop_scope();
+            }
+            return None;
+        };
+
+        // (B) telescoped local: match the CONCLUSION of the local's
+        // ∀-telescope, and return the local APPLIED to the arguments the goal
+        // determined.
+        for i in (0..self.local_instances.len()).rev() {
+            let (fvar, local_ty) = self.local_instances[i].clone();
+            let local_ty_norm = self.whnf(&self.metas.instantiate(&local_ty));
+            // A local that is NOT Pi-shaped after normalisation is exactly what
+            // the primary loop already tried; re-trying it here would be dead
+            // work and a second chance at the same answer.
+            if !matches!(local_ty_norm.kind(), ExprKind::Pi(..)) {
+                continue;
+            }
+
+            self.metas.push_scope();
+            let mut cursor = local_ty_norm;
+            let mut tele_args: Vec<Expr> = Vec::new();
+            let mut opened = true;
+            while let ExprKind::Pi(bi, arg_ty, body) = cursor.kind() {
+                let info = bi.info;
+                let arg_ty = arg_ty.as_ref().clone();
+                let body = body.as_ref().clone();
+                // Deliberately narrow: an `[inst]` binder inside a LOCAL's own
+                // telescope would need a nested sub-goal search to fill, which
+                // is a separate increment with its own termination argument.
+                // Refuse the candidate instead of guessing.
+                if tele_args.len() >= MAX_LOCAL_TELESCOPE || info == BinderInfo::InstImplicit {
+                    opened = false;
+                    break;
+                }
+                let arg_ty_inst = self.metas.instantiate(&arg_ty);
+                let meta = self.fresh_meta(arg_ty_inst);
+                let next = body.instantiate(&meta);
+                tele_args.push(meta);
+                cursor = self.whnf(&self.metas.instantiate(&next));
+            }
+            if !opened || tele_args.is_empty() {
+                self.metas.pop_scope();
+                continue;
+            }
+
+            let Some((concl_class, concl_args)) = extract_class_app(&cursor) else {
+                self.metas.pop_scope();
+                continue;
+            };
+            if concl_class != goal_class || concl_args.len() != goal_args.len() {
+                self.metas.pop_scope();
+                continue;
+            }
+            let unified = concl_args
+                .iter()
+                .zip(goal_args.iter())
+                .all(|(c, g)| self.try_unify(c, g));
+            if !unified {
+                self.metas.pop_scope();
+                continue;
+            }
+
+            // Candidate hygiene, verbatim in spirit from the global candidate
+            // loop: a telescope binder the goal does not determine is not
+            // evidence for the goal, and returning it would leak an unassigned
+            // metavariable (a tagged FVar) into the declaration, surfacing far
+            // away as the kernel's "Declaration contains free variables".
+            let goal_metas = self.collect_meta_fvars(&self.metas.instantiate(goal_norm));
+            let undetermined = tele_args.iter().any(|meta_arg| {
+                let solved = self.metas.instantiate(meta_arg);
+                has_meta_fvar_outside(&solved, &goal_metas)
+            });
+            if undetermined {
+                self.metas.pop_scope();
+                continue;
+            }
+
+            self.metas.commit();
+            let applied = Expr::apps(Expr::fvar(fvar), tele_args);
+            let result = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&applied));
+            return Some(result);
+        }
+
+        None
+    }
+
+    /// GOAL-side telescope: solve a Pi-shaped instance goal by *building* the
+    /// function rather than finding it.
+    ///
+    /// # The residue this closes
+    ///
+    /// [`Self::resolve_local_instance_telescoped`] matches a `def`-based class
+    /// alias against LOCAL binders, which answers every goal whose carrier is
+    /// itself a binder of the declaration being elaborated. It cannot answer a
+    /// goal that has to be *constructed*: at a concrete carrier there is no
+    /// local to match, and the answer is a lambda.
+    ///
+    /// `def callee {α} [DecidableEq α] (a : α) : Nat := 0` applied at `Nat`
+    /// raises the instance goal `DecidableEq Nat`, which `elab_app` δ-unfolds
+    /// before the search ever sees it, so what arrives is
+    /// `(n n1 : Nat) → Decidable (Eq Nat n n1)`. `extract_class_app_with_levels`
+    /// returns `None` on a Pi and `resolve_instance_candidates` bails on its
+    /// first line — the entire candidate search, local and global, is skipped.
+    /// Yet the Pi's BODY, `Decidable (Eq Nat n n1)`, resolves from the global
+    /// table today. What is missing is only the abstraction.
+    ///
+    /// So: open the goal's ∀-telescope over fresh locals, resolve the
+    /// conclusion as an ordinary instance goal, and re-abstract the locals into
+    /// lambdas — `fun n n1 => Nat.decEq n n1`. (Pinned: probe
+    /// `p18_goal_side_constructed`, which carries its own in-file control
+    /// showing the body was always solvable, and `p24`, which removes the
+    /// hand-written `Decidable`/`Eq` bridge from the picture entirely and adds
+    /// a DEPENDENT telescope.)
+    ///
+    /// # Why it cannot admit a wrong candidate
+    ///
+    /// - It is consulted only after the primary search and the candidate-side
+    ///   match have both returned `None` (see the call site), so it can add
+    ///   resolutions and never change one.
+    /// - **Ground goals only.** A goal still carrying metavariables is refused
+    ///   outright. Solving the conclusion under the telescope can assign one of
+    ///   the goal's OWN metavariables to a term mentioning a telescope local,
+    ///   which would escape the moment the telescope closes — abstraction fixes
+    ///   the returned term, not the caller's metavariable context. Refusing the
+    ///   whole shape is the only check that covers that hazard completely; the
+    ///   δ-unfolded alias goals this exists for are ground (their carrier was
+    ///   pinned before the instance goal was raised).
+    /// - **No `[inst]` binder in the goal telescope.** Such a binder would have
+    ///   to enter scope as a local instance for the conclusion's own search, a
+    ///   separate increment with its own argument. Refused, never guessed.
+    /// - The conclusion must be a rigid class application before anything is
+    ///   attempted, so a Pi ending in a metavariable or a `Sort` never starts a
+    ///   search.
+    /// - Candidate hygiene, verbatim from the two loops above: the emitted term
+    ///   may not carry a metavariable the goal does not determine.
+    /// - The emitted term is kernel-re-checked exactly as before. Zero TCB.
+    fn resolve_pi_goal_by_abstraction(
+        &mut self,
+        goal_norm: &Expr,
+        goal_is_ground: bool,
+        depth: usize,
+        goal_path: &mut Vec<String>,
+        strict: bool,
+    ) -> Option<Expr> {
+        use crate::instances::extract_class_app;
+
+        if !goal_is_ground || !matches!(goal_norm.kind(), ExprKind::Pi(..)) {
+            return None;
+        }
+        let goal_metas = self.collect_meta_fvars(&self.metas.instantiate(goal_norm));
+
+        // Open the telescope over fresh LOCALS (not metavariables): the
+        // conclusion must be solved for an arbitrary argument, exactly as the
+        // lambda we are about to build promises.
+        let mut binders: Vec<(BinderData, Expr, FVarId)> = Vec::new();
+        let mut cursor = self.metas.instantiate(goal_norm);
+        let mut opened = true;
+        while let ExprKind::Pi(bd, arg_ty, body) = cursor.kind() {
+            let bd = *bd;
+            if binders.len() >= MAX_GOAL_TELESCOPE || bd.info == BinderInfo::InstImplicit {
+                opened = false;
+                break;
+            }
+            let arg_ty = arg_ty.as_ref().clone();
+            let body = body.as_ref().clone();
+            let arg_ty = self.metas.instantiate(&arg_ty);
+            let fvar = self.fresh_fvar();
+            self.push_local_with_fvar(format!("_goaltele.{}", fvar.as_u64()), fvar, arg_ty.clone());
+            cursor = body.instantiate(&Expr::fvar(fvar));
+            binders.push((bd, arg_ty, fvar));
+        }
+
+        let mut result = None;
+        if opened && !binders.is_empty() {
+            let concl = self.metas.instantiate(&cursor);
+            if extract_class_app(&concl).is_some() {
+                self.metas.push_scope();
+                if let Some(found) =
+                    self.resolve_instance_with_depth(&concl, depth + 1, goal_path, strict)
+                {
+                    // Instantiate BEFORE abstracting: a solved metavariable
+                    // standing for a telescope local must become that local so
+                    // `abstract_fvar` can see and bind it.
+                    let mut term = self.metas.instantiate(&found);
+                    for (bd, ty, fvar) in binders.iter().rev() {
+                        // The binder type is abstracted by the OUTER iterations:
+                        // `abstract_fvar` walks the whole expression, binder
+                        // types included, so a dependent telescope
+                        // (`(x : α) → (y : β x) → …`) comes out correct.
+                        let ty = self.metas.instantiate(ty);
+                        term = Expr::lam(*bd, ty, term.abstract_fvar(*fvar));
+                    }
+                    let term = self
+                        .metas
+                        .instantiate_levels(&self.metas.instantiate(&term));
+                    if has_meta_fvar_outside(&term, &goal_metas) {
+                        self.metas.pop_scope();
+                    } else {
+                        self.metas.commit();
+                        result = Some(term);
+                    }
+                } else {
+                    self.metas.pop_scope();
+                }
+            }
+        }
+
+        for _ in 0..binders.len() {
+            self.pop_local();
+        }
         result
     }
 
@@ -171,17 +619,18 @@ impl<'a> ElabCtx<'a> {
     /// and the goal-path bookkeeping).
     fn resolve_instance_candidates(
         &mut self,
-        goal_ty: Expr,
+        goal_ty: &Expr,
         cache_key: &str,
         goal_is_ground: bool,
         depth: usize,
         goal_path: &mut Vec<String>,
+        strict: bool,
     ) -> Option<Expr> {
         use crate::instances::extract_class_app;
 
         // Extract the class name and arguments from the goal type
         let (class_name, goal_levels, goal_args) =
-            crate::instances::extract_class_app_with_levels(&goal_ty)?;
+            crate::instances::extract_class_app_with_levels(goal_ty)?;
 
         // decEq bridge: `Decidable (@Eq α a b)` is inhabited by `DecidableEq α`
         // applied to `a b`, since `DecidableEq α` is definitionally
@@ -206,7 +655,7 @@ impl<'a> ElabCtx<'a> {
                         alpha,
                     );
                     if let Some(inst) =
-                        self.resolve_instance_with_depth(&dec_eq_goal, depth + 1, goal_path)
+                        self.resolve_instance_with_depth(&dec_eq_goal, depth + 1, goal_path, strict)
                     {
                         let applied = Expr::apps(inst, [a, b]);
                         let result = self
@@ -282,8 +731,10 @@ impl<'a> ElabCtx<'a> {
         // must trigger Lean-style postponement in phase-1 unification below.
         // Gated to input-only classes with no out-params (see
         // `is_input_only_postpone_class`), so it provably cannot alter
-        // arithmetic / heterogeneous out-param resolution.
-        let postpone_undetermined_inputs = is_input_only_postpone_class(&class_name);
+        // arithmetic / heterogeneous out-param resolution — OR to any goal
+        // reached from such a root (`strict`, see `resolve_instance`), which is
+        // the hop the one-hop form was missing.
+        let postpone_undetermined_inputs = strict || is_input_only_postpone_class(&class_name);
 
         // B99: Lean's `@[default_instance]` defaulting. When the goal still
         // has an OPEN (bare unassigned metavariable) INPUT position — no
@@ -433,7 +884,9 @@ impl<'a> ElabCtx<'a> {
                 if inst_levels.len() == goal_levels.len() {
                     let mut levels_ok = true;
                     for (inst_lvl, goal_lvl) in inst_levels.iter().zip(goal_levels.iter()) {
-                        let ctx = self.build_local_ctx();
+                        // Level unification touches no free variable: an
+                        // empty context is the exact closure of its inputs.
+                        let ctx = self.demand_local_ctx(&[]);
                         let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
                         if !matches!(
                             unifier.unify_levels(inst_lvl, goal_lvl),
@@ -479,13 +932,21 @@ impl<'a> ElabCtx<'a> {
                         // rather than committing garbage.
                         //
                         // Restricted to input-only classes with no out-params (the
-                        // `postpone_undetermined_inputs` allowlist): out-param /
+                        // `postpone_undetermined_inputs` allowlist) or to any
+                        // goal reached from such a root (`strict`): out-param /
                         // heterogeneous arithmetic classes (HAdd/HMod/…) never
                         // reach here for their out positions — phase 1 skips
-                        // out-params — AND are excluded by the allowlist, so this
-                        // cannot alter their resolution. A FLEXIBLE candidate arg
-                        // (itself a bare metavar) is NOT rejected: flex/flex
-                        // unification is legitimately deferred, not a wrong grab.
+                        // out-params — so this cannot alter their resolution. A
+                        // FLEXIBLE candidate arg (itself a bare metavar) is NOT
+                        // rejected: flex/flex unification is legitimately
+                        // deferred, not a wrong grab.
+                        //
+                        // NOTE this is the GLOBAL-candidate loop only. The
+                        // local-instance loop above is deliberately unguarded at
+                        // every depth: a local `[inst : C t]` binder is a
+                        // hypothesis of the declaration being elaborated, and
+                        // pinning the carrier from it is evidence rather than
+                        // invention — see `resolve_instance`.
                         //
                         // Suppressed while DEFAULTING (B99): a default
                         // instance's entire purpose is to pin an open input,
@@ -548,7 +1009,7 @@ impl<'a> ElabCtx<'a> {
                         let (_, meta_arg, arg_ty) = pending_inst_args[pos].clone();
                         let arg_ty = self.metas.instantiate(&arg_ty);
                         let Some(resolved) =
-                            self.resolve_instance_with_depth(&arg_ty, depth + 1, goal_path)
+                            self.resolve_instance_with_depth(&arg_ty, depth + 1, goal_path, strict)
                         else {
                             resolved_pending = false;
                             break;
@@ -595,7 +1056,7 @@ impl<'a> ElabCtx<'a> {
                     // to a genuinely applicable instance — weakening-only for
                     // accepts: any candidate rejected here could only have
                     // produced a kernel-rejected term.
-                    let goal_metas = self.collect_meta_fvars(&self.metas.instantiate(&goal_ty));
+                    let goal_metas = self.collect_meta_fvars(&self.metas.instantiate(goal_ty));
                     let undetermined = binder_metas.iter().any(|meta_arg| {
                         let solved = self.metas.instantiate(meta_arg);
                         has_meta_fvar_outside(&solved, &goal_metas)
@@ -797,7 +1258,19 @@ impl<'a> ElabCtx<'a> {
 
     /// Try to unify two expressions, returning true on success
     pub(super) fn try_unify(&mut self, e1: &Expr, e2: &Expr) -> bool {
-        let ctx = self.build_local_ctx();
+        // MEASURED: this is the per-candidate hot path of instance resolution
+        // (94.5% / 94.7% of two profiles of `Mathlib/Logic/Basic` were the
+        // full-context rebuild here, once per candidate, after every other
+        // sink had been removed). The unifier can only reach free variables
+        // of `e1`/`e2` — raw (the metavariables it will look up) and
+        // instantiated (what those metavariables already stand for) — and of
+        // the declarations those transitively mention, so the demand-driven
+        // closure is observationally the same context at a cost proportional
+        // to the two terms instead of to every metavariable of the
+        // declaration (see `demand_local_ctx`).
+        let e1_inst = self.metas.instantiate(e1);
+        let e2_inst = self.metas.instantiate(e2);
+        let ctx = self.demand_local_ctx(&[e1, e2, &e1_inst, &e2_inst]);
         let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
         matches!(unifier.unify(e1, e2), UnifyResult::Success)
     }
@@ -1162,14 +1635,20 @@ impl<'a> ElabCtx<'a> {
 /// phase-1 instance unification.
 ///
 /// Every class here has NO out-parameters, so ALL of its arguments are inputs
-/// the GOAL must determine — never a candidate. Deliberately narrow for this
-/// first landing (`Decidable`, `DecidableEq`, `Inhabited`, `BEq`): it provably
-/// cannot alter resolution of arithmetic / heterogeneous out-param classes
+/// the GOAL must determine — never a candidate. Deliberately narrow
+/// (`Decidable`, `DecidableEq`, `Inhabited`, `BEq`): it provably cannot alter
+/// resolution of arithmetic / heterogeneous out-param classes
 /// (`HAdd`/`HMod`/`HMul`/…), whose out positions never enter phase-1
-/// unification (they are handled in phase 2) — so the new postpone can only
-/// ever touch input positions of these listed input-only classes. Lean reaches
-/// the same effect uniformly via `synthInstance` mvar-postponement; the
-/// allowlist is Clean's conservative staging, not a semantic distinction.
+/// unification (they are handled in phase 2) — so the postpone can only ever
+/// touch input positions of these listed input-only classes. Lean reaches the
+/// same effect uniformly via `synthInstance` mvar-postponement; the allowlist
+/// is Clean's conservative staging, not a semantic distinction.
+///
+/// This predicate is consulted TWICE per search, and the difference matters:
+/// once on the TOP-LEVEL goal, where a hit makes the whole search `strict`
+/// (see [`ElabCtx::resolve_instance`]); and once per goal, so a goal in one of
+/// these classes still postpones even when it was reached from a root that is
+/// not.
 fn is_input_only_postpone_class(class_name: &Name) -> bool {
     matches!(
         class_name.to_string().as_str(),

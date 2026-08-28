@@ -198,7 +198,7 @@ impl EqualityTheory {
     /// SAT literals that caused the equality, extracted from the E-graph's
     /// proof trace (#2344 criterion 4). Falls back to the conservative
     /// over-approximation (all asserted lits) when the proof trace is incomplete.
-    pub fn drain_deduced_equalities(&mut self) -> Vec<(TermId, TermId, Vec<Lit>)> {
+    pub(crate) fn drain_deduced_equalities(&mut self) -> Vec<(TermId, TermId, Vec<Lit>)> {
         let pairs = std::mem::take(&mut self.pending_deduced);
         pairs
             .into_iter()

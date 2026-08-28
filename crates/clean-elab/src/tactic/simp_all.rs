@@ -14,7 +14,7 @@ use clean_kernel::{Expr, ExprKind, Level};
 
 /// Configuration for the enhanced `simp_all` driver.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SimpAllConfig {
+pub(crate) struct SimpAllConfig {
     /// Maximum number of passes to attempt when chasing a fixpoint.
     pub max_iterations: usize,
     /// Whether to run in `simp only` mode.
@@ -54,7 +54,7 @@ impl SimpAllConfig {
     }
 
     #[must_use]
-    pub fn with_arith() -> Self {
+    pub(crate) fn with_arith() -> Self {
         Self::new().with_use_arith(true)
     }
 
@@ -65,25 +65,25 @@ impl SimpAllConfig {
     }
 
     #[must_use]
-    pub fn with_only_mode(mut self, only_mode: bool) -> Self {
+    pub(crate) fn with_only_mode(mut self, only_mode: bool) -> Self {
         self.only_mode = only_mode;
         self
     }
 
     #[must_use]
-    pub fn with_lemmas(mut self, lemmas: Vec<Name>) -> Self {
+    pub(crate) fn with_lemmas(mut self, lemmas: Vec<Name>) -> Self {
         self.lemmas = lemmas;
         self
     }
 
     #[must_use]
-    pub fn with_use_arith(mut self, use_arith: bool) -> Self {
+    pub(crate) fn with_use_arith(mut self, use_arith: bool) -> Self {
         self.use_arith = use_arith;
         self
     }
 
     #[must_use]
-    pub fn with_remove_trivial(mut self, remove_trivial: bool) -> Self {
+    pub(crate) fn with_remove_trivial(mut self, remove_trivial: bool) -> Self {
         self.remove_trivial = remove_trivial;
         self
     }
@@ -95,7 +95,7 @@ impl SimpAllConfig {
     }
 
     #[must_use]
-    pub fn to_simp_config(&self) -> SimpConfig {
+    pub(crate) fn to_simp_config(&self) -> SimpConfig {
         let mut config = SimpConfig::new();
         config.max_steps = self.max_iterations;
         config.extra_lemmas = self.lemmas.iter().map(ToString::to_string).collect();
@@ -108,7 +108,7 @@ impl SimpAllConfig {
 
 /// Result of simplifying either a hypothesis or the goal.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SimpStepResult {
+pub(crate) enum SimpStepResult {
     Unchanged,
     Simplified(Expr),
     Removed,
@@ -116,7 +116,7 @@ pub enum SimpStepResult {
 
 /// A local hypothesis tracked by the enhanced `simp_all` driver.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SimpHypothesis {
+pub(crate) struct SimpHypothesis {
     pub name: Name,
     pub expr: Expr,
     pub changed: bool,
@@ -151,7 +151,7 @@ impl SimpHypothesis {
 
 /// Mutable state for a single `simp_all` run.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SimpAllState {
+pub(crate) struct SimpAllState {
     pub hypotheses: Vec<SimpHypothesis>,
     pub goal: Expr,
     pub goal_changed: bool,
@@ -169,7 +169,7 @@ impl SimpAllState {
         }
     }
 
-    pub fn simplify_goal(&mut self, _config: &SimpAllConfig) -> SimpStepResult {
+    pub(crate) fn simplify_goal(&mut self, _config: &SimpAllConfig) -> SimpStepResult {
         let rewrite_rules = self.collect_rewrite_rules();
         let Some(new_goal) = rewrite_expr_once(&self.goal, &rewrite_rules) else {
             return SimpStepResult::Unchanged;
@@ -181,7 +181,7 @@ impl SimpAllState {
     }
 
     #[must_use]
-    pub fn run_one_pass(&mut self, config: &SimpAllConfig) -> bool {
+    pub(crate) fn run_one_pass(&mut self, config: &SimpAllConfig) -> bool {
         self.iterations += 1;
 
         let mut made_progress = false;
@@ -199,7 +199,7 @@ impl SimpAllState {
     }
 
     #[must_use]
-    pub fn run_fixpoint(&mut self, config: &SimpAllConfig) -> SimpAllResult {
+    pub(crate) fn run_fixpoint(&mut self, config: &SimpAllConfig) -> SimpAllResult {
         let start_iterations = self.iterations;
         let mut changed = false;
         let mut reached_fixpoint = false;
@@ -237,7 +237,7 @@ impl SimpAllState {
 
 /// Final summary of a `simp_all` run.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SimpAllResult {
+pub(crate) struct SimpAllResult {
     pub hypotheses: Vec<SimpHypothesis>,
     pub goal: Expr,
     pub changed: bool,

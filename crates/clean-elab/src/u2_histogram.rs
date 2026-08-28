@@ -67,3 +67,22 @@ pub(crate) fn classify_level_failure(
         "shape-residual"
     }
 }
+
+/// U2 stage 3 mint trace — `CLEAN_U2_MINT_TRACE=1` emits one stderr line per
+/// universe-level mint, naming the AUTHORITY that minted it:
+/// `[u2mint] site=elabctx|proofstate name=u_N`.
+///
+/// This is the instrument that measured the stage-3 defect. Before the shared
+/// [`crate::level_mint::LevelMint`] landed, a single tactic block could show
+/// `site=proofstate name=u_3` and `site=elabctx name=u_3` — one name, two
+/// unrelated levels (see `crate::level_mint` and
+/// `infer::tests::tactic_bridge_levels`). It is kept because that is the only
+/// way to SEE which authority minted a name, and the property it measures is
+/// one a future refactor could silently lose. Same cost profile as
+/// [`u2_hist`]: one cached boolean when off.
+pub(crate) fn u2_mint_trace(site: &str, name: &str) {
+    static ON: OnceLock<bool> = OnceLock::new();
+    if *ON.get_or_init(|| std::env::var("CLEAN_U2_MINT_TRACE").is_ok_and(|v| v == "1")) {
+        eprintln!("[u2mint] site={site} name={name}");
+    }
+}

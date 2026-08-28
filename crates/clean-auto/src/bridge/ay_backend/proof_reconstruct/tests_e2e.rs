@@ -21,7 +21,7 @@ use ay::Sort;
 use ay_core::{Proof, TermStore};
 use clean_kernel::name::Name;
 use clean_kernel::{
-    BinderInfo, Declaration, Environment, Expr, ExprKind, FVarId, Level, LocalContext, TypeChecker,
+    BinderInfo, Declaration, Environment, Expr, FVarId, Level, LocalContext, TypeChecker,
 };
 
 #[path = "tests_e2e_euf_pred.rs"]
@@ -115,15 +115,13 @@ pub(super) fn assert_proof_type_checks_to_false(
     proof: &Expr,
     msg: &str,
 ) {
+    // FULL kernel check (`infer_only = false`), exactly as `certify_reconstruction`
+    // gates: an infer-only `infer_type` does not validate application arguments
+    // and accepts ill-typed `Eq.*` / `Or.rec` sub-terms whose annotated result
+    // type happens to be `False`.
     let tc = TypeChecker::with_context(env, ctx);
-    let ty = tc
-        .infer_type(proof)
-        .unwrap_or_else(|e| panic!("{msg}: type-check failed: {e:?}"));
-    assert!(
-        matches!(ty.kind(), ExprKind::Const(n, _) if *n == Name::from_string("False")),
-        "{msg}: expected type False, got {:?}",
-        ty.kind(),
-    );
+    tc.check_type(proof, &Expr::const_(Name::from_string("False"), vec![]))
+        .unwrap_or_else(|e| panic!("{msg}: check_type(_, False) failed: {e:?}"));
 }
 
 /// E2E: Resolution unit contradiction → kernel type-checks to False.

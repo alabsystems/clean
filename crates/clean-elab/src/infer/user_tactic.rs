@@ -87,7 +87,9 @@ use crate::tactic::{
     CompoundTacticEntry, CompoundTacticHandler, ProofState, TacticError, TacticEval,
 };
 use clean_kernel::{ExprKind, Name};
-use clean_parser::{DoElem, InterpolationPart, SurfaceArg, SurfaceExpr, SurfaceLit, SurfaceTactic};
+use clean_parser::{
+    DoElem, InterpolationPart, SurfaceArg, SurfaceExpr, SurfaceLit, SurfaceRwRule, SurfaceTactic,
+};
 use std::sync::Arc;
 
 /// A name binding used during substitution: a bound identifier mapped to the
@@ -1271,6 +1273,11 @@ fn tactic_mentions(tac: &SurfaceTactic, name: &str) -> bool {
     match tac {
         SurfaceTactic::Named { args, .. } => args.iter().any(|a| expr_mentions(a, name)),
         SurfaceTactic::Term(_, expr) => expr_mentions(expr, name),
+        // Kept consistent with `substitute_in_tactic`: `rw` rule terms are
+        // substitutable payloads (conv-macro bridge), so they count as
+        // mentions. Unreachable from the variadic tactic path (`Rw` bodies
+        // never pass `is_executable_tactic_body`).
+        SurfaceTactic::Rw(_, rules, _) => rules.iter().any(|r| expr_mentions(&r.term, name)),
         // Other tactic shapes are passed through unchanged by substitution, so
         // they cannot meaningfully reference the repetition var for expansion.
         _ => false,
@@ -1359,7 +1366,9 @@ fn lower_body(body: &[SurfaceTactic], bindings: &mut Vec<Binding>) -> Option<Low
 ///
 /// User tactics are dispatched through `SurfaceTactic::Named`, so the arguments
 /// are the `args` of that variant. Returns `None` for any other shape.
-fn call_site_args(tac: &SurfaceTactic) -> Option<&[SurfaceExpr]> {
+/// `pub(super)`: the conv-macro bridge (`user_conv`) dispatches through the
+/// same `Named` route and reuses the extraction.
+pub(super) fn call_site_args(tac: &SurfaceTactic) -> Option<&[SurfaceExpr]> {
     match tac {
         SurfaceTactic::Named { args, .. } => Some(args),
         _ => None,
@@ -1372,8 +1381,15 @@ fn call_site_args(tac: &SurfaceTactic) -> Option<&[SurfaceExpr]> {
 /// tactic structure itself is preserved. Bound variables appear inside those
 /// expression payloads as bare identifiers (e.g. `exact e` carries `e` as an
 /// argument expression), so replacing matching identifiers is sufficient for
-/// the supported shapes (term/ident-argument tactics and flat sequences).
-fn substitute_in_tactic(tac: &SurfaceTactic, bindings: &[Binding]) -> SurfaceTactic {
+/// the supported shapes (term/ident-argument tactics, `rw` rule terms, and
+/// flat sequences).
+///
+/// `pub(super)`: the conv-macro bridge (`user_conv`) reuses the same
+/// substitution over its expanded conv scripts. The `Rw` arm below is
+/// reachable ONLY from that bridge today: `is_executable_tactic_body` keeps
+/// `Rw`-carrying bodies off the tactic-macro compound path, so the tactic
+/// bridge's behavior is unchanged.
+pub(super) fn substitute_in_tactic(tac: &SurfaceTactic, bindings: &[Binding]) -> SurfaceTactic {
     match tac {
         SurfaceTactic::Named { span, name, args } => SurfaceTactic::Named {
             span: *span,
@@ -1386,6 +1402,23 @@ fn substitute_in_tactic(tac: &SurfaceTactic, bindings: &[Binding]) -> SurfaceTac
         SurfaceTactic::Term(span, expr) => {
             SurfaceTactic::Term(*span, Box::new(substitute_in_expr(expr, bindings)))
         }
+        // `rw [rules] (at loc)?`: rule terms are ordinary expression payloads
+        // (`rw [$r]` carries `r` after antiquotation rewriting). The location
+        // is NOT substitutable (hypothesis names are plain strings); the
+        // conv-macro registration rejects patterns whose bound names could
+        // hide there (`user_conv::substitution_reaches`).
+        SurfaceTactic::Rw(span, rules, location) => SurfaceTactic::Rw(
+            *span,
+            rules
+                .iter()
+                .map(|r| SurfaceRwRule {
+                    span: r.span,
+                    reverse: r.reverse,
+                    term: substitute_in_expr(&r.term, bindings),
+                })
+                .collect(),
+            location.clone(),
+        ),
         // Other tactic shapes are passed through unchanged. They are still
         // evaluated by the delegated evaluator; only the explicit substitution
         // of bound variables into the simple term/ident argument tactics is

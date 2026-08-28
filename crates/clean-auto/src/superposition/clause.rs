@@ -10,7 +10,7 @@ use std::fmt;
 
 /// A literal in a clause
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Literal {
+pub(crate) struct Literal {
     /// Left-hand side of equation
     pub lhs: Term,
     /// Right-hand side of equation
@@ -21,7 +21,7 @@ pub struct Literal {
 
 impl Literal {
     /// Create a positive equation
-    pub fn eq(lhs: Term, rhs: Term) -> Self {
+    pub(crate) fn eq(lhs: Term, rhs: Term) -> Self {
         Literal {
             lhs,
             rhs,
@@ -30,7 +30,7 @@ impl Literal {
     }
 
     /// Create a negative equation (disequation)
-    pub fn neq(lhs: Term, rhs: Term) -> Self {
+    pub(crate) fn neq(lhs: Term, rhs: Term) -> Self {
         Literal {
             lhs,
             rhs,
@@ -40,7 +40,7 @@ impl Literal {
 
     /// Negate this literal
     #[must_use]
-    pub fn negate(&self) -> Self {
+    pub(crate) fn negate(&self) -> Self {
         Literal {
             lhs: self.lhs.clone(),
             rhs: self.rhs.clone(),
@@ -50,7 +50,7 @@ impl Literal {
 
     /// Apply a substitution to this literal
     #[must_use]
-    pub fn apply_subst(&self, subst: &Substitution) -> Self {
+    pub(crate) fn apply_subst(&self, subst: &Substitution) -> Self {
         Literal {
             lhs: self.lhs.apply_subst(subst),
             rhs: self.rhs.apply_subst(subst),
@@ -59,17 +59,17 @@ impl Literal {
     }
 
     /// Check if this is a trivial literal (s = s or s ≠ s)
-    pub fn is_trivial(&self) -> bool {
+    pub(crate) fn is_trivial(&self) -> bool {
         self.lhs == self.rhs
     }
 
     /// Check if this is a reflexive positive equation (s = s)
-    pub fn is_reflexive(&self) -> bool {
+    pub(crate) fn is_reflexive(&self) -> bool {
         self.positive && self.lhs == self.rhs
     }
 
     /// Get all variables in this literal
-    pub fn vars(&self) -> HashSet<u32> {
+    pub(crate) fn vars(&self) -> HashSet<u32> {
         let mut vars = self.lhs.vars();
         vars.extend(self.rhs.vars());
         vars
@@ -88,7 +88,7 @@ impl fmt::Display for Literal {
 
 /// A clause is a disjunction of literals
 #[derive(Clone, Debug)]
-pub struct Clause {
+pub(crate) struct Clause {
     /// The literals in this clause
     pub literals: Vec<Literal>,
     /// Unique identifier
@@ -101,7 +101,7 @@ pub struct Clause {
 
 /// Inference rule that derived a clause
 #[derive(Clone, Debug)]
-pub enum Inference {
+pub(crate) enum Inference {
     /// Input clause from the problem
     Input,
     /// Superposition left or right
@@ -118,7 +118,7 @@ pub enum Inference {
 
 impl Clause {
     /// Create a new input clause
-    pub fn new(literals: Vec<Literal>, id: u64) -> Self {
+    pub(crate) fn new(literals: Vec<Literal>, id: u64) -> Self {
         Clause {
             literals,
             id,
@@ -128,17 +128,17 @@ impl Clause {
     }
 
     /// Check if this is the empty clause (contradiction)
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.literals.is_empty()
     }
 
     /// Check if this is a unit clause
-    pub fn is_unit(&self) -> bool {
+    pub(crate) fn is_unit(&self) -> bool {
         self.literals.len() == 1
     }
 
     /// Check if this is a tautology (contains s=s or both s=t and s≠t)
-    pub fn is_tautology(&self) -> bool {
+    pub(crate) fn is_tautology(&self) -> bool {
         // Check for reflexive equalities
         for lit in &self.literals {
             if lit.positive && lit.lhs == lit.rhs {
@@ -167,7 +167,7 @@ impl Clause {
 
     /// Apply a substitution to this clause
     #[must_use]
-    pub fn apply_subst(&self, subst: &Substitution) -> Self {
+    pub(crate) fn apply_subst(&self, subst: &Substitution) -> Self {
         Clause {
             literals: self.literals.iter().map(|l| l.apply_subst(subst)).collect(),
             id: self.id,
@@ -177,7 +177,7 @@ impl Clause {
     }
 
     /// Get all variables in this clause
-    pub fn vars(&self) -> HashSet<u32> {
+    pub(crate) fn vars(&self) -> HashSet<u32> {
         let mut vars = HashSet::new();
         for lit in &self.literals {
             vars.extend(lit.vars());
@@ -187,7 +187,7 @@ impl Clause {
 
     /// Rename variables to avoid conflicts with another clause
     #[must_use]
-    pub fn rename_vars(&self, offset: u32) -> Self {
+    pub(crate) fn rename_vars(&self, offset: u32) -> Self {
         let subst = Substitution {
             map: self
                 .vars()
@@ -199,7 +199,7 @@ impl Clause {
     }
 
     /// Get positive literals
-    pub fn positive_literals(&self) -> Vec<(usize, &Literal)> {
+    pub(crate) fn positive_literals(&self) -> Vec<(usize, &Literal)> {
         self.literals
             .iter()
             .enumerate()
@@ -208,7 +208,7 @@ impl Clause {
     }
 
     /// Get negative literals
-    pub fn negative_literals(&self) -> Vec<(usize, &Literal)> {
+    pub(crate) fn negative_literals(&self) -> Vec<(usize, &Literal)> {
         self.literals
             .iter()
             .enumerate()

@@ -317,6 +317,10 @@ pub(crate) struct ReplacementRowProofSurfaceAudit {
     pub(crate) wrapper_gate_row_ids: Vec<&'static str>,
     pub(crate) wrapper_evidence_artifact_row_count: usize,
     pub(crate) wrapper_evidence_artifact_row_ids: Vec<&'static str>,
+    /// Rows that named the report they live in as their own gate (see
+    /// [`is_self_reported_gate_command`]). A gate cannot be its own evidence.
+    pub(crate) self_reported_gate_row_count: usize,
+    pub(crate) self_reported_gate_row_ids: Vec<&'static str>,
     pub(crate) reviewer_rule: &'static str,
 }
 
@@ -332,12 +336,19 @@ impl ReplacementRowProofSurfaceAudit {
             .filter(|row| is_wrapper_proof_surface(row.evidence_artifact))
             .map(|row| row.id)
             .collect();
-        let status =
-            if wrapper_gate_row_ids.is_empty() && wrapper_evidence_artifact_row_ids.is_empty() {
-                "passed"
-            } else {
-                "blocked"
-            };
+        let self_reported_gate_row_ids: Vec<_> = rows
+            .iter()
+            .filter(|row| is_self_reported_gate_command(row.gate_command))
+            .map(|row| row.id)
+            .collect();
+        let status = if wrapper_gate_row_ids.is_empty()
+            && wrapper_evidence_artifact_row_ids.is_empty()
+            && self_reported_gate_row_ids.is_empty()
+        {
+            "passed"
+        } else {
+            "blocked"
+        };
 
         Self {
             status,
@@ -346,8 +357,10 @@ impl ReplacementRowProofSurfaceAudit {
             wrapper_gate_row_ids,
             wrapper_evidence_artifact_row_count: wrapper_evidence_artifact_row_ids.len(),
             wrapper_evidence_artifact_row_ids,
+            self_reported_gate_row_count: self_reported_gate_row_ids.len(),
+            self_reported_gate_row_ids,
             reviewer_rule:
-                "Replacement row gate_command and evidence_artifact fields must not require python3, pytest, scripts/*.py, scripts/*.sh, or ./scripts/* wrappers for external certification.",
+                "Replacement row gate_command and evidence_artifact fields must not require python3, pytest, scripts/*.py, scripts/*.sh, or ./scripts/* wrappers for external certification, and no row may name `clean replacement status` — the command that prints these rows — as its own gate_command.",
         }
     }
 }
@@ -356,4 +369,23 @@ pub(crate) fn is_wrapper_proof_surface(value: &str) -> bool {
     value.contains("python3")
         || value.contains("pytest")
         || value.contains("scripts/") && (value.contains(".py") || value.contains(".sh"))
+}
+
+/// The command that PRINTS the replacement scorecard.
+pub(crate) const SELF_REPORTED_GATE_COMMAND_PREFIX: &str = "clean replacement status";
+
+/// Whether a row cites the report it lives in as its own evidence.
+///
+/// `clean replacement status` renders these rows; a row naming it as its
+/// `gate_command` is gated by its own output, which is `exit 0` with extra
+/// steps. Two rows did exactly that until 2026-08-26 — `scorecard` and
+/// `rust-first-tooling` — and `tests/support.rs` *asserted* the circle for the
+/// second rather than refusing it, so the defect had a test defending it.
+///
+/// A row with genuinely no gate must say so in words a reader cannot mistake
+/// for a command; it may not point here.
+pub(crate) fn is_self_reported_gate_command(command: &str) -> bool {
+    command
+        .trim_start()
+        .starts_with(SELF_REPORTED_GATE_COMMAND_PREFIX)
 }

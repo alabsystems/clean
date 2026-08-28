@@ -9,6 +9,7 @@
 //! by the rest of the crate (`handle_replacement_command`,
 //! `ReplacementCommands`, `FEATURES`) is unchanged.
 
+mod add_decl_bypass_scan;
 mod artifact_io;
 mod artifact_types;
 mod cert_gates;
@@ -17,6 +18,7 @@ mod consts;
 mod corpus_discovery;
 mod corpus_fixture;
 mod corpus_manifest;
+mod evidence_contract;
 mod evidence_generation;
 mod features;
 mod features_catalog;
@@ -27,6 +29,7 @@ mod handlers;
 mod informational;
 mod launch_evidence;
 mod launch_validation;
+mod ratchet_closure;
 mod readiness;
 mod release_issue_report;
 mod release_issue_rules;
@@ -73,6 +76,7 @@ pub(crate) use crate::cmd_native_library::{
     handle_native_library_command, NativeLibraryCommands, NativeLibraryError,
 };
 
+pub(crate) use self::add_decl_bypass_scan::*;
 pub(crate) use self::artifact_io::*;
 pub(crate) use self::artifact_types::*;
 pub(crate) use self::cert_gates::*;
@@ -81,6 +85,7 @@ pub(crate) use self::consts::*;
 pub(crate) use self::corpus_discovery::*;
 pub(crate) use self::corpus_fixture::*;
 pub(crate) use self::corpus_manifest::*;
+pub(crate) use self::evidence_contract::*;
 pub(crate) use self::evidence_generation::*;
 pub(crate) use self::features::*;
 pub(crate) use self::features_catalog::*;
@@ -91,6 +96,7 @@ pub(crate) use self::handlers::*;
 pub(crate) use self::informational::*;
 pub(crate) use self::launch_evidence::*;
 pub(crate) use self::launch_validation::*;
+pub(crate) use self::ratchet_closure::*;
 pub(crate) use self::readiness::*;
 pub(crate) use self::release_issue_report::*;
 pub(crate) use self::release_issue_rules::*;

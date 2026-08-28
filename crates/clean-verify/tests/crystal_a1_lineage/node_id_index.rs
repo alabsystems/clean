@@ -11,7 +11,7 @@
 //!     ret %2
 //! ```
 //!
-//! ## THE `usize` DECISION lives HERE, and nowhere else
+//! ## THE `usize` DECISION lives HERE and in the tag table's pinned lane
 //!
 //! The ninth chain left `usize` deliberately UNRESOLVED: `norm_emitted_ty`
 //! returns the loud `?usize` token and `assert_lanes` refuses a `?`-prefixed
@@ -22,8 +22,9 @@
 //! the token is then resolved to `uint64` — a TARGET assumption, 64-bit
 //! `usize`, anchored to the recorded `aarch64-apple-darwin` producer pinned
 //! in `node_id_index.lineage.json`; and `assert_lanes` compares the resolved
-//! side against the registered module, whose `ir_ni_tusize` is
-//! `IRTy.uint_ ir_d64` — the same decision, made once, in one named alias.
+//! side against the registered module, whose MINTED `ir_ni_b0` inlines
+//! `(IRTy.uint_ 64)` — the resolution the tag table's `usize` lane pins
+//! (bits 64, one site) and `ir_ni_tusize` restates for the theorems.
 //! The PARSER keeps refusing `?usize`, so the unchained twin body
 //! (`env::persistent_ext::ExtensionIdx::index`, `struct.848`) still fails
 //! closed until its own lane makes its own decision.
@@ -41,8 +42,10 @@
 //!
 //! Structural correspondence, not a semantic proof that Clean's `IRInst.cast`
 //! encoding means what trust-ir's does. The lineage digest is RECORDED, not
-//! recomputed. `ir_ni_module` is hand-transcribed: an incorrect transcription
-//! FAILS here; a correct one is not automatic. Nothing says
+//! recomputed. `ir_ni_module` is MINTED from the emitted artifact as of
+//! 2026-08-22 (crystal A2, `src/ir_mint`, gated by
+//! `tests/crystal_a2_mint_ni.rs`); this lane remains the independent reader D
+//! over the same fixture. Nothing says
 //! `ir_wrap ir_d64 (ir_wrap ir_d32 n)` is Rust's `as usize` — see the module
 //! doc of `spec/core_spec/eval_ir_node_id_index.rs`.
 
@@ -81,7 +84,8 @@ fn node_id_index_proved_module_matches_the_emitted_artifact() {
     );
     let mut emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_node_id_index.rs", "const SRC_IR_NI_B0"),
+        // The MINTED script (crystal A2) — the same lines the spec replays.
+        &clean_block_sources("generated/ir_ni.defs.txt", "def ir_ni_b"),
         "def ir_ni_b0",
     );
 
@@ -165,12 +169,12 @@ fn node_id_index_proved_module_matches_the_emitted_artifact() {
         text.contains("bb0(%0: struct.323):"),
         "one by-value parameter of type struct.323 — NodeId, not ExtensionIdx"
     );
-    let func = clean_block_sources("eval_ir_node_id_index.rs", "const SRC_IR_NI_FUNC");
+    let func = clean_block_sources("generated/ir_ni.defs.txt", "def ir_ni_func");
     assert!(
         func.contains("IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0"),
         "the registered IRFunc must bind the same single parameter id: {func}"
     );
-    let tself = clean_block_sources("eval_ir_node_id_index.rs", "const SRC_IR_NI_TSELF");
+    let tself = clean_block_sources("generated/ir_ni.defs.txt", "def ir_ni_tself");
     assert!(
         tself.contains("IRTy.struct_ 323"),
         "the registered receiver type must carry the SAME struct id the artifact prints: {tself}"
@@ -179,7 +183,7 @@ fn node_id_index_proved_module_matches_the_emitted_artifact() {
     assert_eq!(emitted.blocks, clean.blocks);
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_node_id_index.rs", "const SRC_IR_NI_FUNC"),
+        &clean_block_sources("generated/ir_ni.defs.txt", "def ir_ni_func"),
         "node_id_index",
     );
     assert_lanes(&emitted, &clean, "node_id_index");
@@ -277,15 +281,15 @@ fn node_id_index_the_lanes_catch_a_drifted_artifact() {
     assert_ne!(raw.rets, wrong_ret.rets, "the RET lane must see [2] vs [1]");
 }
 
-/// **The other direction: perturb the CLEAN side.** The registered
-/// `SRC_IR_NI_B0` source itself is mutated and parsed with the same reader the
+/// **The other direction: perturb the CLEAN side.** The registered (minted)
+/// `ir_ni_b0` line itself is mutated and parsed with the same reader the
 /// gate uses; each mutation must break exactly the lane that owns it.
 #[test]
 fn node_id_index_the_lanes_catch_a_drifted_spec_module_too() {
     let text = fixture("node_id_index.trust-ir.txt");
     let mut emitted = parse_emitted(&text);
     resolve_usize(&mut emitted, "node_id_index (spec-drift control)");
-    let src = clean_block_sources("eval_ir_node_id_index.rs", "const SRC_IR_NI_B0");
+    let src = clean_block_sources("generated/ir_ni.defs.txt", "def ir_ni_b");
     let good = parse_clean(&src, "def ir_ni_b0");
     assert_eq!(
         emitted.casts, good.casts,
@@ -297,7 +301,13 @@ fn node_id_index_the_lanes_catch_a_drifted_spec_module_too() {
 
     // The registered module at a 32-bit usize — the OTHER answer the decision
     // could have given, and the one the recorded 64-bit producer refutes.
-    let at_u32 = parse_clean(&src.replace("ir_ni_tusize", "ir_br_tu32"), "def ir_ni_b0");
+    let at_u32 = parse_clean(
+        &src.replace(
+            "(IRTy.uint_ 32) (IRTy.uint_ 64)",
+            "(IRTy.uint_ 32) (IRTy.uint_ 32)",
+        ),
+        "def ir_ni_b0",
+    );
     assert_eq!(emitted.casts, at_u32.casts, "operand lane blind");
     assert_ne!(
         emitted.cast_tys, at_u32.cast_tys,
@@ -317,7 +327,7 @@ fn node_id_index_the_lanes_catch_a_drifted_spec_module_too() {
 
     // The registered module casting the receiver instead of the field.
     let wrong_operand = parse_clean(
-        &src.replace("ir_ni_tusize ir_d1", "ir_ni_tusize ir_d0"),
+        &src.replace("(IRTy.uint_ 64) ir_d1", "(IRTy.uint_ 64) ir_d0"),
         "def ir_ni_b0",
     );
     assert_eq!(emitted.cast_tys, wrong_operand.cast_tys);
@@ -326,8 +336,8 @@ fn node_id_index_the_lanes_catch_a_drifted_spec_module_too() {
     // The registered module reading field 1.
     let wrong_field = parse_clean(
         &src.replace(
-            "ir_br_tu32 ir_d0 ir_d0) ir_d1",
-            "ir_br_tu32 ir_d0 ir_d1) ir_d1",
+            "(IRTy.uint_ 32) ir_d0 ir_d0) ir_d1",
+            "(IRTy.uint_ 32) ir_d0 ir_d1) ir_d1",
         ),
         "def ir_ni_b0",
     );

@@ -130,14 +130,20 @@ impl<'env> TypeChecker<'env> {
         let (ty, cert) = self.infer_type_with_cert_impl(arc.as_ref())?;
         // Cert-clone economy (Track WW): in `infer_only=true` (inference) mode the
         // certificate is ultimately discarded by the public `infer_type`
-        // (`cross_validate_with_micro` runs only when `infer_only=false`). Storing
-        // — and re-cloning on every DAG hit — the full structural cert there would
-        // re-introduce the exponential it was built to avoid (the cert tree mirrors
-        // the expanded term). So in inference mode we cache a cheap placeholder
-        // cert; the freshly-computed `cert` is still returned to THIS caller intact,
-        // only later memo HITS get the placeholder. In `check_type`
-        // (`infer_only=false`) the real cert is cached and returned so the
-        // micro-checker cross-validation remains exact.
+        // (`cross_validate_with_micro` runs only when `infer_only=false`), so we
+        // cache a cheap placeholder rather than pay to keep one alive; the
+        // freshly-computed `cert` is still returned to THIS caller intact, only
+        // later memo HITS get the placeholder. In `check_type`
+        // (`infer_only=false`) and in retained mode the real cert is cached and
+        // returned so the micro-checker cross-validation remains exact.
+        //
+        // Caching the real cert is no longer the exponential it once was. When
+        // `ProofCert` children were `Box`, this `cert.clone()` deep-copied the
+        // memoized sub-certificate on every DAG hit and each parent re-embedded
+        // it by value, so the retained certificate mirrored the EXPANDED term at
+        // `Θ(branching^depth)` — measured at 2^(d+2)-3 nodes, and the cause of
+        // the `data_tree-mirror-size` divergence. Children are now
+        // `Arc<ProofCert>`, so this clone copies one node and bumps refcounts.
         let cached_cert = if infer_only && !self.cert_retained.get() {
             crate::cert::ProofCert::Sort {
                 level: crate::level::Level::zero(),

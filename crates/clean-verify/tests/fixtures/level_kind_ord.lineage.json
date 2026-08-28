@@ -176,14 +176,14 @@
  },
  "current_source_bound_pin": {
   "schema": "clean.crystal.current_source_bound_pin/v1",
-  "record": "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json",
-  "binding_manifest": "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json",
-  "measured_utc": "2026-08-21T08:19:49Z",
+  "record": "data/crystal_fixture_rebaseline_2026-08-21_lane18.json",
+  "binding_manifest": "data/crystal_fixture_rebaseline_bindings_2026-08-21_lane18.json",
+  "measured_utc": "2026-08-21T18:29:12Z",
   "def_path": "level::Level::kind_ord",
   "def_index": 17158,
   "func_id": 3908,
   "instr_count": 14,
-  "lineage": "sha256:d58621399ec0fadfb547d81023e5e53384c8026deedb3bf9377dd9000ecf785f",
+  "lineage": "sha256:e670f5bf2432fe5bae5effa2adb2e5dd5b4f6960c2fc123f5e4da320f3ca6750",
   "lowered": true,
   "spliced": true,
   "unsupported": [],
@@ -206,9 +206,9 @@
   "flip_event": {
    "fired": true,
    "seam": "codegen",
-   "lineage": "sha256:d58621399ec0fadfb547d81023e5e53384c8026deedb3bf9377dd9000ecf785f",
+   "lineage": "sha256:e670f5bf2432fe5bae5effa2adb2e5dd5b4f6960c2fc123f5e4da320f3ca6750",
    "matches_artifact_lineage": true,
-   "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17158 ~ clean_kernel[99b6]::level::{impl#18}::kind_ord), asserts=0, lineage=sha256:d58621399ec0fadfb547d81023e5e53384c8026deedb3bf9377dd9000ecf785f, flipped_so_far=216"
+   "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17158 ~ clean_kernel[89dd]::level::{impl#18}::kind_ord), asserts=0, lineage=sha256:e670f5bf2432fe5bae5effa2adb2e5dd5b4f6960c2fc123f5e4da320f3ca6750, flipped_so_far=229"
   },
   "emitted_body": {
    "verdict": "IDENTICAL",
@@ -216,39 +216,39 @@
    "sha256": "48bb0520a03f39729e44d63ac35024fa39c675f57b3ded84c80a06ce5ca1f582"
   },
   "build": {
-   "clean_source_rev": "b03937e748123cc115bfd159694fd64f0ce8538a",
-   "clean_source_tree": "0d5d4b7116745b8060e61e044fa7fb499d0e18c0",
+   "clean_source_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
+   "clean_source_tree": "12c02545d4d4c398c2668b885e439ba3557c269c",
    "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
-   "trust_worktree_rev": "8ea68367816ce49a7c3026f1e19c7ee4285e7737",
-   "trustc_sha256": "c4b91deb28f50697883de56664595a5afc86f8ec8af8de9d357b6757a7867e80",
-   "librustc_driver_sha256": "a2e495e3e4918964c071d18c420d24f69b781f55829ff63c72fdeaa904d9fce5",
+   "trust_worktree_rev": "c4e667ca51a4b6bd0bc3790e540cdabc707c45a1",
+   "trustc_sha256": "044fb2df5ac0c18f795139f121e15094eea62135be81396aca62142004f9ba1f",
+   "librustc_driver_sha256": "4e2a161f6e0d9f6ddf184d5d744c6f46fa9defba52028addfe31b4885fde510c",
    "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off",
    "recipe": "TRUSTC=<sealed stage1>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> TRUST_IR_BUILD_TARGET_DIR=<exact-driver prewarm> scripts/trust_ir_build.sh --print-only",
    "driver_seal": "Trust seal_driver guard passed with the sole resolved driver inside the read-only snapshot; sysrootcheck reported metadata v12/v12 and compiled std.",
    "artifacts": {
     "clean_kernel.trust-ir.bin": {
-     "sha256": "19ad6224a4c84f2b35ed9163b9777f448805327d5db2e3863c6f729842e61665",
+     "sha256": "ce4ac168087ab6cbd61098dcadd9f67395d1eee828d43637cc05254c9cfc40bd",
      "bytes": 3749392
     },
     "clean_kernel.trust-ir.txt": {
-     "sha256": "324550ca66045236ddaf40da90642258e4c02e07e3c9ed12d59e767c201b0ccc",
+     "sha256": "17cecbc305122ef58e6ddf5e3ffad6eab759da39d1452cbe1d4d2dcc4f0ab78d",
      "bytes": 5441006
     },
     "clean_kernel.coverage.json": {
-     "sha256": "0b44fb1a7ea9b4d2ce2dfabe9cfb4654c24d43cbee60d007c1e1803e54d3dc82",
-     "bytes": 17518829
+     "sha256": "fb60c89a7c590e16493f6ee4b3716f20504c0aa70da519bff3576ed71c15f7db",
+     "bytes": 17711845
     },
     "clean_kernel.build.log": {
-     "sha256": "a7418a940461f362eed539369f587c66e17c48d70baaf28d15c253d3ec62d468",
-     "bytes": 73060
+     "sha256": "c27f34526793082c42e6cada3f0b5a2bf42c140089468cb10d7232e9da28a310",
+     "bytes": 162779
     },
     "clean_kernel.axes.json": {
-     "sha256": "b27d7947d8201150c10110dc87a9ea873c32159cb7b148dc665021ac9b3cc68c",
-     "bytes": 76462
+     "sha256": "6856c74212550889765455b3e71387be7ca839e5348118edf9301a49a25e723f",
+     "bytes": 77411
     },
     "clean_kernel.argv": {
-     "sha256": "9a1160930d859287d263f9da8ae2e12f27c4e9a4b84f120bbb352c44a1dcc655",
-     "bytes": 4728
+     "sha256": "f6d0e4923d6cb4ad6a55ae09039065018f5d57532bd9042f2b62559797c3da4e",
+     "bytes": 5434
     }
    },
    "whole_crate_measurement": {
@@ -268,35 +268,35 @@
     "calls_resolved": 8154,
     "calls_extern_decls": 3244,
     "calls_unresolved": 3240,
-    "interpreter_agreed": 1141,
-    "interpreter_mismatch": 9,
-    "interpreter_not_run": 7791,
+    "interpreter_agreed": 1175,
+    "interpreter_mismatch": 10,
+    "interpreter_not_run": 7756,
     "interpreter_unsupported": 4903,
-    "interpreter_samples_total": 2273,
-    "seam_agreed": 24,
+    "interpreter_samples_total": 2443,
+    "seam_agreed": 2,
     "seam_mismatch": 0,
-    "seam_not_run": 7343,
+    "seam_not_run": 7365,
     "seam_resolved": 7367,
-    "seam_samples_total": 52,
+    "seam_samples_total": 4,
     "derived_mir_agreed": 1590,
     "mismatch": 0,
     "derived_mir_unsupported": 12254,
-    "markers_exact": 1129,
-    "markers_exact_nonvacuous": 40,
+    "markers_exact": 1149,
+    "markers_exact_nonvacuous": 60,
     "markers_exact_vacuous": 1089,
-    "markers_lines_total": 185,
-    "markers_differ_derived_empty": 460,
+    "markers_lines_total": 243,
+    "markers_differ_derived_empty": 440,
     "markers_differ_content": 0,
     "markers_channel_skipped": 1,
     "markers_agreed_prefix_lines": 0,
     "markers_unparseable": 0,
     "lineage_rows": 13216,
     "lineage_rows_in_artifact": 6431,
-    "flip_lineage_equal": 225,
-    "flip_spliced": 225,
+    "flip_lineage_equal": 244,
+    "flip_spliced": 244,
     "func_id_rows": 6431,
-    "flip_events_total": 225,
-    "flip_events_codegen": 184,
+    "flip_events_total": 244,
+    "flip_events_codegen": 203,
     "flip_events_ctfe": 41,
     "flip_backed_total": 206,
     "flip_backed_codegen": 165,

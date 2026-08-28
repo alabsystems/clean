@@ -267,7 +267,7 @@ pub fn run(
             let value = match outcome.returns.first() {
                 Some(v) => match &v.kind {
                     InterpretValueKind::Bool(b) => RunResult::Bool(*b),
-                    InterpretValueKind::Int(i) => match u32::try_from(i.as_unsigned()) {
+                    InterpretValueKind::Int(i) => match u64::try_from(i.as_unsigned()) {
                         Ok(n) => RunResult::Int(n),
                         Err(_) => RunResult::Fault("int_too_wide".to_owned()),
                     },

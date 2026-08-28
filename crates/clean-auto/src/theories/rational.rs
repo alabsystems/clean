@@ -44,7 +44,7 @@ impl Rational {
     /// when `num == i64::MIN` or `den == i64::MIN` with a sign flip and no
     /// reduction), the value saturates to the in-range boundary, matching the
     /// `saturating_abs` approximation policy already used by `abs`.
-    pub fn new(num: i64, den: i64) -> Self {
+    pub(crate) fn new(num: i64, den: i64) -> Self {
         assert!(den != 0, "Division by zero in Rational::new");
         // Sign-normalize in i128 so `-i64::MIN` cannot overflow. For every input
         // that did not overflow before, the i128 path produces identical results.
@@ -79,7 +79,7 @@ impl Rational {
     }
 
     /// Create from an integer
-    pub fn from_int(n: i64) -> Self {
+    pub(crate) fn from_int(n: i64) -> Self {
         Rational { num: n, den: 1 }
     }
 
@@ -111,20 +111,20 @@ impl Rational {
         }
     }
 
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         self.num == 0
     }
 
-    pub fn is_positive(&self) -> bool {
+    pub(crate) fn is_positive(&self) -> bool {
         self.num > 0
     }
 
-    pub fn is_negative(&self) -> bool {
+    pub(crate) fn is_negative(&self) -> bool {
         self.num < 0
     }
 
     #[must_use]
-    pub fn abs(&self) -> Self {
+    pub(crate) fn abs(&self) -> Self {
         Rational {
             num: self.num.saturating_abs(),
             den: self.den,
@@ -132,7 +132,7 @@ impl Rational {
     }
 
     #[must_use]
-    pub fn neg(&self) -> Self {
+    pub(crate) fn neg(&self) -> Self {
         Rational {
             num: self.num.wrapping_neg(),
             den: self.den,
@@ -142,7 +142,7 @@ impl Rational {
     /// Checked negation. Returns None if num == i64::MIN (no i64 positive
     /// representation).
     #[must_use]
-    pub fn checked_neg(&self) -> Option<Self> {
+    pub(crate) fn checked_neg(&self) -> Option<Self> {
         Some(Rational {
             num: self.num.checked_neg()?,
             den: self.den,
@@ -151,7 +151,7 @@ impl Rational {
 
     /// Add two rationals. Returns None on overflow after normalization.
     #[must_use]
-    pub fn add(&self, other: &Self) -> Option<Rational> {
+    pub(crate) fn add(&self, other: &Self) -> Option<Rational> {
         let num =
             (self.num as i128) * (other.den as i128) + (other.num as i128) * (self.den as i128);
         let den = (self.den as i128) * (other.den as i128);
@@ -160,7 +160,7 @@ impl Rational {
 
     /// Subtract two rationals. Returns None on overflow after normalization.
     #[must_use]
-    pub fn sub(&self, other: &Self) -> Option<Rational> {
+    pub(crate) fn sub(&self, other: &Self) -> Option<Rational> {
         let num =
             (self.num as i128) * (other.den as i128) - (other.num as i128) * (self.den as i128);
         let den = (self.den as i128) * (other.den as i128);
@@ -169,7 +169,7 @@ impl Rational {
 
     /// Multiply two rationals. Returns None on overflow after normalization.
     #[must_use]
-    pub fn mul(&self, other: &Self) -> Option<Rational> {
+    pub(crate) fn mul(&self, other: &Self) -> Option<Rational> {
         let num = (self.num as i128) * (other.num as i128);
         let den = (self.den as i128) * (other.den as i128);
         Self::new_checked(num, den)
@@ -177,7 +177,7 @@ impl Rational {
 
     /// Divide two rationals. Returns None on division by zero or overflow.
     #[must_use]
-    pub fn div(&self, other: &Self) -> Option<Rational> {
+    pub(crate) fn div(&self, other: &Self) -> Option<Rational> {
         if other.num == 0 {
             return None;
         }
@@ -187,12 +187,12 @@ impl Rational {
     }
 
     /// Numerator (for external inspection)
-    pub fn numerator(&self) -> i64 {
+    pub(crate) fn numerator(&self) -> i64 {
         self.num
     }
 
     /// Denominator (for external inspection)
-    pub fn denominator(&self) -> i64 {
+    pub(crate) fn denominator(&self) -> i64 {
         self.den
     }
 }
@@ -233,7 +233,7 @@ impl std::fmt::Display for Rational {
 /// Reference: Dutertre & de Moura, "A Fast Linear-Arithmetic Solver for DPLL(T)",
 /// CAV 2006, Section 3.2.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct DeltaRational {
+pub(crate) struct DeltaRational {
     pub real: Rational,
     pub delta: Rational,
 }
@@ -245,7 +245,7 @@ impl DeltaRational {
     };
 
     /// Create from a plain rational (zero delta component)
-    pub fn from_rational(r: Rational) -> Self {
+    pub(crate) fn from_rational(r: Rational) -> Self {
         DeltaRational {
             real: r,
             delta: Rational::ZERO,
@@ -253,12 +253,12 @@ impl DeltaRational {
     }
 
     /// Create with explicit real and delta components
-    pub fn new(real: Rational, delta: Rational) -> Self {
+    pub(crate) fn new(real: Rational, delta: Rational) -> Self {
         DeltaRational { real, delta }
     }
 
     #[must_use]
-    pub fn add(&self, other: &Self) -> Option<Self> {
+    pub(crate) fn add(&self, other: &Self) -> Option<Self> {
         Some(DeltaRational {
             real: self.real.add(&other.real)?,
             delta: self.delta.add(&other.delta)?,
@@ -266,7 +266,7 @@ impl DeltaRational {
     }
 
     #[must_use]
-    pub fn sub(&self, other: &Self) -> Option<Self> {
+    pub(crate) fn sub(&self, other: &Self) -> Option<Self> {
         Some(DeltaRational {
             real: self.real.sub(&other.real)?,
             delta: self.delta.sub(&other.delta)?,
@@ -275,7 +275,7 @@ impl DeltaRational {
 
     /// Multiply by a plain rational coefficient: `(r, d) * c = (r*c, d*c)`
     #[must_use]
-    pub fn mul_rational(&self, c: &Rational) -> Option<Self> {
+    pub(crate) fn mul_rational(&self, c: &Rational) -> Option<Self> {
         Some(DeltaRational {
             real: self.real.mul(c)?,
             delta: self.delta.mul(c)?,
@@ -284,7 +284,7 @@ impl DeltaRational {
 
     /// Divide by a plain rational coefficient: `(r, d) / c = (r/c, d/c)`
     #[must_use]
-    pub fn div_rational(&self, c: &Rational) -> Option<Self> {
+    pub(crate) fn div_rational(&self, c: &Rational) -> Option<Self> {
         Some(DeltaRational {
             real: self.real.div(c)?,
             delta: self.delta.div(c)?,

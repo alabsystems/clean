@@ -8,7 +8,6 @@
 //! module's second `impl Ctx` block verbatim.
 
 use super::super::super::isabelle_pure::IsaTerm;
-use super::super::*;
 use super::*;
 use clean_kernel::expr::FVarId;
 use clean_kernel::{BinderInfo, Expr, Name};

@@ -42,9 +42,43 @@ pub trait TrustedEnvExt {
         &mut self,
         constants: impl Iterator<Item = ConstantInfo>,
     ) -> Vec<(Name, EnvError)>;
+    /// UNCHECKED bulk inductive registration — test-only since 2026-08-24
+    /// (R1-IND, census row `ind-meta-bulk`): production callers use
+    /// [`TrustedEnvExt::extend_inductives_structural`]. Compiled only under
+    /// the `test` cfg or the empty `test-fixtures` feature (enabled by
+    /// downstream dev-dependencies), so a production call cannot compile.
+    #[cfg(any(test, feature = "test-fixtures"))]
     fn extend_inductives_unchecked(&mut self, inductives: impl Iterator<Item = InductiveVal>);
+    /// UNCHECKED bulk constructor registration — test-only since 2026-08-24
+    /// (R1-IND); see [`TrustedEnvExt::extend_inductives_unchecked`].
+    #[cfg(any(test, feature = "test-fixtures"))]
     fn extend_constructors_unchecked(&mut self, constructors: impl Iterator<Item = ConstructorVal>);
+    /// UNCHECKED bulk recursor registration — test-only since 2026-08-24
+    /// (R1-IND); see [`TrustedEnvExt::extend_inductives_unchecked`].
+    #[cfg(any(test, feature = "test-fixtures"))]
     fn extend_recursors_unchecked(&mut self, recursors: impl Iterator<Item = RecursorVal>);
+    /// Structural-tier bulk inductive registration (R1-IND): the same O(1)
+    /// checks as `extend_constants_structural` (no duplicate level params, no
+    /// metavariables, no free variables, `Level::Param` scope) over every
+    /// carried expression; failing records are returned, never inserted.
+    fn extend_inductives_structural(
+        &mut self,
+        inductives: impl Iterator<Item = InductiveVal>,
+    ) -> Vec<(Name, EnvError)>;
+    /// Structural-tier bulk constructor registration (R1-IND) — see
+    /// [`TrustedEnvExt::extend_inductives_structural`].
+    fn extend_constructors_structural(
+        &mut self,
+        constructors: impl Iterator<Item = ConstructorVal>,
+    ) -> Vec<(Name, EnvError)>;
+    /// Structural-tier bulk recursor registration (R1-IND) — see
+    /// [`TrustedEnvExt::extend_inductives_structural`]; the validated set
+    /// includes every rule `rhs` (ι-reduction participates in kernel
+    /// acceptance).
+    fn extend_recursors_structural(
+        &mut self,
+        recursors: impl Iterator<Item = RecursorVal>,
+    ) -> Vec<(Name, EnvError)>;
     fn register_persistent_extension(&mut self, name: Name) -> bool;
     fn add_persistent_extension_entries(
         &mut self,
@@ -62,7 +96,24 @@ pub trait TrustedEnvExt {
     fn register_constructor(&mut self, ctor_val: ConstructorVal);
     fn register_recursor(&mut self, rec_val: RecursorVal);
     fn set_reducibility(&mut self, name: &Name, reducibility: Reducibility) -> bool;
+    /// UNCHECKED axiom-stub upgrade — test-only since 2026-08-24 (R1-STUB,
+    /// census row `axiom-stub-upgrade`): production callers use
+    /// [`TrustedEnvExt::upgrade_axiom_stubs_checked`]. Compiled only under the
+    /// `test` cfg or the empty `test-fixtures` feature (enabled by downstream
+    /// dev-dependencies), so a production call cannot compile.
+    #[cfg(any(test, feature = "test-fixtures"))]
     fn upgrade_axiom_stubs(&mut self, constants: impl Iterator<Item = ConstantInfo>) -> usize;
+    /// Kernel-checked axiom-stub upgrade (R1-STUB, the G4 checked-tier
+    /// precedent): per record, the stub must exist, the incoming type must
+    /// kernel-match the stub's type, and the incoming value must
+    /// `check_type` against it (`UnknownConst`-tolerant for legitimate
+    /// forward/external references); a failing record refuses fail-closed —
+    /// the stub stays and the named error is returned. See
+    /// [`Environment::upgrade_axiom_stubs_checked`] for the full contract.
+    fn upgrade_axiom_stubs_checked(
+        &mut self,
+        constants: impl Iterator<Item = ConstantInfo>,
+    ) -> (usize, Vec<(Name, EnvError)>);
     /// Discharge a bare `Axiom` carrier stub so the genuine imported inductive of
     /// the same name can register in its place. Returns `true` iff a value-free
     /// `Axiom` of this name existed and was removed. See
@@ -70,6 +121,12 @@ pub trait TrustedEnvExt {
     /// soundness contract.
     #[must_use]
     fn discharge_axiom_stub_for_inductive_import(&mut self, name: &Name) -> bool;
+    /// Register a Skolem constant as an UNCHECKED axiom (superposition proof
+    /// reconstruction). The sole production caller operates on a dropped
+    /// scratch clone of the environment; see
+    /// `Environment::add_skolem_axiom` for the soundness contract
+    /// (R1-SKOLEM, data/env_bypass_census.json row "skolem-axiom").
+    fn add_skolem_axiom(&mut self, name: Name, ty: crate::expr::Expr);
     fn init_native_reducers(&mut self);
     fn init_arith_native_reducers(&mut self);
     fn materialize_extension_states(&mut self);
@@ -137,11 +194,13 @@ impl TrustedEnvExt for Environment {
         Environment::extend_constants_structural(self, constants)
     }
 
+    #[cfg(any(test, feature = "test-fixtures"))]
     #[inline]
     fn extend_inductives_unchecked(&mut self, inductives: impl Iterator<Item = InductiveVal>) {
         Environment::extend_inductives_unchecked(self, inductives);
     }
 
+    #[cfg(any(test, feature = "test-fixtures"))]
     #[inline]
     fn extend_constructors_unchecked(
         &mut self,
@@ -150,9 +209,34 @@ impl TrustedEnvExt for Environment {
         Environment::extend_constructors_unchecked(self, constructors);
     }
 
+    #[cfg(any(test, feature = "test-fixtures"))]
     #[inline]
     fn extend_recursors_unchecked(&mut self, recursors: impl Iterator<Item = RecursorVal>) {
         Environment::extend_recursors_unchecked(self, recursors);
+    }
+
+    #[inline]
+    fn extend_inductives_structural(
+        &mut self,
+        inductives: impl Iterator<Item = InductiveVal>,
+    ) -> Vec<(Name, EnvError)> {
+        Environment::extend_inductives_structural(self, inductives)
+    }
+
+    #[inline]
+    fn extend_constructors_structural(
+        &mut self,
+        constructors: impl Iterator<Item = ConstructorVal>,
+    ) -> Vec<(Name, EnvError)> {
+        Environment::extend_constructors_structural(self, constructors)
+    }
+
+    #[inline]
+    fn extend_recursors_structural(
+        &mut self,
+        recursors: impl Iterator<Item = RecursorVal>,
+    ) -> Vec<(Name, EnvError)> {
+        Environment::extend_recursors_structural(self, recursors)
     }
 
     #[inline]
@@ -204,14 +288,28 @@ impl TrustedEnvExt for Environment {
         Environment::set_reducibility(self, name, reducibility)
     }
 
+    #[cfg(any(test, feature = "test-fixtures"))]
     #[inline]
     fn upgrade_axiom_stubs(&mut self, constants: impl Iterator<Item = ConstantInfo>) -> usize {
         Environment::upgrade_axiom_stubs(self, constants)
     }
 
     #[inline]
+    fn upgrade_axiom_stubs_checked(
+        &mut self,
+        constants: impl Iterator<Item = ConstantInfo>,
+    ) -> (usize, Vec<(Name, EnvError)>) {
+        Environment::upgrade_axiom_stubs_checked(self, constants)
+    }
+
+    #[inline]
     fn discharge_axiom_stub_for_inductive_import(&mut self, name: &Name) -> bool {
         Environment::discharge_axiom_stub_for_inductive_import(self, name)
+    }
+
+    #[inline]
+    fn add_skolem_axiom(&mut self, name: Name, ty: crate::expr::Expr) {
+        Environment::add_skolem_axiom(self, name, ty);
     }
 
     #[inline]

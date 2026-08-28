@@ -19,11 +19,13 @@
 //! `"k":"thm","id":` reference scan — the same conservative superset of
 //! `IsaProof::thm_deps` the parallel driver schedules with.
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::io::{BufRead as _, Write as _};
+mod passes;
+
+use std::collections::{HashSet, VecDeque};
+use std::io::BufRead as _;
 use std::path::{Path, PathBuf};
 
-use super::isabelle_import::leading_serial;
+use passes::{emit_from_index, emit_scan, pass1_from_index, pass1_scan};
 
 /// Errors from slice extraction.
 #[derive(Debug, thiserror::Error)]
@@ -86,14 +88,6 @@ pub struct SliceReport {
     /// Referenced serials absent from the corpus (the slice's unavoidable
     /// unresolved-dep floor).
     pub missing_refs: usize,
-}
-
-/// The `"name":"..."` field of a corpus line (after the serial key).
-fn line_name(line: &str) -> Option<&str> {
-    let at = line.find("\"name\":\"")? + "\"name\":\"".len();
-    let rest = &line[at..];
-    let end = rest.find('"')?;
-    Some(&rest[..end])
 }
 
 /// Extract the closure-complete slice of `corpus` selected by `select` into
@@ -180,155 +174,12 @@ pub fn extract_slice(
     }
 }
 
-/// PASS-1 graph + seed resolution over the `<corpus>.idx` sidecar (scan-free).
-/// Iterates entries in FILE order so duplicate-serial `deps_of` resolution
-/// matches [`pass1_scan`] exactly.
-fn pass1_from_index(
-    index: &super::isabelle_index::CorpusIndex,
-    want_serials: &HashSet<i64>,
-    want_names: &[String],
-    dump_exact_names: &HashSet<String>,
-) -> (HashMap<i64, Vec<i64>>, HashSet<i64>, HashSet<i64>) {
-    let mut deps_of: HashMap<i64, Vec<i64>> = HashMap::new();
-    let mut present: HashSet<i64> = HashSet::new();
-    let mut seeds: HashSet<i64> = HashSet::new();
-    for e in index.entries_in_file_order() {
-        present.insert(e.serial);
-        if !e.deps.is_empty() {
-            deps_of.insert(e.serial, e.deps.clone());
-        }
-        let name_match = !e.name.is_empty()
-            && (dump_exact_names.contains(&e.name)
-                || want_names.iter().any(|w| e.name.contains(w.as_str())));
-        if want_serials.contains(&e.serial) || name_match {
-            seeds.insert(e.serial);
-        }
-    }
-    (deps_of, present, seeds)
-}
-
-/// PASS-1 graph + seed resolution by streaming scan (the sidecar-absent path).
-fn pass1_scan(
-    corpus: &Path,
-    want_serials: &HashSet<i64>,
-    want_names: &[String],
-    dump_exact_names: &HashSet<String>,
-) -> Result<(HashMap<i64, Vec<i64>>, HashSet<i64>, HashSet<i64>), IsabelleSliceError> {
-    let mut deps_of: HashMap<i64, Vec<i64>> = HashMap::new();
-    let mut present: HashSet<i64> = HashSet::new();
-    let mut seeds: HashSet<i64> = HashSet::new();
-    let reader = std::io::BufReader::new(std::fs::File::open(corpus).map_err(io_err(corpus))?);
-    let mut ref_buf: Vec<i64> = Vec::new();
-    for line in reader.lines() {
-        let line = line.map_err(io_err(corpus))?;
-        let Some(serial) = leading_serial(&line) else {
-            continue;
-        };
-        present.insert(serial);
-        ref_buf.clear();
-        super::isabelle_import::thm_refs_public(&line, &mut ref_buf);
-        if !ref_buf.is_empty() {
-            deps_of.insert(serial, ref_buf.clone());
-        }
-        if want_serials.contains(&serial) {
-            seeds.insert(serial);
-        } else if let Some(name) = line_name(&line) {
-            if !name.is_empty()
-                && (dump_exact_names.contains(name)
-                    || want_names.iter().any(|w| name.contains(w.as_str())))
-            {
-                seeds.insert(serial);
-            }
-        }
-    }
-    Ok((deps_of, present, seeds))
-}
-
-/// Emit the closure + registration lines by seek-reading only the kept entries
-/// from the corpus (index-driven; FILE order).
-fn emit_from_index(
-    index: &super::isabelle_index::CorpusIndex,
-    corpus: &Path,
-    out_slice: &Path,
-    keep: &HashSet<i64>,
-    select: &SliceSelect,
-    seeds: usize,
-    missing_refs: usize,
-) -> Result<SliceReport, IsabelleSliceError> {
-    let mut report = SliceReport {
-        seeds,
-        missing_refs,
-        ..SliceReport::default()
-    };
-    let mut out =
-        std::io::BufWriter::new(std::fs::File::create(out_slice).map_err(io_err(out_slice))?);
-    for e in index.entries_in_file_order() {
-        let in_closure = keep.contains(&e.serial);
-        let is_registration = select.include_registrations && !in_closure && e.is_registration;
-        if in_closure || is_registration {
-            let line = index
-                .read_line(corpus, e)
-                .map_err(|src| IsabelleSliceError::Io {
-                    path: corpus.to_path_buf(),
-                    source: std::io::Error::other(src.to_string()),
-                })?;
-            out.write_all(line.as_bytes()).map_err(io_err(out_slice))?;
-            out.write_all(b"\n").map_err(io_err(out_slice))?;
-            report.lines_out += 1;
-            report.bytes_out += line.len() as u64 + 1;
-            if is_registration {
-                report.registration_lines += 1;
-            }
-        }
-    }
-    out.flush().map_err(io_err(out_slice))?;
-    Ok(report)
-}
-
-/// Emit the closure + registration lines by re-streaming the corpus (the
-/// sidecar-absent path).
-fn emit_scan(
-    corpus: &Path,
-    out_slice: &Path,
-    keep: &HashSet<i64>,
-    select: &SliceSelect,
-    seeds: usize,
-    missing_refs: usize,
-) -> Result<SliceReport, IsabelleSliceError> {
-    let mut report = SliceReport {
-        seeds,
-        missing_refs,
-        ..SliceReport::default()
-    };
-    let reader = std::io::BufReader::new(std::fs::File::open(corpus).map_err(io_err(corpus))?);
-    let mut out =
-        std::io::BufWriter::new(std::fs::File::create(out_slice).map_err(io_err(out_slice))?);
-    for line in reader.lines() {
-        let line = line.map_err(io_err(corpus))?;
-        let Some(serial) = leading_serial(&line) else {
-            continue;
-        };
-        let in_closure = keep.contains(&serial);
-        let is_registration = select.include_registrations
-            && !in_closure
-            && (line.contains("_def") || line.contains("_dict"));
-        if in_closure || is_registration {
-            out.write_all(line.as_bytes()).map_err(io_err(out_slice))?;
-            out.write_all(b"\n").map_err(io_err(out_slice))?;
-            report.lines_out += 1;
-            report.bytes_out += line.len() as u64 + 1;
-            if is_registration {
-                report.registration_lines += 1;
-            }
-        }
-    }
-    out.flush().map_err(io_err(out_slice))?;
-    Ok(report)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The passes that consume it moved to `passes`; the fixture setup here
+    // still sorts corpus lines by serial.
+    use crate::hol::isabelle_import::leading_serial;
 
     const FIXTURE: &str =
         include_str!("../../tests/fixtures/isabelle/hol_foundational_closure.jsonl");

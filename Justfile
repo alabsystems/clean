@@ -90,6 +90,23 @@ corpus-gate-full:
 crystal-scope ARGS='':
     python3 scripts/crystal_freshness_scope.py {{ARGS}}
 
+# add_decl_* bypass ratchet, MEASURED from crates/**/*.rs (in scripts/local_gate.sh,
+# ~3.4 s). CLAUDE.md's "add_decl_structural / add_decl_unchecked ... only goes
+# down" rule had no source scanner until 2026-08-22: the two gates that read
+# data/unchecked_decl_ratchet.json only ever checked it against itself. Pass
+# --selftest for the 16 mutation arms (13/14 keep the 2026-08-22 snapshot.rs plant
+# as a standing demonstration on the real file), --list to see the measured sites.
+add-decl-ratchet ARGS='':
+    python3 scripts/check_add_decl_ratchet.py {{ARGS}}
+
+# The self-tests of this repo's own gate/tooling scripts (scripts/test_*), as one
+# gate (~21 s; in `scripts/local_gate.sh` full mode). Twenty suites with zero
+# callers until 2026-08-22; two were red and nothing said so. Known reds are
+# ledgered with an expiry in data/script_selftest_quarantine.json, which fails
+# closed on an expired, stale or malformed row.
+script-selftests ARGS='':
+    scripts/check_script_selftests.sh {{ARGS}}
+
 # Axiom-audit release-check gate (clean-cli subcommand, Wave 87).
 # Runs the two non-mutating lanes (aggregate consistency + live row
 # reconciliation) and writes reports/axiom-audit-launch-evidence.json.
@@ -179,18 +196,37 @@ update-ay:
 
 # Quick local check (fmt → lint-coverage → clippy → test-lib). The fail-closed
 # soundness gate is `just gate`.
-ci: fmt-check lint-coverage clippy test-fast
+ci: hooks-check fmt-check lint-coverage clippy test-fast
 
 # Local fail-closed soundness + quality gate (GitHub CI is dead). Run before pushing main.
 gate:
     scripts/local_gate.sh
 
-# Fast gate (skips the ~4min workspace clippy and the heavy KV/kernel legs, but
-# keeps the 0.1s lint-coverage invariant); this is what the pre-push hook runs.
+# Fast gate: everything EXCEPT the legs inside local_gate.sh's `GATE-FULL-ONLY`
+# regions (the ~4 min workspace clippy, workspace fmt, cargo-deny/vet, the KV
+# gates, the full clean-kernel --lib suite, the script self-tests, the kernel
+# lint ratchet, the green-artifact recheck, and the trust-verify soundness
+# ratchet).
+#
+# It is NOT ~30 s and it is NOT what the pre-push hook runs. Corrected
+# 2026-08-25: this comment used to claim both. `--fast` still compiles the
+# trusted kernel twice and the CLI once (soundness-cert 410.8 s COLD,
+# axiom-audit-consistency 8.0 s, cli-feature-coverage 293.3 s COLD), because
+# those legs are excluded from the HOOK, not from this mode. The hook runs a
+# curated subset of its own; the split is one reviewed row per leg, with a MODE
+# column, in scripts/githooks/gate-legs.txt.
 gate-fast:
     scripts/local_gate.sh --fast
 
-# Install the tracked pre-push hook repo-wide (core.hooksPath; binds all worktrees).
+# Install the tracked pre-push hook repo-wide (core.hooksPath). Idempotent,
+# refuses to take over a foreign hooksPath, migrates a clone configured for the
+# pre-2026-08-23 `scripts/hooks` path, and prints the per-worktree rollout split.
 install-hooks:
-    git config core.hooksPath scripts/hooks
-    @echo "pre-push gate installed: core.hooksPath=scripts/hooks (runs 'just gate-fast' on push)"
+    bash scripts/install-git-hooks.sh
+
+# Fail-closed test of the ENFORCEMENT PATH, not of the tree: is the pre-push hook
+# actually installed, executable, and still covering local_gate.sh's fast legs?
+# Wired into `just ci` and into scripts/local_gate.sh, because a hook that only
+# exists in the tree is exactly the bug this repo shipped until 2026-08-23.
+hooks-check:
+    bash scripts/install-git-hooks.sh --check

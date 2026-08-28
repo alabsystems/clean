@@ -77,8 +77,10 @@
 //!
 //! ## What this does NOT establish
 //!
-//! The link between the proved module and the emitted one is STRUCTURAL — same
-//! CFG, checked by `tests/crystal_a1_lineage.rs` — not a semantic proof that
+//! The link between the proved module and the emitted one is STRUCTURAL — the
+//! module is MINTED from the artifact (crystal A2, `crate::ir_mint`, gated by
+//! `tests/crystal_a2_mint_ko.rs`) and the CFG re-checked by
+//! `tests/crystal_a1_lineage.rs` — not a semantic proof that
 //! Clean's `IRInst` encoding of `switch`/`br` means what trust-ir's does. The
 //! lineage digest is RECORDED, not recomputed from the artifact by the Clean
 //! side. Everything past the flip seam (the ~45 MIR optimisation passes, LLVM,
@@ -98,25 +100,59 @@ const SRC_ENCODESLEVELKINDCELL: &str = "inductive EncodesLevelKindCell (mem : IR
 
 const SRC_ENCODES_LEVEL_KIND_OF_ARC: &str = "def encodes_level_kind_of_arc (mem : IRList IRMemSlot) (s : IRScalar) (l : Level) (d : EncodesLevelArc mem s l) : EncodesLevelKindCell mem s l := EncodesLevelArc.rec mem (fun (s0 : IRScalar) (l0 : Level) (_ : EncodesLevelArc mem s0 l0) => EncodesLevelKindCell mem s0 l0) (fun (a : Nat) (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d0 ir_sp0) Bool.true))) => EncodesLevelKindCell.mk mem a ir_sp0 Level.zero h) (fun (a : Nat) (b : Nat) (l0 : Level) (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d1 (ir_sp1 (IRScalar.ptr_ b))) Bool.true))) (_arc : EncodesLevelArc mem (IRScalar.ptr_ b) l0) (_ih : EncodesLevelKindCell mem (IRScalar.ptr_ b) l0) => EncodesLevelKindCell.mk mem a (ir_sp1 (IRScalar.ptr_ b)) (Level.succ l0) h) (fun (a : Nat) (b1 : Nat) (b2 : Nat) (l1 : Level) (l2 : Level) (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ b1) (IRScalar.ptr_ b2))) Bool.true))) (_arc1 : EncodesLevelArc mem (IRScalar.ptr_ b1) l1) (_arc2 : EncodesLevelArc mem (IRScalar.ptr_ b2) l2) (_ih1 : EncodesLevelKindCell mem (IRScalar.ptr_ b1) l1) (_ih2 : EncodesLevelKindCell mem (IRScalar.ptr_ b2) l2) => EncodesLevelKindCell.mk mem a (ir_sp2 (IRScalar.ptr_ b1) (IRScalar.ptr_ b2)) (Level.max l1 l2) h) (fun (a : Nat) (b1 : Nat) (b2 : Nat) (l1 : Level) (l2 : Level) (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d3 (ir_sp2 (IRScalar.ptr_ b1) (IRScalar.ptr_ b2))) Bool.true))) (_arc1 : EncodesLevelArc mem (IRScalar.ptr_ b1) l1) (_arc2 : EncodesLevelArc mem (IRScalar.ptr_ b2) l2) (_ih1 : EncodesLevelKindCell mem (IRScalar.ptr_ b1) l1) (_ih2 : EncodesLevelKindCell mem (IRScalar.ptr_ b2) l2) => EncodesLevelKindCell.mk mem a (ir_sp2 (IRScalar.ptr_ b1) (IRScalar.ptr_ b2)) (Level.imax l1 l2) h) (fun (a : Nat) (w : IRScalar) (nm : Name) (h : Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var ir_d4 (ir_sp1 w)) Bool.true))) => EncodesLevelKindCell.mk mem a (ir_sp1 w) (Level.param nm) h) s l d";
 
-const SRC_IR_KO_TENUM: &str = "def ir_ko_tenum : IRTy := IRTy.enum_ ir_d2";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_ko.core.txt` + `generated/ir_ko.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_ko.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — SIX divergent lines, all ONE notation class, printed before
+/// adoption: the hand blocks named the shared `ir_tU8` alias where the mint
+/// inlines `(IRTy.uint_ ir_d8)`, and the two are definitionally equal
+/// (`ir_tU8 := IRTy.uint_ ir_d8`, registered by `eval_ir_crystal.rs`). The
+/// other four lines (`ir_ko_tenum`, `ir_ko_b6`, `ir_ko_func`, `ir_ko_module`)
+/// minted byte-identical to the hand transcription.
+const MINTED_IR_KO: &str = include_str!("generated/ir_ko.defs.txt");
 
-const SRC_IR_KO_B0: &str = "def ir_ko_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_ko_tenum ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d5 ir_nl0 (ir_sc ir_d0 ir_d1 (ir_sc ir_d1 ir_d2 (ir_sc ir_d2 ir_d3 (ir_sc ir_d3 ir_d4 ir_sc0)))) Bool.false)))";
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_KO_DOCS: &[&str] = &[
+    "ir_ko_tenum: enum.2, the enum id the emitted body names in `load enum.2, ptr %0` -- minted from the chain's tag table (generated/ir_ko.tags.json), where the crate-level id lives so the module's identity does not carry it. The cell-addressed semantics never consults it -- a load returns the stored value whatever its declared shape -- so it is carried for fidelity: the registered term still names the crate id, exactly as the 2026-08-19 load-type correction requires. DerivedProved, zero axiom_deps.",
+    "ir_ko_b0: entry block, MINTED FROM THE EMITTED ARTIFACT (generated/ir_ko.core.txt; reader B's copy of the same body is tests/fixtures/level_kind_ord.trust-ir.txt). Load *self, read the discriminant at field 0, dispatch. FOUR explicit switch cases (0->b1 Zero, 1->b2 Succ, 2->b3 Max, 3->b4 IMax) and a DEFAULT EDGE that carries the reachable Param arm -- not a five-way table and not an unreachable trap. exhaustive_enum_unreachable is Bool.false and that is the MEASURED value read off the artifact binary by reader A, the flag's one witness: the text dumper never prints it, which is the M2 mask's single entry on this chain. DerivedProved, zero axiom_deps.",
+    "ir_ko_b1: Zero => 0u8, then br to the join. DerivedProved, zero axiom_deps.",
+    "ir_ko_b2: Succ => 1u8. A SEPARATE block from every other arm, as emitted -- five distinct constant blocks, not a shared one. DerivedProved, zero axiom_deps.",
+    "ir_ko_b3: Max => 2u8. DerivedProved, zero axiom_deps.",
+    "ir_ko_b4: IMax => 3u8. DerivedProved, zero axiom_deps.",
+    "ir_ko_b5: the DEFAULT edge => 4u8, i.e. Param. The emitted body routes the fifth variant through the switch default rather than listing it, so the default carries a real answer. This is the same shape Level::is_zero's emitted body has (its default carries the IMax arm) and the opposite of the hand-authored ir_lzm_b6, which is an unreachable trap. DerivedProved, zero axiom_deps.",
+    "ir_ko_b6: the JOIN block, taking a u8 block PARAMETER. Five arms funnel through br into bb6(%1: u8) and the block returns its parameter. NOT a Bool parameter: this is the first chain in the spec whose join carries an integer, which is what routes the answer through ir_const_int_eval's width-8 residue rather than through IRConst.bool_. DerivedProved, zero axiom_deps.",
+    "ir_ko_func: Level::kind_ord as EvalIR -- one parameter (the &Level receiver, SSA id 0), entry block 0, SEVEN blocks, matching the emitted body's control-flow graph exactly. DerivedProved, zero axiom_deps.",
+    "ir_ko_module: the module for Level::kind_ord, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it -- modulo the one-entry unwitnessed ledger, the switch's unprinted exhaustive flag; see crate::ir_mint for what that establishes and what it does not. DerivedProved, zero axiom_deps.",
+];
 
-const SRC_IR_KO_B1: &str = "def ir_ko_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tU8 (IRConst.int_ ir_d0)) ir_d4) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d4))))";
+/// The minted script's lines, in registration order — ONE source of truth for
+/// [`Specification::add_eval_ir_kind_ord`] and anything that must run the
+/// machine on *the registered module* rather than on a second transcription
+/// (the GAP-2 encoding differential reads these same lines).
+static MINTED_IR_KO_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_KO
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
 
-const SRC_IR_KO_B2: &str = "def ir_ko_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tU8 (IRConst.int_ ir_d1)) ir_d5) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d5))))";
-
-const SRC_IR_KO_B3: &str = "def ir_ko_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tU8 (IRConst.int_ ir_d2)) ir_d6) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d6))))";
-
-const SRC_IR_KO_B4: &str = "def ir_ko_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tU8 (IRConst.int_ ir_d3)) ir_d7) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d7))))";
-
-const SRC_IR_KO_B5: &str = "def ir_ko_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_tU8 (IRConst.int_ ir_d4)) ir_d8) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d8))))";
-
-const SRC_IR_KO_B6: &str = "def ir_ko_b6 : IRBlock := IRBlock.mk ir_d6 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))";
-
-const SRC_IR_KO_FUNC: &str = "def ir_ko_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_ko_b0 (ir_blk ir_ko_b1 (ir_blk ir_ko_b2 (ir_blk ir_ko_b3 (ir_blk ir_ko_b4 (ir_blk ir_ko_b5 (ir_blk ir_ko_b6 ir_blk0)))))))";
-
-const SRC_IR_KO_MODULE: &str = "def ir_ko_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_ko_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+/// The minted `Level::kind_ord` module definitions, in registration order.
+///
+/// Same contract as `ir_h2_module_defs`: shared by
+/// [`Specification::add_eval_ir_kind_ord`] and the GAP-2 encoding differential
+/// (`crate::ir_semdiff`), which must run the machine on *the registered
+/// module*, not on a second transcription of it. A FUNCTION over the minted
+/// script rather than an array of hand-written constants as of 2026-08-21.
+#[must_use]
+pub fn ir_ko_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_KO_LINES
+}
 
 const SRC_IR_KO_ON_ZERO: &str = "def ir_ko_on_zero : Eq IROutcome (ir_eval ir_d6 ir_ko_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d0 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d0)))";
 
@@ -156,23 +192,6 @@ const SRC_IR_KO_NEVER_FAULTS: &str = "def ir_ko_never_faults (mem : IRList IRMem
 
 const SRC_IR_KO_KIND_BOUND: &str = "def ir_ko_kind_bound (l : Level) : Le (level_kind_ord l) ir_d4 := Level.rec (fun (l0 : Level) => Le (level_kind_ord l0) ir_d4) (Le.step ir_d0 ir_d3 (Le.step ir_d0 ir_d2 (Le.step ir_d0 ir_d1 (Le.step ir_d0 ir_d0 (Le.refl ir_d0))))) (fun (_p : Level) (_ih : Le (level_kind_ord _p) ir_d4) => (Le.step ir_d1 ir_d3 (Le.step ir_d1 ir_d2 (Le.step ir_d1 ir_d1 (Le.refl ir_d1))))) (fun (_p : Level) (_q : Level) (_ih1 : Le (level_kind_ord _p) ir_d4) (_ih2 : Le (level_kind_ord _q) ir_d4) => (Le.step ir_d2 ir_d3 (Le.step ir_d2 ir_d2 (Le.refl ir_d2)))) (fun (_p : Level) (_q : Level) (_ih1 : Le (level_kind_ord _p) ir_d4) (_ih2 : Le (level_kind_ord _q) ir_d4) => (Le.step ir_d3 ir_d3 (Le.refl ir_d3))) (fun (_nm : Name) => (Le.refl ir_d4)) l";
 
-/// The `Level::kind_ord` chain's MODULE definitions, in registration order.
-///
-/// Same contract as `IR_H2_MODULE_DEFS`: the GAP-2 differential runs the
-/// machine on exactly the module the spec registers.
-pub const IR_KO_MODULE_DEFS: &[&str] = &[
-    SRC_IR_KO_TENUM,
-    SRC_IR_KO_B0,
-    SRC_IR_KO_B1,
-    SRC_IR_KO_B2,
-    SRC_IR_KO_B3,
-    SRC_IR_KO_B4,
-    SRC_IR_KO_B5,
-    SRC_IR_KO_B6,
-    SRC_IR_KO_FUNC,
-    SRC_IR_KO_MODULE,
-];
-
 impl Specification {
     /// The width-one chain over the EMITTED shape of `Level::kind_ord`.
     ///
@@ -184,25 +203,21 @@ impl Specification {
         self.add_recursive_def(SRC_LEVEL_KIND_ORD, "level_kind_ord: the reflected Level::kind_ord (level/mod.rs:598-605) -- Lean 4's level_kind order, Zero=0 Succ=1 Max=2 IMax=3 Param=4, the key is_norm_lt sorts normalized levels by. The reflected SOURCE function. Unlike clean_mode_has_cubical this is not a predicate: it has FIVE distinct answers, so the equality theorem below cannot be discharged by a two-valued case split. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESLEVELKINDCELL, "EncodesLevelKindCell mem p l: the heap at p represents a Level whose TAG is l's, with an ARBITRARY payload. \n\nThis is deliberately WEAKER than EncodesLevelArc, and the weakness is the point. kind_ord reads field 0 and nothing else -- measured, in the emitted body: one load, one extractfield at index 0, then a switch. So the honest premise binds the tag and leaves the payload spine `fs` universally quantified: no child pointers, no liveness of children, no recursive structure. EncodesCleanMode could pin the whole payload (ir_sp0) because CleanMode is FIELDLESS; Level is payload-bearing and recursive, so this relation must be payload-agnostic or it would smuggle in facts the body never observes. \n\nStated as an EQUATION on ir_mem_lookup for the same reason as EncodesLevelArc: membership would be satisfied by a shadowed duplicate while the machine reads a different cell. The cell is pinned live because ir_load_cell faults ub bad_addr on a dead one, and the index is IRScalar.ptr_ a because ir_load_at faults ub null_deref on nullptr_. \n\nSAME OPEN LAYOUT OBLIGATION as eval_ir_repr's, carried forward rather than laundered: the tags here are trust-ir DECLARATION-INDEX tags, which is what the emitted body switches on. The Rust Level is niche-encoded downstream of trust-ir; that gap belongs to a layout-adequacy theorem nobody has earned yet. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_ENCODES_LEVEL_KIND_OF_ARC, "encodes_level_kind_of_arc: every heap the is_zero chain's A2 relation accepts is also accepted here. \n\nThe bridge from EncodesLevelArc, by EncodesLevelArc.rec, one arm per Level constructor, each discharging EncodesLevelKindCell.mk with that constructor's actual payload spine (ir_sp0 / ir_sp1 / ir_sp2). It makes the weakening CHECKED rather than asserted: if EncodesLevelKindCell had drifted to demand anything the recursive relation does not supply, this would not elaborate. It also means every witness the Level chain already builds is a witness here. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_KO_TENUM, "ir_ko_tenum: enum.2, the enum id the emitted body names in `load enum.2, ptr %0`. The cell-addressed semantics never consults it -- a load returns the stored value whatever its declared shape -- so it is transcribed for fidelity, not because anything dispatches on it.")?;
-        self.add_recursive_def(SRC_IR_KO_B0, "ir_ko_b0: entry block, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/level_kind_ord.trust-ir.txt). Load *self, read the discriminant at field 0, dispatch. FOUR explicit switch cases (0->b1 Zero, 1->b2 Succ, 2->b3 Max, 3->b4 IMax) and a DEFAULT EDGE that carries the reachable Param arm -- not a five-way table and not an unreachable trap. exhaustive_enum_unreachable is Bool.false and that is the honest value: the default is reached on every Param. The flag is not printed by the text dumper and the semantics does not dispatch on it, so the CFG gate does not check it; it is recorded as a claim, not as evidence. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(
-            SRC_IR_KO_B1,
-            "ir_ko_b1: Zero => 0u8, then br to the join. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(SRC_IR_KO_B2, "ir_ko_b2: Succ => 1u8. A SEPARATE block from every other arm, as emitted -- five distinct constant blocks, not a shared one. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(
-            SRC_IR_KO_B3,
-            "ir_ko_b3: Max => 2u8. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(
-            SRC_IR_KO_B4,
-            "ir_ko_b4: IMax => 3u8. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(SRC_IR_KO_B5, "ir_ko_b5: the DEFAULT edge => 4u8, i.e. Param. The emitted body routes the fifth variant through the switch default rather than listing it, so the default carries a real answer. This is the same shape Level::is_zero's emitted body has (its default carries the IMax arm) and the opposite of the hand-authored ir_lz_b6, which is an unreachable trap. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_KO_B6, "ir_ko_b6: the JOIN block, taking a u8 block PARAMETER. Five arms funnel through br into bb6(%1: u8) and the block returns its parameter. NOT a Bool parameter: this is the first chain in the spec whose join carries an integer, which is what routes the answer through ir_const_int_eval's width-8 residue rather than through IRConst.bool_. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_KO_FUNC, "ir_ko_func: Level::kind_ord as EvalIR -- one parameter (the &Level receiver, SSA id 0), entry block 0, SEVEN blocks, matching the emitted body's control-flow graph exactly. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_KO_MODULE, "ir_ko_module: the module for Level::kind_ord, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/level_kind_ord.trust-ir.txt and checked graph-for-graph against this module by tests/crystal_a1_lineage.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_priority.rs posture: Clean's parser and
+        // elaborator still turn the text into the term the theorems are about.
+        let minted = ir_ko_module_defs();
+        if minted.len() != MINTED_IR_KO_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_ko script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_KO_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_KO_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_KO_ON_ZERO, "GATE WITNESS: Zero, explicit switch case 0. Eq.refl -- the kernel runs the machine for 6 steps and compares. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_KO_ON_SUCC, "GATE WITNESS: Succ, explicit case 1, with a payload present (a child pointer) that the body must not read. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_KO_ON_MAX, "GATE WITNESS: Max, explicit case 2, two-field payload. DerivedProved, zero axiom_deps.")?;
@@ -220,7 +235,7 @@ impl Specification {
         self.add_recursive_def(SRC_IR_OUTCOME_NAT, "ir_outcome_nat: the Nat a successful outcome carries; zero for every fault and for exhaustion. Makes the A5 composition an equality argument rather than an inversion through three injectivity lemmas: apply the projection to both sides with Eq.cong and let the kernel compute. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_KO_MACHINE_SOUND, "ir_ko_machine_sound: *** A5, THE INVERSION. *** If the MACHINE answers n, then the reflected kind_ord of the represented level IS n -- for every n, not just for a chosen one. Goes through A4 rather than restating it. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_LEVEL_KIND_ZERO_IS_ZERO, "level_kind_zero_is_zero: kind_ord l = 0 implies Level::is_zero l -- the link that turns an ordering key into a fact about the level. By Level.rec: the Zero arm computes, and the four other arms are absurd via nat_discr_p, whose mismatch premise is literally Eq.refl Bool Bool.false because the numerals compute. \n\nONE-DIRECTIONAL and necessarily so: level_is_zero Level.max(zero,zero) is true while its kind_ord is 2, so the converse is false. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_KO_MACHINE_SOUND_DENOT, "ir_ko_machine_sound_denot: *** A5 REACHING MATHEMATICS. *** If the machine running the EMITTED kind_ord answers 0, then for EVERY assignment of parameters to naturals the level evaluates to 0. \n\nThis is the same denotational endpoint ir_lz_machine_sound reaches, arrived at through a DIFFERENT shipped kernel function -- and unlike ir_h2_machine_sound, which stops at the reflected predicate because there is no CleanMode semantics to compose with, this one composes: A4 gives kind_ord, level_kind_zero_is_zero converts an ordering key of 0 into definite-zeroness, and level_is_zero_sound converts that into level_eval rho l = 0. Both of A4's premises are carried through unchanged because neither can be dropped: without the representation the machine reads an unrelated heap, and without the fuel bound it may return fuel_out, which is not a return at all. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_IR_KO_MACHINE_SOUND_DENOT, "ir_ko_machine_sound_denot: *** A5 REACHING MATHEMATICS. *** If the machine running the EMITTED kind_ord answers 0, then for EVERY assignment of parameters to naturals the level evaluates to 0. \n\nThis is the same denotational endpoint ir_lzm_machine_sound reaches, arrived at through a DIFFERENT shipped kernel function -- and unlike ir_h2_machine_sound, which stops at the reflected predicate because there is no CleanMode semantics to compose with, this one composes: A4 gives kind_ord, level_kind_zero_is_zero converts an ordering key of 0 into definite-zeroness, and level_is_zero_sound converts that into level_eval rho l = 0. Both of A4's premises are carried through unchanged because neither can be dropped: without the representation the machine reads an unrelated heap, and without the fuel bound it may return fuel_out, which is not a return at all. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_KO_MACHINE_SOUND_DENOT_WITNESS, "ir_ko_machine_sound_denot_witness: A5 is not vacuous, and the witness RUNS THE MACHINE. Every premise discharged concretely at the one-cell heap encoding Level.zero: the representation by EncodesLevelKindCell.mk, the fuel bound by Le.refl at exactly 6, and the observation by Eq.refl, which the kernel discharges by executing the body. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_KO_MACHINE_SOUND_WITNESS, "ir_ko_machine_sound_witness: the inversion is not vacuous at a PAYLOAD-BEARING tag, and the payload is genuinely unread. Instantiated at Max over two ARBITRARY sub-levels l1 l2, on a heap whose two payload fields are IRScalar.undef_ -- a value the semantics refuses to load through and cannot compare. The machine still answers 2 and the premises still discharge, which is the executable form of the claim that EncodesLevelKindCell's payload-agnosticism is real rather than decorative. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_KO_NEVER_FAULTS, "ir_ko_never_faults: *** NO UB, NO PANIC, NO EXHAUSTION -- on any represented level. *** A corollary of A4. IROutcome separates success from ub, type_error, unmodelled, stuck and fuel_out, so proving the outcome is a ret rules out all five at once. Concretely for the emitted body: the load never faults bad_addr or null_deref, the extractfield never faults not_agg, the default edge is a real answer rather than a trap, and 6 steps always suffice. All earned by EncodesLevelKindCell's premise, not assumed. DerivedProved, zero axiom_deps.")?;
@@ -229,267 +244,10 @@ impl Specification {
     }
 }
 
+// The acceptance tests moved to `eval_ir_kind_ord_tests.rs` on 2026-08-21
+// (the `eval_ir_float_div_tests.rs` precedent): the A2 mint migration put this
+// file at the 500-line convention that `data/paragon_ratchet.json`'s
+// `files_over_500` enforces shrink-only.
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The switch must be FOUR explicit cases plus a default that carries the
-    /// fifth answer — the emitted shape. A five-case table, or a default
-    /// routed to a trap, is a different body.
-    #[test]
-    fn test_switch_matches_emitted_four_cases_plus_reachable_default() {
-        assert!(SRC_IR_KO_B0
-            .contains("(ir_sc ir_d0 ir_d1 (ir_sc ir_d1 ir_d2 (ir_sc ir_d2 ir_d3 (ir_sc ir_d3 ir_d4 ir_sc0))))"));
-        assert!(
-            !SRC_IR_KO_B0.contains("ir_sc ir_d4"),
-            "the emitted switch lists no tag-4 case; Param goes through the default"
-        );
-        // the default target is b5, and b5 is a real answer, not a trap
-        assert!(SRC_IR_KO_B0.contains("IRInst.switch ir_d3 ir_d5 ir_nl0"));
-        assert!(SRC_IR_KO_B5.contains("IRConst.int_ ir_d4"));
-        for s in [
-            SRC_IR_KO_B0,
-            SRC_IR_KO_B1,
-            SRC_IR_KO_B2,
-            SRC_IR_KO_B3,
-            SRC_IR_KO_B4,
-            SRC_IR_KO_B5,
-            SRC_IR_KO_B6,
-        ] {
-            assert!(
-                !s.contains("unreachable"),
-                "the emitted body has no trap block"
-            );
-        }
-    }
-
-    /// Five SEPARATE constant blocks with five DISTINCT answers. This is what
-    /// makes the chain more than a predicate: collapsing any two is a
-    /// different CFG and a different theorem.
-    #[test]
-    fn test_five_distinct_constant_arms() {
-        let arms = [
-            (SRC_IR_KO_B1, "ir_d0"),
-            (SRC_IR_KO_B2, "ir_d1"),
-            (SRC_IR_KO_B3, "ir_d2"),
-            (SRC_IR_KO_B4, "ir_d3"),
-            (SRC_IR_KO_B5, "ir_d4"),
-        ];
-        for (src, val) in arms {
-            assert!(
-                src.contains(&format!("IRConst.int_ {val}")),
-                "arm must materialize {val}"
-            );
-            assert!(
-                src.contains("IRInst.br ir_d6"),
-                "every arm branches to the join"
-            );
-            assert!(
-                !src.contains("IRConst.bool_"),
-                "this body's answers are integers, not Bools"
-            );
-        }
-        let mut seen: Vec<&str> = arms.iter().map(|(s, _)| *s).collect();
-        seen.sort_unstable();
-        seen.dedup();
-        assert_eq!(seen.len(), 5, "five distinct arm blocks, as emitted");
-    }
-
-    /// The join block takes a `u8` parameter, not a `bool`. That is the
-    /// difference that routes the answer through `ir_const_int_eval`.
-    #[test]
-    fn test_join_block_takes_an_integer_parameter() {
-        assert!(SRC_IR_KO_B6.contains("IRBlock.mk ir_d6 (ir_nl1 ir_d1)"));
-        assert!(SRC_IR_KO_B6.contains("IRInst.ret (ir_nl1 ir_d1)"));
-        for src in [
-            SRC_IR_KO_B1,
-            SRC_IR_KO_B2,
-            SRC_IR_KO_B3,
-            SRC_IR_KO_B4,
-            SRC_IR_KO_B5,
-        ] {
-            assert!(src.contains("IRInst.const_ ir_tU8"));
-        }
-    }
-
-    /// The representation premise must stay PAYLOAD-AGNOSTIC. Pinning the
-    /// spine would smuggle in facts the emitted body never observes, and would
-    /// make this chain a re-run of the fieldless-enum one.
-    #[test]
-    fn test_representation_is_payload_agnostic() {
-        assert!(SRC_ENCODESLEVELKINDCELL.contains("(fs : IRScalar)"));
-        assert!(SRC_ENCODESLEVELKINDCELL.contains("(ir_var (level_kind_tag l) fs)"));
-        for pinned in ["ir_sp0)", "ir_sp1", "ir_sp2"] {
-            assert!(
-                !SRC_ENCODESLEVELKINDCELL.contains(pinned),
-                "the payload spine must not be pinned to {pinned}"
-            );
-        }
-        // exactly one lookup EQUATION; membership would be satisfiable by a
-        // shadowed duplicate while the machine reads a different cell
-        assert_eq!(
-            SRC_ENCODESLEVELKINDCELL
-                .matches("ir_mem_lookup mem")
-                .count(),
-            1
-        );
-        assert!(SRC_ENCODESLEVELKINDCELL.contains("(IRScalar.ptr_ a)"));
-        assert!(SRC_ENCODESLEVELKINDCELL.contains("Bool.true"));
-        for bad in ["Exists", "Sigma"] {
-            assert!(!SRC_ENCODESLEVELKINDCELL.contains(bad));
-        }
-    }
-
-    /// The bridge makes the weakening CHECKED: every heap the recursive `Level`
-    /// relation accepts is accepted here, one arm per constructor.
-    #[test]
-    fn test_bridge_covers_every_level_constructor() {
-        for ctor in [
-            "Level.zero",
-            "Level.succ",
-            "Level.max",
-            "Level.imax",
-            "Level.param",
-        ] {
-            assert!(
-                SRC_ENCODES_LEVEL_KIND_OF_ARC.contains(ctor),
-                "no bridge arm for {ctor}"
-            );
-        }
-        assert!(SRC_ENCODES_LEVEL_KIND_OF_ARC.contains("EncodesLevelArc.rec mem"));
-        assert!(SRC_ENCODES_LEVEL_KIND_OF_ARC
-            .contains("(_arc1 : EncodesLevelArc mem (IRScalar.ptr_ b1) l1)"));
-    }
-
-    /// A4 stays universally quantified over `Level`, over the heap, and over
-    /// the fuel. Naming a constructor in the statement would make it a sample.
-    #[test]
-    fn test_a4_shape() {
-        let statement = SRC_IR_KO_CORRECT.split(":=").next().unwrap_or("");
-        assert!(statement.contains("(l : Level)"));
-        assert!(statement.contains("(mem : IRList IRMemSlot)"));
-        assert!(SRC_IR_KO_CORRECT.contains("Le ir_d6 fuel ->"));
-        assert!(SRC_IR_KO_CORRECT.contains("ir_run_le_ret"));
-        for c in ["Level.zero", "Level.succ", "Level.max", "Level.imax"] {
-            assert!(
-                !statement.contains(c),
-                "A4's STATEMENT must not mention {c}"
-            );
-        }
-        assert!(
-            !statement.contains("ir_cell"),
-            "a concrete heap would make this a witness, not a theorem"
-        );
-    }
-
-    /// A5 exists, composes with A4 through `ir_outcome_nat`, and reaches a
-    /// denotational conclusion rather than stopping at the reflected function.
-    /// The `has_cubical_layer` chain lost its A5 once, silently, to a
-    /// re-authoring; nothing noticed for two days. This is what notices.
-    #[test]
-    fn test_a5_is_present_and_reaches_level_eval() {
-        assert!(SRC_IR_KO_MACHINE_SOUND.contains("ir_eval fuel ir_ko_module"));
-        assert!(SRC_IR_KO_MACHINE_SOUND.contains(": Eq Nat (level_kind_ord l) n"));
-        assert!(SRC_IR_KO_MACHINE_SOUND.contains("ir_ko_correct mem fuel na r l henc hle"));
-        assert!(SRC_IR_KO_MACHINE_SOUND.contains("ir_outcome_nat"));
-        // …and the denotational step, which ir_h2_machine_sound has no
-        // analogue of because there is no CleanMode semantics to compose with.
-        assert!(SRC_IR_KO_MACHINE_SOUND_DENOT.contains("level_is_zero_sound"));
-        assert!(SRC_IR_KO_MACHINE_SOUND_DENOT.contains("level_kind_zero_is_zero"));
-        assert!(SRC_IR_KO_MACHINE_SOUND_DENOT
-            .contains("forall (rho : Name -> Nat), Eq Nat (level_eval rho l) Nat.zero"));
-        assert!(SRC_IR_KO_NEVER_FAULTS.contains("ir_outcome_is_ret"));
-    }
-
-    /// Every premise of A5 is discharged concretely, and the payload-bearing
-    /// witness runs on `undef_` payloads over ARBITRARY sub-levels — the
-    /// executable form of payload-agnosticism.
-    #[test]
-    fn test_a5_witnesses_are_concrete_and_run_the_machine() {
-        assert!(SRC_IR_KO_MACHINE_SOUND_DENOT_WITNESS.contains("EncodesLevelKindCell.mk"));
-        assert!(SRC_IR_KO_MACHINE_SOUND_DENOT_WITNESS.contains("Le.refl ir_d6"));
-        assert!(SRC_IR_KO_MACHINE_SOUND_DENOT_WITNESS.contains("Eq.refl IROutcome"));
-        assert!(SRC_IR_KO_MACHINE_SOUND_WITNESS.contains("(l1 : Level) (l2 : Level)"));
-        assert!(
-            SRC_IR_KO_MACHINE_SOUND_WITNESS.contains("(ir_sp2 IRScalar.undef_ IRScalar.undef_)")
-        );
-    }
-
-    /// All FIVE emitted arms are executed, including the default edge, and the
-    /// default-edge witness carries an unreadable payload.
-    #[test]
-    fn test_every_emitted_arm_has_an_executed_witness() {
-        let witnesses = [
-            (SRC_IR_KO_ON_ZERO, "ir_var ir_d0", "ir_d0"),
-            (SRC_IR_KO_ON_SUCC, "ir_var ir_d1", "ir_d1"),
-            (SRC_IR_KO_ON_MAX, "ir_var ir_d2", "ir_d2"),
-            (SRC_IR_KO_ON_IMAX, "ir_var ir_d3", "ir_d3"),
-            (SRC_IR_KO_ON_PARAM, "ir_var ir_d4", "ir_d4"),
-        ];
-        for (src, cell, ans) in witnesses {
-            assert!(src.contains(cell), "witness must encode {cell}");
-            assert!(src.contains(&format!("IRScalar.int_ {ans}")));
-            assert!(src.contains("Eq.refl IROutcome"), "discharged by execution");
-        }
-        assert!(
-            SRC_IR_KO_ON_PARAM.contains("IRScalar.undef_"),
-            "the default-edge witness must carry an unreadable payload"
-        );
-    }
-
-    /// The fuel bound must match the transcribed module's cost: 3 steps in the
-    /// entry block, 2 in an arm, 1 in the join.
-    #[test]
-    fn test_fuel_bound_matches_the_transcribed_module() {
-        for src in [
-            SRC_IR_KO_CORRECT,
-            SRC_IR_KO_MACHINE_SOUND,
-            SRC_IR_KO_MACHINE_SOUND_DENOT,
-            SRC_IR_KO_NEVER_FAULTS,
-        ] {
-            assert!(src.contains("Le ir_d6 fuel"));
-        }
-        assert!(SRC_IR_KO_EXACT.contains("ir_run ir_d6 ir_ko_module"));
-    }
-
-    /// `level_kind_tag` (a LAYOUT claim) and `level_kind_ord` (the reflected
-    /// SOURCE function) coincide for `Level` and must stay separately stated,
-    /// so a layout change can move one without silently moving the other.
-    #[test]
-    fn test_tag_and_ord_are_separate_declarations() {
-        assert!(SRC_LEVEL_KIND_TAG.starts_with("def level_kind_tag"));
-        assert!(SRC_LEVEL_KIND_ORD.starts_with("def level_kind_ord"));
-        assert_eq!(
-            SRC_LEVEL_KIND_TAG.replace("level_kind_tag", "X"),
-            SRC_LEVEL_KIND_ORD.replace("level_kind_ord", "X"),
-            "they coincide today; that is a measured fact about Level, and it is \
-             exactly why the two must remain distinguishable"
-        );
-        // the relation is stated with the LAYOUT function…
-        assert!(SRC_ENCODESLEVELKINDCELL.contains("level_kind_tag"));
-        // …and the theorem's conclusion with the SOURCE one
-        assert!(SRC_IR_KO_CORRECT.contains("IRScalar.int_ (level_kind_ord l)"));
-    }
-
-    #[test]
-    fn test_sources_balanced_ascii() {
-        for src in [
-            SRC_LEVEL_KIND_TAG,
-            SRC_LEVEL_KIND_ORD,
-            SRC_ENCODESLEVELKINDCELL,
-            SRC_ENCODES_LEVEL_KIND_OF_ARC,
-            SRC_IR_KO_B0,
-            SRC_IR_KO_MODULE,
-            SRC_IR_KO_EXACT,
-            SRC_IR_KO_CORRECT,
-            SRC_IR_KO_MACHINE_SOUND,
-            SRC_LEVEL_KIND_ZERO_IS_ZERO,
-            SRC_IR_KO_MACHINE_SOUND_DENOT,
-            SRC_IR_KO_NEVER_FAULTS,
-            SRC_IR_KO_KIND_BOUND,
-        ] {
-            assert!(src.is_ascii(), "spec sources stay ASCII");
-            assert_eq!(src.matches('(').count(), src.matches(')').count());
-        }
-    }
-}
+#[path = "eval_ir_kind_ord_tests.rs"]
+mod tests;

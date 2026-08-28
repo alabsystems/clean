@@ -5,38 +5,66 @@
 //! DEPENDENCY-CLOSURE GATE for the two-pass parallel Metamath verifier.
 //!
 //! The two-pass verifier (`mm_verify_range`) checks each proof against a PASS-1
-//! environment in which EVERY theorem's type is registered as an axiom. So if a
-//! theorem `D` is skipped (its own proof did not verify), a dependent `T` that
-//! cites `D` can still type-check against `D`'s pass-1 AXIOM type — `T` would be
-//! reported verified even though it rests on an unproven `D`. The sequential
-//! verifier never does this (it only registers `D` after `D` verified).
+//! environment in which EVERY theorem's type is registered as an axiom. That makes
+//! the raw union of the workers' verified labels a STRICT SUPERSET of what the
+//! sequential verifier accepts, in two ways, and this gate removes both:
 //!
-//! This gate restores byte-for-byte equality with the sequential result: it
-//! removes any verified theorem whose transitive `$p`-theorem dependency closure
-//! is not fully verified. A theorem survives iff EVERY `$p` theorem it cites is
-//! also verified (`$a` axioms and `$f`/`$e` hypotheses are the trusted/local base
-//! and are not dependencies in this sense). Iterated to a fixpoint, the surviving
-//! set equals exactly the set the sequential verifier would accept — so the
-//! two-pass parallel output carries the SAME KernelVerified trust as sequential.
+//! 1. A theorem `D` that never verified still has a pass-1 AXIOM type, so a
+//!    dependent `T` type-checks against it and is reported verified. Removed
+//!    because `D` is not in the verified set.
+//! 2. A theorem `D` that verified only on the GROUND fallback is verified but NOT
+//!    reusable — the sequential verifier leaves it out of its reuse cache and skips
+//!    every dependent. Two-pass instead leaves `D`'s cheap pass-1 *schematic* type
+//!    standing in every worker that does not own `D`, and `T` type-checks against
+//!    that. Removed because `D` is marked `G` (ground-only) in the input stream.
+//!    This is issue R1-MM; rule 2 is what makes the surviving set EQUAL the
+//!    sequential set rather than a superset of it.
 //!
-//! Usage: `mm_gate <path.mm> [verified-labels-file]`
-//!   Verified labels are read from the file (or stdin if omitted); lines may be
-//!   bare labels or the `V <label>` form emitted by `mm_verify_range`. Prints the
-//!   gated (closure) label set, one per line, sorted.
+//! A theorem survives iff EVERY `$p` theorem it cites is verified AND citable
+//! (`$a` axioms and `$f`/`$e` hypotheses are the trusted/local base and are not
+//! dependencies in this sense), iterated to a fixpoint.
+//!
+//! The gate logic itself lives in
+//! [`clean_olean::metamath::dependency_closure_gate`] so it is exercised by the
+//! R1-MM property/differential suite (`tests/mm_two_pass_theorem.rs`) rather than
+//! only by this binary. Read that module's docs for the precise statement of what
+//! the gate does and does NOT establish, and
+//! `docs/issues/2026-08-23-r1-mm-two-pass-theorem.md` for the history.
+//!
+//! Usage: `mm_gate [--allow-unmarked] <path.mm> [verified-labels-file]`
+//!   Verified labels are read from the file (or stdin if omitted). The stream MUST
+//!   carry the `VERIFIED_FORMAT 2` stamp that `mm_verify_range` writes; without it
+//!   the reusability of every label is UNKNOWN and the gate REFUSES the file rather
+//!   than guess (guessing "all reusable" is exactly the R1-MM gap). `--allow-unmarked`
+//!   proceeds anyway, treating every unmarked label as NON-citable — fail-closed, so
+//!   the result under-approximates. Prints the gated (closure) label set, one BARE
+//!   label per line, sorted (the format `mm_export_verified` consumes). A label that
+//!   is not a `$p` theorem of the given database is dropped, not passed through.
 
-use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::process::ExitCode;
 
-use clean_olean::metamath::{parse_database_file, resolve_database, Proof, ResolvedStatement};
+use clean_olean::metamath::{
+    dependency_closure_gate, parse_database_file, parse_verified_labels, resolve_database,
+    VERIFIED_FORMAT_HEADER,
+};
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
+    let argv: Vec<String> = std::env::args().collect();
+    let allow_unmarked = argv.iter().any(|a| a == "--allow-unmarked");
+    let args: Vec<&String> = argv
+        .iter()
+        .enumerate()
+        .filter(|(i, a)| *i == 0 || !a.starts_with("--"))
+        .map(|(_, a)| a)
+        .collect();
     if args.len() < 2 {
-        eprintln!("usage: mm_gate <path.mm> [verified-labels-file]  (else stdin)");
+        eprintln!(
+            "usage: mm_gate [--allow-unmarked] <path.mm> [verified-labels-file]  (else stdin)"
+        );
         return ExitCode::FAILURE;
     }
-    let db = match parse_database_file(std::path::Path::new(&args[1])) {
+    let db = match parse_database_file(std::path::Path::new(args[1])) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("parse error: {e}");
@@ -51,38 +79,9 @@ fn main() -> ExitCode {
         }
     };
 
-    // All `$p` (provable) theorem labels, and each provable's `$p`-theorem deps
-    // (the cited labels that are themselves provable theorems).
-    let mut provable: HashSet<String> = HashSet::new();
-    let mut proof_labels: HashMap<String, Vec<String>> = HashMap::new();
-    for stmt in &resolved.statements {
-        if let ResolvedStatement::Assertion(a) = stmt {
-            if a.kind == "provable" {
-                provable.insert(a.label.clone());
-                let labels: Vec<String> = match &a.proof {
-                    Some(Proof::Uncompressed(ls)) => ls.clone(),
-                    Some(Proof::Compressed(c)) => c.labels.clone(),
-                    None => Vec::new(),
-                };
-                proof_labels.insert(a.label.clone(), labels);
-            }
-        }
-    }
-    let deps: HashMap<String, Vec<String>> = proof_labels
-        .iter()
-        .map(|(t, ls)| {
-            let d: Vec<String> = ls
-                .iter()
-                .filter(|l| provable.contains(*l))
-                .cloned()
-                .collect();
-            (t.clone(), d)
-        })
-        .collect();
-
-    // Read the verified set (file arg or stdin); accept bare labels or `V <label>`.
+    // Read the verified set (file arg or stdin).
     let raw = if args.len() >= 3 {
-        match std::fs::read_to_string(&args[2]) {
+        match std::fs::read_to_string(args[2]) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("read error {}: {e}", args[2]);
@@ -97,43 +96,48 @@ fn main() -> ExitCode {
         }
         s
     };
-    let mut verified: HashSet<String> = raw
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with("VERIFIED_COUNT"))
-        .map(|l| l.strip_prefix("V ").unwrap_or(l).trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
+    let verified = parse_verified_labels(&raw);
     let before = verified.len();
+    let unmarked = verified.unmarked_count();
+    let ground_only = verified.ground_only().len();
 
-    // Fixpoint dependency-closure: drop any verified theorem with an unverified
-    // `$p`-dependency; a removal may cascade to its dependents.
-    loop {
-        let removed: Vec<String> = verified
-            .iter()
-            .filter(|t| {
-                deps.get(*t)
-                    .map(|ds| ds.iter().any(|d| !verified.contains(d)))
-                    .unwrap_or(false)
-            })
-            .cloned()
-            .collect();
-        if removed.is_empty() {
-            break;
-        }
-        for r in removed {
-            verified.remove(&r);
-        }
+    // FAIL CLOSED on a pre-R1-MM labels file. Reading it as "everything reusable"
+    // is the exact defect this gate was fixed for, so refuse rather than guess.
+    if unmarked > 0 && !allow_unmarked {
+        eprintln!(
+            "REFUSED: {unmarked} of {before} verified labels carry no reusability marking \
+             (the stream has no `{VERIFIED_FORMAT_HEADER}` stamp)."
+        );
+        eprintln!(
+            "  The gate cannot tell a schematically-verified dependency from a GROUND-ONLY one \
+             without it, and assuming `reusable` re-opens issue R1-MM \
+             (docs/issues/2026-08-23-r1-mm-two-pass-theorem.md)."
+        );
+        eprintln!(
+            "  FIX: regenerate the labels with a current `mm_verify_range` (via \
+             scripts/mm_two_pass.sh), or pass --allow-unmarked to treat every unmarked label \
+             as NON-citable (fail-closed: the result under-approximates)."
+        );
+        return ExitCode::FAILURE;
+    }
+    if unmarked > 0 {
+        eprintln!(
+            "warn: --allow-unmarked — {unmarked} label(s) have unknown reusability and are \
+             treated as NON-citable; every dependent of one is dropped."
+        );
     }
 
+    let gated = dependency_closure_gate(&resolved, &verified);
+
     eprintln!(
-        "=== gate: {before} verified -> {} after dependency-closure ({} removed as resting on unverified $p-deps) ===",
-        verified.len(),
-        before - verified.len()
+        "=== gate: {before} verified ({ground_only} ground-only, {unmarked} unmarked) -> {} after \
+         dependency-closure ({} removed as resting on an unverified or non-citable $p-dep, or as \
+         not a $p of this database) ===",
+        gated.len(),
+        before - gated.len()
     );
-    let mut out: Vec<&String> = verified.iter().collect();
-    out.sort();
-    for l in out {
+    // `BTreeSet` iteration is already sorted.
+    for l in &gated {
         println!("{l}");
     }
     ExitCode::SUCCESS

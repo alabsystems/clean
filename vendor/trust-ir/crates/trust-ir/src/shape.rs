@@ -565,6 +565,16 @@ pub enum LayoutError {
     MissingType(TyId),
     MissingStruct(StructId),
     MissingStructSize(StructId),
+    MissingStructAlign(StructId),
+    /// A declared struct layout contradicted its own size/alignment/offset
+    /// evidence, or contained an inline recursive cycle with no finite size.
+    StructLayoutIncoherent(StructId),
+    /// The module names a target whose scalar ABI alignment is not represented
+    /// by TrustIR's built-in layout table. Size-only guesses are not layout
+    /// evidence; layout-sensitive consumers must decline this target.
+    TargetScalarLayoutUnavailable {
+        triple: String,
+    },
     MissingFieldOffset {
         struct_id: StructId,
         field: u32,
@@ -598,6 +608,16 @@ impl core::fmt::Display for LayoutError {
             LayoutError::MissingStructSize(id) => {
                 write!(f, "struct.{} has no size layout metadata", id.0)
             }
+            LayoutError::MissingStructAlign(id) => {
+                write!(f, "struct.{} has no alignment layout metadata", id.0)
+            }
+            LayoutError::StructLayoutIncoherent(id) => {
+                write!(f, "struct.{} has incoherent declared layout metadata", id.0)
+            }
+            LayoutError::TargetScalarLayoutUnavailable { triple } => write!(
+                f,
+                "target {triple:?} is outside TrustIR's canonical scalar-layout set"
+            ),
             LayoutError::MissingFieldOffset { struct_id, field } => write!(
                 f,
                 "struct.{} field {} has no offset layout metadata",
@@ -687,8 +707,31 @@ impl Module {
             .unwrap_or(DEFAULT_POINTER_BITS)
     }
 
+    /// Whether the target's scalar ABI alignment is exactly the table encoded
+    /// by [`Module::ty_layout_shape`].
+    ///
+    /// TrustIR currently carries a triple and pointer width, not an LLVM/Rust
+    /// data-layout string. The fixed table is exact for the architectures that
+    /// TrustCg implements (plus its Wasm backend), but it is *not* exact for
+    /// targets such as i686 (`f64` alignment 4) or AVR (wide integers alignment
+    /// 1). Treating those as though alignment equalled scalar size manufactures
+    /// false ABI evidence, so layout-sensitive queries fail closed instead.
+    pub fn target_has_canonical_scalar_layout(&self) -> bool {
+        let Some(target) = &self.target_info else {
+            // Target-free TrustIR uses the documented canonical reference layout.
+            return true;
+        };
+        let arch = target.triple.split('-').next().unwrap_or_default();
+        match arch {
+            "x86_64" | "x64" | "aarch64" | "arm64" | "wasm64" => target.pointer_size == 8,
+            "wasm32" => target.pointer_size == 4,
+            arch if arch.starts_with("riscv64") => target.pointer_size == 8,
+            _ => false,
+        }
+    }
+
     pub fn ty_layout_shape(&self, ty: &Ty) -> Result<TyLayoutShape, LayoutError> {
-        self.ty_layout_shape_inner(ty, &mut Vec::new())
+        self.ty_layout_shape_inner(ty, &mut Vec::new(), &mut Vec::new())
     }
 
     /// [`Module::ty_layout_shape`] with the enum cycle guard threaded through:
@@ -700,7 +743,16 @@ impl Module {
         &self,
         ty: &Ty,
         enum_visiting: &mut Vec<EnumId>,
+        struct_visiting: &mut Vec<StructId>,
     ) -> Result<TyLayoutShape, LayoutError> {
+        if ty_uses_scalar_layout_table(ty) && !self.target_has_canonical_scalar_layout() {
+            return Err(LayoutError::TargetScalarLayoutUnavailable {
+                triple: self
+                    .target_info
+                    .as_ref()
+                    .map_or_else(String::new, |target| target.triple.clone()),
+            });
+        }
         let pointer_bits = self.pointer_bits();
         match ty {
             Ty::Bool => Ok(scalar_layout(TyShape::Bool, 8, Some(8))),
@@ -840,35 +892,134 @@ impl Module {
                 kind: TyLayoutKind::Never,
             }),
             Ty::Struct(id) => {
+                if struct_visiting.contains(id) {
+                    // A direct, inline struct cycle has no finite layout. Pointers do
+                    // not recurse through this path, so ordinary recursive Rust data
+                    // structures remain representable.
+                    return Err(LayoutError::StructLayoutIncoherent(*id));
+                }
                 let sd = self
                     .structs
                     .iter()
                     .find(|sd| sd.id == *id)
                     .ok_or(LayoutError::MissingStruct(*id))?;
                 let size = sd.size.ok_or(LayoutError::MissingStructSize(*id))?;
-                let fields = sd
-                    .fields
-                    .iter()
-                    .enumerate()
-                    .map(|(field, def)| FieldOffsetShape {
-                        field: field as u32,
-                        name: def.name.clone(),
-                        ty_shape: def.ty.shape(),
-                        offset_bits: def.offset.and_then(|offset| offset.checked_mul(8)),
+                let align = sd.align.ok_or(LayoutError::MissingStructAlign(*id))?;
+                if align == 0 || !align.is_power_of_two() || !size.is_multiple_of(align) {
+                    return Err(LayoutError::StructLayoutIncoherent(*id));
+                }
+                let clamp = match sd.repr {
+                    crate::ty::StructRepr::Packed(packed)
+                        if packed != 0 && packed.is_power_of_two() =>
+                    {
+                        u64::from(packed)
+                    }
+                    crate::ty::StructRepr::Packed(_) => {
+                        return Err(LayoutError::StructLayoutIncoherent(*id));
+                    }
+                    _ => u64::MAX,
+                };
+                if align > clamp {
+                    return Err(LayoutError::StructLayoutIncoherent(*id));
+                }
+
+                struct_visiting.push(*id);
+                let result = (|| {
+                    let mut ranges = Vec::with_capacity(sd.fields.len());
+                    let mut fields = Vec::with_capacity(sd.fields.len());
+                    let mut transparent_carrier = None;
+                    let mut transparent_nontrivial = 0usize;
+                    for (field, def) in sd.fields.iter().enumerate() {
+                        let field_layout =
+                            self.ty_layout_shape_inner(&def.ty, enum_visiting, struct_visiting)?;
+                        let field_size = field_layout
+                            .size_bytes()
+                            .ok_or(LayoutError::StructLayoutIncoherent(*id))?;
+                        let field_align = field_layout
+                            .align_bits
+                            .filter(|bits| *bits != 0 && bits.is_multiple_of(8))
+                            .map(|bits| bits / 8)
+                            .ok_or(LayoutError::StructLayoutIncoherent(*id))?
+                            .max(1)
+                            .min(clamp);
+                        let offset = match def.offset {
+                            Some(offset) => offset,
+                            None if field_size == 0 => 0,
+                            None => {
+                                return Err(LayoutError::MissingFieldOffset {
+                                    struct_id: *id,
+                                    field: field as u32,
+                                });
+                            }
+                        };
+                        if !offset.is_multiple_of(field_align)
+                            || field_align > align
+                            || offset.checked_add(field_size).is_none_or(|end| end > size)
+                        {
+                            return Err(LayoutError::StructLayoutIncoherent(*id));
+                        }
+                        if sd.repr == crate::ty::StructRepr::Transparent
+                            && (field_size != 0 || field_align != 1)
+                        {
+                            transparent_nontrivial += 1;
+                            transparent_carrier = Some((field_size, field_align, offset));
+                        }
+                        ranges.push((offset, field_size));
+                        fields.push(FieldOffsetShape {
+                            field: field as u32,
+                            name: def.name.clone(),
+                            ty_shape: def.ty.shape(),
+                            // A missing offset is information-free only for a ZST;
+                            // canonicalize that placement to byte zero for consumers.
+                            offset_bits: Some(
+                                offset.checked_mul(8).ok_or(LayoutError::SizeOverflow)?,
+                            ),
+                        });
+                    }
+                    for left in 0..ranges.len() {
+                        for right in left + 1..ranges.len() {
+                            if byte_ranges_overlap(
+                                ranges[left].0,
+                                ranges[left].1,
+                                ranges[right].0,
+                                ranges[right].1,
+                            ) {
+                                return Err(LayoutError::StructLayoutIncoherent(*id));
+                            }
+                        }
+                    }
+                    if sd.repr == crate::ty::StructRepr::Transparent {
+                        // rustc's transparent rule is about 1-ZSTs, not size
+                        // alone. A zero-sized field with alignment > 1 is the
+                        // representation-bearing field. The wrapper must match
+                        // that sole carrier exactly (including offset zero); if
+                        // every field is a 1-ZST, the wrapper itself is a 1-ZST.
+                        let (carrier_size, carrier_align, carrier_offset) =
+                            transparent_carrier.unwrap_or((0, 1, 0));
+                        if transparent_nontrivial > 1
+                            || size != carrier_size
+                            || align != carrier_align
+                            || carrier_offset != 0
+                        {
+                            return Err(LayoutError::StructLayoutIncoherent(*id));
+                        }
+                    }
+                    Ok(TyLayoutShape {
+                        size_bits: size.checked_mul(8).ok_or(LayoutError::SizeOverflow)?,
+                        align_bits: Some(align.checked_mul(8).ok_or(LayoutError::SizeOverflow)?),
+                        kind: TyLayoutKind::Struct { id: *id, fields },
                     })
-                    .collect();
-                Ok(TyLayoutShape {
-                    size_bits: size.checked_mul(8).ok_or(LayoutError::SizeOverflow)?,
-                    align_bits: sd.align.and_then(|align| align.checked_mul(8)),
-                    kind: TyLayoutKind::Struct { id: *id, fields },
-                })
+                })();
+                struct_visiting.pop();
+                result
             }
             Ty::Array(elem, len) => {
                 let elem_ty = self
                     .types
                     .get(elem.as_usize())
                     .ok_or(LayoutError::MissingType(*elem))?;
-                let elem_layout = self.ty_layout_shape_inner(elem_ty, enum_visiting)?;
+                let elem_layout =
+                    self.ty_layout_shape_inner(elem_ty, enum_visiting, struct_visiting)?;
                 Ok(TyLayoutShape {
                     size_bits: elem_layout
                         .size_bits
@@ -883,7 +1034,8 @@ impl Module {
                 })
             }
             Ty::Vector(elem, lanes) => {
-                let elem_layout = self.ty_layout_shape_inner(elem, enum_visiting)?;
+                let elem_layout =
+                    self.ty_layout_shape_inner(elem, enum_visiting, struct_visiting)?;
                 Ok(TyLayoutShape {
                     size_bits: elem_layout
                         .size_bits
@@ -901,7 +1053,7 @@ impl Module {
             // `Module::enum_layout_shape`). Deliberately NOT a claim of rustc
             // layout parity: no niche optimization, no variant reordering.
             Ty::Enum(id) => {
-                let layout = self.enum_layout_shape_inner(*id, enum_visiting)?;
+                let layout = self.enum_layout_shape_inner(*id, enum_visiting, struct_visiting)?;
                 Ok(TyLayoutShape {
                     size_bits: layout.size_bits,
                     align_bits: Some(layout.align_bits),
@@ -921,7 +1073,9 @@ impl Module {
             // whole typed-value-model change unable to move a byte of any
             // downstream artifact.
             Ty::Refine(base, _) => match self.types.get(base.as_usize()) {
-                Some(base_ty) => self.ty_layout_shape_inner(base_ty, enum_visiting),
+                Some(base_ty) => {
+                    self.ty_layout_shape_inner(base_ty, enum_visiting, struct_visiting)
+                }
                 None => Err(LayoutError::UnsupportedTyShape(TyShape::Refine)),
             },
             Ty::Tuple(_) | Ty::Closure(_) | Ty::Set(_, _) | Ty::Sequence(_) | Ty::Record(_) => {
@@ -942,7 +1096,7 @@ impl Module {
     /// layout is unavailable propagates its error — never a partial or wrong
     /// layout.
     pub fn enum_layout_shape(&self, id: EnumId) -> Result<EnumLayoutShape, LayoutError> {
-        self.enum_layout_shape_inner(id, &mut Vec::new())
+        self.enum_layout_shape_inner(id, &mut Vec::new(), &mut Vec::new())
     }
 
     /// [`Module::enum_layout_shape`] with the shared enum cycle guard.
@@ -950,6 +1104,7 @@ impl Module {
         &self,
         id: EnumId,
         enum_visiting: &mut Vec<EnumId>,
+        struct_visiting: &mut Vec<StructId>,
     ) -> Result<EnumLayoutShape, LayoutError> {
         if enum_visiting.contains(&id) {
             // Inline self-reference (not broken by a pointer): no finite
@@ -987,7 +1142,8 @@ impl Module {
                 let mut field_sizes = Vec::with_capacity(variant.fields.len());
                 let mut field_aligns = Vec::with_capacity(variant.fields.len());
                 for field_ty in &variant.fields {
-                    let field_layout = self.ty_layout_shape_inner(field_ty, enum_visiting)?;
+                    let field_layout =
+                        self.ty_layout_shape_inner(field_ty, enum_visiting, struct_visiting)?;
                     let field_size = field_layout
                         .size_bytes()
                         .ok_or(LayoutError::EnumLayoutUnavailable(id))?;
@@ -1206,18 +1362,13 @@ impl Module {
         struct_id: StructId,
         field: u32,
     ) -> Result<u64, LayoutError> {
-        let sd = self
-            .structs
-            .iter()
-            .find(|sd| sd.id == struct_id)
-            .ok_or(LayoutError::MissingStruct(struct_id))?;
-        let field_def = sd
-            .fields
+        let layout = self.ty_layout_shape(&Ty::Struct(struct_id))?;
+        let TyLayoutKind::Struct { fields, .. } = layout.kind else {
+            return Err(LayoutError::StructLayoutIncoherent(struct_id));
+        };
+        fields
             .get(field as usize)
-            .ok_or(LayoutError::MissingFieldOffset { struct_id, field })?;
-        field_def
-            .offset
-            .and_then(|offset| offset.checked_mul(8))
+            .and_then(|field| field.offset_bits)
             .ok_or(LayoutError::MissingFieldOffset { struct_id, field })
     }
 
@@ -1291,6 +1442,37 @@ impl Module {
             _ => Ok(CastLayoutEvidence::NotLayoutSensitive),
         }
     }
+}
+
+fn ty_uses_scalar_layout_table(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Bool
+            | Ty::I8
+            | Ty::I16
+            | Ty::I32
+            | Ty::I64
+            | Ty::I128
+            | Ty::U8
+            | Ty::U16
+            | Ty::U32
+            | Ty::U64
+            | Ty::U128
+            | Ty::Isize
+            | Ty::Usize
+            | Ty::Char
+            | Ty::F16
+            | Ty::F32
+            | Ty::F64
+            | Ty::Ptr
+            | Ty::Ref(_)
+            | Ty::RefMut(_)
+            | Ty::PtrConst(_)
+            | Ty::PtrMut(_)
+            | Ty::Rc(_)
+            | Ty::Func(_)
+            | Ty::FatPtr(_)
+    )
 }
 
 fn scalar_layout(shape: TyShape, size_bits: u64, align_bits: Option<u64>) -> TyLayoutShape {
@@ -1628,6 +1810,60 @@ mod tests {
     }
 
     #[test]
+    fn scalar_layout_evidence_declines_targets_outside_the_canonical_table() {
+        let mut i686 = Module::new("i686-layout");
+        i686.target_info = Some(TargetInfo {
+            triple: "i686-unknown-linux-gnu".into(),
+            pointer_size: 4,
+            endianness: Endianness::Little,
+            abi: None,
+            struct_passing: Default::default(),
+        });
+        assert!(matches!(
+            i686.ty_layout_shape(&Ty::F64),
+            Err(LayoutError::TargetScalarLayoutUnavailable { triple })
+                if triple == "i686-unknown-linux-gnu"
+        ));
+
+        // Empty aggregate evidence does not consult a scalar table and remains
+        // available even on an otherwise unsupported target.
+        i686.add_struct(StructDef {
+            id: StructId::new(0),
+            name: "Empty".into(),
+            fields: vec![],
+            size: Some(0),
+            align: Some(1),
+            repr: crate::ty::StructRepr::C,
+        });
+        assert!(i686.ty_layout_shape(&Ty::Struct(StructId::new(0))).is_ok());
+
+        let mut wasm = Module::new("wasm-layout");
+        wasm.target_info = Some(TargetInfo {
+            triple: "wasm32-unknown-unknown".into(),
+            pointer_size: 4,
+            endianness: Endianness::Little,
+            abi: None,
+            struct_passing: Default::default(),
+        });
+        assert_eq!(wasm.ty_layout_shape(&Ty::F64).unwrap().align_bits, Some(64));
+        assert_eq!(wasm.ty_layout_shape(&Ty::Ptr).unwrap().align_bits, Some(32));
+
+        let mut forged_x86_64 = Module::new("forged-x86-64-layout");
+        forged_x86_64.target_info = Some(TargetInfo {
+            triple: "x86_64-unknown-linux-gnu".into(),
+            pointer_size: 4,
+            endianness: Endianness::Little,
+            abi: None,
+            struct_passing: Default::default(),
+        });
+        assert!(matches!(
+            forged_x86_64.ty_layout_shape(&Ty::Ptr),
+            Err(LayoutError::TargetScalarLayoutUnavailable { triple })
+                if triple == "x86_64-unknown-linux-gnu"
+        ));
+    }
+
+    #[test]
     fn cast_shape_is_stable_and_explicit() {
         assert_eq!(CastOp::ZExt.shape(), CastShape::IntegerResize);
         assert_eq!(CastOp::FPExt.shape(), CastShape::FloatResize);
@@ -1714,6 +1950,212 @@ mod tests {
                 lane_bits: 32
             }
         );
+    }
+
+    fn module_with_declared_struct(
+        fields: Vec<FieldDef>,
+        size: u64,
+        align: u64,
+        repr: crate::ty::StructRepr,
+    ) -> Module {
+        let mut module = Module::new("declared-struct-shape");
+        module.add_struct(StructDef {
+            id: StructId::new(0),
+            name: "S".into(),
+            fields,
+            size: Some(size),
+            align: Some(align),
+            repr,
+        });
+        module
+    }
+
+    #[test]
+    fn struct_shape_revalidates_declared_layout_before_exporting_it() {
+        let field = |name: &str, ty: Ty, offset: Option<u64>| FieldDef {
+            name: name.into(),
+            ty,
+            offset,
+        };
+        let incoherent = |module: &Module| {
+            matches!(
+                module.ty_layout_shape(&Ty::Struct(StructId::new(0))),
+                Err(LayoutError::StructLayoutIncoherent(id)) if id == StructId::new(0)
+            )
+        };
+
+        let misaligned = module_with_declared_struct(
+            vec![field("a", Ty::U8, Some(0)), field("b", Ty::U64, Some(3))],
+            16,
+            8,
+            crate::ty::StructRepr::C,
+        );
+        assert!(incoherent(&misaligned));
+        assert!(matches!(
+            misaligned.struct_field_offset_bits(StructId::new(0), 1),
+            Err(LayoutError::StructLayoutIncoherent(_))
+        ));
+
+        let overlap = module_with_declared_struct(
+            vec![field("a", Ty::U64, Some(0)), field("b", Ty::U32, Some(4))],
+            16,
+            8,
+            crate::ty::StructRepr::C,
+        );
+        assert!(incoherent(&overlap));
+
+        let packed_bad_clamp = module_with_declared_struct(
+            vec![field("value", Ty::U64, Some(0))],
+            8,
+            1,
+            crate::ty::StructRepr::Packed(3),
+        );
+        assert!(incoherent(&packed_bad_clamp));
+
+        let packed_overaligned = module_with_declared_struct(
+            vec![field("value", Ty::U64, Some(0))],
+            8,
+            8,
+            crate::ty::StructRepr::Packed(1),
+        );
+        assert!(incoherent(&packed_overaligned));
+
+        let packed_control = module_with_declared_struct(
+            vec![field("a", Ty::U8, Some(0)), field("b", Ty::U64, Some(3))],
+            11,
+            1,
+            crate::ty::StructRepr::Packed(1),
+        );
+        let layout = packed_control
+            .ty_layout_shape(&Ty::Struct(StructId::new(0)))
+            .expect("packed(1) makes byte 3 coherent");
+        assert_eq!(layout.size_bits, 88);
+        assert_eq!(
+            packed_control.struct_field_offset_bits(StructId::new(0), 1),
+            Ok(24)
+        );
+
+        let missing_sized = module_with_declared_struct(
+            vec![field("value", Ty::U64, None)],
+            8,
+            8,
+            crate::ty::StructRepr::C,
+        );
+        assert!(matches!(
+            missing_sized.ty_layout_shape(&Ty::Struct(StructId::new(0))),
+            Err(LayoutError::MissingFieldOffset {
+                struct_id,
+                field: 0
+            }) if struct_id == StructId::new(0)
+        ));
+
+        let missing_zst = module_with_declared_struct(
+            vec![field("zst", Ty::Unit, None)],
+            0,
+            1,
+            crate::ty::StructRepr::C,
+        );
+        assert_eq!(
+            missing_zst.struct_field_offset_bits(StructId::new(0), 0),
+            Ok(0)
+        );
+    }
+
+    #[test]
+    fn struct_shape_enforces_the_exact_transparent_carrier_layout() {
+        let field = |name: &str, ty: Ty, offset: Option<u64>| FieldDef {
+            name: name.into(),
+            ty,
+            offset,
+        };
+        let incoherent = |module: &Module, id: u32| {
+            matches!(
+                module.ty_layout_shape(&Ty::Struct(StructId::new(id))),
+                Err(LayoutError::StructLayoutIncoherent(found)) if found == StructId::new(id)
+            )
+        };
+
+        let shifted_carrier = module_with_declared_struct(
+            vec![field("value", Ty::U64, Some(8))],
+            16,
+            8,
+            crate::ty::StructRepr::Transparent,
+        );
+        assert!(incoherent(&shifted_carrier, 0));
+
+        let two_carriers = module_with_declared_struct(
+            vec![
+                field("left", Ty::U32, Some(0)),
+                field("right", Ty::U32, Some(4)),
+            ],
+            8,
+            4,
+            crate::ty::StructRepr::Transparent,
+        );
+        assert!(incoherent(&two_carriers, 0));
+
+        let ordinary = module_with_declared_struct(
+            vec![
+                field("value", Ty::U64, Some(0)),
+                field("marker", Ty::Unit, None),
+            ],
+            8,
+            8,
+            crate::ty::StructRepr::Transparent,
+        );
+        assert_eq!(
+            ordinary
+                .ty_layout_shape(&Ty::Struct(StructId::new(0)))
+                .expect("one carrier plus a 1-ZST is transparent")
+                .size_bits,
+            64
+        );
+
+        // A zero-sized field with alignment greater than one is the carrier;
+        // size-only counting would wrongly call both fields trivial.
+        let mut overaligned = Module::new("transparent-overaligned-zst");
+        overaligned.add_struct(StructDef {
+            id: StructId::new(0),
+            name: "Marker".into(),
+            fields: vec![],
+            size: Some(0),
+            align: Some(8),
+            repr: crate::ty::StructRepr::Rust,
+        });
+        overaligned.add_struct(StructDef {
+            id: StructId::new(1),
+            name: "Wrapper".into(),
+            fields: vec![
+                field("marker", Ty::Struct(StructId::new(0)), Some(0)),
+                field("unit", Ty::Unit, None),
+            ],
+            size: Some(0),
+            align: Some(8),
+            repr: crate::ty::StructRepr::Transparent,
+        });
+        let layout = overaligned
+            .ty_layout_shape(&Ty::Struct(StructId::new(1)))
+            .expect("an over-aligned ZST can be the sole transparent carrier");
+        assert_eq!(layout.size_bits, 0);
+        assert_eq!(layout.align_bits, Some(64));
+    }
+
+    #[test]
+    fn struct_shape_refuses_an_inline_recursive_cycle() {
+        let recursive = module_with_declared_struct(
+            vec![FieldDef {
+                name: "self".into(),
+                ty: Ty::Struct(StructId::new(0)),
+                offset: Some(0),
+            }],
+            8,
+            8,
+            crate::ty::StructRepr::Rust,
+        );
+        assert!(matches!(
+            recursive.ty_layout_shape(&Ty::Struct(StructId::new(0))),
+            Err(LayoutError::StructLayoutIncoherent(id)) if id == StructId::new(0)
+        ));
     }
 
     #[test]

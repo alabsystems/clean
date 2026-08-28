@@ -1,0 +1,46 @@
+{
+ "prefix": "ir_ep",
+ "body": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+ "core_digest": "8bff6fe47374b235f1d89fecb077b68cc596ce3bd67ac1a9616cb071a1efae32",
+ "defs_digest": "19218dff3576612b868ba3b9c63df882debcc950e24e645a028ed88496c31fd3",
+ "def_count": 16,
+ "artifact_core_digest": "8666bb95821fb7ca037e79f98b328b41771b34cf05eede801d3bb4ecb8a09a94",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the expr_path_step_clone row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 6303,
+  "artifact_func_id": 6303,
+  "artifact_functy_id": 856,
+  "artifact_functy_note": "856 on the dump this migration was revalidated against, where the COMMITTED fixture says 859 and the producer A/B record says 1094/1091/857: four dumps, four values -- the whole-crate function-TYPE index at its most mobile, with the instruction text byte-identical throughout (func_id 6303 here, after 7478/7475/6301 -- the same drift class). The interface pin compares reader B's header against the fixture-era 859; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [
+   182
+  ],
+  "crate_enum_ids_note": "182 on this dump, where the COMMITTED fixture and the registered ir_ep_tstep say 184 and the producer A/B record says 181/181/176. FIVE observed values for one unchanged body -- this chain's enum id is the ORIGINAL specimen of the whole-crate drift class (it is the id docs/CRYSTAL_STATUS.md cites as 181 -> 176), and the reason the tag table rather than the module owns the pin. Reader A's value is RECORDED per dump, NEVER COMPARED; the fixture-era 184 is what readers B and C are compared against, per the M7 bargain.",
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [
+   6303
+  ],
+  "crate_func_names_seen": [
+   "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone"
+  ],
+  "aligns_erased": [
+   "load:None"
+  ],
+  "param_tys_erased": [
+   "Ptr"
+  ],
+  "block_param_tys_erased": [
+   "bb12:Enum(EnumId(182))"
+  ]
+ },
+ "text_unwitnessed": [
+  { "slot": "bb0#2 switch arg4", "why": "trust-ir Display never prints Switch.exhaustive_enum_unreachable" }
+ ],
+ "text_unwitnessed_note": "ONE entry: this body dispatches, so the one field trust-ir's Display never prints occurs exactly once. M2 is therefore an exact comparison under the declared mask, and the flag has exactly one in-repo witness -- reader A, whose committed core carries the measured `false` (the DEFAULT EDGE is the reachable ProjExpr arm, not a trap).",
+ "producer_dumps_observed": 4,
+ "producer_dumps_note": "The three dumps of generated/ir_mint.producer_ab.json (trust wave-tr-fix 2026-08-12 v36, mfclose 2026-08-13 v36, lane2rv 2026-08-19 v37) plus the laneREG wc-REG dump_O3 2026-08-21 projection this migration ran (recorded verbatim under reader_a above). All four project to the byte-identical committed core text: func_id moved on three of the four boundaries, functy on all three, and the enum id on two -- and no core digest moved. This chain is the drift class's original specimen, re-observed at yet another numbering on the freshest dump on this machine."
+}

@@ -502,6 +502,18 @@ fn kernel_records_for_file(
     // lightweight Clean-native path; import decls are still elaborated below for
     // local context side effects, then excluded from this file's record set.
     file_ctx.disable_external_import_search();
+    // ...and, having declared that, do not measure this lane against import
+    // RESOLUTION either. With external search off, an import resolves to
+    // nothing by construction, so the 2026-08-26 fail-closed default
+    // (`clean_elab::ImportPolicy`) would refuse it — and for an undeclared
+    // `Mathlib.*` module that refusal REGISTERS NOTHING, where the pre-brick
+    // behavior fabricated the stub set. The loop below snapshots the
+    // environment per declaration to attribute new constants to this file, so
+    // "which constants the import registered" changes what is attributed.
+    // Indexing mints no verification verdict and the loop already tolerates
+    // import failures explicitly, so pin the pre-brick behavior here, at the
+    // call site, rather than let a verification default decide for an indexer.
+    file_ctx.set_import_policy(clean_elab::ImportPolicy::Permissive);
     let source_path = relative_path(root, file);
     let mut records = Vec::new();
 
@@ -1077,6 +1089,8 @@ fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::Section { span, .. }
         | SurfaceDecl::UniverseDecl { span, .. }
         | SurfaceDecl::Variable { span, .. }
+        | SurfaceDecl::IncludeVars { span, .. }
+        | SurfaceDecl::OmitVars { span, .. }
         | SurfaceDecl::Open { span, .. }
         | SurfaceDecl::Export { span, .. }
         | SurfaceDecl::DerivingInstance { span, .. }

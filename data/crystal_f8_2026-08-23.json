@@ -1,0 +1,391 @@
+{
+ "schema": "clean.crystal.f8_block_interposition/1",
+ "date": "2026-08-23",
+ "lane": "LANE F8 \u2014 the block-interposition wall, re-derived per sub-shape: REAL for the four switch-headed bodies, and NOT the wall for the other four",
+ "provenance": {
+  "method": "sealed drivers from detached trust worktrees at ONE rev, each whole-crate clean-kernel at -O3 / -O0 / -O3+noflip against one PINNED clean corpus; probes dumped through the sealed CONTROL (built MIR via -Zdump-mir=built, derived MIR via -Ztrust-dump=mir).",
+  "trust_rev": "d8ea7f4dde727416727d8bf09802625efd6dd8a5",
+  "trust_rev_choice": "trust origin/main tip 2bbf42073e does NOT build: the merge kept a root Cargo.lock resolving `ay` from git at 0c0538325 while the first-party/trust-vc submodule pin 9852ca70b demands c306c4cd54, so `cargo build --locked --manifest-path compiler/rustc/Cargo.toml` dies with `cannot update the lock file ... --locked`. d8ea7f4dde (lane R53's own commit) is the maximal buildable commit whose FLIP PATH equals the tip's: `git diff d8ea7f4dde origin/main -- crates/trust-thir-lower compiler/` is EMPTY. b624136814 also builds but is the OTHER merge parent and does NOT contain R53's +8.",
+  "clean_corpus_rev": "51c893ce5e6f79fe1f08fe8db828da14b0dd71d6",
+  "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13)",
+  "instruments": {
+   "markers": "$HOME/trust/scratchpad/laneF8/markers.py \u2014 lane R53's re-implementation of `canon_markers` (mir_differential.rs), unchanged, RE-VALIDATED here against the oracle's own first-divergence lines (x1 `mk b0.0:live s0:u8`, x3 `mk b6.0:live s0:bool`, x4 `mk b2.0:live s0:u32`)",
+   "graph": "$HOME/trust/scratchpad/laneF8/graph.py \u2014 this lane's own renderer of the FINE BLOCK ORDER (canon_markers' DFS preorder over RAW successors) with per-block assign counts and successors, on both sides",
+   "census": "$HOME/trust/scratchpad/laneF8/analyze.py (laneGAP2's analyze3.py, unchanged)",
+   "families": "$HOME/trust/scratchpad/laneF8/rank.py (laneGAP2's rank4.py, unchanged)",
+   "ab": "$HOME/trust/scratchpad/laneF8/compare.py (laneGAP/laneS3's compare.py, unchanged)",
+   "perturb": "$HOME/trust/scratchpad/laneF8/pert_check.py (laneR53's, unchanged)"
+  },
+  "probes": "$HOME/trust/scratchpad/laneF8/probes/f8.rs, f8b.rs, f8c.rs",
+  "drivers": {
+   "control": {
+    "sha256": "e1d8c012e55d6471d489623ecc89fcbb8627e5561779ca38b1fd6a2d40a8ac23",
+    "to_mir_blob": "c6dab117e82bf11893bc6424e2a7b265d17a70aa",
+    "sysrootcheck": "OK",
+    "tree": "52e0a70314 + lane R53's four landed files (== the flip path of trust origin/main)"
+   },
+   "subject": {
+    "sha256": "351b8a442fd32be747511a6da33e1edf5270cd7fc4729447e4ad2eab5a135dc2",
+    "to_mir_blob": "85901e58b1e6031d0c3c5287c8aee7b42fafbae0",
+    "sysrootcheck": "OK"
+   },
+   "mcor": {
+    "sha256": "52042d29b0f2cfe067285a52764828dc8221295b428f58e50f381e1e0b0b7228",
+    "to_mir_blob": "5efd0ef1e66a468921f834a9d51866b86325fdd2",
+    "sysrootcheck": "OK"
+   }
+  },
+  "only_file_that_differs": "crates/trust-thir-lower/src/to_mir.rs \u2014 every other flip-path blob, the FROZEN mir_differential.rs (the ORACLE, 13cd4f258683fdede1877d194d674910fb6366a9) included, is byte-identical across all three drivers.",
+  "flip_path_to_mir_blobs_as_built": {
+   "ctl": "c6dab117e82bf11893bc6424e2a7b265d17a70aa (== lane R53's landed subject)",
+   "subj": "b3e9830249275073ee7f463b952b594de95fa304",
+   "mcor": "3e19fc2815edd34a387dbd1815a6500b7a82194a"
+  },
+  "post_measurement_cfg_test_only_edit": {
+   "what_happened": "a FIRST subject/M-COR pair was built from a tree missing one line \u2014 the thirteenth plan field in the `plan_exclusivity_tests` occurrence pin's `MfPlans { .. }` list, without which that pin is RED. The pre-push provenance gate refused the stamp (`THE MEASUREMENT IS OF A DIFFERENT TREE`), correctly.",
+   "resolution": "both drivers were REBUILT from the committed trees and the whole crate, the perturbation and the M-COR were RE-MEASURED on them. The second pass reproduced the first row for row: -O3 589 -> 590 (+1, 0 lost), -O0 617 -> 617, agreed 1592 -> 1592, markers_exact 1563 -> 1564, one `markers_exact False -> True`, perturbation 590 -> 589 removing exactly hex_digit with applications=1 on it and 0 on the other 2,226 rows, M-COR coverage byte-identical. Every number published here is from the SECOND pass, of the trees that were committed.",
+   "first_pass_digests_for_the_record": {
+    "subject": "f0511204b8891e2a524badc910fc85683372570d0237c1d130f87ad7ee6d6c98",
+    "mcor": "6f79676588384f85d49c585983d0c935d6630a7ab1e0dcdad090901e62f6665a"
+   }
+  },
+  "coverage_sha256_O3": {
+   "ctl": "21d01b67c1b2fa0b99a88b76f99ce543f2b2c1faea2214bb49633aecd104f713",
+   "subj": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910",
+   "mcor": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910"
+  },
+  "trust_commit": "88af57f7fa8ca0a5c92f6375e97963dc85c2fa4b (pushed to trust main on top of 47c570427e)"
+ },
+ "trust_rev_note": "trust origin/main tip 2bbf42073e and BOTH its merge parents (b624136814, 4f31ee6811) fail the driver build. Two DISTINCT causes, both measured: (1) `--locked` refuses the tip \u2014 the root Cargo.lock resolves `ay` from git at 0c0538325 while the first-party/trust-vc pin 9852ca70b demands c306c4cd54; (2) at b624136814 (and at d8ea7f4dde, which shares its submodule cohort c48a9a9594) `first-party/trust-mc` @5255ae902 no longer compiles against `first-party/ay` @c306c4cd54 \u2014 14 errors in trust-mc-driver/src/native.rs (E0616 private fields on ChcProofRunArtifact/ProofRun/Certificate, E0061 arity on ProofRun::certificate, E0609 Certificate::accepted). The maximal BUILDABLE base is 52e0a70314 \u2014 lane R53's own build base \u2014 and lane R53's four landed files are checked out on top of it, so this lane's CONTROL to_mir.rs blob is c6dab117e82bf11893bc6424e2a7b265d17a70aa, byte-identical to R53's landed subject.",
+ "question": "Is the second wall lane R53 named \u2014 built's interposed match-candidate blocks against the shim's one-MIR-block-per-trust-ir-block emission \u2014 what refuses F8's eight bodies, and does F7 inherit it?",
+ "the_wall_re_derived_per_sub_shape": {
+  "instrument_validation": "lane R53's `canon_markers` re-implementation, re-validated before use: it reproduces the oracle's own first-divergence lines for x1 (`mk b0.0:live s0:u8`), x3 (`mk b6.0:live s0:bool`) and x4 (`mk b2.0:live s0:u32`), and this lane's own whole-crate run then printed `markers differ: line 0: built `mk b0.0:live s0:u8` vs derived `<end>`` for hex_digit in the CONTROL \u2014 the same line, from the oracle itself.",
+  "A_switch_all_single_candidates": {
+   "corpus": [
+    "cert::cross_project::hex_digit"
+   ],
+   "probe": "probes/f8.rs::c1 (the hex_digit shape at five arms)",
+   "built_reachable_blocks": 11,
+   "derived_reachable_blocks": 7,
+   "delta": 4,
+   "arithmetic": "ONE `falseEdge` candidate block per NON-LAST candidate; the wildcard `_` is the last candidate and gets none. built f0..f10 = head, cand, arm0, JOIN, cand, arm1, cand, arm2, cand, arm3, default-arm; derived (control) f0..f6 = head, arm0, JOIN, arm1, arm2, arm3, default-arm. The JOIN sits at built fine 3 and derived fine 2.",
+   "markers": "4 lines: `mk b0.0:live s0:u8` (the scrutinee RESULT temp), `mk b0.0:live s1:u8` (its one OPERAND temp), `mk b0.2:dead s1:u8`, `mk b3.0:dead s0:u8` (the result temp, at the JOIN, position 0).",
+   "verdict": "TAKEABLE. Built and measured this lane: +1 at -O3, 0 lost."
+  },
+  "B_switch_with_an_or_pattern_candidate": {
+   "corpus": [
+    "cert::types::proof_cert_has_recursive_children",
+    "mode::CleanMode::allows_large_elimination"
+   ],
+   "probes": "probes/f8.rs::a1 vs b1 (four separate candidates vs the same values with the middle one an or-pattern), and lane R53's x2/x3",
+   "arithmetic": "wave-DR's per-edge table, RE-MEASURED at HEAD on a1/b1: last candidate 0; non-last single variant 1; non-last or-pattern LOWEST discriminant 2 (built mints the alternative's `goto` AND the candidate's shared `falseEdge`); non-last or-pattern any other 0 (built mints one `goto`, the producer duplicates the arm body). x3 = 1,2,0,0 -> derived 7 blocks becomes 10, built is 10, and the fine indices then coincide exactly. x2 = 2,0,0 -> derived 5 becomes 7, built is 7.",
+   "the_information_question_ANSWERED": "the source candidate structure IS recoverable from the Module. The producer stamps each source arm's OWN location on the arm's first instruction: MEASURED, a1's two identical-bodied SEPARATE arms carry `#loc 15:17` and `16:17`, b1's two OR-PATTERN alternatives carry `25:25` TWICE. (The derived-MIR Assign spans do NOT show this \u2014 a folded `Inst::Const` mints no statement and the span you see there is the `br` edge copy's; the signal is on the trust-ir node.)",
+   "verdict": "TAKEABLE, not built here. Costs wave-DR's grouping function (reusable verbatim) plus one arm-internal marker rule (x3: live/dead around the shared or-pattern arm's two assigns) and one hoisted join-parameter rule (x2: the match value's temp opened at HEAD position 0 and retired at JOIN position 1, after the join's own `Not`)."
+  },
+  "C_switch_or_pattern_BINDING_a_payload": {
+   "corpus": [
+    "tc::reduction::cofib::CofibAtom::var"
+   ],
+   "probe": "lane R53's probes/r53.rs::x4",
+   "arithmetic": "built f0..f6 = head, cand, alt1(binds _3), OR-JOIN(`_0 = copy _3`; dead _3), RET, alt2, unreachable \u2014 SEVEN blocks; derived = head, alt1, join(assign+Return), alt2, unreachable \u2014 FIVE. Delta 2: one `falseEdge` candidate block AND a RETURN SPLIT. Built's or-join (1 assign + goto) and its bare `return` block are TWO blocks where the shim emits ONE.",
+   "markers": "3 lines: live@f2.0, dead@f3.1, live@f5.0 \u2014 the or-pattern binding minted TWICE.",
+   "verdict": "NOT takeable by empty `Goto` alone. It needs a SECOND structural addition the shim has never made: splitting a derived `{assign; Return}` join into `{assign; Goto R}` + `{R: Return}`. Not attempted."
+  },
+  "D_condbr_headed": {
+   "corpus": [
+    "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+    "tc::heartbeat_profiler::types::clamp_u32"
+   ],
+   "probes": "probes/f8.rs::d1/e1 and f8c.rs::or1/an1/if1/ma1/if2",
+   "arithmetic": "the delta is EXACTLY ONE BLOCK \u2014 the empty FALSE-edge trampoline \u2014 and the shim ALREADY mints it whenever lane K's branch plan engages. MEASURED: d1 built 5 reachable vs derived 4; e1 built 5 vs derived 4; with that one block the fine maps coincide exactly and every marker lands at an assign count both sides carry.",
+   "verdict": "THE BLOCK-INTERPOSITION WALL DOES NOT REFUSE THESE TWO. What refuses them is lane K's own admission rules, and they are two DIFFERENT walls."
+  },
+  "E_scoped": {
+   "corpus": [
+    "env::native_reducers_bitvec::to_signed",
+    "env::native_reducers_sint::to_signed"
+   ],
+   "verdict": "the `func.scopes.is_some()` firewall, and it is CORRECT here, not stale."
+  }
+ },
+ "the_two_condbr_walls_named": {
+  "combine (`a || b`)": {
+   "rule": "plan_branch_markers: `every CondBr condition is a MARKED RESULT of its own block` (the `param_cond`/`match_bool` tripwire). `combine`'s condition is the bare param `%1`.",
+   "lane_K_counterexample_REPRODUCED_AT_HEAD": "`pc(a,x,y){ if a {x} else {y} }` and `mb(c,x,y){ match c { true=>x, false=>y } }` lower to trust-ir that is IDENTICAL block for block, instruction for instruction, edge arg for edge arg \u2014 `bb0: condbr %0, bb1, bb2 ; bb1: br bb3(%1) ; bb2: br bb3(%2) ; bb3(%3): ret %3` \u2014 and the ONLY differing token is the `#loc` of the `if`/`match` keyword, i.e. where the two functions sit in the file. Built gives `pc` TWO markers plus an empty else-entry and gives `mb` ZERO markers plus a `falseEdge` candidate and an unreachable. So the rule is not conservatism: it is a genuine module-indistinguishability, and admitting the pair would cost `mb`'s existing flip.",
+   "BUT_THE_SUGAR_IS_SEPARABLE": "`a || b` and `a && b` are NOT in that pair. MEASURED on f8c.rs: `or1`/`an1` carry the synthesized constant at the SAME `#loc` as the `CondBr` itself (8:39/8:39 and 10:39/10:39) and emit the else-arm block FIRST; `if1` (`if a {true} else {b}`), `ma1` (`match a {true=>true,false=>b}`) and `if2` all carry the constant at its own literal position (4:46, 6:57, 12:57), distinct from the `CondBr`'s. `if1` and `ma1` remain byte-indistinguishable from EACH OTHER, so both must stay refused \u2014 but the `||`/`&&` desugar is a Module-visible signature and `combine` can be admitted on it without touching them.",
+   "verdict": "TAKEABLE, not built here. Costs: one narrowed clause in plan_branch_markers' condition rule, a plan-gated condition temp for a bare-param condition in the CondBr emitter, and the matching `live`+`assign` in predict_from's CondBr arm. The trampoline is already minted."
+  },
+  "clamp_u32": {
+   "rule": "plan_branch_markers: `results are LEFTMOST in every operand list`, which names `clamp_u32` in its own source, verbatim.",
+   "measured": "built bb0 is `StorageLive(_2)[result]; StorageLive(_3)[operand0]; _3 = copy _1; StorageLive(_4)[operand1]; _4 = const MAX as u64; _2 = Gt(move _3, move _4)` \u2014 markers at .0, .0, .1. The trust-ir is `%2 = const u32 MAX; %3 = zext %2 to u64; %4 = icmp ugt %0, %3`, so the shim's LINEAR walk emits the cast's own statement before it ever reaches the icmp's operand slots and mints the two temps in the wrong order.",
+   "verdict": "an operand-ORDER wall, ORTHOGONAL to blocks. Takeable in principle by delaying a marked result's defining statement to its use site and minting operand temps left to right; that is a widening of the operand-temp discipline, not a block-graph change."
+  }
+ },
+ "scopes_firewall_verdict": {
+  "verdict": "CORRECT \u2014 not stale \u2014 for both bodies, and REDUNDANT: each is refused twice over.",
+  "why": "`env::native_reducers_bitvec::to_signed` binds `let half = 1u128 << (w - 1);` and `env::native_reducers_sint::to_signed` binds `let sign_bit = 1u64 << (bits - 1);`. The firewall's documented meaning is exactly `the producer opened a let-visibility scope`, and that is TRUE of both \u2014 a real source `let`, with the named binding local and the `FakeRead` the instruction stream cannot see. This is not the destructuring-param case the module docs name as the firewall's heuristic gap; that case is a body the firewall LETS THROUGH and the oracle then refuses, which is a false negative of the firewall, not a false positive.",
+  "second_independent_refusal": "both bodies carry an EARLY RETURN (`return 0;` / `return val as i64;`), i.e. a SECOND `Inst::Return`, which `plan_branch_markers` refuses on its own line (`exactly one Return`). Consuming the scope table would therefore not be enough; the early-return shape has to land too \u2014 and that shape is F7's harder half, measured below.",
+  "so_the_firewall_costs_nothing_here": "lifting it would move neither body."
+ },
+ "F7_verdict": {
+  "question": "lane R53 flagged that F7's seven bodies inherit the F8 block-interposition question. Measured, they SPLIT.",
+  "sub_shape_1_short_circuit_over_calls": {
+   "n": 4,
+   "corpus": [
+    "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+    "cert::def_eq::\u2026::try_type_directed_eq",
+    "cert::def_eq::\u2026::try_struct_eta_eq",
+    "\u2026::try_string_lit_expansion"
+   ],
+   "probe": "probes/f8.rs::f1 (`s.p() || s.q()`)",
+   "measured": "built 7 reachable blocks, derived 6. The delta is EXACTLY ONE BLOCK \u2014 lane K's empty FALSE-edge trampoline \u2014 and with it the two fine maps coincide element for element: built f0..f6 = call, cont(switch), TRAMP, call, cont, join, then-arm; derived f0..f6 = call, cont(switch), TRAMP, call, cont, join, then-arm. Every marker of built's 7 lands at an assign count the derived side carries.",
+   "verdict": "F7's short-circuit half does NOT inherit the F8 wall. The block it needs already exists in the shim. What is missing is a PLAN that admits `Inst::Call` in a multi-block body (lane K's `operands_of` has no `Call` arm) together with wave-CF's `&(*_p)` argument-reborrow model, in a multi-block setting."
+  },
+  "sub_shape_2_early_return_plus_tail_call": {
+   "n": 3,
+   "corpus": [
+    "expr::subst::<impl expr::Expr>::has_loose_bvar",
+    "\u2026::round_up_to_next",
+    "\u2026::try_structure_eta_expansion"
+   ],
+   "probe": "probes/f8.rs::f2 (`if k == 0 { return false; } s.p()`)",
+   "measured": "built 8 reachable blocks and ELEVEN markers; derived 4 blocks. Built needs FOUR blocks the derived side lacks: (1) the empty false-edge trampoline (lane K already mints it); (2) the `if`-statement's scope-exit block, which carries a STATEMENT \u2014 `_3 = const ()` \u2014 and a retirement; (3) a SHARED `return` block, where the derived body has two separate `Return` terminators; (4) the early-return path's own scope-exit block. Built additionally marks the `if`-statement's `()` value (`mk b0.0:live s0:()`), the slot lane L9's loop plan models as `IfVal`.",
+   "verdict": "this half DOES inherit the interposition question and EXCEEDS it \u2014 a statement-bearing interposed block and a shared-return join, neither of which an empty `Goto` provides."
+  }
+ },
+ "census_control": {
+  "totals": {
+   "bodies": 13879,
+   "agreed": 1592,
+   "agreed_markers_exact": 1563,
+   "codegen_flips_O3": 589,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "21d01b67c1b2fa0b99a88b76f99ce543f2b2c1faea2214bb49633aecd104f713",
+   "coverage_O0_sha256": "21d01b67c1b2fa0b99a88b76f99ce543f2b2c1faea2214bb49633aecd104f713",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": {
+   "size": 29,
+   "by_kind": {
+    "fn": 28,
+    "const-init": 1
+   },
+   "partition_by_channel": {
+    "derived-end@0": 29
+   },
+   "partition_sums_to_gap": true
+  }
+ },
+ "census_subject": {
+  "totals": {
+   "bodies": 13879,
+   "agreed": 1592,
+   "agreed_markers_exact": 1564,
+   "codegen_flips_O3": 590,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910",
+   "coverage_O0_sha256": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": {
+   "size": 28,
+   "by_kind": {
+    "fn": 27,
+    "const-init": 1
+   },
+   "partition_by_channel": {
+    "derived-end@0": 28
+   },
+   "partition_sums_to_gap": true
+  }
+ },
+ "control_reproduces_R53": "the CONTROL's numbers are lane R53's landed numbers exactly: agreed 1592, markers_exact 1563, -O3 codegen 589, -O0 codegen 617, ctfe 42/43, gap 29, `-Ztrust-ir-flip=no` control 0, and every invariant (O3flips == O0flips & markers_exact, 0 lost the other way, 0 derived_mir rows moving between levels, partition 100% derived-end@0) HOLDS.",
+ "whole_crate_subject_vs_control": {
+  "base": "$HOME/trust/scratchpad/laneF8/wc-ctl",
+  "subject": "$HOME/trust/scratchpad/laneF8/wc-subj",
+  "O3": {
+   "codegen_base": 589,
+   "codegen_subject": 590,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 1,
+   "lost": 0,
+   "gained_names": [
+    "cert::cross_project::hex_digit"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 617,
+   "codegen_subject": 617,
+   "ctfe_base": 43,
+   "ctfe_subject": 43,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 1
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "cert::cross_project::hex_digit"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1592,
+   "subject_agreed": 1592,
+   "base_markers_exact": 1563,
+   "subject_markers_exact": 1564
+  }
+ },
+ "mutation_mcor": {
+  "wall_deleted": "the ALL-DISTINCT-LOCATIONS refusal in `plan_switch_join_markers` \u2014 the clause that keeps an OR-PATTERN candidate (two arm blocks stamped with one arm-expression location) out of a table this class has not measured.",
+  "live_unit_kill": "`switch_join_marker_plan_tests::two_arms_at_one_source_position_are_refused` \u2014 775 passed, 1 failed.",
+  "whole_crate": {
+   "base": "$HOME/trust/scratchpad/laneF8/wc-subj",
+   "subject": "$HOME/trust/scratchpad/laneF8/wc-mcor",
+   "O3": {
+    "codegen_base": 590,
+    "codegen_subject": 590,
+    "ctfe_base": 42,
+    "ctfe_subject": 42,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "O0": {
+    "codegen_base": 617,
+    "codegen_subject": 617,
+    "ctfe_base": 43,
+    "ctfe_subject": 43,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "channel_moves": {},
+   "verdict_regressions": [],
+   "markers_gained": [],
+   "markers_lost": [],
+   "totals": {
+    "base_agreed": 1592,
+    "subject_agreed": 1592,
+    "base_markers_exact": 1564,
+    "subject_markers_exact": 1564
+   }
+  },
+  "coverage_json_byte_identity": "the M-COR's whole-crate -O3 coverage JSON is BYTE-IDENTICAL to the subject's (sha256 28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910), so `row-exact identical` is a digest, not a comparator opinion.",
+  "reading": "defense in depth confirmed: no body in this corpus rides on that wall, and the live kill is the test."
+ },
+ "perturbation_sw_tramp": {
+  "codegen_base": 589,
+  "codegen_subject": 590,
+  "codegen_perturbed": 589,
+  "ctfe_base": 42,
+  "ctfe_subject": 42,
+  "ctfe_perturbed": 42,
+  "lost_vs_subject_names": [
+   "cert::cross_project::hex_digit"
+  ],
+  "gained_vs_subject_names": [],
+  "kept_vs_base_names": [],
+  "regressed_vs_base": [],
+  "applications_by_body": {},
+  "family_lost": [
+   "cert::cross_project::hex_digit"
+  ],
+  "family_kept": [],
+  "what_it_does": "`-Ztrust-sat-perturb=sw-tramp` MOVES one match-candidate trampoline off the plan's first non-last candidate and onto the LAST candidate's edge, which the plan never puts one on. The TOTAL is unchanged, so every later `new_block` index is unchanged and the marker LAW \u2014 which models the allocation, not the placement \u2014 stays green; an empty `Goto` on either edge is the same program, so the derived-MIR semantic channel cannot refuse it either. The ONLY channel that can is `canon_markers`, which walks the RAW CFG and therefore sees the join one fine block early.",
+  "reach": {
+   "rows_with_a_sat_perturb_line": 2227,
+   "applications_1": 1,
+   "applications_0": 2226,
+   "line": "trust-sat-perturb: def=DefId(0:860 ~ clean_kernel[79c7]::cert::cross_project::hex_digit) class=SwTramp applications=1",
+   "note": "the shipped `pert_check.py` regex looks for `sat_perturb=N`; the driver prints `class=\u2026 applications=N`, so its `applications_by_body` field reads empty \u2014 the counts here are from the flip log itself."
+  }
+ },
+ "per_body_marker_line_counts": {
+  "cert::cross_project::hex_digit": {
+   "control": {
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u8` vs derived `<end>`",
+    "semantic": "20 canonical line(s) identical",
+    "verdict": "agreed"
+   },
+   "subject": {
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical",
+    "semantic": "20 canonical line(s) identical",
+    "verdict": "agreed"
+   },
+   "reading": "NEVER 0-vs-0: the control side has no marker line at all, and the subject's four are IDENTICAL to built's. The SEMANTIC line count is 20 on both sides of the A/B, so the four added empty `Goto` blocks moved the semantic channel by exactly zero canonical lines."
+  }
+ },
+ "the_semantic_channel_is_UNTOUCHED_measured": {
+  "claim": "an empty `Goto` costs 0 `agreed`. LEDGER L3 says so; this lane MEASURED it rather than citing it.",
+  "crate_wide": "agreed 1592 -> 1592 across 13,879 bodies. ZERO verdict regressions, zero verdict moves of any kind (`channel_moves` carries exactly one entry, `markers_exact False -> True: 1`).",
+  "per_body": "hex_digit's own `derived_mir.detail` is `20 canonical line(s) identical` in BOTH the control and the subject \u2014 the four interposed blocks are threaded onto their incoming edges and render nothing.",
+  "attribution": "markers cannot move the semantic channel at all (LEDGER L2 drops them from it), so every `agreed` movement in this A/B would have been attributable to the trampolines alone. There is none."
+ },
+ "unit_tests": {
+  "control": "770 passed, 0 failed",
+  "subject": "776 passed, 0 failed (the control's 770 plus this lane's six)",
+  "mcor": "775 passed, 1 failed \u2014 the live kill"
+ },
+ "conversions": {
+  "gained_O3": [
+   "cert::cross_project::hex_digit"
+  ],
+  "lost_O3": [],
+  "gained_O0": [],
+  "lost_O0": [],
+  "gap_before": 29,
+  "gap_after": 28,
+  "headline": "-O3 codegen 589 -> 590 (+1, 0 LOST), ctfe 42 -> 42; -O0 617 -> 617 and ctfe 43 -> 43 (0 gained, 0 lost). Exactly one `markers_exact False -> True`. agreed 1592 -> 1592. markers_exact 1563 -> 1564. Every invariant holds at both levels; `-Ztrust-ir-flip=no` control 0."
+ },
+ "what_refuses_the_rest_of_the_28": {
+  "F8 residual (7)": "3 switch-headed (2 or-pattern const-arm bodies \u2014 TAKEABLE, table derived above; 1 or-pattern payload binding \u2014 needs the return split), 2 scoped (firewall correct AND redundant), 2 condbr (one module-separable `||`, one operand-order).",
+  "F7 (7)": "4 short-circuit-over-calls (NO new block needed; needs a Call-admitting multi-block plan), 3 early-return (needs three more blocks, one statement-bearing, plus a shared-return join).",
+  "F5 (3), F9 (3), F6 (1)": "single-block leftovers outside every current grammar; not re-measured this lane.",
+  "F3 WB8 named (3) + chain-forward (2)": "lane WB8's own measured refusals; not re-measured this lane.",
+  "F2 residual (1)": "<AiSearchStats as Default>::default \u2014 lane S3's struct-typed field refusal.",
+  "F0 (1)": "env::ext_instance::PRIORITY_BYTES has no trust-ir body at all."
+ }
+}

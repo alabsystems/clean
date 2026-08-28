@@ -123,7 +123,7 @@ pub(crate) fn quot_type(u: &Name) -> Expr {
 /// REQUIRES: `u` is a valid universe parameter name
 /// ENSURES: Returns the type of the Quot.mk constructor (an axiom)
 /// ENSURES: Result is `{α : Sort u} → (r : α → α → Prop) → α → @Quot α r`
-pub fn quot_mk_type(u: &Name) -> Expr {
+pub(crate) fn quot_mk_type(u: &Name) -> Expr {
     let sort_u = Expr::from_kind(ExprKind::Sort(Level::param(u.clone())));
 
     // α is BVar 2 after binding α, r, a
@@ -171,7 +171,7 @@ pub fn quot_mk_type(u: &Name) -> Expr {
 /// REQUIRES: `u` and `v` are valid universe parameter names
 /// ENSURES: Returns the type of the Quot.lift eliminator (an axiom)
 /// ENSURES: Lift allows computing from Quot to any Sort v, given proof f respects r
-pub fn quot_lift_type(u: &Name, v: &Name) -> Expr {
+pub(crate) fn quot_lift_type(u: &Name, v: &Name) -> Expr {
     let sort_u = Expr::from_kind(ExprKind::Sort(Level::param(u.clone())));
     let sort_v = Expr::from_kind(ExprKind::Sort(Level::param(v.clone())));
 
@@ -318,7 +318,7 @@ fn make_eq_type(level_v: Level, beta: Expr, a: Expr, b: Expr) -> Expr {
 /// REQUIRES: `u` is a valid universe parameter name
 /// ENSURES: Returns the type of the Quot.ind induction principle (an axiom)
 /// ENSURES: Allows proving propositions about Quot by proving them for Quot.mk
-pub fn quot_ind_type(u: &Name) -> Expr {
+pub(crate) fn quot_ind_type(u: &Name) -> Expr {
     let sort_u = Expr::from_kind(ExprKind::Sort(Level::param(u.clone())));
 
     // r : α → α → Prop
@@ -417,7 +417,7 @@ fn build_ind_hyp_type(u: &Name) -> Expr {
 
 /// Build the type of `Quot.sound`:
 /// `Quot.sound.{u} : {α : Sort u} → {r : α → α → Prop} → {a b : α} → r a b → Quot.mk.{u} α r a = Quot.mk.{u} α r b`
-pub fn quot_sound_type(u: &Name) -> Expr {
+pub(crate) fn quot_sound_type(u: &Name) -> Expr {
     let sort_u = Expr::from_kind(ExprKind::Sort(Level::param(u.clone())));
 
     // r : α → α → Prop
@@ -676,7 +676,7 @@ pub fn try_quot_lift_reduction(
 /// ENSURES: Implements the iota/quot computation rule (soundness-critical)
 ///
 /// Reference: Lean 4 kernel quot.h:52-68 `quot_reduce_rec`
-pub fn try_quot_ind_reduction(
+pub(crate) fn try_quot_ind_reduction(
     fn_head: &Expr,
     args: &[&Expr],
     whnf: impl Fn(&Expr) -> Expr,

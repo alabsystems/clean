@@ -7,10 +7,18 @@
 mod pattern;
 mod unify_expr;
 
+use clean_kernel::expr::Literal;
 use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr, ExprKind, Level, LocalContext, TypeChecker};
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::sync::LazyLock;
+
+/// Cached `BitVec` type-former name for the payload-literal re-wrap in
+/// [`Unifier::unify_meta`].
+static BITVEC_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("BitVec"));
+/// Cached `BitVec.ofNat` name for the payload-literal re-wrap.
+static BITVEC_OF_NAT_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("BitVec.ofNat"));
 
 use super::meta_id::MetaId;
 use super::meta_state::MetaState;
@@ -304,8 +312,71 @@ impl<'a> Unifier<'a> {
         }
     }
 
+    /// Re-wrap a kernel-internal BitVec payload literal into its well-typed
+    /// spelling before it can be STORED as a metavariable solution.
+    ///
+    /// The kernel's def-eq machinery represents a fully reduced `BitVec w`
+    /// value as a bare `Lit(Nat payload)` — a canonical form that is valid
+    /// ONLY inside `whnf`/`is_def_eq` recursion. `infer_type` (correctly)
+    /// types `Lit(Nat _)` as `Nat`, never as `BitVec w`: accepting one
+    /// literal at two types would break typing. The unifier, however,
+    /// compares WHNF'd forms and assigns what it compared, so a constraint
+    /// `?a =?= t` with `t : BitVec w` and `whnf(t) = Lit(Nat p)` would store
+    /// the payload literal in the elaborated term, and the kernel re-check
+    /// then rejects the declaration ("expected BitVec w, got Nat").
+    ///
+    /// The reference (standalone) Clean stack never hits this because its
+    /// `BitVec.ofNat` native reducer fires only on operands ALREADY in bare
+    /// payload form, which no elaborator-visible term contains — the payload
+    /// convention stays confined to kernel def-eq internals. This stack's
+    /// reducers additionally fire on surface spellings (`OfNat.ofNat`-wrapped
+    /// and pre-WHNF'd composite operands, for the multi-limb pipeline), so
+    /// the confinement must be re-established here, at the single point where
+    /// a compared term becomes a stored term.
+    ///
+    /// The wrap: when the solution is a bare Nat literal and the metavar's
+    /// (instantiated, WHNF'd) type is `BitVec w`, store `BitVec.ofNat w p`
+    /// instead of `p`. `BitVec.ofNat w p` is the definitional spelling of
+    /// exactly the value the payload denotes (`BitVec.ofNat w p` natively
+    /// reduces to `p mod 2^w`, and a whnf-produced payload is already
+    /// reduced mod `2^w`), so this substitutes one spelling of the same
+    /// value, never a different value — and it is fail-closed regardless:
+    /// the kernel re-checks every declaration built from this assignment,
+    /// with typing and def-eq untouched. Metavars typed `Nat` (where a bare
+    /// literal is correctly typed) and every non-literal solution pass
+    /// through unchanged.
+    fn rewrap_bitvec_payload_solution(&self, meta_id: MetaId, other: Expr) -> Expr {
+        if !matches!(other.kind(), ExprKind::Lit(Literal::Nat(_))) {
+            return other;
+        }
+        let Some(meta) = self.metas.get(meta_id) else {
+            return other;
+        };
+        let ty = meta.ty.clone();
+        let ty = self.metas.instantiate(&ty);
+        let ty = self.try_whnf(&ty);
+        // `BitVec w` is `App(Const(BitVec, []), w)`.
+        let ExprKind::App(f, w) = ty.kind() else {
+            return other;
+        };
+        let ExprKind::Const(name, _) = f.kind() else {
+            return other;
+        };
+        if *name != *BITVEC_NAME {
+            return other;
+        }
+        Expr::app(
+            Expr::app(
+                Expr::const_(BITVEC_OF_NAT_NAME.clone(), Vec::<Level>::new()),
+                w.as_ref().clone(),
+            ),
+            other,
+        )
+    }
+
     pub(super) fn unify_meta(&mut self, meta_id: MetaId, other: &Expr) -> UnifyResult {
         let other = self.metas.instantiate(other);
+        let other = self.rewrap_bitvec_payload_solution(meta_id, other);
 
         // Use occurs_in directly on the already-instantiated expression to avoid
         // the redundant O(n) re-instantiation inside occurs(). Part of #1921 F1.
@@ -355,7 +426,43 @@ impl<'a> Unifier<'a> {
         // 2. The metavar is a value (e.g., ?x : T), and we're assigning a value (e.g., a^2)
         //    In this case, we need to check if T has parametric levels
         if let Some(meta) = self.metas.get(meta_id) {
-            let meta_ty = meta.ty.clone();
+            let meta_ty_raw = meta.ty.clone();
+            // A metavariable's `ty` is stored UNINSTANTIATED, and neither arm
+            // below looks through an assignment. That is inert for the common
+            // ground type (`?x : Nat`), but a HOLE's type is itself a
+            // metavariable — `elab_hole` mints `?h : ?t` — so by the time `?h`
+            // is solved, `?t` typically already stands for a real `Sort u`
+            // while `meta.ty` still reads the bare `FVar(?t)`. `FVar` is not
+            // `Sort(_)` and carries no level param, so BOTH arms were skipped
+            // and the callee's universe was never constrained at all: the
+            // measured `theorem forallTrueIff : (α → True) ↔ True := impTrue _`
+            // registered `impTrue.{u_4} α` with `u_4` free of `α`'s `u_3`,
+            // generalized both, and was rejected by the kernel with
+            // `expected Sort(u_4), got Sort(u_3) … at body of lambda`.
+            //
+            // So resolve the type before dispatching — Lean's
+            // `checkTypesAndAssign` works on `instantiateMVars mvarType`. The
+            // work is confined to the case that previously did NOTHING: a type
+            // already `Sort(_)` or already carrying a level param takes the
+            // arms it always took, on the same expression as before, and a
+            // meta-free type cannot change under instantiation. So this ADDS
+            // constraint propagation where there was none and alters none that
+            // existed.
+            //
+            // Ordered cheapest-first so the hot path pays nothing new: an
+            // `ExprKind` discriminant, then two O(1) metadata bits, and only a
+            // type that is fvar-bearing AND meta-bearing is walked. A ground
+            // `?x : Nat` — the overwhelming majority — exits on
+            // `has_fvar_quick`.
+            let meta_ty = if matches!(meta_ty_raw.kind(), ExprKind::Sort(_))
+                || meta_ty_raw.has_level_param_quick()
+                || !meta_ty_raw.has_fvar_quick()
+                || !Self::expr_mentions_meta(&meta_ty_raw)
+            {
+                meta_ty_raw
+            } else {
+                self.metas.instantiate(&meta_ty_raw)
+            };
             // If the metavar's type is Sort(...), the metavar itself stands for a type.
             if let ExprKind::Sort(expected_level) = meta_ty.kind() {
                 let should_constrain_level =
@@ -544,8 +651,36 @@ impl<'a> Unifier<'a> {
         match expr.kind() {
             // A Sort is a type itself - its level is Succ of the inner level
             ExprKind::Sort(level) => Some(Level::succ(level.clone())),
-            // FVars, Constants, and Applications: look up the type in the environment
-            ExprKind::FVar(_) | ExprKind::Const(_, _) | ExprKind::App(_, _) => {
+            // FVars, Constants, Applications — and, U2 stage 2 (2026-08-25),
+            // Pi types: infer through the cached TypeChecker.
+            //
+            // Pi used to fall through to the `None` arm, so a Sort-typed
+            // metavariable assigned a FUNCTION type never had its level
+            // constrained AT ALL — the equation was never generated, not
+            // mis-solved (the CLEAN_U2_HISTOGRAM discriminator for the
+            // measured class: zero solver events). The minted `Sort ?u`
+            // param then survived to `finalize_level_params`, was
+            // GENERALIZED into the declaration's `level_params`, and the
+            // mandatory kernel re-check refused the declaration with the
+            // sub-class-B face (docs/analysis/u2-implementation-plan-2026-08-24.md
+            // §1.2): `expected Sort(Param(u_N)), got Sort(Max(Succ(..), Succ(..)))`.
+            // Measured minimal reproducer, builtin prelude:
+            // `def f {α β : Type*} : (α → β) → (α → β) := id` — `id`'s
+            // implicit `?A : Sort ?u` is assigned `α → β : Sort (max (u_0+1)
+            // (u_1+1))`, and `?u` never met that level. Single-binder
+            // spellings never hit this because their assigned type is an
+            // FVar, which the arm below always handled — which is why the
+            // face surfaced selectively on telescopes wide enough to need
+            // `max` (Function.hasUncurryBase, Set.SeparatesPoints,
+            // Pi.map_id). The kernel's own Pi inference supplies the
+            // imax/max semantics; this arm stays best-effort (`.ok()?`)
+            // exactly like the lookup cases. Lam/Let/Proj spellings of a
+            // type remain out: no measured failure names them, and each
+            // would widen the surface past the measured edge.
+            ExprKind::FVar(_)
+            | ExprKind::Const(_, _)
+            | ExprKind::App(_, _)
+            | ExprKind::Pi(_, _, _) => {
                 let tc_cache = self.tc_cache.borrow();
                 let tc = tc_cache.as_ref()?;
                 let inferred_ty = tc.infer_type(expr).ok()?;

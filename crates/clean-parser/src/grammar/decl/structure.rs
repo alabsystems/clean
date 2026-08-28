@@ -117,9 +117,21 @@ impl Parser {
             None
         };
 
-        // Parse fields
+        // Parse fields. Lean's `structFields` accepts PARENTHESIZED binder
+        // groups (`(x y : Nat)`, one field per name, optional group default)
+        // interleaved with simple `name : Ty` fields; before this arm the
+        // groups fell out of the `where` block entirely and the structure was
+        // SILENTLY accepted with zero fields (the junk resurfacing as a raw
+        // decl) — the audit's "wrong program silently accepted" shape.
         let mut fields = Vec::new();
-        while self.is_field_start() {
+        loop {
+            if self.check(&TokenKind::LParen) {
+                fields.extend(self.parse_paren_field_binders()?);
+                continue;
+            }
+            if !self.is_field_start() {
+                break;
+            }
             let field_span = self.current_span();
             let field_name = self.ident()?;
 
@@ -195,10 +207,13 @@ impl Parser {
         Ok(classes)
     }
 
-    /// Parse a run of parenthesized field binders `(name… : type)*` — the field
-    /// spec of the legacy `structure`/`class` `:=` form. A group with multiple
-    /// names (`(a b : T)`) expands to one field per name. Shared by the
-    /// structure and class parsers.
+    /// Parse a run of parenthesized field binders `(name… : type [:= default])*`
+    /// — the field spec of the legacy `structure`/`class` `:=` form, and the
+    /// parenthesized groups Lean's `structFields` accepts inside a `where`
+    /// block (`structure P where (x : Nat) (y : Nat)`). A group with multiple
+    /// names (`(a b : T)`) expands to one field per name; a group default
+    /// applies to every name in its group. Shared by the structure and class
+    /// parsers.
     pub(in crate::grammar) fn parse_paren_field_binders(
         &mut self,
     ) -> Result<Vec<SurfaceField>, ParseError> {
@@ -212,13 +227,20 @@ impl Parser {
             }
             self.expect(&TokenKind::Colon)?;
             let field_ty = self.expr()?;
+            // Optional group default: `(x : Nat := 3)`. The closing paren
+            // delimits the value, so the full expression grammar applies.
+            let default = if self.eat(&TokenKind::ColonEq) {
+                Some(self.expr()?)
+            } else {
+                None
+            };
             self.expect(&TokenKind::RParen)?;
             for name in names {
                 fields.push(SurfaceField {
                     span: group_span,
                     name,
                     ty: field_ty.clone(),
-                    default: None,
+                    default: default.clone(),
                     is_default_override: false,
                 });
             }

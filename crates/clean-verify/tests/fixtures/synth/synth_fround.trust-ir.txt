@@ -1,0 +1,19 @@
+fn @synth::fround_probe(functy.926) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the float-residue semdiff
+    ; #synthetic: lane (data/evalir_float_residue.PENDING.md). No compiler
+    ; #synthetic: emitted this body; its registered Clean twin is
+    ; #synthetic: ir_frr_module (eval_ir_wfr_synth.rs). ffloor, fceil and
+    ; #synthetic: ftrunc run on the SAME f64 operand and all three results
+    ; #synthetic: return through the three-value ret, so one row observes the
+    ; #synthetic: whole away-from-zero split at once. The battery's input set
+    ; #synthetic: has NO NaN row by design: Clean's rounding family refuses
+    ; #synthetic: NaNs (implementation-defined payload) where the interpreter
+    ; #synthetic: answers -- a declared boundary, kernel-witnessed
+    ; #synthetic: (ir_exact_ffloor_nan_refused), never a battery row. Do not
+    ; #synthetic: add it to any emitted-fixture census.
+bb0(%0: f64):
+    %1 = ffloor f64 %0
+    %2 = fceil f64 %0
+    %3 = ftrunc f64 %0
+    ret %1, %2, %3
+}

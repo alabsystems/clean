@@ -9,6 +9,7 @@ use crate::env::Environment;
 use crate::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, Literal};
 use crate::level::Level;
 use crate::name::Name;
+use std::sync::Arc;
 
 fn empty_env() -> Environment {
     Environment::new()
@@ -76,13 +77,13 @@ fn test_replay_app() {
     let b_ty = Expr::const_(Name::from_string("B"), vec![]);
 
     let cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Const {
+        fn_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("f"),
             levels: vec![],
             type_: Box::new(Expr::arrow(a_ty.clone(), b_ty.clone())),
         }),
         fn_type: Box::new(Expr::arrow(a_ty.clone(), b_ty.clone())),
-        arg_cert: Box::new(ProofCert::Const {
+        arg_cert: Arc::new(ProofCert::Const {
             name: Name::from_string("x"),
             levels: vec![],
             type_: Box::new(a_ty),
@@ -106,10 +107,10 @@ fn test_replay_lam() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -128,11 +129,11 @@ fn test_replay_pi() {
 
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         arg_level: Level::succ(Level::zero()),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -160,7 +161,7 @@ fn test_replay_def_eq() {
     // DefEq should be transparent in replay
     let inner_expr = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let cert = ProofCert::DefEq {
-        inner: Box::new(ProofCert::Sort {
+        inner: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
@@ -182,7 +183,7 @@ fn test_replay_mdata() {
 
     let cert = ProofCert::MData {
         metadata: metadata.clone(),
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
@@ -221,10 +222,10 @@ fn test_replay_and_verify_identity() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -287,11 +288,11 @@ fn test_replay_complex_nested_cert() {
     // Certificate for inner lambda
     let inner_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::BVar {
+        arg_type_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(type1.clone()),
         }),
-        body_cert: Box::new(inner_body_cert),
+        body_cert: Arc::new(inner_body_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             Expr::from_kind(ExprKind::BVar(0)),
@@ -302,10 +303,10 @@ fn test_replay_complex_nested_cert() {
     // Certificate for outer lambda
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(inner_cert),
+        body_cert: Arc::new(inner_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             type0.clone(),
@@ -345,13 +346,13 @@ fn test_replay_let() {
     );
 
     let cert = ProofCert::Let {
-        type_cert: Box::new(ProofCert::Sort {
+        type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        value_cert: Box::new(ProofCert::Sort {
+        value_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -391,14 +392,14 @@ fn test_replay_cubical_endpoint_i1() {
 fn test_replay_cubical_path() {
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let cert = ProofCert::CubicalPath {
-        ty_cert: Box::new(ProofCert::Sort {
+        ty_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         ty_level: Level::succ(Level::zero()),
-        left_cert: Box::new(ProofCert::Sort {
+        left_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        right_cert: Box::new(ProofCert::Sort {
+        right_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
     };
@@ -420,7 +421,7 @@ fn test_replay_cubical_path_lam() {
         level: Level::zero(),
     };
     let cert = ProofCert::CubicalPathLam {
-        body_cert: Box::new(prop_cert),
+        body_cert: Arc::new(prop_cert),
         body_type: Box::new(Expr::prop()),
         result_type: Box::new(Expr::type_()),
     };
@@ -437,10 +438,10 @@ fn test_replay_cubical_path_lam() {
 #[test]
 fn test_replay_cubical_path_app() {
     let cert = ProofCert::CubicalPathApp {
-        path_cert: Box::new(ProofCert::Sort {
+        path_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        arg_cert: Box::new(ProofCert::CubicalEndpoint { is_one: false }),
+        arg_cert: Arc::new(ProofCert::CubicalEndpoint { is_one: false }),
         path_type: Box::new(Expr::type_()),
         result_type: Box::new(Expr::type_()),
     };
@@ -459,16 +460,16 @@ fn test_replay_cubical_path_app() {
 fn test_replay_cubical_hcomp() {
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let cert = ProofCert::CubicalHComp {
-        ty_cert: Box::new(ProofCert::Sort {
+        ty_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        phi_cert: Box::new(ProofCert::Sort {
+        phi_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        u_cert: Box::new(ProofCert::Sort {
+        u_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        base_cert: Box::new(ProofCert::Sort {
+        base_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(Expr::type_()),
@@ -490,13 +491,13 @@ fn test_replay_cubical_hcomp() {
 fn test_replay_cubical_transp() {
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let cert = ProofCert::CubicalTransp {
-        ty_cert: Box::new(ProofCert::Sort {
+        ty_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        phi_cert: Box::new(ProofCert::Sort {
+        phi_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        base_cert: Box::new(ProofCert::Sort {
+        base_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(Expr::type_()),
@@ -548,7 +549,7 @@ fn test_replay_zfc_set_singleton() {
     use crate::expr::ZFCSetExpr;
 
     let cert = ProofCert::ZFCSet {
-        kind: ZFCSetCertKind::Singleton(Box::new(ProofCert::Sort {
+        kind: ZFCSetCertKind::Singleton(Arc::new(ProofCert::Sort {
             level: Level::zero(),
         })),
         result_type: Box::new(Expr::type_()),
@@ -567,10 +568,10 @@ fn test_replay_zfc_set_pair() {
 
     let cert = ProofCert::ZFCSet {
         kind: ZFCSetCertKind::Pair(
-            Box::new(ProofCert::Sort {
+            Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
-            Box::new(ProofCert::Sort {
+            Arc::new(ProofCert::Sort {
                 level: Level::succ(Level::zero()),
             }),
         ),
@@ -593,7 +594,7 @@ fn test_replay_zfc_set_union() {
     use crate::expr::ZFCSetExpr;
 
     let cert = ProofCert::ZFCSet {
-        kind: ZFCSetCertKind::Union(Box::new(ProofCert::ZFCSet {
+        kind: ZFCSetCertKind::Union(Arc::new(ProofCert::ZFCSet {
             kind: ZFCSetCertKind::Empty,
             result_type: Box::new(Expr::type_()),
         })),
@@ -612,7 +613,7 @@ fn test_replay_zfc_set_power_set() {
     use crate::expr::ZFCSetExpr;
 
     let cert = ProofCert::ZFCSet {
-        kind: ZFCSetCertKind::PowerSet(Box::new(ProofCert::ZFCSet {
+        kind: ZFCSetCertKind::PowerSet(Arc::new(ProofCert::ZFCSet {
             kind: ZFCSetCertKind::Empty,
             result_type: Box::new(Expr::type_()),
         })),
@@ -632,11 +633,11 @@ fn test_replay_zfc_set_separation() {
 
     let cert = ProofCert::ZFCSet {
         kind: ZFCSetCertKind::Separation {
-            set_cert: Box::new(ProofCert::ZFCSet {
+            set_cert: Arc::new(ProofCert::ZFCSet {
                 kind: ZFCSetCertKind::Empty,
                 result_type: Box::new(Expr::type_()),
             }),
-            pred_cert: Box::new(ProofCert::Sort {
+            pred_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
         },
@@ -660,11 +661,11 @@ fn test_replay_zfc_set_replacement() {
 
     let cert = ProofCert::ZFCSet {
         kind: ZFCSetCertKind::Replacement {
-            set_cert: Box::new(ProofCert::ZFCSet {
+            set_cert: Arc::new(ProofCert::ZFCSet {
                 kind: ZFCSetCertKind::Empty,
                 result_type: Box::new(Expr::type_()),
             }),
-            func_cert: Box::new(ProofCert::Sort {
+            func_cert: Arc::new(ProofCert::Sort {
                 level: Level::zero(),
             }),
         },
@@ -687,7 +688,7 @@ fn test_replay_zfc_set_choice() {
     use crate::expr::ZFCSetExpr;
 
     let cert = ProofCert::ZFCSet {
-        kind: ZFCSetCertKind::Choice(Box::new(ProofCert::ZFCSet {
+        kind: ZFCSetCertKind::Choice(Arc::new(ProofCert::ZFCSet {
             kind: ZFCSetCertKind::Empty,
             result_type: Box::new(Expr::type_()),
         })),
@@ -704,10 +705,10 @@ fn test_replay_zfc_set_choice() {
 #[test]
 fn test_replay_zfc_mem() {
     let cert = ProofCert::ZFCMem {
-        elem_cert: Box::new(ProofCert::Sort {
+        elem_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        set_cert: Box::new(ProofCert::Sort {
+        set_cert: Arc::new(ProofCert::Sort {
             level: Level::succ(Level::zero()),
         }),
     };
@@ -726,10 +727,10 @@ fn test_replay_zfc_mem() {
 #[test]
 fn test_replay_zfc_comprehension() {
     let cert = ProofCert::ZFCComprehension {
-        var_ty_cert: Box::new(ProofCert::Sort {
+        var_ty_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        pred_cert: Box::new(ProofCert::Sort {
+        pred_cert: Arc::new(ProofCert::Sort {
             level: Level::succ(Level::zero()),
         }),
         result_type: Box::new(Expr::type_()),
@@ -757,7 +758,7 @@ fn test_replay_sprop() {
 fn test_replay_squash() {
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let cert = ProofCert::Squash {
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
     };
@@ -771,7 +772,7 @@ fn test_replay_proj() {
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
         idx: 0,
-        expr_cert: Box::new(ProofCert::Sort {
+        expr_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expr_type: Box::new(Expr::type_()),

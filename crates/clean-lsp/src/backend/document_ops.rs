@@ -251,6 +251,19 @@ impl CleanBackend {
                 let name = binders.first().map(|b| b.name.clone());
                 (CommandKind::Variable, name, (span.start, span.end))
             }
+            // `include x` / `omit x` steer which section `variable`s the
+            // following declarations receive, so the editor reports them as
+            // the variable-scope commands they are.
+            SurfaceDecl::IncludeVars { span, names } => (
+                CommandKind::Other("include".to_string()),
+                names.first().cloned(),
+                (span.start, span.end),
+            ),
+            SurfaceDecl::OmitVars { span, names } => (
+                CommandKind::Other("omit".to_string()),
+                names.first().cloned(),
+                (span.start, span.end),
+            ),
             SurfaceDecl::UniverseDecl { span, names, .. } => (
                 CommandKind::Universe,
                 names.first().cloned(),
@@ -359,9 +372,20 @@ impl CleanBackend {
         Self::classify_decl(decl).2
     }
 
-    /// Elaborate a document and update its state (with incremental checking)
+    /// Elaborate a document and update its state (with incremental checking).
+    ///
+    /// Structured as read / compute / commit so the `documents` map guard is
+    /// never held across elaboration: holding `get_mut` across that await
+    /// serialized every other document behind the DashMap shard lock for the
+    /// whole run (measured 96.1 s on an import-heavy file). The compute phase
+    /// runs on the blocking pool because the `.olean` import-closure load
+    /// inside it is synchronous and must not pin an executor thread.
     pub(crate) async fn elaborate_document(&self, uri: &Url) {
-        if let Some(mut doc) = self.documents.get_mut(uri) {
+        // Read: capture elaboration inputs under a short-lived guard.
+        let (text, version, prev_state) = {
+            let Some(mut doc) = self.documents.get_mut(uri) else {
+                return;
+            };
             if let Some(parsed) = &doc.parsed {
                 if !parsed.errors.is_empty() {
                     doc.elaborated = Some(ElaboratedDocument {
@@ -375,37 +399,117 @@ impl CleanBackend {
                     return;
                 }
             }
-
             let text = doc.text();
             let prev_state = std::mem::take(&mut doc.incremental_state);
+            (text, doc.version, prev_state)
+        };
 
-            let file_path = uri.to_file_path().ok();
-            let version = doc.version;
-            let (elaborated, new_state, import_env) = self
-                .elaborate_text_incremental(uri, version, &text, prev_state, file_path.as_deref())
-                .await;
-
-            // Tactic snapshots run against the same base the declarations
-            // elaborated against: the shared import closure when the file has
-            // an import header, the (near-empty) server environment otherwise.
-            let shared_env;
-            let env: &clean_kernel::Environment = match &import_env {
-                Some(imported) => imported,
-                None => {
-                    shared_env = self.env.read().await.clone();
-                    &shared_env
-                }
-            };
-            let snapshots = Self::tactic_goal_snapshots_from_text(&doc, &text, env);
-            doc.elaborated = Some(elaborated);
-            doc.incremental_state = new_state;
-
-            if snapshots.is_empty() {
-                self.tactic_goal_snapshots.remove(uri);
-            } else {
-                self.tactic_goal_snapshots.insert(uri.clone(), snapshots);
+        // Compute: no document guard held. `spawn_blocking` needs owned
+        // (`'static`) inputs, so the closure gets its own copies; fileProgress
+        // shrink events come back over a channel because the notification
+        // client must stay on the async side.
+        let file_path = uri.to_file_path().ok();
+        let tactic_patterns = self.tactic_patterns.clone();
+        // Base for the rare case where the shared prelude closure fails to
+        // initialize; cloned ahead because the blocking closure cannot await
+        // the RwLock.
+        let fallback_env = self.env.read().await.clone();
+        let (progress_tx, mut progress_rx) = tokio::sync::mpsc::unbounded_channel();
+        let task_text = text.clone();
+        let mut compute = tokio::task::spawn_blocking(move || {
+            Self::elaborate_text_blocking(
+                &task_text,
+                prev_state,
+                file_path.as_deref(),
+                &tactic_patterns,
+                fallback_env,
+                &progress_tx,
+            )
+        });
+        let outcome = loop {
+            tokio::select! {
+                joined = &mut compute => break joined,
+                event = progress_rx.recv() => match event {
+                    Some(processing) => {
+                        self.send_file_progress(uri, version, processing).await;
+                    }
+                    // Sender dropped: the compute task is finishing; take its
+                    // result.
+                    None => break (&mut compute).await,
+                },
             }
+        };
+        // Shrink events still queued when the task finished must precede the
+        // terminal notification the elaboration phase sends after this returns.
+        while let Ok(processing) = progress_rx.try_recv() {
+            self.send_file_progress(uri, version, processing).await;
         }
+        // A panicked/aborted compute task has no result to commit; the
+        // document keeps its pre-elaboration state.
+        let Ok((elaborated, new_state, import_env)) = outcome else {
+            return;
+        };
+
+        // Tactic snapshots run against the same base the declarations
+        // elaborated against: the shared import closure when the file has
+        // an import header, the (near-empty) server environment otherwise.
+        let shared_env;
+        let env: &clean_kernel::Environment = match &import_env {
+            Some(imported) => imported,
+            None => {
+                shared_env = self.env.read().await.clone();
+                &shared_env
+            }
+        };
+        self.commit_elaboration(
+            uri,
+            version,
+            &text,
+            elaborated,
+            new_state,
+            env,
+            import_env.clone(),
+        );
+    }
+
+    /// Commit an elaboration result computed off-guard, unless the document
+    /// moved on while it was being computed. Returns whether the result was
+    /// stored: a version mismatch (or a closed document) discards it as stale
+    /// — the `didChange` that bumped the version owns the state and its own
+    /// document check supersedes this one.
+    ///
+    /// `imports_env` is the shared import closure the result elaborated
+    /// against; it is stored on the document so synchronous request handlers
+    /// (hover) can resolve imported constants without running the blocking
+    /// closure loader themselves. `None` when the document elaborated against
+    /// the bare server environment.
+    pub(crate) fn commit_elaboration(
+        &self,
+        uri: &Url,
+        elaborated_version: i32,
+        text: &str,
+        elaborated: ElaboratedDocument,
+        new_state: IncrementalState,
+        env: &clean_kernel::Environment,
+        imports_env: Option<std::sync::Arc<clean_kernel::Environment>>,
+    ) -> bool {
+        let Some(mut doc) = self.documents.get_mut(uri) else {
+            return false;
+        };
+        if doc.version != elaborated_version {
+            return false;
+        }
+        let snapshots = Self::tactic_goal_snapshots_from_text(&doc, text, env);
+        doc.elaborated = Some(elaborated);
+        doc.incremental_state = new_state;
+        doc.imports_env = imports_env;
+
+        if snapshots.is_empty() {
+            self.tactic_goal_snapshots.remove(uri);
+        } else {
+            self.tactic_goal_snapshots.insert(uri.clone(), snapshots);
+        }
+        true
     }
 
     fn tactic_goal_snapshots_from_text(
@@ -446,7 +550,13 @@ impl CleanBackend {
         }
     }
 
-    fn tactic_goal_snapshot_from_theorem(
+    /// Tactic snapshot for a theorem declaration. Binder-free theorems use the
+    /// shared type-and-proof path (typed post-tactic snapshot when the target
+    /// elaborates, source-rendered initial goal otherwise). Bound theorems get
+    /// the source-rendered initial goal only: `proof_state_for_tactic_target`
+    /// still elaborates the bare target with no binder telescope, so the
+    /// recorded bridge gap keeps the typed post-tactic path fail-closed.
+    pub(crate) fn tactic_goal_snapshot_from_theorem(
         doc: &crate::document::Document,
         text: &str,
         env: &clean_kernel::Environment,
@@ -454,11 +564,77 @@ impl CleanBackend {
         ty: &SurfaceExpr,
         proof: &SurfaceExpr,
     ) -> Option<TacticGoalSnapshot> {
-        if !binders.is_empty() {
-            Self::post_tactic_snapshot_bridge_gap_from_theorem(doc, text, binders, ty, proof)?;
+        if binders.is_empty() {
+            return Self::tactic_goal_snapshot_from_type_and_proof(doc, text, env, ty, proof);
+        }
+        Self::post_tactic_snapshot_bridge_gap_from_theorem(doc, text, binders, ty, proof)?;
+        Self::initial_goal_snapshot_from_bound_theorem(doc, text, binders, ty, proof)
+    }
+
+    /// Initial (pre-tactic) goal for a bound theorem: one `name : ty`
+    /// hypothesis line per binder above `⊢ target`, all rendered from source
+    /// spans — no typed-ProofState claim is made.
+    ///
+    /// Fail-closed: a binder without a source-renderable type annotation
+    /// suppresses the snapshot rather than showing a wrong local context.
+    fn initial_goal_snapshot_from_bound_theorem(
+        doc: &crate::document::Document,
+        text: &str,
+        binders: &[SurfaceBinder],
+        ty: &SurfaceExpr,
+        proof: &SurfaceExpr,
+    ) -> Option<TacticGoalSnapshot> {
+        let proof_span = match proof {
+            SurfaceExpr::ByTactic(span, tactics) if !tactics.is_empty() => *span,
+            _ => return None,
+        };
+        let ty_span = ty.span();
+        let target = text.get(ty_span.start..ty_span.end)?.trim();
+        if target.is_empty() {
             return None;
         }
-        Self::tactic_goal_snapshot_from_type_and_proof(doc, text, env, ty, proof)
+
+        // A surface expression's own span can stop at its HEAD — an instance
+        // binder `[Decidable p]` parses as an App whose span covers only
+        // `Decidable`, so slicing by `.span()` rendered `inst : Decidable`
+        // and dropped the argument. Take the maximum end across the
+        // expression's sub-spans instead.
+        fn span_extent(e: &SurfaceExpr) -> usize {
+            match e {
+                SurfaceExpr::App(span, f, args) => args
+                    .iter()
+                    .map(|a| span_extent(&a.expr))
+                    .chain([span.end, span_extent(f)])
+                    .max()
+                    .unwrap_or(span.end),
+                SurfaceExpr::Arrow(span, dom, cod) => {
+                    span.end.max(span_extent(dom)).max(span_extent(cod))
+                }
+                SurfaceExpr::Paren(span, inner) => span.end.max(span_extent(inner)),
+                other => other.span().end,
+            }
+        }
+
+        let mut lines = Vec::with_capacity(binders.len() + 1);
+        for binder in binders {
+            let binder_ty = binder.ty.as_deref()?;
+            let start = binder_ty.span().start;
+            let end = span_extent(binder_ty);
+            let rendered_ty = text.get(start..end)?.trim();
+            if binder.name.is_empty() || rendered_ty.is_empty() {
+                return None;
+            }
+            lines.push(format!("{} : {rendered_ty}", binder.name));
+        }
+        lines.push(format!("⊢ {target}"));
+
+        Some(TacticGoalSnapshot {
+            range: Range::new(
+                doc.offset_to_position(proof_span.start),
+                doc.offset_to_position(proof_span.end),
+            ),
+            goals: vec![lines.join("\n")],
+        })
     }
 
     fn tactic_goal_snapshot_from_type_and_proof(
@@ -607,23 +783,29 @@ impl CleanBackend {
     /// document's on-disk location, used to derive project-local `.olean`
     /// search paths; `None` for non-`file:` documents.
     ///
-    /// Emits per-declaration `$/lean/fileProgress` shrink notifications: before
-    /// each declaration after the first, the still-processing range is reduced
-    /// to start at that declaration (the leading whole-file notification comes
-    /// from [`CleanBackend::check_document`]).
-    async fn elaborate_text_incremental(
-        &self,
-        uri: &Url,
-        version: i32,
+    /// Runs synchronously on the blocking pool ([`Self::elaborate_document`]
+    /// wraps it in `spawn_blocking`): the `.olean` import-closure load is
+    /// synchronous and must not pin an executor thread, so nothing here may
+    /// touch the async runtime. Per-declaration `$/lean/fileProgress` shrink
+    /// events — before each declaration after the first, the still-processing
+    /// range is reduced to start at that declaration — are pushed through
+    /// `progress` for the async caller to forward (the leading whole-file
+    /// notification comes from [`CleanBackend::check_document_parse_phase`]).
+    /// `fallback_env` is the base environment for the rare case where the
+    /// shared prelude closure fails to initialize.
+    fn elaborate_text_blocking(
         text: &str,
         _prev_state: IncrementalState,
         file_path: Option<&std::path::Path>,
+        tactic_patterns: &clean_parser::TacticPatterns,
+        fallback_env: clean_kernel::Environment,
+        progress: &tokio::sync::mpsc::UnboundedSender<Vec<LeanFileProgressProcessingInfo>>,
     ) -> (
         ElaboratedDocument,
         IncrementalState,
         Option<std::sync::Arc<clean_kernel::Environment>>,
     ) {
-        let Ok(decls) = clean_parser::parse_file_with_tactics(text, &self.tactic_patterns) else {
+        let Ok(decls) = clean_parser::parse_file_with_tactics(text, tactic_patterns) else {
             return (
                 ElaboratedDocument {
                     errors: vec![],
@@ -696,7 +878,7 @@ impl CleanBackend {
         // state (or the shared import closure).
         let mut scratch_env = match &import_env {
             Some(env) => (**env).clone(),
-            None => self.env.read().await.clone(),
+            None => fallback_env,
         };
 
         let end_of_file = byte_offset_to_position(text, text.len());
@@ -715,18 +897,14 @@ impl CleanBackend {
             // fileProgress shrink: everything before this declaration is done;
             // the remainder of the file (this declaration onward) is still
             // being processed. The first declaration needs no extra event —
-            // `check_document` already announced the whole file as processing.
+            // the parse phase already announced the whole file as processing.
+            // Progress is advisory: a send failure only means the async
+            // caller stopped listening, so the error is dropped.
             if decl_index > 0 {
                 let processing_start = byte_offset_to_position(text, span.0);
-                self.send_file_progress(
-                    uri,
-                    version,
-                    vec![LeanFileProgressProcessingInfo::processing(Range::new(
-                        processing_start,
-                        end_of_file,
-                    ))],
-                )
-                .await;
+                let _ = progress.send(vec![LeanFileProgressProcessingInfo::processing(
+                    Range::new(processing_start, end_of_file),
+                )]);
             }
 
             // Surface-level warnings (unused vars, literal sorry, deprecation)
@@ -1001,18 +1179,43 @@ impl CleanBackend {
             .await;
     }
 
-    /// Check a document (parse + elaborate + publish diagnostics).
+    /// Parse phase of a document check: parse, publish parse-only diagnostics,
+    /// and announce the whole file as processing.
     ///
-    /// Emits Lean4-compatible `$/lean/fileProgress` notifications around
-    /// elaboration: a leading notification whose processing range covers the
-    /// not-yet-elaborated file, per-declaration shrink notifications from
-    /// `elaborate_text_incremental`, and a terminal notification with empty
-    /// ranges once processing is done — the signal the Lean 4 VS Code
-    /// extension uses to drive its progress bar and refresh the infoview.
-    /// Diagnostics are published only after the terminal notification, so
-    /// clients never observe diagnostics for a file still marked processing.
-    pub(crate) async fn check_document(&self, uri: &Url) {
+    /// Together with [`Self::check_document_elaboration_phase`] this emits the
+    /// Lean4-compatible `$/lean/fileProgress` sequence: a leading notification
+    /// whose processing range covers the not-yet-elaborated file,
+    /// per-declaration shrink notifications from `elaborate_text_blocking`, and
+    /// a terminal notification with empty ranges once processing is done — the
+    /// signal the Lean 4 VS Code extension uses to drive its progress bar and
+    /// refresh the infoview. Parse diagnostics are published immediately, ahead
+    /// of elaboration, whose cold import-closure load can take minutes; the
+    /// full set (parse + type + warnings) published after the terminal
+    /// notification replaces them.
+    ///
+    /// This is the part that must complete before a `didOpen`/`didChange`
+    /// notification handler returns (parse-first): syntax feedback must not
+    /// wait on elaboration. Returns the document version announced in the
+    /// leading `$/lean/fileProgress` notification (`None` when the document
+    /// is not open), which the elaboration phase echoes in the terminal
+    /// notification.
+    pub(crate) async fn check_document_parse_phase(&self, uri: &Url) -> Option<i32> {
         self.parse_document(uri).await;
+
+        // Parse-phase feedback, ahead of elaboration. The map guard is
+        // dropped before publishing: `publish_diagnostics` awaits the client.
+        let parse_feedback = self.documents.get(uri).and_then(|doc| {
+            let parsed = doc.parsed.as_ref()?;
+            Some((
+                doc.version,
+                crate::diagnostics::generate_parse_diagnostics(&doc, parsed),
+            ))
+        });
+        if let Some((version, diagnostics)) = parse_feedback {
+            self.client
+                .publish_diagnostics(uri.clone(), diagnostics, Some(version))
+                .await;
+        }
 
         let progress_target = self.documents.get(uri).map(|doc| {
             let text_len = doc.text().len();
@@ -1029,12 +1232,42 @@ impl CleanBackend {
                 vec![LeanFileProgressProcessingInfo::processing(full_range)],
             )
             .await;
-            self.elaborate_document(uri).await;
-            self.send_file_progress(uri, version, Vec::new()).await;
+            Some(version)
         } else {
-            self.elaborate_document(uri).await;
+            None
+        }
+    }
+
+    /// Elaboration phase of a document check: elaborate + commit,
+    /// then send the terminal `$/lean/fileProgress` and publish the full
+    /// diagnostics set (parse + type + warnings), replacing the parse-only
+    /// publish from the parse phase.
+    ///
+    /// `generation` is the elaboration generation this run was scheduled
+    /// under ([`Self::bump_elaboration_generation`]). When a newer check has
+    /// bumped it — or the document was closed — the terminal notification
+    /// and the diagnostics publish are skipped: the newer run owns them, and
+    /// an empty terminal notification here would end the client's progress
+    /// bar while that run is still elaborating. (`commit_elaboration`'s
+    /// version check independently discards a stale *result*; this gate
+    /// covers the *publishes*.)
+    pub(crate) async fn check_document_elaboration_phase(
+        &self,
+        uri: &Url,
+        generation: u64,
+        announced_version: Option<i32>,
+    ) {
+        self.elaborate_document(uri).await;
+
+        if !self.elaboration_generation_is_current(uri, generation) {
+            return;
+        }
+
+        if let Some(version) = announced_version {
+            self.send_file_progress(uri, version, Vec::new()).await;
         }
 
         self.publish_diagnostics(uri).await;
+        self.finish_elaboration_task(uri, generation);
     }
 }

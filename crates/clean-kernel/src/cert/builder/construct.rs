@@ -115,9 +115,9 @@ impl<'env> CertBuilder<'env> {
         let result_type = codomain.instantiate(&arg_expr);
 
         let cert = ProofCert::App {
-            fn_cert: Box::new(fn_cert),
+            fn_cert: Arc::new(fn_cert),
             fn_type: Box::new(fn_computed_type),
-            arg_cert: Box::new(arg_cert),
+            arg_cert: Arc::new(arg_cert),
             result_type: Box::new(result_type.clone()),
         };
         self.add_node(cert, result_type)
@@ -160,8 +160,8 @@ impl<'env> CertBuilder<'env> {
 
         let cert = ProofCert::Lam {
             binder_info,
-            arg_type_cert: Box::new(arg_type_cert),
-            body_cert: Box::new(body_cert),
+            arg_type_cert: Arc::new(arg_type_cert),
+            body_cert: Arc::new(body_cert),
             result_type: Box::new(result_type.clone()),
         };
         self.add_node(cert, result_type)
@@ -217,9 +217,9 @@ impl<'env> CertBuilder<'env> {
 
         let cert = ProofCert::Pi {
             binder_info,
-            arg_type_cert: Box::new(arg_type_cert),
+            arg_type_cert: Arc::new(arg_type_cert),
             arg_level,
-            body_type_cert: Box::new(body_cert),
+            body_type_cert: Arc::new(body_cert),
             body_level,
         };
         self.add_node(cert, result_type)
@@ -270,9 +270,9 @@ impl<'env> CertBuilder<'env> {
         let result_type = body_computed.instantiate(&value_expr);
 
         let cert = ProofCert::Let {
-            type_cert: Box::new(type_cert),
-            value_cert: Box::new(value_cert),
-            body_cert: Box::new(body_cert),
+            type_cert: Arc::new(type_cert),
+            value_cert: Arc::new(value_cert),
+            body_cert: Arc::new(body_cert),
             result_type: Box::new(result_type.clone()),
         };
         self.add_node(cert, result_type)
@@ -293,7 +293,7 @@ impl<'env> CertBuilder<'env> {
         }
 
         let cert = ProofCert::DefEq {
-            inner: Box::new(inner_cert),
+            inner: Arc::new(inner_cert),
             expected_type: Box::new(expected_type.clone()),
             actual_type: Box::new(inner_computed),
             eq_steps: vec![],

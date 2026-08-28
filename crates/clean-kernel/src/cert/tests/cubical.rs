@@ -10,6 +10,7 @@ use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::mode::CleanMode;
 use crate::TypeChecker;
+use std::sync::Arc;
 
 fn empty_env() -> Environment {
     Environment::new()
@@ -146,10 +147,10 @@ fn test_cubical_hcomp_cert_rejects_non_interval_phi() {
     });
 
     let forged = ProofCert::CubicalHComp {
-        ty_cert: Box::new(ty_cert),
-        phi_cert: Box::new(phi_cert),
-        u_cert: Box::new(u_cert),
-        base_cert: Box::new(base_cert),
+        ty_cert: Arc::new(ty_cert),
+        phi_cert: Arc::new(phi_cert),
+        u_cert: Arc::new(u_cert),
+        base_cert: Arc::new(base_cert),
         result_type: Box::new(ty),
     };
 
@@ -189,9 +190,9 @@ fn test_cubical_transp_cert_rejects_wrong_result_type() {
     });
 
     let forged = ProofCert::CubicalTransp {
-        ty_cert: Box::new(ty_cert),
-        phi_cert: Box::new(phi_cert),
-        base_cert: Box::new(base_cert),
+        ty_cert: Arc::new(ty_cert),
+        phi_cert: Arc::new(phi_cert),
+        base_cert: Arc::new(base_cert),
         // Deliberately wrong: expected ty i1 (def-eq to Prop), not Type.
         result_type: Box::new(Expr::type_()),
     };

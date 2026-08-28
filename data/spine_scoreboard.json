@@ -1,0 +1,580 @@
+{
+  "schema": "clean.spine.scoreboard/1",
+  "_doc": [
+    "G-SCORE scoreboard \u2014 designs/2026-08-22-spine-and-lattice-program.md \u00a76.",
+    "Regenerate: /opt/homebrew/bin/python3.14 scripts/spine_scoreboard.py --refresh",
+    "Ratchet:    scripts/spine_scoreboard.py --ratchet (READ-ONLY; baseline = this file as committed)",
+    "UNKNOWN is a first-class value, never 0; it neither satisfies nor violates a direction.",
+    "Quoting any row of this file from prose is a bug: read the artifact."
+  ],
+  "generated_at_utc": "2026-08-27T14:22:52Z",
+  "generator": "scripts/spine_scoreboard.py",
+  "inputs": {
+    "spine_set": "ABSENT",
+    "a0_census": "sha256:f1acedfd852f29023474404a75d7dfc6c4aaad4af52052faa0f45e1de81f054f",
+    "axiom_ratchet": "sha256:cca27c20be9d4a38ef4d6008beae43231ed359a68a55fb3ed9a403ee44dd1fc0",
+    "unchecked_decl_ratchet": "sha256:318ba0a4e01c692a91a07db000cb660276d167c32004e9b6c675fad212ce2f3b",
+    "env_bypass_census": "sha256:f527328f663985fd545a4b218f8dd97c144cb9ef81eee455f1482238971f5f96",
+    "assumption_ledger": "ABSENT",
+    "parity_tiers": "sha256:09b0d48abc6020c0a47b10685948048f8f7d270768d55968ec9535e31f82864e",
+    "evalir_coverage": "sha256:20ca5312340df670270aade72eaf7d77e11b9fd58bfdd6fc5fde64ec6a4cfe79",
+    "evalir_adequacy_grid": "sha256:52a937ca039244e487b123f489d72ff51caf42c20604de3ffed0c5205ab67775",
+    "evalir_census_src": "sha256:f15318df3b12821292e06a2ea194402734bafa37388551753b6db06fbcd21d71",
+    "evalir_syntax_src": "sha256:7bda24690daaa3cbc95bfff894f22b03567f43b9a81b5932092eb2eda2c3afd6",
+    "verdict_io_contracts": "sha256:1ad9f8369a8d1fbc1db4e64fee39047db5fdfb86ed536a33d7e932827a1f4ef6",
+    "verdict_set": "sha256:6a3d8b4da88930a26d837f6c78226b021c27210435219f0e8dc09bb98833fc5e"
+  },
+  "rows": [
+    {
+      "id": "spine_set.size",
+      "value": "UNKNOWN",
+      "direction": "frozen",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::infer.agreed",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::infer.flipping",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::infer.chained",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::def_eq.agreed",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::def_eq.flipping",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::def_eq.chained",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::whnf.agreed",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::whnf.flipping",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::whnf.chained",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::infer_proj.agreed",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::infer_proj.flipping",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::infer_proj.chained",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::reduction.agreed",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::reduction.flipping",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.tc::reduction.chained",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.env::decl_add.agreed",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.env::decl_add.flipping",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "spine_set.family.env::decl_add.chained",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/spine_set.json",
+      "reason": "spine_set not yet minted (post-a5aae3bde dump owed, trust host)"
+    },
+    {
+      "id": "a0.whole_crate_chains_complete",
+      "value": 189,
+      "direction": "up",
+      "producer": "data/crystal_a0_census_2026-08-22.json",
+      "provenance": {
+        "clean_rev": "746ef6cee9cfae221c8be0495905dbe1eef37a45",
+        "trust_rev": "dc99dbf67e29ffabf41820fd78ea1418397e7f9e",
+        "measured_utc": "2026-08-22T00:08:33Z",
+        "driver_dylib_sha256": "b6c32185902bab851d3a7ba10b15192acb41221a72f47529aa6d65ff23915c76",
+        "flags": [
+          "predates a5aae3bde"
+        ],
+        "nonvacuous_split": {
+          "a0_complete_6_of_6": 189,
+          "nonvacuous_markers": 36,
+          "vacuous_markers": 153
+        }
+      }
+    },
+    {
+      "id": "a0.six_of_six_nonvacuous",
+      "value": 36,
+      "direction": "up",
+      "producer": "data/crystal_a0_census_2026-08-22.json",
+      "provenance": {
+        "clean_rev": "746ef6cee9cfae221c8be0495905dbe1eef37a45",
+        "trust_rev": "dc99dbf67e29ffabf41820fd78ea1418397e7f9e",
+        "measured_utc": "2026-08-22T00:08:33Z",
+        "driver_dylib_sha256": "b6c32185902bab851d3a7ba10b15192acb41221a72f47529aa6d65ff23915c76",
+        "flags": [
+          "predates a5aae3bde"
+        ],
+        "nonvacuous_split": {
+          "a0_complete_6_of_6": 189,
+          "nonvacuous_markers": 36,
+          "vacuous_markers": 153
+        }
+      }
+    },
+    {
+      "id": "census.axiom_count",
+      "value": 11,
+      "direction": "equal_11",
+      "producer": "data/clean_verify_axiom_ratchet.json",
+      "provenance": {
+        "schema": "clean-verify-axiom-ratchet-v2",
+        "last_updated": "2026-07-07",
+        "axioms_list_len": 11
+      }
+    },
+    {
+      "id": "bypass_doors.watched",
+      "value": 8,
+      "direction": "none",
+      "producer": "data/unchecked_decl_ratchet.json + data/env_bypass_census.json",
+      "provenance": {
+        "unchecked_decl_ratchet": {
+          "add_decl_structural": 0,
+          "add_decl_unchecked": 1,
+          "extend_constants_unchecked": 1,
+          "extend_constants_structural": 6,
+          "last_updated": "2026-08-23"
+        }
+      }
+    },
+    {
+      "id": "bypass_doors.unwatched",
+      "value": "UNKNOWN",
+      "direction": "down",
+      "producer": "data/unchecked_decl_ratchet.json + data/env_bypass_census.json",
+      "reason": "env_bypass_census.json items carry no 'status' field yet \u2014 fail closed to UNKNOWN"
+    },
+    {
+      "id": "bypass_doors.proved",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/unchecked_decl_ratchet.json + data/env_bypass_census.json",
+      "reason": "env_bypass_census.json items carry no 'status' field yet \u2014 fail closed to UNKNOWN"
+    },
+    {
+      "id": "assumption_ledger.count",
+      "value": "UNKNOWN",
+      "direction": "down",
+      "producer": "data/spine_assumption_ledger.json",
+      "reason": "data/spine_assumption_ledger.json absent \u2014 the \u00a73.6 ledger is not yet minted"
+    },
+    {
+      "id": "assumption_ledger.verdict_io_lane_b",
+      "value": 44,
+      "direction": "down",
+      "producer": "data/verdict_io_contracts.json (ledger block)",
+      "provenance": {
+        "declared_direction": "down",
+        "destination": "data/spine_assumption_ledger.json, when that file exists; until then these rows live here and scripts/verdict_gate.sh reads them from here",
+        "rows_by_class": {
+          "content-bearing": 34,
+          "meta": 2,
+          "success-only": 8
+        },
+        "baseline_rows": 44,
+        "rebases": 0,
+        "note": "counted in this scoreboard IN ADDITION to assumption_ledger.count; the two are disjoint until data/spine_assumption_ledger.json absorbs these rows, at which point this row must be re-based to avoid double count"
+      }
+    },
+    {
+      "id": "parity_tiers.tiers",
+      "value": 5,
+      "direction": "none",
+      "producer": "data/parity_tiers.json"
+    },
+    {
+      "id": "parity_tiers.measured",
+      "value": 4,
+      "direction": "up",
+      "producer": "data/parity_tiers.json"
+    },
+    {
+      "id": "parity_tiers.unknown",
+      "value": 1,
+      "direction": "down",
+      "producer": "data/parity_tiers.json"
+    },
+    {
+      "id": "parity_tiers.stale_vs_generation_head",
+      "value": 4,
+      "direction": "none",
+      "producer": "data/parity_tiers.json"
+    },
+    {
+      "id": "parity_tiers.tier.everyday-language.value",
+      "value": 63,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "unit": "snippets",
+        "denominator": 63,
+        "status": "measured",
+        "measured_at_commit": "410e193c1cd04d38fc44fecc3d3a4c8004980120",
+        "staleness": "STALE: measured at 410e193c1, an ANCESTOR of HEAD (104 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.everyday-language.guard.failed_snippets",
+      "value": 0,
+      "direction": "down",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "a snippet added to the battery that FAILS trips this even though `passed` held flat"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.universe-u2.value",
+      "value": 37,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "unit": "fixtures",
+        "denominator": 45,
+        "status": "measured",
+        "measured_at_commit": "1b28d2d742a122f08d2a10d5af466194c1188c2f",
+        "staleness": "STALE: measured at 1b28d2d74, an ANCESTOR of HEAD (1 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.universe-u2.guard.open_gaps_in_negative_split",
+      "value": 0,
+      "direction": "down",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "must stay 0: every fail-pinned fixture is declared MUST_FAIL, i.e. a sound loud reject"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.value",
+      "value": 326,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "unit": "declarations",
+        "denominator": 784,
+        "status": "measured",
+        "measured_at_commit": "08b7b05d9c52e783f666018108c218724a8e0b7b",
+        "staleness": "STALE: measured at 08b7b05d9, an ANCESTOR of HEAD (58 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.guard.kernel_check_failures",
+      "value": 5,
+      "direction": "down",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "declarations the frontend produced that Clean's KERNEL then rejected"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.guard.sorry_axioms",
+      "value": 9,
+      "direction": "down",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "run-wide sorry counter; the basis folds sorry-tainted decls into successes"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.guard.success:Mathlib/Data/Subtype.lean",
+      "value": 13,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "per-file floor, 13/45"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.guard.success:Mathlib/Logic/Basic.lean",
+      "value": 164,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "per-file floor, 164/256"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.guard.success:Mathlib/Logic/Function/Basic.lean",
+      "value": 83,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "per-file floor, 83/230"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.guard.success:Mathlib/Logic/Unique.lean",
+      "value": 8,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "per-file floor, 8/41"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-source-elab.guard.success:Mathlib/Order/Basic.lean",
+      "value": 58,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "per-file floor, 58/212"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-olean-recheck-milestone.value",
+      "value": "UNKNOWN",
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "reason": "The milestone's counts (357/357, 1123/1123, and a 40-module / 8,908-constant cross-section) exist ONLY as prose in docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md (present in this checkout). The commands that produced them wrote their JSON to a `--out-dir` that was never committed, so no machine-minted artifact backs those numbers here. Under the house rule (scripts/evalir_coverage.py: measured rows only, authored ones never), a number typed into a plan is not a measurement, and this generator will not promote one. UNKNOWN neither satisfies nor violates the R3 ratchet.",
+      "provenance": {
+        "unit": null,
+        "denominator": null,
+        "status": "unknown",
+        "measured_at_commit": "UNKNOWN",
+        "staleness": "UNKNOWN \u2014 nothing was measured, so there is nothing to be stale"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-olean-recheck-sweep-2026-07-08.value",
+      "value": 440079,
+      "direction": "up",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "unit": "constants",
+        "denominator": 440145,
+        "status": "measured",
+        "measured_at_commit": "0a3c59c414003d1530cea2a93ebee873d8e1d48d",
+        "staleness": "STALE: measured at 0a3c59c41, an ANCESTOR of HEAD (1224 commits behind) \u2014 the value is true of that commit, not of HEAD"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-olean-recheck-sweep-2026-07-08.guard.failed_constants",
+      "value": 66,
+      "direction": "down",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "constants the kernel REJECTED on re-check"
+      }
+    },
+    {
+      "id": "parity_tiers.tier.mathlib-olean-recheck-sweep-2026-07-08.guard.modules_with_failures",
+      "value": 15,
+      "direction": "down",
+      "producer": "data/parity_tiers.json",
+      "provenance": {
+        "note": "modules carrying at least one rejection"
+      }
+    },
+    {
+      "id": "evalir.constructor_census",
+      "value": 28,
+      "direction": "frozen",
+      "producer": "crates/clean-verify/tests/eval_ir/census.rs + crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+      "provenance": {
+        "cross_checked_against": [
+          "data/evalir_coverage.json:total",
+          "data/evalir_adequacy_grid.json:constructors"
+        ],
+        "disagreements": []
+      }
+    },
+    {
+      "id": "evalir.denominator_disagreements",
+      "value": 0,
+      "direction": "down",
+      "producer": "crates/clean-verify/tests/eval_ir/census.rs + crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs"
+    },
+    {
+      "id": "evalir.semdiff_covered",
+      "value": 6,
+      "direction": "up",
+      "producer": "data/evalir_coverage.json",
+      "provenance": {
+        "covered": [
+          "br",
+          "const_",
+          "extractfield",
+          "load",
+          "ret",
+          "switch"
+        ],
+        "denominator": 28,
+        "rule": "covered = union of coverage.exercised over the artifacts below; measured rows only \u2014 authored-but-unminted battery rows never count. total = pinned constructed-Inst census, derived independently from both denominator sources, which must agree."
+      }
+    },
+    {
+      "id": "evalir.semdiff_unmeasured",
+      "value": 22,
+      "direction": "down",
+      "producer": "data/evalir_coverage.json"
+    },
+    {
+      "id": "evalir.adequacy.field_rows",
+      "value": 83,
+      "direction": "none",
+      "producer": "data/evalir_adequacy_grid.json"
+    },
+    {
+      "id": "evalir.adequacy.relevant_by_design",
+      "value": 63,
+      "direction": "none",
+      "producer": "data/evalir_adequacy_grid.json"
+    },
+    {
+      "id": "evalir.adequacy.irrelevance_proved_await_mint",
+      "value": 20,
+      "direction": "down",
+      "producer": "data/evalir_adequacy_grid.json"
+    },
+    {
+      "id": "evalir.adequacy.audit_pin",
+      "value": 3,
+      "direction": "down",
+      "producer": "data/evalir_adequacy_grid.json"
+    },
+    {
+      "id": "evalir.adequacy.declared_delta",
+      "value": 11,
+      "direction": "down",
+      "producer": "data/evalir_adequacy_grid.json"
+    },
+    {
+      "id": "verdict_io.site_total",
+      "value": 211,
+      "direction": "none",
+      "producer": "data/verdict_io_contracts.json",
+      "provenance": {
+        "cross_checked_against": "data/verdict_set.json:partitions.b_io_bearing.io_site_total",
+        "authoritative_value": 211
+      }
+    },
+    {
+      "id": "verdict_io.denominator_disagreements",
+      "value": 0,
+      "direction": "down",
+      "producer": "data/verdict_io_contracts.json vs data/verdict_set.json"
+    },
+    {
+      "id": "verdict_io.sites_issuing_io",
+      "value": 128,
+      "direction": "none",
+      "producer": "data/verdict_io_contracts.json"
+    },
+    {
+      "id": "verdict_io.content_bearing",
+      "value": 98,
+      "direction": "none",
+      "producer": "data/verdict_io_contracts.json"
+    },
+    {
+      "id": "verdict_io.unclassified",
+      "value": 0,
+      "direction": "down",
+      "producer": "data/verdict_io_contracts.json"
+    },
+    {
+      "id": "verdict_io.contracts_stated",
+      "value": 8,
+      "direction": "none",
+      "producer": "data/verdict_io_contracts.json",
+      "provenance": {
+        "measured_absent": 1,
+        "residue_class": "C-NONE"
+      }
+    },
+    {
+      "id": "replay.age",
+      "value": "UNKNOWN",
+      "direction": "none",
+      "producer": "B-2ND machine-readable replay record (not yet minted)",
+      "reason": "no machine-readable replay record \u2014 B-2ND owes one (the 2026-08-11 replay exists only as prose, docs/SELF_VERIFICATION_CERTIFICATE.md:832)"
+    }
+  ]
+}

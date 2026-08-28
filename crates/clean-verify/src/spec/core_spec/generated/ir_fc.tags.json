@@ -1,0 +1,61 @@
+{
+ "chain": "ir_fc",
+ "body": "flat::types::FlatFlags::contains",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses -- one INTERFACE-ONLY row: the struct the body takes BY VALUE, twice, and names in no instruction.",
+ "why": "Same split as ir_h2.tags.json, and the struct sibling of ir_fs.tags.json's SourceSystem row: `struct.1017` (FlatFlags) never occurs in the core module at all -- both arguments arrive by value and only their u8 payload field is read -- so it has no first-use index to inherit; canonical 0 is ASSIGNED so both parameter-type pins can be the producer-invariant `struct#0` instead of the anything-matches `struct#?`. Two bodies over two different by-value structs project to ONE core module; this row is what separates them.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_fc_tflags` alias (`IRTy.struct_ 1017`, outside the atom pool, so a literal) that nothing in the module names -- registered so the FlatFlags pin is an elaborated term, and BYTE-IDENTICAL to the alias the hand transcription already registered for the same purpose. `Tags::canon_ty` resolves the printed parameter tokens through it for the interface comparison.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. On this chain the sharp slot is the PARAMETER TYPES: `bb0(%0: struct.1017, %1: struct.1017)` -- two by-value copies of the SAME struct, which is what makes the and/eq over their field-0 payloads a subset test of one flag algebra rather than a comparison across two.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED, because it moves. Reader A's record on the laneREG wc-REG dump_O3 2026-08-21 revalidation: `param_tys_erased: [\"Struct(StructId(1017))\", \"Struct(StructId(1017))\"]`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 488,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read the notes in ir_h2.tags.json. The producer A/B record has this index at 661/661/486 over its three dumps and reader A's 2026-08-21 laneREG dump says 485, all with the instruction text byte-identical. The pin compares reader B's header against the FIXTURE-ERA 488; reader A's value is RECORDED in ir_fc.mint.json, NEVER COMPARED.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "struct#0",
+    "observed_ty": "struct.1017",
+    "rust_type": "flat::types::FlatFlags",
+    "note": "`self`, BY VALUE. The subset test's LEFT operand: its field-0 payload is masked with the other's."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "struct#0",
+    "observed_ty": "struct.1017",
+    "rust_type": "flat::types::FlatFlags",
+    "note": "`other`, BY VALUE, the SAME canonical struct -- which is the row's semantic payload: a twin whose second parameter is a different struct is a different program the core module cannot see."
+   }
+  ],
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement rather than an omission: the body contains no memory instruction at all. Reader A's `aligns_erased` is [] on the dump this migration was revalidated against.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 1017,
+   "alias": "ir_fc_tflags",
+   "rust_type": "flat::types::FlatFlags",
+   "observed_crate_id_by_producer": {
+    "laneREG-2026-08-21": 1017
+   },
+   "note": "INTERFACE-ONLY, the struct sibling of ir_fs_tsrc: assigned canonical 0 so the two parameter pins read `struct#0`. Reader A's `crate_struct_ids_seen` is [] on every recorded dump -- the module genuinely names no struct -- and its `param_tys_erased` carries 1017 twice on the 2026-08-21 laneREG dump, where the COMMITTED fixture also prints 1017: this id has not been observed to move yet, unlike ir_fs's 178->176, and the pin is still canonical rather than verbatim because the drift class is the same."
+  }
+ ],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `FlatFlags::contains` calls NOTHING: reader A's `crate_func_ids_seen` is the single entry [3833] -- the body's own id -- and the emitted body contains no `call` instruction. `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`."
+ }

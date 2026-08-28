@@ -81,8 +81,21 @@ pub(crate) fn reduce_bool_beq(args: &[&Expr]) -> Option<Expr> {
 // === Nat.gcd reducer ===
 
 /// Euclidean GCD for u64.
+///
+/// Spelled in the LOOP orientation (`loop { if … break }`) rather than `while`. The two are the
+/// same algorithm and the same six-block CFG, but `while` desugars with a statically-dead
+/// break-value block (`StorageDead` under `unreachable`) that the Trust differential's marker
+/// channel refuses on the BUILT side before a derived line is read (trust lane L8,
+/// `reports/loop-block8-2026-08-19/`), while this orientation's built body is measured clean of
+/// dead marker blocks (trust `reports/parallel-move-2026-08-21/built_walk_gshape.txt`,
+/// `g2_gcd_loop_let`). This is the one spelling whose storage markers the Trust rotation class
+/// (lane ROT) can reproduce and compare EXACTLY — the `while` spelling stays `agreed` but
+/// marker-inexact forever, which forfeits the `-O` codegen flip for the kernel's one true loop.
 pub(crate) fn nat_gcd(mut a: u64, mut b: u64) -> u64 {
-    while b != 0 {
+    loop {
+        if b == 0 {
+            break;
+        }
         let t = b;
         b = a % b;
         a = t;

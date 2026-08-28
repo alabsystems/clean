@@ -50,7 +50,7 @@ pub enum MintError {
     #[error(transparent)]
     Core(#[from] CoreError),
     /// A numeral with no atom in the registered `ir_dN` pool.
-    #[error("numeral {0} is outside the registered ir_d0..ir_d16 atom pool; minting it would need a pool entry this change does not add")]
+    #[error("numeral {0} is outside the registered ir_d0..ir_d63 atom pool; minting it would need a pool entry this change does not add")]
     Numeral(u128),
 }
 

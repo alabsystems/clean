@@ -10,19 +10,26 @@ use crate::tc::heartbeat_profiler::HeartbeatProfile;
 
 /// One-token summary of the head of an expression's application spine.
 ///
-/// Full `{:?}` dumps of mismatching types can run to kilobytes; the head
+/// Renderings of mismatching types can run to kilobytes; the head
 /// (`Nat.add`, `Sort`, `Pi`, ...) is usually enough to orient. Used to append
 /// a compact `heads:` suffix to the type-error displays — additive only, the
-/// full Debug rendering stays.
+/// full rendering stays.
+///
+/// These strings reach editors: an `ElabError` wrapping one of these is what
+/// the problems panel shows, so the type bodies below are rendered through
+/// `Display for Expr` (Lean-ish notation), never through `{:?}` (which would
+/// ship `Const(Name { … lean4_hash: … })` to a user).
 fn head_summary(e: &Expr) -> String {
     match &e.get_app_fn().kind {
         ExprKind::Const(name, _) => name.to_string(),
-        ExprKind::Sort(level) => format!("Sort({level:?})"),
+        ExprKind::Sort(level) => format!("Sort({level})"),
         ExprKind::Pi(_, _, _) => "Pi".to_string(),
         ExprKind::Lam(_, _, _) => "fun".to_string(),
         ExprKind::BVar(idx) => format!("BVar({idx})"),
-        ExprKind::FVar(id) => format!("FVar({id:?})"),
-        ExprKind::Lit(lit) => format!("{lit:?}"),
+        // `{id:?}` would render `FVarId(0)` and `{lit:?}` would render
+        // `Nat(Small(1))` — Rust type names in a message a user reads.
+        ExprKind::FVar(id) => format!("FVar({})", id.as_u64()),
+        ExprKind::Lit(lit) => lit.to_string(),
         ExprKind::Proj(name, idx, _) => format!("Proj({name}, {idx})"),
         _ => "<expr>".to_string(),
     }
@@ -45,7 +52,7 @@ pub enum TypeError {
     #[error("Unknown constant: {0}")]
     UnknownConst(Name),
     /// Application target is not a function type
-    #[error("Expected function type, got: {ty:?} (head: {}){}", head_summary(ty), location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default())]
+    #[error("Expected function type, got: {ty} (head: {}){}", head_summary(ty), location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default())]
     NotAFunction {
         /// The type that was found instead of a function type
         ty: Box<Expr>,
@@ -55,7 +62,7 @@ pub enum TypeError {
         location: Option<Box<ExprLocation>>,
     },
     /// Argument type doesn't match parameter type
-    #[error("Type mismatch: expected {expected:?}, got {inferred:?} (heads: {} vs {}){}", head_summary(expected), head_summary(inferred), location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default())]
+    #[error("Type mismatch: expected {expected}, got {inferred} (heads: {} vs {}){}", head_summary(expected), head_summary(inferred), location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default())]
     TypeMismatch {
         /// The type expected by the context
         expected: Box<Expr>,
@@ -76,7 +83,7 @@ pub enum TypeError {
         depth: u32,
     },
     /// Expected a Sort (Type or Prop) but got something else
-    #[error("Expected sort, got: {ty:?} (head: {}){}", head_summary(ty), location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default())]
+    #[error("Expected sort, got: {ty} (head: {}){}", head_summary(ty), location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default())]
     ExpectedSort {
         /// The type that was found instead of a Sort
         ty: Box<Expr>,
@@ -86,7 +93,7 @@ pub enum TypeError {
         location: Option<Box<ExprLocation>>,
     },
     /// Projection target is not a structure type
-    #[error("Invalid projection: type {0:?} is not a structure")]
+    #[error("Invalid projection: type {0} is not a structure")]
     InvalidProjNotStruct(Box<Expr>),
     /// Projection target is an inductive with multiple constructors
     #[error("Invalid projection: inductive {0} does not have a unique constructor")]
@@ -170,6 +177,25 @@ pub enum TypeError {
         ///
         /// Part of #3399.
         profile: Option<Box<HeartbeatProfile>>,
+    },
+
+    /// The AMBIENT, declaration-scoped cooperative budget ran out.
+    ///
+    /// Distinct from [`TypeError::HeartbeatExceeded`] on purpose, and the
+    /// distinction is the point. `HeartbeatExceeded` says "one type checker
+    /// spent its own fuel"; this says "the declaration this thread is working
+    /// on has spent the whole budget its owner granted it, across every type
+    /// checker it built". The owner is the declaration loop — `clean check` —
+    /// not the kernel.
+    ///
+    /// **This is not a verdict on the declaration.** It reports that the work
+    /// did not finish. A consumer must never fold it into a pass, and must not
+    /// fold it into a failure-to-prove either: nothing was refuted. See
+    /// [`crate::tc::set_declaration_budget`].
+    #[error("declaration budget exhausted: the ambient per-declaration budget of {limit} kernel operations ran out before this declaration finished (raise it with `clean check --decl-budget <n>`, or `0` for unlimited). This is NOT a verdict on the declaration: nothing was proved and nothing was refuted.")]
+    DeclarationBudgetExhausted {
+        /// The configured ambient per-declaration budget that was exhausted.
+        limit: u64,
     },
 
     /// Memory limit exceeded during type checking.

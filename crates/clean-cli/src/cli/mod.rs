@@ -121,8 +121,8 @@ pub struct RunArgs {
     /// Path to the `.lean` source file containing the entry declaration.
     #[arg(value_name = "FILE")]
     pub file: PathBuf,
-    /// Name of the nullary `Nat`-returning or `IO Unit` entry declaration to
-    /// build and run.
+    /// Name of the nullary `Nat`-returning or `IO` entry declaration to build
+    /// and run.
     #[arg(long, value_name = "NAME")]
     pub decl: String,
     /// Optimization level hint forwarded to the C emit pipeline (`0`..`2`).
@@ -385,27 +385,39 @@ script consolidation (see `docs/SCRIPTS_MIGRATION.md`).",
     },
     FeatureDescriptor {
         path: &["run"],
-        summary: "Build and run a nullary `Nat`-returning declaration natively (Experimental)",
+        summary: "Build and run a `Nat`-returning or `IO` declaration natively (Experimental)",
         description: "\
 Phase 5 link step of the file -> elaborate -> compile -> emit -> LINK -> RUN \
 pipeline (Epic #3436). Takes `<FILE>` + `--decl <NAME>` through the same \
 emit-C closure as `clean compile --emit c`, synthesizes a C `main()` plus the \
-small-`Nat` prelude shims the closure calls (e.g. `l_Nat_add`), `cc`-compiles \
-and links the emitted C together with the embedded Clean C runtime into a \
-native executable, runs it, and prints the entry's `Nat` result.\n\n\
-The MVP entry contract is a nullary `Nat`-returning definition such as \
-`def answer : Nat := Nat.succ (Nat.succ 0)`; the synthesized `main` unboxes \
-the small-`Nat` result and prints it. Entries with parameters, non-`Nat` \
-return types, `IO Unit` actions, or prelude externs outside the small-`Nat` \
-shim table are rejected with an explicit message rather than mis-linked. \
-Override the compiler with `$CC`; pass `--keep-temp` to retain the scratch \
-build directory (emitted C + runtime + binary) for inspection.",
+prelude shims the closure calls (e.g. `l_Nat_add`), `cc`-compiles and links \
+the emitted C together with the embedded Clean C runtime into a native \
+executable, and runs it.\n\n\
+Two entry shapes are supported. A nullary `Nat`-returning definition such as \
+`def answer : Nat := Nat.succ (Nat.succ 0)`: the synthesized `main` unboxes \
+the small-`Nat` result and prints it. And Lean 4's own entry contract — \
+`def main : IO Unit`, `def main : IO UInt32`, and either of those taking \
+`(args : List String)`: the driver marshals the process arguments into a \
+`List String` when the entry takes one, drives every IO effect, and \
+PROPAGATES the returned `UInt32` as its own exit status (an `IO Unit` entry \
+exits 0). `clean run` itself passes no arguments to the program — use \
+`clean lake run <target> -- <args>` to forward them; that surface builds \
+through the same engine and execs the produced binary with the caller's \
+argv. Entries taking anything other than one `List String`, and prelude \
+externs outside the shim tables, are rejected with an explicit message \
+rather than mis-linked. Override the compiler with `$CC`; pass `--keep-temp` \
+to retain the scratch build directory (emitted C + runtime + binary) for \
+inspection.",
         category: Category::Dev,
         stability: Stability::Experimental,
         examples: &[
             Example {
                 cmd: "clean run answer.lean --decl answer",
                 what: "build and run the nullary Nat entry `answer`, printing its value",
+            },
+            Example {
+                cmd: "clean run main.lean --decl main",
+                what: "run a `def main : IO UInt32` entry; `clean run` exits with the status it returns",
             },
             Example {
                 cmd: "clean run answer.lean --decl answer --keep-temp",

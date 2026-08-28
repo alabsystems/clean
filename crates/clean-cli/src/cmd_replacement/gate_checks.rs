@@ -226,26 +226,48 @@ pub(crate) fn zero_trust_gate_rows(
     let fallback_debt = ratchet
         .add_decl_structural_count
         .saturating_add(ratchet.add_decl_unchecked_count);
-    let (fallback_status, fallback_reason) = if fallback_debt == 0 {
-        if deny_sorry_launch_evidence.is_passed() {
-            (
-                ZeroTrustGateStatus::Passed,
-                "unchecked-decl ratchet is zero and fresh DENY_SORRY launch evidence passed."
-                    .to_string(),
-            )
-        } else {
-            (
-                ZeroTrustGateStatus::PendingEvidence,
-                "unchecked-decl ratchet is zero, but DENY_SORRY still needs a fresh launch-gate evidence artifact before replacement readiness."
-                    .to_string(),
-            )
+    // G6 (2026-08-26): this row's verdict now asks the SAME question its own
+    // artifact does. It used to block on `structural + unchecked != 0` while
+    // every other half of the deny-sorry gate — `scripts/deny_sorry_gate.sh`
+    // (the command this row literally names), the minting path in
+    // `evidence_generation`, and the validator in `launch_validation` — had
+    // already moved to the closure definition in `ratchet_closure`: closed
+    // means every counted bypass is SANCTIONED, at or under its pinned cap, and
+    // fully accounted by the declared counts. The two halves disagreed, and the
+    // disagreement was not cosmetic: the live ratchet is closed with exactly one
+    // sanctioned occurrence, so this row printed the `debt != 0` blocker and
+    // RE-MINTING THE EVIDENCE COULD NOT TURN IT GREEN. A gate whose stated
+    // remedy cannot clear it is not fail-closed, it is stuck.
+    //
+    // `active_debt_count` below deliberately keeps reporting the raw
+    // occurrence count: one sanctioned bypass is still a real verification
+    // skip and still ratchets. What changed is that the count no longer
+    // decides the verdict — the closure check does.
+    let (fallback_status, fallback_reason) = match validate_unchecked_decl_ratchet_closed(ratchet) {
+        Ok(()) => {
+            if deny_sorry_launch_evidence.is_passed() {
+                (
+                    ZeroTrustGateStatus::Passed,
+                    format!(
+                        "unchecked-decl ratchet is closed ({fallback_debt} sanctioned capped bypass occurrence(s)) and fresh DENY_SORRY launch evidence passed."
+                    ),
+                )
+            } else {
+                (
+                    ZeroTrustGateStatus::PendingEvidence,
+                    format!(
+                        "unchecked-decl ratchet is closed ({fallback_debt} sanctioned capped bypass occurrence(s)), but DENY_SORRY still needs a fresh launch-gate evidence artifact before replacement readiness: {}",
+                        deny_sorry_launch_evidence.summary()
+                    ),
+                )
+            }
         }
-    } else {
-        (
+        Err(message) => (
             ZeroTrustGateStatus::Blocked,
-            "unchecked-decl ratchet records remaining structural/unchecked trusted fallback callsites; replacement scope stays blocked."
-                .to_string(),
-        )
+            format!(
+                "unchecked-decl ratchet is not closed; replacement scope stays blocked: {message}"
+            ),
+        ),
     };
     let axiom_audit_debt = axiom_audit
         .total_domain_axioms

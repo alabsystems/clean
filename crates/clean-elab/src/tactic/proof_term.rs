@@ -78,7 +78,7 @@ pub fn exact(state: &mut ProofState, proof: Expr) -> TacticResult {
             Ok(())
         }
         UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-            expected: format!("{target:?}"),
+            expected: format!("{target}"),
             actual: msg,
         }),
         UnifyResult::Stuck => Err(TacticError::UnificationFailed(
@@ -345,7 +345,7 @@ fn apply_aux_acc(
                         Ok(())
                     }
                     UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-                        expected: format!("{target:?}"),
+                        expected: format!("{target}"),
                         actual: msg,
                     }),
                     UnifyResult::Stuck => Err(TacticError::UnificationFailed(

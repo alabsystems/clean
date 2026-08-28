@@ -282,6 +282,38 @@ impl LocalContext {
         }
     }
 
+    /// Reserve every FVarId below `floor` so no id this context hands out can
+    /// alias one its holder already uses elsewhere.
+    ///
+    /// WHY THIS IS PUBLIC. A caller may hand the checker a context containing
+    /// only PART of the free variables it has minted — the elaborator's
+    /// demand-driven context is exactly the free-variable closure of the call's
+    /// input expressions (`clean-elab`'s `infer::demand_local_ctx`). The two
+    /// fresh-id paths, [`Self::push`] (via `next_id`) and
+    /// [`Self::push_low_local`] (via `low_cursor` / `used_ids`), both derive
+    /// their next candidate from what THIS context holds, so with a partial
+    /// context they could mint an id that the caller has already bound to a
+    /// different variable it simply did not pass in. Registering the caller's
+    /// own high-water mark as a floor restores the guarantee a full context
+    /// gave for free: a binder local opened by the kernel is above every
+    /// FVarId the caller has issued.
+    ///
+    /// `floor` is a LOW-range high-water mark; a value at or above the
+    /// metavariable tag (`1<<63`) advances only `next_id`, since the low
+    /// cursor exists precisely to keep [`Self::push_low_local`] out of the
+    /// tagged range. Never decreases either counter.
+    pub fn reserve_fvar_floor(&mut self, floor: u64) {
+        // Deliberately NOT named `META_TAG`: the crystal chain pins
+        // `LocalContext::push_low_local::META_TAG` by def path, and a second
+        // constant of that name in this file is one more thing to disambiguate
+        // for no gain (data/crystal_chain_revalidation_*.json).
+        const META_FVAR_TAG: u64 = 1u64 << 63;
+        self.advance_next_id(floor);
+        if floor < META_FVAR_TAG && floor > self.low_cursor {
+            self.low_cursor = floor;
+        }
+    }
+
     /// Clear the FVarId reuse guard after external cache invalidation.
     ///
     /// `TypeChecker::local_context_mut()` clears all context-sensitive caches
@@ -367,68 +399,5 @@ impl LocalContext {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_checked_add_u32_normal() {
-        assert_eq!(checked_add_u32(10, 20, "test"), 30);
-        assert_eq!(checked_add_u32(0, 0, "test"), 0);
-        assert_eq!(checked_add_u32(u32::MAX - 1, 1, "test"), u32::MAX);
-    }
-
-    #[test]
-    fn test_checked_add_u32_overflow_saturates() {
-        assert_eq!(checked_add_u32(u32::MAX, 1, "test_overflow"), u32::MAX);
-    }
-
-    #[test]
-    fn test_checked_add_u32_large_overflow_saturates() {
-        assert_eq!(
-            checked_add_u32(u32::MAX / 2 + 1, u32::MAX / 2 + 1, "test_large"),
-            u32::MAX
-        );
-    }
-
-    /// Regression: `push_low_local` must advance `next_id` past the id it
-    /// hands out, otherwise a subsequent plain `push` while the low local is
-    /// still active mints the same id and panics ("active duplicate FVarId").
-    /// Observed via the elaborator unifier opening a Pi/Lam binder
-    /// (`push_binder_local`) and then recursing into kernel `is_def_eq` →
-    /// `infer_type_fast` → `push`.
-    #[test]
-    fn test_push_low_local_then_push_mints_distinct_id() {
-        let mut ctx = LocalContext::new();
-        let low = ctx.push_low_local(Name::anon(), Expr::type_(), BinderInfo::Default);
-        assert_eq!(low, FVarId(0), "fresh context should hand out the low id 0");
-        // Must not panic and must not collide with the active low local.
-        let fresh = ctx.push(Name::anon(), Expr::type_(), BinderInfo::Default);
-        assert_ne!(
-            low, fresh,
-            "plain push after push_low_local must mint a distinct FVarId"
-        );
-    }
-
-    /// `push_low_local` must never *decrease* `next_id`: a counter already in
-    /// the meta-tagged range (>= 1<<63, from registered meta-FVars) stays put
-    /// while the returned id remains in the low range.
-    #[test]
-    fn test_push_low_local_does_not_decrease_next_id() {
-        const META_TAG: u64 = 1u64 << 63;
-        let mut ctx = LocalContext::new();
-        ctx.push_with_id(
-            FVarId(META_TAG),
-            Name::anon(),
-            Expr::type_(),
-            BinderInfo::Default,
-        );
-        assert_eq!(ctx.next_id(), META_TAG + 1);
-        let low = ctx.push_low_local(Name::anon(), Expr::type_(), BinderInfo::Default);
-        assert!(low.0 < META_TAG, "returned id must stay in the low range");
-        assert_eq!(
-            ctx.next_id(),
-            META_TAG + 1,
-            "tagged-range next_id must not be decreased"
-        );
-    }
-}
+#[path = "local_context_tests.rs"]
+mod local_context_tests;

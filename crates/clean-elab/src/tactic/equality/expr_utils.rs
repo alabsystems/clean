@@ -342,6 +342,29 @@ pub(crate) fn find_defeq_subterm_with(
             // to avoid indiscriminate whole-target def-eq probing.
             return false;
         }
+        // Struct-field-projection bridge: a candidate `Proj(S, i, inner)` whose
+        // inner term is headed by a hetero-op typeclass projection. This is the
+        // `(u + v).x` shape — a user-structure field projection over the
+        // structure's own `+`:
+        //   candidate = Proj(arith_Vec2, 0, @HAdd.hAdd … (instHAdd … instAddarith_Vec2) u v)
+        //   needle    = Int.add u.x v.x   -- from `Int.add_comm`'s LHS
+        // The candidate whnf-reduces through the instance chain (instHAdd → the
+        // user instance's field → `arith_Vec2.mk (u.x + v.x) …` → proj 0 →
+        // instAddInt → `Int.add u.x v.x`), so the *kernel def-eq oracle* — not
+        // this gate — decides the match. A bare `Proj` has no const app-head, so
+        // without this arm the head-keyed `let (Const, Const) …` below refuses
+        // it before the oracle ever runs, and the rewrite dies `RewriteNoMatch`
+        // on a goal real Lean's `kabstract` (matching at instance transparency)
+        // accepts. Gating on the hetero-op inner head keeps the probe scoped to
+        // instance-op chains; an instance that bottoms out at a *different* op
+        // (`Int.sub`, a custom `Add` doing something else) still fails the
+        // definitional check and the rewrite refuses, so this cannot over-match.
+        if let ExprKind::Proj(_, _, inner) = candidate.kind() {
+            if let ExprKind::Const(inner_head, _) = inner.get_app_fn().kind() {
+                return is_hetero_op_projection(inner_head);
+            }
+            return false;
+        }
         // Head-keyed gate: only spend a kernel `is_def_eq` on a candidate whose
         // application head is the *same* const as the needle's head. The cases
         // to recover share the outer head and differ only in a nested,

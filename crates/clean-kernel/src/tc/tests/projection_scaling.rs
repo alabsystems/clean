@@ -194,7 +194,7 @@ fn measure_is_def_eq_eta_whnf_calls(num_fields: u32) -> u64 {
     let struct_ty = Expr::const_(struct_name.clone(), vec![]);
 
     // Create FVar x : Struct_N
-    let x_id = tc.ctx.borrow_mut().push(
+    let x_id = tc.ctx_mut().push(
         Name::from_string("x"),
         struct_ty.clone(),
         BinderInfo::Default,

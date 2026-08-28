@@ -249,7 +249,7 @@ impl IbpReluSpec {
 
     /// Propagate a vector of intervals through element-wise ReLU.
     #[must_use]
-    pub fn propagate_vector(&self, inputs: &[Interval]) -> Vec<Interval> {
+    pub(crate) fn propagate_vector(&self, inputs: &[Interval]) -> Vec<Interval> {
         inputs.iter().map(|iv| self.propagate(iv)).collect()
     }
 
@@ -319,7 +319,7 @@ impl IbpCompositionSpec {
     /// `layer_bounds[i]` is contained in `layer_bounds[i+1]`.
     ///
     /// This method checks the subset chain property.
-    pub fn verify_chain(&self, layer_bounds: &[Vec<Interval>]) -> Result<(), String> {
+    pub(crate) fn verify_chain(&self, layer_bounds: &[Vec<Interval>]) -> Result<(), String> {
         if layer_bounds.len() < 2 {
             return Ok(());
         }

@@ -18,7 +18,7 @@ use clean_kernel::{Environment, Name};
 
 use super::plan::{LexicalDirective, Node};
 use crate::decl_attributes::CtxAttributes;
-use crate::infer::ElabResult;
+use crate::infer::{ElabResult, UnstagedSibling};
 use crate::namespace::NamespaceState;
 use crate::{register, ElabCtx, ElabError, HoleContext};
 
@@ -97,8 +97,29 @@ impl OptionScope {
 /// Every lexical channel is read by REFERENCE out of the snapshot, never taken
 /// from it: a deferred node is re-elaborated in a later round against the same
 /// snapshot, and a take would leave it empty from the second round on.
-pub(super) fn elab_ctx_for<'a>(env: &'a Environment, node: &Node) -> ElabCtx<'a> {
+/// `siblings` names the same-batch declarations that contributed no
+/// forward-resolvable header. It is DIAGNOSTIC ONLY: the elaborator reads it
+/// exclusively on the path where a name has already failed to resolve, to say
+/// which sibling the name matched instead of offering nearest theorem names.
+/// Pass an empty slice wherever the question does not arise (the header and
+/// type phases, where no body is looking for a sibling yet).
+pub(super) fn elab_ctx_for<'a>(
+    env: &'a Environment,
+    node: &Node,
+    siblings: &[UnstagedSibling],
+) -> ElabCtx<'a> {
     let mut ctx = ElabCtx::new(env);
+    ctx.set_unstaged_siblings(
+        siblings
+            .iter()
+            .filter(|sibling| {
+                node.name
+                    .as_ref()
+                    .is_none_or(|own| own.to_string() != sibling.name)
+            })
+            .cloned()
+            .collect(),
+    );
     let lex = &node.lex;
     ctx.set_namespace_state(replay_directives(
         env,
@@ -110,6 +131,15 @@ pub(super) fn elab_ctx_for<'a>(env: &'a Environment, node: &Node) -> ElabCtx<'a>
         lex.scoped_instance_map().clone(),
         lex.default_instance_entries(),
     );
+    // U2 rung-4 explicitness channel: the file-scope `universe` names FROZEN
+    // with this node. `plan.rs` preprocessed the node against the same
+    // context, and preprocessing merges those names into the declaration's
+    // `universe_params` vector; without them here the elaborator would read a
+    // merged `universe u` as a written `.{u}` list and close a declaration
+    // whose author closed nothing. Taking them from the node's own snapshot
+    // (not from the live context) keeps a re-elaborated deferred node reading
+    // the same set it was planned with.
+    ctx.set_file_universe_params(lex.current_universe_params().to_vec());
     let mut macro_ctx = lex.macro_ctx().clone();
     macro_ctx.set_active_variable_bindings(
         lex.active_variable_bindings()
@@ -207,8 +237,15 @@ fn set_current_namespace(state: &mut NamespaceState, target: &Name) {
 }
 
 /// Elaborate `node` against `env`. Registers nothing.
-pub(super) fn elaborate_node(env: &Environment, node: &Node) -> NodeElaboration {
-    let mut ctx = elab_ctx_for(env, node);
+///
+/// See [`elab_ctx_for`] for `siblings`; it changes no resolution, only which
+/// refusal an already-failed one carries.
+pub(super) fn elaborate_node(
+    env: &Environment,
+    node: &Node,
+    siblings: &[UnstagedSibling],
+) -> NodeElaboration {
+    let mut ctx = elab_ctx_for(env, node, siblings);
     let result = ctx.elab_decl(&node.decl);
     let hole_contexts = ctx.collect_hole_contexts();
     let attributes = CtxAttributes::collect(&mut ctx);

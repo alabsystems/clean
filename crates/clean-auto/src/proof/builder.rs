@@ -11,7 +11,7 @@ use clean_kernel::{Environment, Expr, ExprKind, FVarId, Level, TypeChecker};
 use std::collections::HashMap;
 
 /// Proof builder that constructs kernel expressions from proof steps
-pub struct ProofBuilder<'a> {
+pub(crate) struct ProofBuilder<'a> {
     /// Mapping from SMT term IDs to kernel expressions
     pub(super) term_to_expr: &'a HashMap<TermId, Expr>,
     /// Mapping from SMT term IDs to their types
@@ -33,7 +33,7 @@ impl<'a> ProofBuilder<'a> {
             reason = "internal proof reconstruction still keeps a constructor without environment-backed sort inference"
         )
     )]
-    pub fn new(
+    pub(crate) fn new(
         term_to_expr: &'a HashMap<TermId, Expr>,
         term_to_type: &'a HashMap<TermId, Expr>,
     ) -> Self {
@@ -53,7 +53,7 @@ impl<'a> ProofBuilder<'a> {
             reason = "internal proof reconstruction still keeps the env-only constructor alongside with_hypotheses"
         )
     )]
-    pub fn with_env(
+    pub(crate) fn with_env(
         term_to_expr: &'a HashMap<TermId, Expr>,
         term_to_type: &'a HashMap<TermId, Expr>,
         env: &'a Environment,
@@ -71,7 +71,7 @@ impl<'a> ProofBuilder<'a> {
     /// `eq_hypotheses` maps `(lhs_term, rhs_term) → FVarId` for each equality hypothesis.
     /// This is inverted to build a reverse map from FVarId → (lhs, rhs) so the builder
     /// can supply explicit implicit arguments to Eq.symm/Eq.trans.
-    pub fn with_hypotheses(
+    pub(crate) fn with_hypotheses(
         term_to_expr: &'a HashMap<TermId, Expr>,
         term_to_type: &'a HashMap<TermId, Expr>,
         env: &'a Environment,
@@ -159,7 +159,7 @@ impl<'a> ProofBuilder<'a> {
     }
 
     /// Build a kernel proof term from a proof step
-    pub fn build(&self, step: &ProofStep) -> Result<Expr, ProofReconstructionError> {
+    pub(crate) fn build(&self, step: &ProofStep) -> Result<Expr, ProofReconstructionError> {
         match step {
             ProofStep::Refl(term_id) => {
                 let expr = self

@@ -276,6 +276,10 @@ pub fn ext(state: &mut ProofState, var_name: &str) -> TacticResult {
         });
     }
 
+    // CURSOR MINTING OK (wf_5584ceff audit): inference-only scratch — this fvar
+    // only instantiates the codomain for sort/level inference and never reaches
+    // a subgoal context or the assignment fragment; the trailing `intro` mints
+    // goal-derived, so the cursor bump cannot misalign its binder id.
     let arg_expr = Expr::fvar(state.fresh_fvar());
     let result_ty = state.whnf(&goal, &codomain.clone().instantiate(&arg_expr));
     let dom_sort = state.infer_type(&goal, &domain).ok();

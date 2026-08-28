@@ -4,9 +4,7 @@
 
 //! Function/interface parsing for reader B.
 
-use super::{
-    EmittedError, ParamSlot, Reader, Sx, CALLING_CONVS, CLAUSE_KINDS, LINKAGES, SELF_FUNC_INDEX,
-};
+use super::{EmittedError, ParamSlot, Reader, Sx, CALLING_CONVS, CLAUSE_KINDS, LINKAGES};
 
 impl Reader {
     pub(super) fn run(&mut self, text: &str) -> Result<Sx, EmittedError> {
@@ -135,8 +133,11 @@ impl Reader {
                         vec![
                             // The function's OWN index. One namespace with the
                             // callee ids by construction — see the module docs
-                            // and `func_index` below.
-                            Sx::a(SELF_FUNC_INDEX.to_string()),
+                            // and `func_index` below. It is `SELF_FUNC_INDEX`
+                            // for every one-body chain and the body's place in
+                            // the chain namespace otherwise: a SIBLING body of
+                            // a multi-function module is not `(func 0 …)`.
+                            Sx::a(self.self_canonical().to_string()),
                             Sx::tag("params", params),
                             Sx::tag("entry", vec![Sx::a(entry.to_string())]),
                             Sx::tag("blocks", blocks),
@@ -287,7 +288,7 @@ fn block(id: u32, params: Vec<Sx>, nodes: Vec<Sx>) -> Sx {
 /// against [`CLAUSE_KINDS`]. Dropping the clause is right; dropping it without
 /// looking at what it said is how an annotation that turns out to matter gets
 /// erased in silence.
-fn strip_comment(line: &str) -> (&str, Vec<(&str, &str)>) {
+pub(super) fn strip_comment(line: &str) -> (&str, Vec<(&str, &str)>) {
     match line.find("  ; #") {
         Some(p) => (&line[..p], clause_kinds(&line[p..])),
         None => (line, Vec::new()),

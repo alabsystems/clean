@@ -461,15 +461,19 @@ fn test_dsimp_replace_target_beta_zeta_proof_extraction() {
     let expected_target = make_equality_type(&nat, &zero, &zero, Level::succ(Level::zero()));
     let goal_target = make_equality_type(&nat, &reducible, &zero, Level::succ(Level::zero()));
 
-    let mut state = ProofState::new(env, goal_target);
+    let mut state = ProofState::new(env, goal_target.clone());
     dsimp(&mut state).expect("dsimp should beta/zeta-reduce the target");
-    assert_eq!(
-        state.current_goal().unwrap().target,
-        expected_target,
-        "dsimp should reduce the goal to a reflexive equality"
+    // Since 2026-08-26 `dsimp` also CLOSES a goal its own reduction made
+    // reflexive, so `expected_target` (`Nat.zero = Nat.zero`) is never left
+    // open and the `rfl` that used to follow would now be a "no goals" error.
+    // That is Lean's behaviour, measured against leanprover/lean4 v4.30.0-rc2:
+    // `example : ((fun x : Nat => x) 5) = 5 := by dsimp` succeeds, and
+    // `by dsimp; rfl` on the same goal reports `No goals to be solved`.
+    // The MetaId(0) invariant this file guards is asserted below, unchanged.
+    assert!(
+        state.current_goal().is_none(),
+        "dsimp should reduce the goal to the reflexive {expected_target:?} and close it"
     );
-
-    rfl(&mut state).expect("rfl should close the dsimp-reduced goal");
     assert!(state.is_complete(), "dsimp proof should be complete");
     assert!(
         state.proof_term().is_some(),
@@ -507,13 +511,13 @@ fn test_dsimp_replace_target_eta_proof_extraction() {
 
     let mut state = ProofState::new(env, goal_target);
     dsimp(&mut state).expect("dsimp should eta-reduce the target");
-    assert_eq!(
-        state.current_goal().unwrap().target,
-        expected_target,
-        "dsimp should reduce eta-equivalent functions to a reflexive equality"
+    // See the beta/zeta twin above: `dsimp` now closes the reflexive target it
+    // produced, matching Lean 4 v4.30.0-rc2, so no `rfl` can follow it.
+    assert!(
+        state.current_goal().is_none(),
+        "dsimp should reduce eta-equivalent functions to the reflexive \
+         {expected_target:?} and close it"
     );
-
-    rfl(&mut state).expect("rfl should close the eta-reduced goal");
     assert!(
         state.is_complete(),
         "eta-reduced dsimp proof should be complete"
@@ -965,6 +969,60 @@ fn test_ratchet_no_new_inplace_target_mutations() {
     }
 }
 
+/// Lane LOOSE two-way proof for the `.target = ` ratchet, over SYNTHETIC source
+/// so it cannot drift with the tree.
+///
+/// DIRECTION 1 — it must stop false-REDing: a `// SOUNDNESS:` line comment, a
+/// doc comment, a block comment and a string literal that merely NAME
+/// `.target = ` count 0. Under the old `starts_with("//")` filter the trailing
+/// comment, the block comment and the string literal all counted.
+/// DIRECTION 2 — it must keep true-REDing: real assignments still count, at
+/// their real line numbers, including one after a string containing `//`.
+#[test]
+fn test_target_mutation_scan_counts_code_not_prose() {
+    use crate::test_support::source_scan::production_code_lines;
+
+    fn count(src: &str) -> Vec<usize> {
+        production_code_lines(src)
+            .into_iter()
+            .filter_map(|(n, code)| {
+                let trimmed = code.trim();
+                let pos = trimmed.find(".target")?;
+                let after = trimmed[pos + 7..].trim_start();
+                (after.starts_with("= ") && !after.starts_with("== ")).then_some(n)
+            })
+            .collect()
+    }
+
+    let prose = r####"
+// SOUNDNESS: this path must not do g.target = t; it uses replace_target_eq.
+/// Older revisions wrote `g.target = working;` here.
+/* block comment showing g.target = working */
+fn ok(g: &mut Goal) { let hint = "never write g.target = t"; let _ = hint; }
+fn also_ok(g: &Goal) -> bool { g.target == other }
+"####;
+    assert!(
+        count(prose).is_empty(),
+        "prose naming `.target = ` must not count: {:?}",
+        count(prose)
+    );
+
+    let calls = r####"
+fn offender_one(g: &mut Goal) {
+    g.target = working; // trailing comment, still an assignment
+}
+fn offender_two(g: &mut Goal) {
+    let u = "https://example.invalid"; g.target = other;
+}
+"####;
+    assert_eq!(
+        count(calls),
+        vec![3, 6],
+        "real `.target = ` assignments must still count, including one after a \
+         string literal containing `//`"
+    );
+}
+
 /// Recursively scan directory for `.target = ` assignments in non-test .rs files.
 fn scan_dir_for_target_mutations(
     root: &std::path::Path,
@@ -988,12 +1046,23 @@ fn scan_dir_for_target_mutations(
                 continue;
             };
             let rel_path = path.strip_prefix(root).unwrap_or(&path);
-            for (line_num, line) in content.lines().enumerate() {
-                let trimmed = line.trim();
-                // Skip comments and doc comments
-                if trimmed.starts_with("//") || trimmed.starts_with("///") {
-                    continue;
-                }
+            let raw: Vec<&str> = content.lines().collect();
+            // LEXED, not raw lines (lane LOOSE, 2026-08-25). The filter here was
+            // `trimmed.starts_with("//") || trimmed.starts_with("///")` -- the
+            // second test is dead (every `///` line starts with `//`) and the
+            // first only skips a WHOLE-LINE comment, so a trailing comment, a
+            // block comment or a string literal naming `.target = ` counted
+            // against a baseline that is asserted with `<=` AND with an
+            // exact-decrease panic. Same family as the three scanners lane
+            // ANTICORR retired and the two duplicates in tactic/tests/core.rs;
+            // measured over-count in production scope at 0b3b94e5b: 0 (6 both
+            // ways), which is the wrong direction to be dangerous and says
+            // nothing about the silent one. `production_code_lines` also drops
+            // inline `#[cfg(test)] mod` bodies, which this walker never did.
+            for (line_num, code) in
+                crate::test_support::source_scan::production_code_lines(&content)
+            {
+                let trimmed = code.trim();
                 // Match `.target = ` but not `.target == ` (comparison)
                 if let Some(pos) = trimmed.find(".target") {
                     let after_target = &trimmed[pos + 7..];
@@ -1002,8 +1071,9 @@ fn scan_dir_for_target_mutations(
                         *count += 1;
                         violations.push((
                             rel_path.display().to_string(),
-                            line_num + 1,
-                            trimmed.to_string(),
+                            line_num,
+                            raw.get(line_num - 1)
+                                .map_or_else(String::new, |l| l.trim().to_string()),
                         ));
                     }
                 }

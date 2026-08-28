@@ -224,8 +224,8 @@ impl<'a> ElabCtx<'a> {
             let annotated = self.elaborate(ty_surface)?;
             if !self.try_unify(&annotated, &alpha) && !self.is_def_eq(&annotated, &alpha) {
                 return Err(ElabError::TypeMismatch {
-                    expected: format!("{:?}", self.metas.instantiate(&alpha)),
-                    actual: format!("{annotated:?}"),
+                    expected: format!("{}", self.metas.instantiate(&alpha)),
+                    actual: format!("{annotated}"),
                 });
             }
             annotated

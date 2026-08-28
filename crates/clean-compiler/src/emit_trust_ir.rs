@@ -355,7 +355,7 @@ pub fn host_target_info() -> TargetInfo {
     };
     TargetInfo {
         triple,
-        pointer_size: core::mem::size_of::<usize>() as u32,
+        pointer_size: size_of::<usize>() as u32,
         endianness: if cfg!(target_endian = "big") {
             Endianness::Big
         } else {
@@ -391,10 +391,34 @@ pub fn emit_trust_ir(decls: &[IRDecl]) -> Result<Module, TrustIrError> {
 }
 
 /// Lower a slice of L5IR declarations into a `trust_ir::Module` with config.
-pub fn emit_trust_ir_with_config(
+pub(crate) fn emit_trust_ir_with_config(
     decls: &[IRDecl],
     config: &TrustIrConfig,
 ) -> Result<Module, TrustIrError> {
+    // SKIP THE PRIMITIVES THEMSELVES (`emit_wasm::lower_module`'s discipline,
+    // same rationale, same drift guard). A saturated call to
+    // `UIntW.{add,sub,mul}` lowers to the native wrapping `BinOp` below, so the
+    // callee's body is never needed — but the prelude defines those operations
+    // in Lean and the pipeline compiles them FROM SOURCE (routing through boxed
+    // `Nat`), and pass 1 registered them in `fn_ids`, where "a user declaration
+    // always wins" sent every call site through `emit_apply_user` as a BOXED
+    // call instead. That shadowing is exactly why an `affineU`-shaped root
+    // (pure UInt32 arithmetic) could never take the native arm, and with it the
+    // Fragment-2/3 TV certificate: its arithmetic became extern-call chains no
+    // compositional certificate could ground. Dropping the primitives here —
+    // BEFORE wrapper synthesis, so `collect_uint_value_refs` sees the post-skip
+    // slice and still materializes boxed-entry wrappers for value references —
+    // makes the native arm the only path. Keyed on the SAME `uint_arith_binop`
+    // table that lowers the call sites, so the skip set and the realized set
+    // cannot drift apart. The intermediates' scalar types survive because the
+    // boxing pass corrected them while the primitives were still in-slice.
+    let decls: Vec<IRDecl> = decls
+        .iter()
+        .filter(|d| uint_arith_binop(&d.name.to_string()).is_none())
+        .cloned()
+        .collect();
+    let decls: &[IRDecl] = &decls;
+
     // Synthesize native boxed-entry wrappers for fixed-width UInt arithmetic
     // primitives referenced only as function VALUES (`instHAddUInt8`'s
     // `PartialApply { UInt8.add, .. }`; see [`synthesize_uint_arith_wrappers`]).
@@ -582,7 +606,7 @@ fn build_string_globals(
         return string_globals;
     }
     // BTreeSet for a deterministic (reproducible) global order.
-    let mut literals: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut literals: BTreeSet<String> = BTreeSet::new();
     for decl in decls {
         collect_string_literals(&decl.body, &mut literals);
     }
@@ -615,7 +639,7 @@ fn build_string_globals(
 
 /// Collect every distinct string literal reachable from `body`. `IRExpr::String`
 /// only ever appears as a `VDecl` value, so the walk just recurses the body tree.
-fn collect_string_literals(body: &IRBody, out: &mut std::collections::BTreeSet<String>) {
+fn collect_string_literals(body: &IRBody, out: &mut BTreeSet<String>) {
     match body {
         IRBody::VDecl { value, rest, .. } => {
             if let IRExpr::String(s) = value {
@@ -989,7 +1013,6 @@ fn emit_decl(
     let mut ctx = FnCtx {
         fb: &mut fb,
         fn_ids,
-        fn_sigs,
         fn_shapes,
         extern_fallbacks,
         config,
@@ -1025,7 +1048,6 @@ fn emit_decl(
 struct FnCtx<'a, 'b> {
     fb: &'a mut FunctionBuilder<'b>,
     fn_ids: &'a HashMap<String, FuncId>,
-    fn_sigs: &'a HashMap<String, FuncTyId>,
     /// Lowered signature shape of every in-slice user decl (pass 1), for the
     /// `Apply` call-site/parameter alignment (C2; [`emit_apply_user`]).
     fn_shapes: &'a HashMap<String, FnShape>,
@@ -1057,8 +1079,6 @@ struct FnCtx<'a, 'b> {
 /// A lowered join point: its trust-ir block plus the order of its params.
 struct JoinPoint {
     block: BlockId,
-    /// L5IR param vars in declaration order (their SSA values live on `block`).
-    params: Vec<VarId>,
 }
 
 impl FnCtx<'_, '_> {
@@ -1110,20 +1130,12 @@ fn emit_body(ctx: &mut FnCtx, body: &IRBody) -> Result<(), TrustIrError> {
             // the predecessor must be given a terminator branching to `cont` —
             // otherwise it is left dangling and `validate_module` rejects it.
             let block = ctx.fb.create_block();
-            let mut jp_param_vars = Vec::with_capacity(params.len());
             for (pvar, pty) in params {
                 let pv = ctx.fb.add_block_param(block, lower_ty(pty));
                 ctx.var_values.insert(*pvar, pv);
                 ctx.var_tys.insert(*pvar, pty.clone());
-                jp_param_vars.push(*pvar);
             }
-            ctx.jp_blocks.insert(
-                *jp,
-                JoinPoint {
-                    block,
-                    params: jp_param_vars,
-                },
-            );
+            ctx.jp_blocks.insert(*jp, JoinPoint { block });
 
             // Terminate the predecessor by falling through to `cont`.
             let cont = ctx.fb.create_block();
@@ -2026,7 +2038,7 @@ fn collect_uint_value_refs(
     slice_names: &HashSet<String>,
     out: &mut BTreeSet<String>,
 ) {
-    let mut note = |value: &IRExpr, out: &mut BTreeSet<String>| {
+    let note = |value: &IRExpr, out: &mut BTreeSet<String>| {
         let name = match value {
             IRExpr::PartialApply { fn_id, .. } => fn_id.0.to_string(),
             IRExpr::Apply { fn_id, args } if args.is_empty() => fn_id.0.to_string(),

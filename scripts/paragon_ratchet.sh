@@ -5,7 +5,7 @@
 # shrink-only against the committed baseline data/paragon_ratchet.json
 # (mirrors data/unchecked_decl_ratchet.json):
 #
-#   (a) files_over_500          .rs files longer than 500 lines
+#   (a) files_over_1000         .rs files longer than 1000 lines (OWNER RULING 2026-08-24: threshold raised 500 -> 1000; the goal is organization, not taxing proof text — was the 500-line rust_excellence figure)
 #   (b) unwrap_expect_production .unwrap()/.expect( in non-test production code
 #   (c) bare_pub_non_lib        bare `pub fn/struct/enum` outside lib.rs
 #   (d) allow_dead_code_sites   whole-module dead-code inner attributes in src/
@@ -29,6 +29,7 @@ import json
 import os
 import re
 import sys
+from functools import lru_cache
 from datetime import date
 from pathlib import Path
 
@@ -44,11 +45,39 @@ MODE = os.environ.get("PARAGON_RATCHET_MODE", "check")
 KERNEL_ENV = Path("crates/clean-kernel/src/env")
 
 
+# ONE `git ls-files` for the whole run, and ONE read per file. The scanner used
+# to walk the tree four times (discover, the cfg(test)-root scan, the metric
+# loop, and a re-read of every parent mod.rs inside is_cfg_test_module_file);
+# every consumer below now shares these two structures instead.
+def _tracked_rs() -> list[str]:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "ls-files", "crates/*.rs", "crates/**/*.rs"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+
+
+TRACKED = _tracked_rs()
+TRACKED_PATHS = {Path(name) for name in TRACKED}
+_TEXT: dict[Path, str] = {}
+
+
+def text_of(path: Path) -> str:
+    """Cached file read. Untracked parents still fall back to disk, so the
+    test-path heuristic below sees exactly what it saw when it read directly."""
+    cached = _TEXT.get(path)
+    if cached is None:
+        cached = path.read_text(encoding="utf-8", errors="replace")
+        _TEXT[path] = cached
+    return cached
+
+
 def discover() -> dict[str, list[Path]]:
     by_crate: dict[str, list[Path]] = {}
-    import subprocess
-    tracked = subprocess.run(["git","ls-files","crates/*.rs","crates/**/*.rs"],capture_output=True,text=True).stdout.splitlines()
-    for path in sorted(Path(f) for f in tracked):
+    for path in sorted(TRACKED_PATHS):
         parts = path.parts
         if "target" in parts:
             continue
@@ -86,18 +115,10 @@ CFG_TEST_MOD_RE = re.compile(
 
 def discover_cfg_test_module_roots() -> tuple[Path, ...]:
     """Resolve files/directories imported only through `#[cfg(test)] mod`."""
-    import subprocess
-
-    tracked = subprocess.run(
-        ["git", "ls-files", "crates/*.rs", "crates/**/*.rs"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.splitlines()
-    tracked_paths = {Path(name) for name in tracked}
+    tracked_paths = TRACKED_PATHS
     roots: set[Path] = set()
     for declaring_file in sorted(tracked_paths):
-        text = declaring_file.read_text(encoding="utf-8", errors="replace")
+        text = text_of(declaring_file)
         for explicit_path, module_name in CFG_TEST_MOD_RE.findall(text):
             if explicit_path:
                 candidates = [declaring_file.parent / explicit_path]
@@ -125,6 +146,11 @@ def discover_cfg_test_module_roots() -> tuple[Path, ...]:
 
 
 CFG_TEST_MODULE_ROOTS = discover_cfg_test_module_roots()
+# `path.is_relative_to(root)` for every root was 8.03M Path comparisons -- 33.5s
+# of a 39s run, and the reason this leg cost a minute. A path is relative to
+# some root exactly when one of its OWN ancestors (or itself) IS a root, and a
+# path has ~6 ancestors against 2,176 roots. Same predicate, set-sized.
+CFG_TEST_MODULE_ROOT_SET = frozenset(CFG_TEST_MODULE_ROOTS)
 
 
 def strip_code(line: str) -> str:
@@ -172,6 +198,7 @@ def production_lines(text: str):
         yield raw, code
 
 
+@lru_cache(maxsize=None)
 def is_cfg_test_module_file(path: Path) -> bool:
     """Return whether a sibling module file is declared behind `cfg(test)`."""
     module_name = path.stem
@@ -183,10 +210,10 @@ def is_cfg_test_module_file(path: Path) -> bool:
     ]
     declaration = re.compile(rf"\bmod\s+{re.escape(module_name)}\s*;")
     for parent in dict.fromkeys(parent_sources):
-        if parent == path or not parent.is_file():
+        if parent == path or (parent not in TRACKED_PATHS and not parent.is_file()):
             continue
         pending_cfg_test = False
-        for raw in parent.read_text(encoding="utf-8", errors="replace").splitlines():
+        for raw in text_of(parent).splitlines():
             code = strip_code(raw).strip()
             if CFG_TEST_RE.search(code):
                 pending_cfg_test = True
@@ -201,6 +228,7 @@ def is_cfg_test_module_file(path: Path) -> bool:
     return False
 
 
+@lru_cache(maxsize=None)
 def is_test_path(path: Path) -> bool:
     if any(p in ("tests", "benches", "examples") for p in path.parts):
         return True
@@ -208,7 +236,9 @@ def is_test_path(path: Path) -> bool:
     # resolves `#[path = "..."]` declarations and whole module DIRECTORIES,
     # the parent walk catches declarations separated from `#[cfg(test)]` by
     # intervening attribute lines. Either match means test-only code.
-    if any(path == root or path.is_relative_to(root) for root in CFG_TEST_MODULE_ROOTS):
+    if not CFG_TEST_MODULE_ROOT_SET.isdisjoint(path.parents):
+        return True
+    if path in CFG_TEST_MODULE_ROOT_SET:
         return True
     if is_cfg_test_module_file(path):
         return True
@@ -244,16 +274,16 @@ def measure():
     offenders: list[dict] = []
     for crate, files in discover().items():
         m = {
-            "files_over_500": 0,
+            "files_over_1000": 0,
             "unwrap_expect_production": 0,
             "bare_pub_non_lib": 0,
             "allow_dead_code_sites": 0,
         }
         for path in files:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = text_of(path)
             n_lines = text.count("\n") + (1 if text and not text.endswith("\n") else 0)
-            if n_lines > 500:
-                m["files_over_500"] += 1
+            if n_lines > 1000:
+                m["files_over_1000"] += 1
                 offenders.append({"path": str(path), "lines": n_lines})
             if is_test_path(path) or "src" not in path.parts:
                 continue  # production metrics: src/ only
@@ -268,7 +298,7 @@ def measure():
     totals = {
         k: sum(c[k] for c in crates.values())
         for k in (
-            "files_over_500",
+            "files_over_1000",
             "unwrap_expect_production",
             "bare_pub_non_lib",
             "allow_dead_code_sites",
@@ -282,7 +312,7 @@ crates, totals, worst = measure()
 
 HEURISTICS = {
     "scope": "all .rs files under crates/<crate>/; excludes */target/* and crates/clean-kernel/src/env/ (another lane owns its content)",
-    "files_over_500": "every in-scope .rs file with >500 lines (src, tests, benches, examples) — rust_excellence 500-line rule",
+    "files_over_1000": "every in-scope .rs file with >1000 lines (src, tests, benches, examples) — owner ruling 2026-08-24 raised the organizational threshold from the rust_excellence 500 figure",
     "unwrap_expect_production": "occurrences of `.unwrap()` and `.expect(` in src/ files only (tests/, benches/, examples/ dirs, files/directories resolved from direct #[cfg(test)] mod declarations including #[path=\"...\"], sibling modules declared behind #[cfg(test)], sibling test files tests.rs/*_tests.rs/tests_*.rs, and sibling test dirs tests_*/ excluded), skipping #[cfg(test)]-gated inline items via a naive brace-depth scanner (string literals and // comments stripped first) and skipping comment text; string contents containing the patterns are not detected — grep heuristic, not a parse",
     "bare_pub_non_lib": "lines in src/ non-lib.rs files (same test-skip heuristic) matching `pub [async|const|unsafe|extern] fn|struct|enum` — bare pub, not pub(crate)/pub(super); proxy for pub(crate) discipline",
     "allow_dead_code_sites": "inner-attribute lines in src/ files that allow dead_code directly or through cfg_attr (whole-file/module suppressions)",
@@ -300,12 +330,21 @@ if MODE == "update":
         "heuristics": HEURISTICS,
         "totals": totals,
         "crates": crates,
-        "worst_offenders_over_500": worst,
+        "worst_offenders_over_1000": worst,
         "generated_by": "scripts/paragon_ratchet.sh --update",
         "last_updated": date.today().isoformat(),
     }
-    if "fix_forward_context" in previous:
-        doc["fix_forward_context"] = previous["fix_forward_context"]
+    # Carry forward every narrative key the baseline already had that this
+    # generator does not itself produce. `--update` used to preserve exactly
+    # one hand-written key by name, so the REASONING a lane recorded for a
+    # legitimate baseline bump ("these four pubs are structurally required, and
+    # here is why each one is") was silently erased by the next lane's refresh.
+    # A ratchet whose justifications evaporate is a ratchet whose numbers
+    # nobody can audit, so the rule is now the general one: generated keys are
+    # rewritten, everything else survives.
+    for key, value in previous.items():
+        if key not in doc:
+            doc[key] = value
     DATA_FILE.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     print(f"paragon ratchet: baseline written to {DATA_FILE}")
     for k, v in totals.items():

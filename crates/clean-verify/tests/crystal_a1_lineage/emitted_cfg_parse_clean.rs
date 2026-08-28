@@ -389,6 +389,24 @@ pub(crate) fn parse_clean(src: &str, block_marker: &str) -> Cfg {
                             {
                                 agg_consts.entry(id).or_default().push((r, v));
                             }
+                        } else if let Some((_, rest)) = k.split_once("IRConst.aggv ") {
+                            // The RAW spine the A2 MINT emits,
+                            // `IRConst.aggv (IRConst.vcons (IRConst.int_ k)
+                            // IRConst.vnil)` — the same aggregate `ir_cvar`
+                            // abbreviates, spelled without the alias. Matched
+                            // BEFORE the scalar branch below, which would
+                            // otherwise read the spine's inner `IRConst.int_`
+                            // and misfile a minted aggregate arm as an integer
+                            // constant — an error the lane comparison catches
+                            // loudly, but on the wrong lane with the wrong
+                            // message.
+                            if let Some(v) = rest
+                                .split_once("IRConst.int_ ")
+                                .and_then(|(_, tail)| tail.split_whitespace().next())
+                                .and_then(|x| n(x.trim_end_matches(')')))
+                            {
+                                agg_consts.entry(id).or_default().push((r, v));
+                            }
                         } else if let Some((_, rest)) = k.split_once("IRConst.int_ ") {
                             if let Some(v) = rest
                                 .split_whitespace()

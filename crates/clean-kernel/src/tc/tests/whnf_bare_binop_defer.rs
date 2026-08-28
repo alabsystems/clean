@@ -219,8 +219,7 @@ fn test_def_eq_bare_nat_binop_deferral_preserves_verdicts() {
     // still differ).
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat_ty, BinderInfo::Default);
     let x = Expr::fvar(x_id);
     let via_proj = Expr::app(Expr::app(holder_proj(), x.clone()), Expr::nat_lit(3));
@@ -249,8 +248,7 @@ fn test_whnf_applied_mixed_guarded_binop_large_count_stays_stuck() {
 
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat_ty, BinderInfo::Default);
     let x = Expr::fvar(x_id);
 
@@ -334,8 +332,7 @@ fn test_def_eq_applied_guarded_binop_stuck_preserves_verdicts() {
 
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let x_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), nat_ty, BinderInfo::Default);
     let x = Expr::fvar(x_id);
     let add = |count: u64| {

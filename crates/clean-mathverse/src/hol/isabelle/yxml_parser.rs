@@ -39,7 +39,7 @@ pub enum YxmlTree {
 impl YxmlTree {
     /// Get the tag name if this is an element.
     #[must_use]
-    pub fn tag_name(&self) -> Option<&str> {
+    pub(crate) fn tag_name(&self) -> Option<&str> {
         match self {
             Self::Element { name, .. } => Some(name.as_str()),
             Self::Text(_) => None,
@@ -78,13 +78,13 @@ impl YxmlTree {
 
     /// Find the first child element with the given tag name.
     #[must_use]
-    pub fn find_child(&self, tag: &str) -> Option<&YxmlTree> {
+    pub(crate) fn find_child(&self, tag: &str) -> Option<&YxmlTree> {
         self.children().iter().find(|c| c.tag_name() == Some(tag))
     }
 
     /// Find all child elements with the given tag name.
     #[must_use]
-    pub fn find_children(&self, tag: &str) -> Vec<&YxmlTree> {
+    pub(crate) fn find_children(&self, tag: &str) -> Vec<&YxmlTree> {
         self.children()
             .iter()
             .filter(|c| c.tag_name() == Some(tag))

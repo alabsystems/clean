@@ -66,6 +66,34 @@ impl<'a> ElabCtx<'a> {
             return self.elab_mutual_inductive(decls);
         }
 
+        // MUTUAL COINDUCTIVE PREDICATES ARE A FUTURE RUNG — refuse loudly.
+        // Measured before this guard existed: a `mutual … end` holding
+        // `coinductive` members was silently ACCEPTED and registered NOTHING
+        // (the members fell through the def-shaped paths below), so the
+        // whole family vanished and every downstream use failed with an
+        // unrelated auto-bound artifact. Same treatment for the Type-level
+        // codata/codef lanes, whose single-decl arms already refuse; a
+        // mutual wrapper must not become a silent bypass.
+        if let Some(member) = decls.iter().find(|d| {
+            matches!(
+                d,
+                SurfaceDecl::Coinductive { .. }
+                    | SurfaceDecl::Codata { .. }
+                    | SurfaceDecl::Codef { .. }
+            )
+        }) {
+            return Err(ElabError::Unsupported {
+                feature: format!(
+                    "a `mutual` block containing `{}` is not supported yet:                      mutual coinductive predicates are a planned rung of the                      full-gfp program (designs/2026-08-25-rank1-full-gfp-                     lowering.md, non-goals) — declare the family as a single                      `coinductive` over a sum/tagged index for now",
+                    match member {
+                        SurfaceDecl::Coinductive { .. } => "coinductive",
+                        SurfaceDecl::Codata { .. } => "codata",
+                        _ => "codef",
+                    }
+                ),
+            });
+        }
+
         // A `mutual` block whose members are ALL `partial def`s with explicit
         // result types: Lean compiles these to opaque/unsafe constants
         // (non-terminating, non-reducing), so — exactly like a single

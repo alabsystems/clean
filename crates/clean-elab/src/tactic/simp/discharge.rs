@@ -58,7 +58,8 @@
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, Level};
 
-use super::expr::simp_expr;
+use super::budget::SimpBudget;
+use super::expr::simp_expr_budgeted;
 use super::proof::mk_eq_refl_expr;
 use super::types::{SimpConfig, SimpLemmaSet};
 use crate::tactic::core::{Goal, ProofState};
@@ -74,13 +75,15 @@ use crate::tactic::match_equality;
 /// ENSURES: On `Some(p)`, `state.infer_type(goal, &p)` succeeded and its result
 ///   is def-eq to `premise` — i.e. `p : premise` was *checked*, never assumed.
 /// ENSURES: On `None`, no term is produced and the caller must abandon the
-///   rewrite (fail-closed).
+///   rewrite (fail-closed) — including when `budget` tripped, since a tripped
+///   traversal normalizes nothing and stage 3 then finds no witness.
 pub(crate) fn discharge_premise(
     state: &ProofState,
     goal: &Goal,
     premise: &Expr,
     lemmas: &SimpLemmaSet,
     config: &SimpConfig,
+    budget: &SimpBudget,
 ) -> Option<Expr> {
     // A side condition mentioning a binder-opened variable has no local
     // context to be proved in; `infer_type` would be meaningless there.
@@ -95,7 +98,7 @@ pub(crate) fn discharge_premise(
         return Some(proof);
     }
     if config.discharge_depth > 0 {
-        if let Some(proof) = by_recursive_simp(state, goal, premise, lemmas, config) {
+        if let Some(proof) = by_recursive_simp(state, goal, premise, lemmas, config, budget) {
             return Some(proof);
         }
     }
@@ -189,17 +192,21 @@ fn by_recursive_simp(
     premise: &Expr,
     lemmas: &SimpLemmaSet,
     config: &SimpConfig,
+    budget: &SimpBudget,
 ) -> Option<Expr> {
     let child = SimpConfig {
         discharge_depth: config.discharge_depth - 1,
         ..config.clone()
     };
-    let result = simp_expr(state, goal, premise, lemmas, &child);
+    // The SAME budget the enclosing traversal is spending: a discharger that
+    // re-enters simp at every node would otherwise multiply the bound by the
+    // node count instead of being covered by it.
+    let result = simp_expr_budgeted(state, goal, premise, lemmas, &child, budget);
     if result.expr == *premise {
         return None;
     }
     let witness = result.proof?;
-    let normalized = discharge_premise(state, goal, &result.expr, lemmas, &child)?;
+    let normalized = discharge_premise(state, goal, &result.expr, lemmas, &child, budget)?;
 
     let proof = Expr::apps(
         Expr::const_(Name::from_string("Eq.mpr"), vec![Level::zero()]),

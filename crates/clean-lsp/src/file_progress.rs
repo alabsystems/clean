@@ -249,7 +249,8 @@ mod tests {
     /// End-to-end over the real server plumbing: didOpen must produce at
     /// least one `$/lean/fileProgress` with a non-empty processing range,
     /// per-declaration shrinking, and a terminal notification with empty
-    /// ranges — in that order, all before diagnostics are published.
+    /// ranges — in that order, all before the FULL diagnostics publish (the
+    /// parse-phase publish is allowed to precede the sequence).
     #[tokio::test]
     async fn test_did_open_emits_file_progress_then_empty_terminal() {
         let (service, socket) = crate::build_service();
@@ -303,14 +304,22 @@ mod tests {
         )
         .await;
 
-        // check_document publishes diagnostics only after the terminal
-        // fileProgress, so publishDiagnostics marks the end of the sequence.
+        // The parse-phase publishDiagnostics precedes the progress sequence;
+        // the FULL publish still follows the terminal fileProgress, so the
+        // sequence ends at the first publishDiagnostics seen after an
+        // empty-ranges notification.
         let mut progress_params: Vec<Value> = Vec::new();
+        let mut saw_terminal = false;
         loop {
             let message = timeout_next(&mut reader).await;
             match message.get("method").and_then(Value::as_str) {
-                Some("$/lean/fileProgress") => progress_params.push(message["params"].clone()),
-                Some("textDocument/publishDiagnostics") => break,
+                Some("$/lean/fileProgress") => {
+                    saw_terminal |= message["params"]["processing"]
+                        .as_array()
+                        .is_some_and(|ranges| ranges.is_empty());
+                    progress_params.push(message["params"].clone());
+                }
+                Some("textDocument/publishDiagnostics") if saw_terminal => break,
                 _ => {}
             }
         }
@@ -381,6 +390,94 @@ mod tests {
             vec![progress_params.len() - 1],
             "the terminal empty-ranges fileProgress must come after every non-empty one: \
              {progress_params:?}"
+        );
+    }
+
+    /// Parse-phase diagnostics unblock the editor loop: for a file with a
+    /// syntax error, a publishDiagnostics carrying the parse error must
+    /// arrive BEFORE the terminal (empty-ranges) fileProgress — syntax
+    /// feedback is not gated on elaboration finishing.
+    #[tokio::test]
+    async fn test_did_open_publishes_parse_diagnostics_before_terminal_progress() {
+        let (service, socket) = crate::build_service();
+        let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+        let (server_read, server_write) = tokio::io::split(server_io);
+        let server = tokio::spawn(async move {
+            tower_lsp::Server::new(server_read, server_write, socket)
+                .serve(service)
+                .await;
+        });
+
+        let (client_read, mut client_write) = tokio::io::split(client_io);
+        let mut reader = FrameReader {
+            reader: client_read,
+            buffer: Vec::new(),
+        };
+
+        write_message(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": { "capabilities": {} }
+            }),
+        )
+        .await;
+        loop {
+            let message = timeout_next(&mut reader).await;
+            if message.get("id").and_then(Value::as_i64) == Some(1) {
+                break;
+            }
+        }
+
+        let uri = "file:///file_progress_parse_first.lean";
+        write_message(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": { "textDocument": {
+                    "uri": uri,
+                    "languageId": "lean",
+                    "version": 1,
+                    "text": "def broken :=\n"
+                }}
+            }),
+        )
+        .await;
+
+        // Collect every publishDiagnostics until the terminal fileProgress.
+        let mut early_diagnostics: Vec<Value> = Vec::new();
+        loop {
+            let message = timeout_next(&mut reader).await;
+            match message.get("method").and_then(Value::as_str) {
+                Some("textDocument/publishDiagnostics") => {
+                    early_diagnostics.push(message["params"].clone());
+                }
+                Some("$/lean/fileProgress")
+                    if message["params"]["processing"]
+                        .as_array()
+                        .is_some_and(|ranges| ranges.is_empty()) =>
+                {
+                    break;
+                }
+                _ => {}
+            }
+        }
+        server.abort();
+
+        assert!(
+            early_diagnostics.iter().any(|params| {
+                params["uri"] == json!(uri)
+                    && params["diagnostics"].as_array().is_some_and(|diags| {
+                        diags
+                            .iter()
+                            .any(|diag| diag["code"] == json!("parse-error"))
+                    })
+            }),
+            "a parse-error publishDiagnostics must precede the terminal fileProgress, got: \
+             {early_diagnostics:?}"
         );
     }
 }

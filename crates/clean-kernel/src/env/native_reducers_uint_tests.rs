@@ -510,3 +510,63 @@ fn test_decide_uint8_zero_lt_one_whnf_true() {
     );
     assert_bool_result(Some(tc.whnf(&decide_f)), false);
 }
+
+/// The CANONICAL elaborated-numeral wrapper must be peeled — and ONLY it.
+///
+/// A source numeral inside an application elaborates to `@OfNat.ofNat Nat
+/// <lit> (instOfNatNat <lit>)`, not a raw `Lit`. Before the peel, that shape
+/// made `get_uint_ctor_val` decline, and the kernel δι-ground the structural
+/// `decEq` — Θ(value) unary work, a measured multi-minute hang at
+/// `(4294967295 : UInt32) == 4294967295` on the `clean extract` kernel leg.
+///
+/// The fail-closed direction is load-bearing: `@OfNat.ofNat Nat 5 weird` for
+/// a CUSTOM instance (`OfNat Nat 5 := ⟨7⟩`) denotes 7, not 5 — peeling it
+/// would mint a wrong `Decidable` verdict. Any non-`instOfNatNat` instance
+/// head must make the reducer DECLINE (δι fallback keeps the verdict).
+#[test]
+fn test_uint32_dec_eq_peels_canonical_ofnat_wrapper_only() {
+    let wrapped = |n: u64, inst: &str| {
+        Expr::app(
+            Expr::const_str("UInt32.ofNat"),
+            Expr::apps(
+                Expr::const_str_levels("OfNat.ofNat", vec![Level::zero()]),
+                [
+                    Expr::const_str("Nat"),
+                    Expr::nat_lit(n),
+                    Expr::app(Expr::const_str(inst), Expr::nat_lit(n)),
+                ],
+            ),
+        )
+    };
+    let big = 4_294_967_295;
+    // Fires on the canonical wrapper — O(1), including the measured hang pair.
+    assert_decidable_result(
+        reduce_uint32_dec_eq(&[&wrapped(big, "instOfNatNat"), &wrapped(big, "instOfNatNat")]),
+        true,
+    );
+    assert_decidable_result(
+        reduce_uint32_dec_eq(&[&wrapped(big, "instOfNatNat"), &wrapped(0, "instOfNatNat")]),
+        false,
+    );
+    // FAIL-CLOSED: a custom OfNat instance must decline — never a verdict.
+    assert!(
+        reduce_uint32_dec_eq(&[&wrapped(5, "weirdOfNat"), &wrapped(5, "weirdOfNat")]).is_none(),
+        "custom OfNat instance must make the reducer decline, not compute"
+    );
+    // FAIL-CLOSED: a non-Nat-typed OfNat wrapper must also decline.
+    let non_nat = Expr::app(
+        Expr::const_str("UInt32.ofNat"),
+        Expr::apps(
+            Expr::const_str_levels("OfNat.ofNat", vec![Level::zero()]),
+            [
+                Expr::const_str("Int"),
+                Expr::nat_lit(5),
+                Expr::app(Expr::const_str("instOfNatNat"), Expr::nat_lit(5)),
+            ],
+        ),
+    );
+    assert!(
+        reduce_uint32_dec_eq(&[&non_nat, &non_nat]).is_none(),
+        "non-Nat OfNat wrapper must make the reducer decline"
+    );
+}

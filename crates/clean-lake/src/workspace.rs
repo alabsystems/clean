@@ -29,6 +29,14 @@ pub struct Workspace {
     manifest: Option<LakeManifest>,
     /// Resolved module paths
     module_paths: HashMap<String, PathBuf>,
+    /// Directory that replaces the configured build directory while set.
+    ///
+    /// Used by check-only builds, which must write their `.olean` files
+    /// somewhere (module imports are loaded from disk) without touching the
+    /// project's own artifacts. See [`BuildOptions::check_only`].
+    ///
+    /// [`BuildOptions::check_only`]: crate::BuildOptions::check_only
+    build_dir_override: Option<PathBuf>,
 }
 
 impl Workspace {
@@ -61,6 +69,7 @@ impl Workspace {
             toolchain_version,
             manifest,
             module_paths: HashMap::new(),
+            build_dir_override: None,
         };
 
         // Index modules
@@ -93,6 +102,7 @@ impl Workspace {
             toolchain_version,
             manifest: None,
             module_paths: HashMap::new(),
+            build_dir_override: None,
         }
     }
 
@@ -134,6 +144,7 @@ impl Workspace {
             toolchain_version,
             manifest,
             module_paths: HashMap::new(),
+            build_dir_override: None,
         };
 
         // Index modules (no errors for new projects with no source files)
@@ -212,7 +223,22 @@ impl Workspace {
     /// Get the build directory
     #[must_use]
     pub fn build_dir(&self) -> PathBuf {
-        self.root.join(self.config.build_dir())
+        self.build_dir_override
+            .clone()
+            .unwrap_or_else(|| self.root.join(self.config.build_dir()))
+    }
+
+    /// Redirect every build output of this workspace to `dir`, or restore the
+    /// configured directory with `None`.
+    ///
+    /// Everything derived from [`Self::build_dir`] moves with it — the lib
+    /// directory, each module's `.olean` triple, the rebuild check and
+    /// `LEAN_PATH` — which is what lets a check-only build write the imports
+    /// it needs without touching the project. See [`BuildOptions::check_only`].
+    ///
+    /// [`BuildOptions::check_only`]: crate::BuildOptions::check_only
+    pub(crate) fn set_build_dir_override(&mut self, dir: Option<PathBuf>) {
+        self.build_dir_override = dir;
     }
 
     /// Get the lib directory (for .olean files)
@@ -239,10 +265,25 @@ impl Workspace {
                 continue;
             }
 
-            // Walk the source directory
+            // Walk the source directory, pruning `.lake/`.
+            //
+            // `.lake/` is Lake's build and dependency directory: `lake update` /
+            // `lake exe cache get` populate `.lake/packages/<dep>` with entire
+            // upstream checkouts. Those are DEPENDENCIES, not this project's
+            // modules. Without this prune, a workspace with a Mathlib checkout
+            // present indexes the checkout's 9,071 `.lean` files under names
+            // like `.lake.packages.mathlib.Mathlib.*` and then tries to build
+            // them, so the project's own modules never run.
+            //
+            // `filter_entry` prunes rather than filters: a rejected directory is
+            // never descended into, so the cost is not paid at all. The
+            // `depth() == 0` exemption keeps an explicitly-configured source dir
+            // that itself lives under `.lake` (a dependency package built as a
+            // workspace member) working — only nested `.lake` components prune.
             for entry in walkdir::WalkDir::new(&src_dir)
                 .follow_links(true)
                 .into_iter()
+                .filter_entry(|e| e.depth() == 0 || e.file_name() != ".lake")
                 .filter_map(Result::ok)
             {
                 let path = entry.path();
@@ -337,11 +378,57 @@ impl Workspace {
         self.olean_path(module_name).with_extension("olean.private")
     }
 
-    /// Get the .ilean file path for a module
+    /// Platform path-list separator (`;` on Windows, `:` elsewhere).
     #[must_use]
-    pub fn ilean_path(&self, module_name: &str) -> PathBuf {
-        let rel_path = Self::module_name_to_path(module_name).with_extension("ilean");
-        self.lib_dir().join(rel_path)
+    pub(crate) fn lean_path_separator() -> &'static str {
+        if cfg!(windows) {
+            ";"
+        } else {
+            ":"
+        }
+    }
+
+    /// The `LEAN_PATH` search list: this workspace's `.olean` lib directory
+    /// first, then every fetched/path dependency package directory.
+    #[must_use]
+    pub(crate) fn lean_path(&self) -> String {
+        let mut entries: Vec<PathBuf> = vec![self.lib_dir()];
+        entries.extend(self.package_dirs());
+        entries
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(Self::lean_path_separator())
+    }
+
+    /// The resolved Lake environment as `(key, value)` pairs.
+    ///
+    /// This is the single definition of what `lake env` means, shared by the
+    /// reporting path and by the child-process path. They used to disagree:
+    /// the library printed `LEAN_PATH=…` while the CLI spawned `lake env <cmd>`
+    /// with nothing but inherited environment, so `lake env lean Foo.lean`
+    /// could not resolve a single import.
+    #[must_use]
+    pub fn env_pairs(&self) -> Vec<(String, String)> {
+        vec![
+            (
+                "LAKE_PACKAGE".to_string(),
+                self.config().package.name.clone(),
+            ),
+            ("LAKE_ROOT".to_string(), self.root().display().to_string()),
+            ("LEAN_PATH".to_string(), self.lean_path()),
+            (
+                "LEAN_SRC_PATH".to_string(),
+                self.src_dir().display().to_string(),
+            ),
+            (
+                "LEAN_TOOLCHAIN".to_string(),
+                self.toolchain_version()
+                    .or_else(|| self.toolchain())
+                    .unwrap_or_default()
+                    .to_string(),
+            ),
+        ]
     }
 
     /// Get all package directories
@@ -563,7 +650,7 @@ impl Workspace {
     }
 
     /// Create workspace directories
-    pub fn create_dirs(&self) -> LakeResult<()> {
+    pub(crate) fn create_dirs(&self) -> LakeResult<()> {
         std::fs::create_dir_all(self.build_dir())?;
         std::fs::create_dir_all(self.lib_dir())?;
         Ok(())

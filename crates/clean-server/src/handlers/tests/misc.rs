@@ -41,6 +41,7 @@ async fn test_save_load_roundtrip_bincode() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: true,
+        replace_unchecked: true,
     };
     let load_response = handle_load_environment(&state2, RequestId::Number(3), load_params).await;
     assert!(
@@ -89,6 +90,7 @@ async fn test_save_load_roundtrip_json() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
         replace: true,
+        replace_unchecked: true,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -134,6 +136,7 @@ async fn test_load_format_mismatch_bincode_as_json() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
         replace: true,
+        replace_unchecked: false,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -168,6 +171,7 @@ async fn test_load_corrupt_file_returns_error() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: true,
+        replace_unchecked: false,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     assert!(
@@ -195,6 +199,7 @@ async fn test_load_corrupt_json_returns_error() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
         replace: true,
+        replace_unchecked: false,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     assert!(
@@ -232,6 +237,7 @@ async fn test_load_nonexistent_file() {
         path: "/tmp/clean_this_file_does_not_exist_12345.bincode".to_string(),
         format: Some("bincode".to_string()),
         replace: true,
+        replace_unchecked: false,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     assert!(
@@ -426,6 +432,7 @@ async fn test_save_unknown_format_falls_through_to_bincode() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: true,
+        replace_unchecked: true,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(

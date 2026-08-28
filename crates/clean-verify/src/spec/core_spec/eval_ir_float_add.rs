@@ -148,10 +148,44 @@ const SRC_ENV_REDUCE_FLOAT_ADD: &str =
     "def env_reduce_float_add (a : Nat) (b : Nat) : IROption Nat := ir_f64_add a b";
 const SRC_IR_FA_RES: &str = "def ir_fa_res (o : IROption Nat) : IROutcome := IROption.rec Nat (fun (_ : IROption Nat) => IROutcome) (IROutcome.unmodelled IRFault.float_domain) (fun (k : Nat) => IROutcome.ret (ir_vl1 (IRScalar.float_ k))) o";
 
-// ── the emitted module, transcribed ───────────────────────────────────
-const SRC_IR_FA_B0: &str = "def ir_fa_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.binop IRBinOp.fadd ir_fa_tf64 ir_d1 ir_d2) ir_d3) (ir_nd (IRInst.ret (ir_nl1 ir_d3))))";
-const SRC_IR_FA_FUNC: &str = "def ir_fa_func : IRFunc := IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0 (ir_blk ir_fa_b0 ir_blk0)";
-const SRC_IR_FA_MODULE: &str = "def ir_fa_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_fa_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_fa.core.txt` + `generated/ir_fa.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_floats.rs` fails closed if this
+/// committed script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — two notation-level ones, both definitionally equal: the minted
+/// `ir_fa_b0` carries `(IRTy.float_ 64)` inline where the hand line named the
+/// `ir_fa_tf64` alias, and the minted `ir_fa_func` spells its parameter list
+/// as the raw `IRList.cons` spine where the hand line used `ir_nl3`.
+const MINTED_IR_FA: &str = include_str!("generated/ir_fa.defs.txt");
+
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_FA_DOCS: &[&str] = &[
+    "ir_fa_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fa.core.txt, cut from tests/fixtures/float_add.trust-ir.txt's body). One fadd at f64 over %1 and %2 in that order into %3, then `ret %3`. The TYPE on the binop and the RETURNED id are both compared against the artifact by lanes the eighth chain added; without them a transcription that returned %1 -- an OPERAND instead of the sum -- agrees with every other lane on a body with nothing else in it. DerivedProved, zero axiom_deps.",
+    "ir_fa_func: the closure as EvalIR -- THREE parameters (%0 the closure environment pointer, %1 and %2 the operands), entry block 0, one block. %0 is bound and never read, and that is read off the artifact rather than assumed: the emitted body mentions %0 exactly once, in its parameter list, which is asserted by the gate, and A4 quantifies over it with no premise at all. The minted parameter list is the raw IRList.cons spine, definitionally equal to the hand transcription's ir_nl3. DerivedProved, zero axiom_deps.",
+    "ir_fa_module: the module for env::native_reducers_float::reduce_float_add::{closure#0}, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it -- with an EMPTY unwitnessed ledger, the first in the tree, because the body has no switch; see crate::ir_mint for what that establishes and what it does not. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order — ONE source of truth for
+/// [`Specification::add_eval_ir_float_add`] and anything that must run the
+/// machine on *the registered module* rather than on a second transcription.
+static MINTED_IR_FA_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_FA
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `reduce_float_add::{closure#0}` module definitions, in
+/// registration order.
+#[must_use]
+pub(crate) fn ir_fa_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_FA_LINES
+}
 
 // ── the machine ───────────────────────────────────────────────────────
 const SRC_IR_FA_MACH0: &str = "def ir_fa_mach0 (p : IRScalar) (a : Nat) (b : Nat) (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl3 ir_d0 ir_d1 ir_d2) (ir_vl3 p (IRScalar.float_ a) (IRScalar.float_ b)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
@@ -218,9 +252,21 @@ impl Specification {
         self.add_recursive_def(SRC_IR_FA_TF64, "ir_fa_tf64: f64 -- binary64, the type the emitted fadd is at. ir_float_binop reads the width off it and DECIDES only 64, giving every other float width the tagged unmodelled outcome, so this is semantic input and not decoration: a transcription at IRTy.float_ 32 computes `unmodelled` where the artifact computes 3.0. Checked against the artifact by the binop_tys lane. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_ENV_REDUCE_FLOAT_ADD, "env_reduce_float_add: the reflected env::native_reducers_float::reduce_float_add::{closure#0} (native_reducers_float.rs:210), which is `|a, b| a + b` on f64. It is ir_f64_add -- the classified binary64 addition of super::eval_ir_float, whose fin/fin cell is super::eval_ir_float_fin's correctly-rounded ir_f64_add_fin -- and NOT a proof that ir_f64_add is the hardware adder. That gap is stated in those modules and closed nowhere, and it is larger than the eighth chain's, because more of this operator computes. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_RES, "ir_fa_res: the outcome a classified float answer produces -- the returned value when the fragment is modelled, and IROutcome.unmodelled IRFault.float_domain when it is not. The eighth chain's device, reused unchanged: it is what lets A4 be TOTAL over a partial value domain instead of restricted to the answering half. For fadd the refusing half is small (a NaN operand, or two infinities of opposite sign) but it is not empty, so the device is still needed. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FA_B0, "ir_fa_b0: THE WHOLE BODY, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/float_add.trust-ir.txt). One fadd at f64 over %1 and %2 in that order into %3, then `ret %3`. The TYPE on the binop and the RETURNED id are both compared against the artifact by lanes the eighth chain added; without them a transcription that returned %1 -- an OPERAND instead of the sum -- agrees with every other lane on a body with nothing else in it. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FA_FUNC, "ir_fa_func: the closure as EvalIR -- THREE parameters (%0 the closure environment pointer, %1 and %2 the operands), entry block 0, one block. %0 is bound and never read, and that is read off the artifact rather than assumed: the emitted body mentions %0 exactly once, in its parameter list (tests/fixtures/float_add.trust-ir.txt), which is asserted by the gate, and A4 quantifies over it with no premise at all. The `1 proven-never-read opaque param(s) as placeholders` note is the EIGHTH chain's fixture, about the sibling body; this body's fixture records its interpreter differential only as agreed on 64 sampled inputs. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FA_MODULE, "ir_fa_module: the module for env::native_reducers_float::reduce_float_add::{closure#0}, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir recorded at tests/fixtures/float_add.trust-ir.txt and checked graph-for-graph and instruction-for-instruction, including the binop type and the returned id, by tests/crystal_a1_lineage/float_add.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_priority.rs posture: Clean's parser and
+        // elaborator still turn the text into the term the theorems are about.
+        let minted = ir_fa_module_defs();
+        if minted.len() != MINTED_IR_FA_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_fa script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_FA_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_FA_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_FA_MACH0, "ir_fa_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds THREE parameters positionally, through the FIFTH chain's ir_nl3 / ir_vl3. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_M1, "ir_fa_m1: the machine after the fadd, with the CLASSIFIED ANSWER ABSTRACTED to an IROption parameter. Necessary for the same reason as in the eighth chain: ir_f64_result dispatches with IROption.rec, and on symbolic bit patterns ir_f64_add is stuck under ir_f64_class, so the machine is stuck there and no fuel unsticks it. At o := env_reduce_float_add a b this term is DEFINITIONALLY one ir_step of ir_fa_mach0. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FA_ONE_STEP, "ir_fa_one_step: ONE step of the machine IS ir_fa_m1 at the real classified answer. Eq.refl -- the kernel runs one step and compares two configurations, both of which carry the classification unreduced, so the check is bounded by the size of one instruction's semantics rather than by a 64-bit residue or by the rounding pipeline. 0.030 s. DerivedProved, zero axiom_deps.")?;
@@ -257,243 +303,10 @@ impl Specification {
     }
 }
 
-// The acceptance tests live HERE rather than in a sibling file: `eval_ir_float_div.rs`
-// moved its out only because it passed the 500-line convention that
-// `data/paragon_ratchet.json`'s `files_over_500` enforces shrink-only.
+// The acceptance tests moved to `eval_ir_float_add_tests.rs` on 2026-08-21
+// (the `eval_ir_float_div_tests.rs` precedent): the A2 mint migration put this
+// file at the 500-line convention that `data/paragon_ratchet.json`'s
+// `files_over_500` enforces shrink-only.
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The whole body: one `fadd` at f64 over `%1, %2` into `%3`, then `ret %3`
-    /// — the SUM and not an operand, and no control flow. Every token in that
-    /// sentence is a lane the CFG gate compares.
-    #[test]
-    fn test_the_body_is_one_typed_fadd_and_a_ret_of_its_result() {
-        assert!(SRC_IR_FA_B0.contains("IRInst.binop IRBinOp.fadd ir_fa_tf64 ir_d1 ir_d2) ir_d3"));
-        assert!(SRC_IR_FA_B0.contains("IRInst.ret (ir_nl1 ir_d3)"));
-        assert!(!SRC_IR_FA_B0.contains("IRInst.ret (ir_nl1 ir_d1)"));
-        assert_eq!(SRC_IR_FA_TF64.split(":= ").nth(1), Some("IRTy.float_ 64"));
-        assert!(
-            !SRC_IR_FA_B0.contains("condbr")
-                && !SRC_IR_FA_B0.contains("switch")
-                && !SRC_IR_FA_B0.contains("IRInst.br ")
-        );
-    }
-
-    /// Every registered source, so a source cannot be added and left out of
-    /// the two whole-set checks below.
-    const ALL: &[&str] = &[
-        SRC_IR_FA_TF64,
-        SRC_ENV_REDUCE_FLOAT_ADD,
-        SRC_IR_FA_RES,
-        SRC_IR_FA_B0,
-        SRC_IR_FA_FUNC,
-        SRC_IR_FA_MODULE,
-        SRC_IR_FA_MACH0,
-        SRC_IR_FA_M1,
-        SRC_IR_FA_ONE_STEP,
-        SRC_IR_FA_SPLIT,
-        SRC_IR_FA_EXACT,
-        SRC_IR_FA_FUELOUT_ABSURD,
-        SRC_IR_FA_RUN_SUCC,
-        SRC_IR_FA_RUN_LE,
-        SRC_IR_FA_CORRECT,
-        SRC_IR_FA_HEAD_FLOAT,
-        SRC_IR_FA_ANSWER,
-        SRC_IR_FA_ANSWER_RES,
-        SRC_IR_FA_SOUND_GEN,
-        SRC_IR_FA_RES_IS_RET,
-        SRC_IR_FA_RES_NEVER_TRAPS,
-        SRC_IR_F64_ADD_ZERO_ZERO,
-        SRC_W_INT_OPERAND,
-        SRC_W_F32,
-        SRC_W_WRAP_CONTRAST,
-        SRC_W_NAN,
-        SRC_W_OPPOSITE_INF,
-        SRC_W_INF_PLUS_INF,
-        SRC_W_MINUS_ZEROS,
-        SRC_W_MIXED_ZEROS,
-        SRC_W_ZERO_PLUS_FIN,
-        SRC_W_FIN_PLUS_MZERO,
-        SRC_W_EXACT_ZERO_SUM,
-        SRC_W_SIGNED_ZERO_SUM,
-        SRC_W_CORRECT_WITNESS,
-        SRC_W_ONE_PLUS_TWO,
-        SRC_W_TWO_PLUS_ONE,
-        SRC_W_OVERFLOW,
-    ];
-
-    /// Nothing the earlier chains registered is re-declared: a duplicate
-    /// elaborates cleanly in every fast gate and fails only in the full
-    /// `Specification::new()`.
-    #[test]
-    fn test_no_shared_declaration_is_redeclared() {
-        let all = ALL.join("\n");
-        for shared in [
-            "def ir_nl3",
-            "def ir_vl3",
-            "def ir_option_is_some",
-            "def ir_outcome_is_trap",
-            "def ir_outcome_is_ret",
-            "def ir_outcome_fuelout_ne_unmodelled_prop",
-            "def ir_outcome_fuelout_ne_ret_prop",
-            "inductive EncodesF64Val",
-        ] {
-            assert!(
-                !all.contains(shared),
-                "{shared} must be REUSED, not declared"
-            );
-        }
-    }
-
-    /// A4 is TOTAL, quantified, and goes through the refusal-tolerant
-    /// monotonicity rather than the ret-only one.
-    #[test]
-    fn test_a4_is_total_over_a_partial_value_domain() {
-        let statement = SRC_IR_FA_CORRECT.split(":=").next().unwrap_or("");
-        assert!(statement.contains("(a : Nat)") && statement.contains("(b : Nat)"));
-        assert!(statement.contains("(mem : IRList IRMemSlot)"));
-        assert!(statement.contains("Le ir_d2 fuel ->"));
-        assert!(
-            statement.contains("(ir_fa_res (env_reduce_float_add a b))"),
-            "the conclusion must be the CLASSIFIED outcome, refusals included"
-        );
-        // A conclusion restricted to returns would throw away the half of this
-        // theorem that says the emitted body's refusals are the reflected
-        // function's refusals; a concrete heap would make it a witness rather
-        // than a theorem; and a premise on `p` would weaken it for nothing,
-        // since the body never reads the environment pointer.
-        assert!(!statement.contains("IROutcome.ret"));
-        assert!(!statement.contains("ir_mem0"));
-        assert!(!statement.contains("EncodesF64Val p"));
-        assert_eq!(SRC_IR_FA_CORRECT.matches("EncodesF64Val.rec").count(), 2);
-        assert!(SRC_IR_FA_CORRECT.contains("ir_fa_run_le"));
-        assert!(!SRC_IR_FA_CORRECT.contains("ir_run_le_ret"));
-    }
-
-    /// **A5 and the two boundary corollaries are stated at the IMAGE, and that
-    /// is a measured limit rather than a stylistic choice.** If one of them ever
-    /// mentions `env_reduce_float_add`, somebody has composed it with A4 — the
-    /// shape that does not elaborate here (module header, probe table) — and
-    /// this fails in a second instead of in twenty-five minutes.
-    #[test]
-    fn test_a5_and_the_boundary_are_stated_at_the_image() {
-        for src in [
-            SRC_IR_FA_SOUND_GEN,
-            SRC_IR_FA_RES_IS_RET,
-            SRC_IR_FA_RES_NEVER_TRAPS,
-        ] {
-            assert!(
-                !src.contains("env_reduce_float_add") && !src.contains("ir_f64_add"),
-                "this statement must quantify over the OUTCOME IMAGE, not over the add: {src}"
-            );
-            assert!(src.contains("(o : IROption Nat)"));
-        }
-        assert!(SRC_IR_FA_SOUND_GEN.contains("ir_fa_answer_res"));
-        assert!(SRC_IR_FA_SOUND_GEN.contains(": Eq (IROption Nat) o (IROption.some Nat k)"));
-        assert!(SRC_IR_FA_RES_IS_RET.contains("ir_option_is_some o"));
-        assert!(SRC_IR_FA_RES_NEVER_TRAPS.contains("ir_outcome_is_trap"));
-    }
-
-    /// The signed-zero rule concludes about the ARGUMENTS' sign bits, with the
-    /// AND that addition uses and not the XOR that multiplication does.
-    #[test]
-    fn test_the_signed_zero_rule_is_the_and_of_the_sign_bits() {
-        assert!(SRC_IR_F64_ADD_ZERO_ZERO.contains("(ir_f64_class b) IRF64Class.zero_"));
-        assert!(SRC_IR_F64_ADD_ZERO_ZERO.contains(
-            ": Eq (IROption Nat) (ir_f64_add a b) (IROption.some Nat (ir_f64_pack (Bool.and \
-             (ir_f64_is_neg a) (ir_f64_is_neg b)) Nat.zero))"
-        ));
-        // The XOR is MULTIPLICATION's rule: it agrees with addition's on three
-        // of the four zero pairs and differs on (-0) + (-0).
-        assert!(!SRC_IR_F64_ADD_ZERO_ZERO.contains("ir_f64_xsign"));
-        // …and the witness discharges both class premises by computation.
-        let refls = SRC_W_SIGNED_ZERO_SUM.matches("Eq.refl IRF64Class IRF64Class.zero_");
-        assert_eq!(refls.count(), 2);
-    }
-
-    /// **The answering witnesses, re-derived from the HARDWARE.**
-    ///
-    /// Every expected bit pattern below is computed by `f64` itself rather than
-    /// by reading IEEE 754 a second time. A table whose arms were in the wrong
-    /// order, or a rounding mode that resolved ties the other way, type-checks
-    /// exactly as well and fails here.
-    #[test]
-    fn test_the_answering_witnesses_agree_with_real_f64() {
-        for (src, a, b) in [
-            (
-                SRC_W_ONE_PLUS_TWO,
-                4607182418800017408u64,
-                4611686018427387904u64,
-            ),
-            (SRC_W_TWO_PLUS_ONE, 4611686018427387904, 4607182418800017408),
-            (
-                SRC_W_EXACT_ZERO_SUM,
-                4607182418800017408,
-                13830554455654793216,
-            ),
-            (SRC_W_OVERFLOW, 9218868437227405311, 9218868437227405311),
-            (SRC_W_INF_PLUS_INF, 9218868437227405312, 9218868437227405312),
-            (SRC_W_MINUS_ZEROS, 9223372036854775808, 9223372036854775808),
-            (SRC_W_MIXED_ZEROS, 9223372036854775808, 0),
-            (SRC_W_ZERO_PLUS_FIN, 0, 4607182418800017408),
-            (
-                SRC_W_FIN_PLUS_MZERO,
-                4607182418800017408,
-                9223372036854775808,
-            ),
-        ] {
-            let expected = (f64::from_bits(a) + f64::from_bits(b)).to_bits();
-            assert!(
-                src.contains(&format!(
-                    "(IROutcome.ret (ir_vl1 (IRScalar.float_ {expected})))"
-                )),
-                "the hardware answers {expected} for {a} + {b}; the registered witness says \
-                 something else: {src}"
-            );
-            assert!(src.contains("ir_eval ir_d2 ir_fa_module"));
-            assert!(src.contains(&format!("(IRScalar.float_ {a}) (IRScalar.float_ {b})")));
-        }
-    }
-
-    /// The refusing witnesses are TAGGED refusals and never values; the two
-    /// answering contrasts are values. Together: the refusal set of this
-    /// operator is the two shapes the module doc names, and finite/finite is
-    /// not one of them.
-    #[test]
-    fn test_the_refusing_witnesses_are_tagged_refusals() {
-        for src in [SRC_W_OPPOSITE_INF, SRC_W_NAN] {
-            assert!(src.contains("ir_eval ir_d2 ir_fa_module"));
-            assert!(src.contains("IROutcome.unmodelled IRFault.float_domain"));
-            assert!(!src.contains("IROutcome.ret"));
-        }
-        assert!(SRC_W_ONE_PLUS_TWO.contains("IROutcome.ret"));
-        // …and the float lane is measurably not the integer lane.
-        assert!(SRC_W_WRAP_CONTRAST.contains("IRBinOp.add"));
-        assert!(SRC_W_WRAP_CONTRAST.contains("IRStepResult.value (IRScalar.int_ 0)"));
-        assert!(SRC_W_OVERFLOW.contains("IRScalar.float_ 9218868437227405312"));
-        assert!(SRC_W_F32.contains("IRTy.float_ 32") && SRC_W_F32.contains("ir_float_fault"));
-    }
-
-    #[test]
-    fn test_sources_balanced_ascii() {
-        assert_eq!(
-            ALL.len(),
-            38,
-            "every registered source must be checked here"
-        );
-        for src in ALL {
-            let mut d: i64 = 0;
-            for ch in src.chars() {
-                match ch {
-                    '(' => d += 1,
-                    ')' => d -= 1,
-                    _ => {}
-                }
-                assert!(d >= 0, "unbalanced parens in {src}");
-            }
-            assert_eq!(d, 0, "unbalanced parens in {src}");
-            assert!(src.is_ascii(), "spec sources must be ASCII");
-        }
-    }
-}
+#[path = "eval_ir_float_add_tests.rs"]
+mod tests;

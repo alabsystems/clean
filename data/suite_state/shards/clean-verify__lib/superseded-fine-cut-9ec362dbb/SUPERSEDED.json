@@ -1,0 +1,12 @@
+{
+  "schema": "clean.suite_state_superseded/v1",
+  "superseded_by": "data/suite_plans/clean-verify__lib.json — the packed 7-shard cut landed at 59d3b3a77 (2026-08-13)",
+  "retired_at": "2026-08-13",
+  "retired_scheme": "the 395-shard fine cut of clean-verify::lib, landed at 9ec362dbb (2026-08-13) and retired the same day once `perf(verify): build each spec flavour once per process` (6dbe7955b) moved the cost from per-test to per-process and made a coarse pack strictly cheaper",
+  "record_count": 125,
+  "disposition": "KEPT, INERT, NOT JOURNALLED",
+  "why_kept": "These 125 files are real measurements of real tests — 121 GREEN totalling 4,923 passing tests, plus 4 records still reading RUNNING from workers that were stopped when the cut was replaced. Deleting them would discard measurement to tidy a directory. They are not evidence of anything about HEAD: the shard ids they carry belong to a plan that no longer exists, so no roll-up can or should consume them.",
+  "why_inert": "The runner addresses a shard record at exactly shards/<parent>/<id>.json — see record_path in scripts/verify_runner.py — and every directory walk in that file globs one level. Nothing descends into this directory: not record_path, not projection_records, not the roll-up, which builds its shard set from the PLAN and not from a glob. scripts/check_suite_journal.py J4 re-derives that by refusing if any key in the live plan also appears here.",
+  "not_journalled": "journal_adopt() skips this directory for the same reason: the write-through journal is the durable record of what this machine has MEASURED and may re-project into the working tree. Re-projecting a retired scheme's records would resurrect rows the runner deliberately no longer reads.",
+  "if_you_want_them_gone": "Delete the directory and this marker in one commit, with the record counts above quoted in the message. Do not delete piecemeal: a partially-deleted retired set trips the record_count clause of J4, which is the intended behaviour."
+}

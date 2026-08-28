@@ -1,0 +1,422 @@
+{
+ "schema": "clean.crystal.g21_branch_call/1",
+ "date": "2026-08-25",
+ "lane": "LANE G21 \u2014 the SHORT-CIRCUIT-OVER-CALLS class: the four `f(..) || g(..)` gap rows CONVERT (+4 at -O3, 0 lost, gap 21 -> 17)",
+ "question": "Lane G25 named family A's four `||`-over-calls bodies and measured that lane K's block arithmetic already closes them \u2014 the only refusal being that no MULTI-BLOCK marker plan has an `Inst::Call` arm. Does a plan that admits one convert them, and what is left after it?",
+ "answer": "Yes, all four. +4 at -O3 (598 -> 602), 0 lost at either level, 0 verdict regressions, the residual gap 21 -> 17, and the equality O3 == O0 INTERSECT markers_exact still holds with both witness lists empty. `expr::kind::arc_eq`, the fifth body lane G25 grouped with them, is measured OUT of the class and stays refused: its arm is THREE chained calls (wave-WB8's shape), not one.",
+ "provenance": {
+  "method": "ONE sealed subject driver from ONE detached trust worktree at ONE rev, whole-crate clean-kernel at -O3 / -O0 / -O3+noflip / -O3+g21-ret-order, against ONE PINNED clean corpus; the CONTROL is lane RMX's own sealed driver and its committed dumps at the SAME trust rev and the SAME corpus, re-analysed here",
+  "trust_base": "3495e42c456f489802805cd9f041c71cf38b945a (trust origin/main at lane RMX's seal time; the control driver's rev, verbatim)",
+  "clean_corpus_rev": "f21d6336b (clean origin/main at lane RMX's measurement; a detached worktree, tracked-clean)",
+  "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13, SYSROOT_COMPAT OK, sysrootcheck OK on both drivers)",
+  "drivers": {
+   "control": "$HOME/trust/scratchpad/laneRMX/seal-RMX (digest 1f7d329f...0702c530 rustc-main)",
+   "subject": "$HOME/trust/scratchpad/laneG21/seal-SUBJ2 (dylib ab827d1bce074aac10df66b007b0572caf20eb0fe3c3d44fd337053323b62ff7)"
+  },
+  "control_flip_path_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "340982431ba5baa3e00f67aeb8cc077321438fa1",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "147f522988fdfd69e9395d208424a621f2d86212",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "aef29fc7dad206e3a9e4c53252dc9eb2a08b0b4c"
+  },
+  "subject_flip_path_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "340982431ba5baa3e00f67aeb8cc077321438fa1",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "a4e780e5a1ce00bd93ef8dab119a11481fb59896",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "aef29fc7dad206e3a9e4c53252dc9eb2a08b0b4c"
+  },
+  "flip_path_files_that_differ_control_vs_subject": [
+   "crates/trust-thir-lower/src/to_mir.rs"
+  ],
+  "the_FROZEN_oracle": {
+   "file": "crates/trust-thir-lower/src/mir_differential.rs",
+   "blob": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "identical_across_drivers": true
+  },
+  "driver_side_files_that_also_differ": {
+   "compiler/rustc_driver_impl/src/lib.rs": "a78467e56ff3b8a7d848c23bd4c573c573ad03de",
+   "compiler/rustc_driver_impl/src/tests.rs": "2f9ec8c16621acaf8ba44ba31fb3e48829d3f728",
+   "why": "they REGISTER the `g21-ret-order` SAT class; they are not on the flip path and carry no marker logic"
+  },
+  "TWO_DRIVERS_WERE_SEALED_AND_THE_SECOND_IS_THE_LANDED_TREE": {
+   "claim": "the first subject driver (seal-SUBJ, to_mir 6be5b75f) was built before a formatting-only repair of nine sites; the LANDED tree is to_mir a4e780e5, and seal-SUBJ2 was built from it and re-measured end to end",
+   "the_two_are_the_SAME_PROGRAM_and_that_is_MEASURED": "coverage_O3 sha256 cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7 is IDENTICAL across the two runs, at both levels, and every number below is identical row for row",
+   "the_formatting_repair_is_ALSO_measured": "the base file at trust 3495e42c45 carries NINE trustfmt diff sites under the repo's own rustfmt.toml; the landed file carries the SAME NINE, shifted by this lane's insertions and no more \u2014 zero new fmt diffs"
+  },
+  "instruments": {
+   "census": "laneG21/analyze.py (laneRMX's, unchanged)",
+   "ab": "laneG21/compare.py (laneGAP/laneS3's, unchanged)",
+   "blast radius": "laneG21/scan_bc.py (this lane's \u2014 `plan_bc_markers`' grammar re-implemented on the corpus trust-ir TEXT, run BEFORE the driver)",
+   "per body": "laneG21/perbody.py (this lane's)",
+   "probes": "crates/trust-thir-lower/probes/g25.rs::V::a1 and ::Summ::a3, dumped through the CONTROL driver"
+  }
+ },
+ "baseline_reconciliation": {
+  "claim": "this lane's CONTROL is lane RMX's committed measurement, re-derived here from its own dumps, and it reproduces the standing tip baseline exactly",
+  "standing_tip_2026-08-25": "-O3 598 + 42 ctfe, -O0 618 + 43 ctfe, bodies 13,906, agreed 1,593, markers_exact 1,572, residual gap 21",
+  "this_lane_control": {
+   "bodies": 13906,
+   "agreed": 1593,
+   "agreed_markers_exact": 1572,
+   "codegen_flips_O3": 598,
+   "codegen_flips_O0": 618,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47
+  },
+  "control_gap": 21,
+  "control_invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "afdc71a274c58648eda69a3ee13ff5118370843131a1db81d999edeed246b319",
+   "coverage_O0_sha256": "afdc71a274c58648eda69a3ee13ff5118370843131a1db81d999edeed246b319",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  }
+ },
+ "census_subject": {
+  "bodies": 13906,
+  "agreed": 1593,
+  "agreed_markers_exact": 1576,
+  "codegen_flips_O3": 602,
+  "codegen_flips_O0": 618,
+  "ctfe_flips_O3": 42,
+  "ctfe_flips_O0": 43,
+  "loud_fallback_events_O3": 47,
+  "loud_fallback_events_O0": 47,
+  "noflip_control": {
+   "codegen": 0,
+   "ctfe": 0,
+   "fallback_events": 0
+  }
+ },
+ "subject_invariants": {
+  "derived_mir_rows_that_move_between_O3_and_O0": 0,
+  "coverage_O3_sha256": "cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7",
+  "coverage_O0_sha256": "cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7",
+  "O0_flips_subset_of_agreed": true,
+  "O3_flips_subset_of_agreed_and_markers_exact": true,
+  "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+  "flips_lost_O3_not_O0": 0,
+  "witnesses_O0_mex_not_O3": [],
+  "witnesses_O3_not_O0": []
+ },
+ "subject_gap": {
+  "size": 17,
+  "by_kind": {
+   "fn": 16,
+   "const-init": 1
+  },
+  "partition_by_channel": {
+   "derived-end@0": 17
+  },
+  "partition_sums_to_gap": true,
+  "shape_overlay": {
+   "other": 13,
+   "WB8-named-chain": 3,
+   "NO-TRUST-IR-BODY": 1
+  }
+ },
+ "whole_crate_subject_vs_control": {
+  "base": "$HOME/trust/scratchpad/laneRMX/wc-tip",
+  "subject": "wc-subj2",
+  "O3": {
+   "codegen_base": 598,
+   "codegen_subject": 602,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 4,
+   "lost": 0,
+   "gained_names": [
+    "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+    "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+    "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion",
+    "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 618,
+   "codegen_subject": 618,
+   "ctfe_base": 43,
+   "ctfe_subject": 43,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 4
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+   "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion",
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1593,
+   "subject_agreed": 1593,
+   "base_markers_exact": 1572,
+   "subject_markers_exact": 1576
+  }
+ },
+ "blast_radius_scanned_BEFORE_the_run": {
+  "scanned_functions": 7098,
+  "exact_shape_hits": 4,
+  "hits": [
+   {
+    "name": "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+    "post": null,
+    "head_args": 4,
+    "rhs_args": 4,
+    "verdict": "agreed",
+    "markers_exact": false
+   },
+   {
+    "name": "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+    "post": "usize",
+    "head_args": 1,
+    "rhs_args": 1,
+    "verdict": "agreed",
+    "markers_exact": false
+   },
+   {
+    "name": "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion",
+    "post": null,
+    "head_args": 3,
+    "rhs_args": 3,
+    "verdict": "agreed",
+    "markers_exact": false
+   },
+   {
+    "name": "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion",
+    "post": null,
+    "head_args": 3,
+    "rhs_args": 3,
+    "verdict": "agreed",
+    "markers_exact": false
+   }
+  ],
+  "near_misses": {
+   "arms are not one const + one call": 3,
+   "rhs arm outside [Call,Br] / [Call,Const,ICmp,Br]": 5
+  }
+ },
+ "per_body_marker_line_counts": {
+  "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "11 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "22 marker line(s) identical",
+    "semantic_detail": "11 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "11 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "22 marker line(s) identical",
+    "semantic_detail": "11 canonical line(s) identical"
+   }
+  },
+  "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "10 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "17 marker line(s) identical",
+    "semantic_detail": "10 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "10 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "17 marker line(s) identical",
+    "semantic_detail": "10 canonical line(s) identical"
+   }
+  },
+  "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "10 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "17 marker line(s) identical",
+    "semantic_detail": "10 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "10 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "17 marker line(s) identical",
+    "semantic_detail": "10 canonical line(s) identical"
+   }
+  },
+  "env::sorry_summary::DeclarationTrustSummary::is_fully_verified": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "9 marker line(s) identical",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "9 marker line(s) identical",
+    "semantic_detail": "8 canonical line(s) identical"
+   }
+  },
+  "expr::kind::arc_eq": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "11 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "11 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "11 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic_detail": "11 canonical line(s) identical"
+   }
+  }
+ },
+ "the_ladder": "90 -> 85 -> 37 -> 29 -> 28 -> 25 -> 23 -> 21 -> 17",
+ "perturbation_g21_ret_order_WHOLE_CRATE": {
+  "what_it_moves": "the RHS call's argument temps are retired FORWARD at its successor instead of in reverse creation order \u2014 same statements, same markers, two of them exchanged",
+  "why_it_is_the_STRONG_form": "the bit is read ONCE, in `MfPlans::seal`, and then by BOTH the emitter and `predict_bc`, so the marker LAW stays green and the body still ships WITH markers; the FROZEN oracle is the only thing that can reject it. A class whose markers were decorative would still flip under it.",
+  "codegen_O3_subject": 602,
+  "codegen_O3_perturbed": 599,
+  "lost_by_name": [
+   "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion",
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion"
+  ],
+  "gained_must_be_zero": [],
+  "applications_rows": [
+   "trust-sat-perturb: def=DefId(0:889 ~ clean_kernel[79c7]::cert::def_eq::{impl#1}::try_struct_eta_eq) class=G21RetOrder applications=1",
+   "trust-sat-perturb: def=DefId(0:19437 ~ clean_kernel[79c7]::tc::def_eq::structural::{impl#0}::try_structure_eta_expansion) class=G21RetOrder applications=1",
+   "trust-sat-perturb: def=DefId(0:19441 ~ clean_kernel[79c7]::tc::def_eq::structural::{impl#0}::try_string_lit_expansion) class=G21RetOrder applications=1"
+  ],
+  "the_refusal_is_at_the_ORACLE_not_the_LAW": {
+   "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 13: built `mk b4.0:dead s8:opaque:Ref { mutable: false, inner: Datatype { name: \"clean_kernel::expr::Expr\", variants: [(\"Expr\", [(\"kind\", Datatype { name: \"clean_kernel::expr::kind::ExprKind\", variants: [] }), (\"meta\", Datatype { name: \"cl",
+    "semantic": "11 canonical line(s) identical"
+   },
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 10: built `mk b4.0:dead s6:opaque:Ref { mutable: false, inner: Datatype { name: \"clean_kernel::expr::Expr\", variants: [(\"Expr\", [(\"kind\", Datatype { name: \"clean_kernel::expr::kind::ExprKind\", variants: [] }), (\"meta\", Datatype { name: \"cl",
+    "semantic": "10 canonical line(s) identical"
+   },
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 10: built `mk b4.0:dead s6:opaque:Ref { mutable: false, inner: Datatype { name: \"clean_kernel::expr::Expr\", variants: [(\"Expr\", [(\"kind\", Datatype { name: \"clean_kernel::expr::kind::ExprKind\", variants: [] }), (\"meta\", Datatype { name: \"cl",
+    "semantic": "10 canonical line(s) identical"
+   }
+  },
+  "the_INERT_body_keeps_its_flip": {
+   "env::sorry_summary::DeclarationTrustSummary::is_fully_verified": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "9 marker line(s) identical",
+    "semantic": "8 canonical line(s) identical"
+   }
+  },
+  "reading": "applications=1 on exactly the three bodies whose RHS call carries TWO OR MORE argument temps to exchange; those three and only those three lose the -O3 flip; `is_fully_verified` has ONE argument, the plan never sets the bit for it, and it keeps its flip with 9 marker lines identical."
+ },
+ "unit_tests": {
+  "command": "cargo test --locked --release -p trust-thir-lower --lib, in the laneG21 worktree, against exactly the landed blobs",
+  "result": "ok. 827 passed; 0 failed; 0 ignored",
+  "the_three_source_text_PINS_this_class_RAISED": [
+   "marker_gate_invariant_tests::the_two_sides_share_one_sequence_builder_and_nothing_else \u2014 `MfSeqBuild<MfSlot> = MfSeqBuild::new()` 8 -> 9, because `predict_bc` is a NINTH predicted walk",
+   "plan_exclusivity_tests::the_payload_plan_is_resolved_against_every_other_plan \u2014 the MfPlans literal gained a `bc` field the pin's list had not been told about",
+   "plan_exclusivity_tests::the_loop_plan_is_resolved_against_every_other_plan \u2014 the loop gate's pinned text; RESTORED rather than re-pinned, by moving the bc/loop resolution to a statement AFTER `loop_`"
+  ],
+  "all_three_were_RED_at_the_class_first_build_and_that_is_the_measurement": "the pins are the file's own defence against an unacknowledged plan, and they fired"
+ },
+ "what_refuses_the_remaining_17": {
+  "arc_eq": "the fifth body lane G25 grouped with family A. Its arm is `%4 = call f(%0); %5 = call f(%1); %6 = call g(%4,%5)` \u2014 a call FEEDING another call's argument, which is wave-WB8's chain (in-transit locals plus a reborrow bridge). `plan_bc_markers` refuses it at its `[Call,Br]`/`[Call,Const,ICmp,Br]` arm grammar and the whole-crate run confirms it: `<end>` in the control AND in the subject, unchanged at both levels.",
+  "try_type_directed_eq": "family A3 \u2014 a FOUR-WAY `||` chain, three `CondBr`s SHARING one short-circuit arm (built's join has three predecessors), which lane K's `preds == 1` clause refuses on a line independent of this class's four-block grammar.",
+  "the_other_15": "unchanged from lane G25's re-derivation and lane RMX's tip census \u2014 families B (statement-call sequences), C1/C2/C3 (single-block aggregates, the flip.rs:1878 fragment gate, the `let` firewall), E (early return + checked arithmetic), F (the `|&l|` destructuring parameter, LevelArc::fmt's third local) and G (structural / no derived body)."
+ },
+ "net_loss_check": {
+  "flips_lost_O3": 0,
+  "flips_lost_O0": 0,
+  "verdict_regressions": 0,
+  "markers_lost": 0,
+  "bodies_that_flip_today_and_are_inside_this_class": 0,
+  "how_that_was_known_BEFORE_the_run": "scan_bc.py found 4 exact-shape hits over all 7,098 corpus functions and all four were already IN the gap (agreed, markers_exact false); no body that flips today is in the class, so the plan had nothing it could take away."
+ }
+}

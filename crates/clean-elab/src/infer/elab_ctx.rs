@@ -11,6 +11,7 @@
 //! - Free variable replacement (for inductive type elaboration)
 
 use super::*;
+use crate::level_role::LevelParamRole;
 use clean_kernel::ExprFolder;
 
 /// State whose lifetime is tied to the active local-variable scope.
@@ -45,7 +46,7 @@ impl<'a> ElabCtx<'a> {
     fn local_scope_snapshot(&self) -> LocalScopeSnapshot {
         LocalScopeSnapshot {
             locals: self.locals.clone(),
-            local_let_values: self.local_let_values.clone(),
+            local_let_values: self.locals.let_values().clone(),
             shared_if_let_scrutinees: self.shared_if_let_scrutinees.clone(),
             local_instances: self.local_instances.clone(),
             instance_cache: self.instance_cache.clone(),
@@ -62,8 +63,8 @@ impl<'a> ElabCtx<'a> {
     }
 
     fn restore_local_scope(&mut self, snapshot: LocalScopeSnapshot, restore_failed_state: bool) {
-        self.locals = snapshot.locals;
-        self.local_let_values = snapshot.local_let_values;
+        self.locals
+            .restore(snapshot.locals, snapshot.local_let_values);
         self.shared_if_let_scrutinees = snapshot.shared_if_let_scrutinees;
         self.local_instances = snapshot.local_instances;
         self.instance_cache = snapshot.instance_cache;
@@ -258,7 +259,37 @@ impl<'a> ElabCtx<'a> {
     /// otherwise elaborated identically to an anonymous one — the recorded name
     /// never affects unification, def-eq, or the produced term.
     pub(crate) fn elab_hole(&mut self, span: clean_parser::Span, name: Option<&str>) -> Expr {
-        let ty_meta = self.fresh_meta(Expr::type_());
+        // The hole's TYPE metavariable is `?t : Sort ?u` with a FRESH LEVEL
+        // METAVARIABLE — Lean's `mkFreshTypeMVar` (`mkFreshLevelMVar` then
+        // `mkFreshExprMVar (mkSort u)`), NOT a hardcoded `Type`.
+        //
+        // This used to read `Expr::type_()`, i.e. `Sort 1`, which asserts that
+        // whatever the hole turns out to be lives in `Type 0`. That assertion is
+        // not licensed by anything the user wrote, and `unify_meta`'s Sort arm
+        // (`unify/unifier/mod.rs`) enforces it on assignment: solving `?t := α`
+        // unifies `α`'s sort against the hardcoded `1`. Measured consequences,
+        // all from this one literal:
+        //   * `α : Sort u` DECLARED (`universe u`) — `cannot assign rigid
+        //     universe parameter u := 1`; the rigidity is CORRECT (`u` is a real
+        //     parameter of the declaration) and the hole was the bug;
+        //   * `α : Sort*` / `Type*` — `?u_n := 1` is accepted because a `Sort*`
+        //     param is not rigid, so the declaration SILENTLY MONOMORPHIZES to
+        //     `Type 0` and only a downstream use at `Prop` or `Type 1` fails;
+        //   * `α : Type 1` — `universe level conflict: Succ(Zero) vs Succ(Succ(..))`.
+        // `Prop` and `Type` passed only because `Sort 0 ≤ Sort 1 ≤ Sort 1` under
+        // the cumulativity check right next to the hardcode.
+        //
+        // A fresh level METAVARIABLE is the honest statement of what is known at
+        // a `_`: the hole lives in SOME universe, to be solved from context. It
+        // is strictly weaker than the literal it replaces (every `?u := 1`
+        // solution the old code forced is still reachable), it is assignable
+        // rather than rigid, and an unsolved one is caught at
+        // `finalize_level_params` exactly like every other fresh level param —
+        // so this relaxes no refusal. In particular the rigid-refusal backstop
+        // (`add_level_constraint`, probes p06/p30/p31) is untouched: those
+        // declarations contain no hole.
+        let hole_sort = Expr::sort(self.fresh_universe_param());
+        let ty_meta = self.fresh_meta(hole_sort);
         let meta_id = self
             .metas
             .fresh_with_locals_at(ty_meta, self.locals.clone(), Some(span));
@@ -353,27 +384,120 @@ impl<'a> ElabCtx<'a> {
         self.universe_params = params.to_vec();
         self.metas
             .set_rigid_level_params(params.iter().map(|s| Name::from_string(s)));
+        // U2 rung-4 explicitness channel (2026-08-25). `params` is the MERGED
+        // vector `preprocess_decl_with_context` built — file-scope `universe`
+        // names first, then whatever the declaration wrote after its name.
+        // Subtracting the file-scope names is what recovers the written
+        // `.{...}` list, and recovering it is the whole reason the rung-4
+        // scope cut existed: without the subtraction `universe u` and
+        // `def f.{u}` are the same vector at declaration close, so enforcing
+        // closure would have closed every declaration in any file that ever
+        // said `universe`.
+        //
+        // Empty result ⇒ `None` ⇒ auto-generalization, unchanged. That covers
+        // both "wrote no list" and the deliberate under-refusal where a
+        // declaration re-states a name the file already declared
+        // (`universe u` + `def f.{u}`): the two vectors are then equal, the
+        // subtraction is empty, and Clean keeps today's behaviour rather than
+        // guessing.
+        let explicit: Vec<String> = params
+            .iter()
+            .filter(|p| !self.file_universe_params.contains(*p))
+            .cloned()
+            .collect();
+        self.decl_explicit_universes = (!explicit.is_empty()).then_some(explicit);
     }
 
-    /// Create a fresh universe parameter level
+    /// Install the file-scope `universe` names for the declaration about to be
+    /// elaborated (the subtrahend documented on
+    /// [`ElabCtx::set_decl_universe_params`]).
     ///
-    /// This generates a new universe parameter name like `u_0`, `u_1`, etc.
-    /// and returns a `Level::Param` with that name. The parameter is also
-    /// added to `universe_params` so it's available for lookups.
+    /// Called from the file-driven entry point with
+    /// `FileContext::current_universe_params`. Contexts built without a
+    /// `FileContext` leave it empty, which is exactly right: nothing could
+    /// have been merged into their declarations' lists.
+    pub(crate) fn set_file_universe_params(&mut self, params: Vec<String>) {
+        self.file_universe_params = params;
+    }
+
+    /// The TOTAL role of a universe-level parameter NAME in this declaration
+    /// (U2 stage-3 deferral 1, 2026-08-26 — see [`crate::level_role`] for the
+    /// exhibited failure this replaced `universe_params`-membership with).
+    ///
+    /// `universe_params` is the UNION of the rigid names and the minted ones —
+    /// `fresh_universe_param` pushes its mints there so the next mint skips
+    /// them — so membership alone cannot answer "is this already a parameter".
+    /// Subtracting the rigid set recovers the minted population, which makes
+    /// the classification total with no extra state to keep in sync.
+    pub(crate) fn level_param_role(&self, name: &str) -> LevelParamRole {
+        if self.metas.is_rigid_level_param(&Name::from_string(name)) {
+            LevelParamRole::Rigid
+        } else if self.universe_params.iter().any(|p| p == name) {
+            LevelParamRole::Minted
+        } else {
+            LevelParamRole::Foreign
+        }
+    }
+
+    /// Create a fresh universe METAVARIABLE level.
+    ///
+    /// The name is minted into the reserved [`crate::level_mint::MINT_PREFIX`]
+    /// space (`?u_0`, `?u_1`, …) — a spelling the surface grammar has no
+    /// production for — and the parameter is added to `universe_params` so it
+    /// is available for lookups.
+    ///
+    /// The id comes from [`crate::level_mint::LevelMint`], which this context
+    /// SHARES with every `ProofState` it opens (U2 stage 3), so two mints can
+    /// never draw the same id.
+    ///
+    /// RESERVED SINCE 2026-08-26b. Before, this minted `u_N` — a name a user
+    /// may also write — and the two populations aliased. Curing that by
+    /// classification alone (`crate::level_role`) closed the unsound-looking
+    /// half and left a measured over-refusal (fixture p49); reserving the
+    /// namespace removes the shared spelling itself, so neither half exists.
+    /// The skip loop below is therefore now UNREACHABLE — no `universe_params`
+    /// entry can be reserved, since a user cannot write one and the shared
+    /// counter never repeats an id — and is kept only as the structural
+    /// backstop it always was.
     pub(crate) fn fresh_universe_param(&mut self) -> Level {
-        // Generate a unique name that doesn't collide with explicit params.
-        // Skip names already in self.universe_params (e.g., if user declared `.{u_0}`).
-        let mut id = self.next_universe;
         let name = loop {
-            let candidate = format!("u_{id}");
-            id += 1;
+            let candidate = self.level_mint.next_name();
             if !self.universe_params.contains(&candidate) {
                 break candidate;
             }
         };
-        self.next_universe = id;
         self.universe_params.push(name.clone());
+        crate::u2_histogram::u2_mint_trace("elabctx", &name);
         Level::param(Name::from_string(&name))
+    }
+
+    /// Mint a fresh USER-FACING universe parameter name for a level that is
+    /// being GENERALIZED into the declaration's interface.
+    ///
+    /// The counterpart of [`Self::fresh_universe_param`]: that one names a
+    /// metavariable (unwritable, reserved), this one names a parameter the
+    /// declaration will actually export, so it must be a spelling a caller can
+    /// write in `@f.{…}` and a reader can recognize in `#print`.
+    ///
+    /// Called once per surviving mint by `ElabCtx::finalize_level_params`
+    /// (Lean's `levelMVarToParam`). Both minters draw from the same counter,
+    /// which is why the registered names did not move when the reservation
+    /// landed: a declaration whose hole took id 0 and whose generalization took
+    /// id 1 registered `u_1` before and registers `u_1` now.
+    ///
+    /// The skip loop is load-bearing HERE in a way it no longer is for the
+    /// metavariable minter: `u_1` is a name the user may have written, so a
+    /// candidate the declaration already holds must be passed over.
+    pub(super) fn fresh_generalized_universe_param(&mut self) -> Name {
+        let name = loop {
+            let candidate = self.level_mint.next_generalized_name();
+            if !self.universe_params.contains(&candidate) {
+                break candidate;
+            }
+        };
+        self.universe_params.push(name.clone());
+        crate::u2_histogram::u2_mint_trace("generalize", &name);
+        Name::from_string(&name)
     }
 
     /// Push a local binding
@@ -407,51 +531,25 @@ impl<'a> ElabCtx<'a> {
         ty: Expr,
         value: Expr,
     ) {
-        self.push_local_with_fvar(name, fvar, ty);
-        self.local_let_values.insert(fvar, value);
+        self.locals.push_let((name, fvar, ty), value);
+        // Ensure fresh_fvar() won't collide with the pushed FVar.
+        self.next_fvar = self.next_fvar.max(fvar.as_u64() + 1);
     }
 
-    /// Pop a local binding
+    /// Pop a local binding (its let value, if any, goes with it — see
+    /// `LocalBindings::pop`).
     pub(crate) fn pop_local(&mut self) {
-        if let Some((_, fvar, _)) = self.locals.pop() {
-            // Clear any let-value side-channel entry in lock-step so a popped
-            // let-local cannot leak its value into a later, unrelated scope.
-            self.local_let_values.remove(&fvar);
-        }
+        self.locals.pop();
     }
 
-    /// Build a LocalContext containing both locals and metavariables
+    /// An OWNED LocalContext containing both locals and metavariables.
+    ///
+    /// A clone of the memoised context (`shared_local_ctx`): O(n) refcount
+    /// bumps, never a re-instantiation. Callers that only need to hand the
+    /// context to a `TypeChecker` should pass the `Arc` from
+    /// `shared_local_ctx` instead, which is O(1) and is what `make_tc` does.
     pub(crate) fn build_local_ctx(&self) -> LocalContext {
-        let mut ctx = LocalContext::new();
-        for (name, fvar, ty) in &self.locals {
-            let ty_inst = self.metas.instantiate(ty);
-            let ty_inst = self.metas.instantiate_levels(&ty_inst);
-            // Let-bound locals (`let x : T := v`) carry a value: emit them as
-            // local definitions so the kernel WHNF can zeta-reduce `x` to `v`
-            // during def-eq. Opaque hypotheses (`have`/binders) have no value
-            // entry and stay rigid. See `ElabCtx::local_let_values`.
-            if let Some(value) = self.local_let_values.get(fvar) {
-                let val_inst = self.metas.instantiate(value);
-                let val_inst = self.metas.instantiate_levels(&val_inst);
-                ctx.push_let_with_id(*fvar, Name::from_string(name), ty_inst, val_inst);
-            } else {
-                ctx.push_with_id(*fvar, Name::from_string(name), ty_inst, BinderInfo::Default);
-            }
-        }
-
-        for (meta_id, meta) in self.metas.iter() {
-            let name = Name::from_string(&format!("?m{}", meta_id.0));
-            let ty_inst = self.metas.instantiate(&meta.ty);
-            let ty_inst = self.metas.instantiate_levels(&ty_inst);
-            ctx.push_with_id(
-                MetaState::to_fvar(meta_id),
-                name,
-                ty_inst,
-                BinderInfo::Implicit,
-            );
-        }
-
-        ctx
+        LocalContext::clone(&self.shared_local_ctx())
     }
 
     /// Look up a local by name
@@ -565,8 +663,15 @@ impl<'a> ElabCtx<'a> {
     /// 1. Fast path: kernel `Level::is_def_eq`
     /// 2. Resolve through MetaState union-find + pending buffer
     /// 3. Assign unresolved params when one side is concrete
-    fn make_tc(&self, caches: TcCaches) -> TypeChecker<'_> {
-        let mut tc = TypeChecker::with_context_and_caches(self.env, self.build_local_ctx(), caches);
+    ///
+    /// `roots` are the (already instantiated) expressions the call will hand
+    /// to the kernel: the context is their free-variable closure
+    /// (`demand_local_ctx`), not the whole declaration's — measured as the
+    /// difference between paying O(every metavariable ever created) and
+    /// O(what this call can touch) on every `whnf` of instance resolution.
+    fn make_tc(&self, caches: TcCaches, roots: &[&Expr]) -> TypeChecker<'_> {
+        let mut tc =
+            TypeChecker::with_context_and_caches(self.env, self.demand_local_ctx(roots), caches);
         let metas = &self.metas;
         let pending = &self.pending_level_assigns;
         tc.set_level_eq_override(move |l1, l2| {
@@ -644,10 +749,10 @@ impl<'a> ElabCtx<'a> {
 
     /// Infer the type of an expression (delegating to kernel)
     pub(crate) fn infer_type(&self, expr: &Expr) -> Result<Expr, ElabError> {
-        let caches = self.tc_caches.take();
-        let tc = self.make_tc(caches);
         let instantiated = self.metas.instantiate(expr);
         let instantiated = self.metas.instantiate_levels(&instantiated);
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches, &[&instantiated]);
         let result = tc
             .infer_type(&instantiated)
             .map(|ty| {
@@ -656,7 +761,7 @@ impl<'a> ElabCtx<'a> {
             })
             .map_err(|e| ElabError::TypeMismatch {
                 expected: "valid type".to_string(),
-                actual: format!("{e:?}"),
+                actual: format!("{e}"),
             });
         self.tc_caches.replace(tc.take_caches());
         result
@@ -672,10 +777,10 @@ impl<'a> ElabCtx<'a> {
     /// mis-applied `Eq.trans`) are rejected at the elaboration boundary instead
     /// of slipping through to a later `add_decl` failure. Part of #38.
     pub(crate) fn infer_type_full(&self, expr: &Expr) -> Result<Expr, ElabError> {
-        let caches = self.tc_caches.take();
-        let tc = self.make_tc(caches);
         let instantiated = self.metas.instantiate(expr);
         let instantiated = self.metas.instantiate_levels(&instantiated);
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches, &[&instantiated]);
         let result = tc
             .infer_type_full(&instantiated)
             .map(|ty| {
@@ -684,7 +789,7 @@ impl<'a> ElabCtx<'a> {
             })
             .map_err(|e| ElabError::TypeMismatch {
                 expected: "valid type".to_string(),
-                actual: format!("{e:?}"),
+                actual: format!("{e}"),
             });
         self.tc_caches.replace(tc.take_caches());
         result
@@ -692,15 +797,15 @@ impl<'a> ElabCtx<'a> {
 
     /// Infer the universe level `u` such that `expr : Sort u`.
     pub(crate) fn infer_sort(&self, expr: &Expr) -> Result<Level, ElabError> {
-        let caches = self.tc_caches.take();
-        let tc = self.make_tc(caches);
         let instantiated = self.metas.instantiate(expr);
         let instantiated = self.metas.instantiate_levels(&instantiated);
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches, &[&instantiated]);
         let result = tc
             .infer_sort(&instantiated)
             .map_err(|e| ElabError::TypeMismatch {
                 expected: "valid type".to_string(),
-                actual: format!("{e:?}"),
+                actual: format!("{e}"),
             });
         self.tc_caches.replace(tc.take_caches());
         result
@@ -722,13 +827,13 @@ impl<'a> ElabCtx<'a> {
                 let Some(meta_id) = MetaState::from_fvar(*id) else {
                     return Err(ElabError::TypeMismatch {
                         expected: "valid type".to_string(),
-                        actual: format!("ExpectedSort({ty:?})"),
+                        actual: format!("ExpectedSort({ty})"),
                     });
                 };
                 let Some(meta) = self.metas.get(meta_id) else {
                     return Err(ElabError::TypeMismatch {
                         expected: "valid type".to_string(),
-                        actual: format!("ExpectedSort({ty:?})"),
+                        actual: format!("ExpectedSort({ty})"),
                     });
                 };
                 let meta_ty = self.metas.instantiate(&meta.ty);
@@ -736,7 +841,7 @@ impl<'a> ElabCtx<'a> {
                 if !matches!(meta_ty.kind(), ExprKind::Sort(_)) {
                     return Err(ElabError::TypeMismatch {
                         expected: "valid type".to_string(),
-                        actual: format!("ExpectedSort({ty:?})"),
+                        actual: format!("ExpectedSort({ty})"),
                     });
                 }
 
@@ -745,14 +850,14 @@ impl<'a> ElabCtx<'a> {
                 if !self.metas.assign(meta_id, promoted_sort) {
                     return Err(ElabError::TypeMismatch {
                         expected: "valid type".to_string(),
-                        actual: format!("ExpectedSort({ty:?})"),
+                        actual: format!("ExpectedSort({ty})"),
                     });
                 }
                 Ok(level)
             }
             _ => Err(ElabError::TypeMismatch {
                 expected: "valid type".to_string(),
-                actual: format!("ExpectedSort({ty:?})"),
+                actual: format!("ExpectedSort({ty})"),
             }),
         }
     }
@@ -767,10 +872,10 @@ impl<'a> ElabCtx<'a> {
     /// transparent (the reason that normalisation exists) while preserving the
     /// distinction a wrapper is written to create.
     pub(crate) fn whnf_instances(&self, expr: &Expr) -> Expr {
-        let caches = self.tc_caches.take();
-        let tc = self.make_tc(caches);
         let instantiated = self.metas.instantiate(expr);
         let instantiated = self.metas.instantiate_levels(&instantiated);
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches, &[&instantiated]);
         let result =
             tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Instances);
         self.tc_caches.replace(tc.take_caches());
@@ -778,10 +883,10 @@ impl<'a> ElabCtx<'a> {
     }
 
     pub(crate) fn whnf(&self, expr: &Expr) -> Expr {
-        let caches = self.tc_caches.take();
-        let tc = self.make_tc(caches);
         let instantiated = self.metas.instantiate(expr);
         let instantiated = self.metas.instantiate_levels(&instantiated);
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches, &[&instantiated]);
         let result = tc.whnf(&instantiated);
         self.tc_caches.replace(tc.take_caches());
         result
@@ -789,12 +894,12 @@ impl<'a> ElabCtx<'a> {
 
     /// Check if two expressions are definitionally equal (delegating to kernel)
     pub(crate) fn is_def_eq(&self, a: &Expr, b: &Expr) -> bool {
-        let caches = self.tc_caches.take();
-        let tc = self.make_tc(caches);
         let a_inst = self.metas.instantiate(a);
         let a_inst = self.metas.instantiate_levels(&a_inst);
         let b_inst = self.metas.instantiate(b);
         let b_inst = self.metas.instantiate_levels(&b_inst);
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches, &[&a_inst, &b_inst]);
         let result = tc.is_def_eq(&a_inst, &b_inst);
         self.tc_caches.replace(tc.take_caches());
         result

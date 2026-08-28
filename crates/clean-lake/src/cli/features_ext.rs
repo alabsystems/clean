@@ -25,10 +25,14 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "script", "list"],
         summary: "List scripts declared in lakefile.lean",
-        description: "Prints every named `script` block declared in the current project's lakefile, \
-                      including inherited scripts from dependencies.",
+        description: "Prints the `script` blocks the declarative lakefile parser recognizes in the \
+                      current project's lakefile. All three Lean spellings parse — \
+                      `script <name> [(args)] do`, `script <name> := <body>` and \
+                      `script <name> where` — and each prints the BARE declared name, which is the \
+                      key `lake script run`/`doc` accept. Scripts inherited from dependencies are \
+                      NOT listed: only the current lakefile is read.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Building,
         examples: &[Example {
             cmd: "clean lake script list",
             what: "enumerate project scripts",
@@ -42,10 +46,19 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "script", "run"],
         summary: "Invoke a named script",
-        description: "Runs the script identified by `name`, passing any trailing arguments through to it. \
-                      The script is looked up in the current lakefile and inherited manifests.",
+        description: "Lowers the named script's body into a synthetic `main : IO Unit` module and \
+                      executes it through the same native bridge as `lake run`, forwarding trailing \
+                      arguments and preserving the child exit code. The lookup reads the CURRENT \
+                      lakefile only, not inherited manifests. A script with an empty body is \
+                      REFUSED (it would otherwise run an empty `pure ()` and exit 0, reporting \
+                      success for work that never happened). Two bounds remain: bodies must stay \
+                      inside the bridge's stdout IO subset (`IO.print`/`IO.println`, \
+                      do-sequencing), and a declared argument binder (`script s (args) do`) is \
+                      parsed and reported but NOT bound in the synthetic `main : IO Unit`, so a \
+                      body that reads it cannot be lowered. Both fail closed rather than delegating \
+                      to `lean --run`.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Building,
         examples: &[Example {
             cmd: "clean lake script run build-docs",
             what: "invoke a script by name",
@@ -59,10 +72,14 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "script", "doc"],
         summary: "Show documentation for a named script",
-        description: "Prints the docstring attached to a script declared in `lakefile.lean`. Useful for \
-                      discovering what a script does before invoking it.",
+        description: "Prints a script's recorded documentation and body. The only documentation \
+                      spelling read is a `doc := \"...\"` field inside a `script <name> where` block \
+                      — a Lean `/-- ... -/` docstring above the declaration is NOT captured and \
+                      reports \"No documentation available\". Subject to the same lookup limit as \
+                      `lake script run`: the current lakefile only, not scripts inherited from \
+                      dependencies.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Building,
         examples: &[Example {
             cmd: "clean lake script doc build-docs",
             what: "show the documentation for a script",
@@ -75,14 +92,16 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "cache", "get"],
-        summary: "Download cached .olean files",
-        description: "Fetches precompiled `.olean` files from the configured build cache, skipping \
-                      modules that have not changed. Accelerates cold builds of large dependencies.",
+        summary: "Report the configured build cache (no remote fetch yet)",
+        description: "Reports the configured cache locations. It does NOT fetch anything: when the \
+                      project declares a cache executable this prints the `clean lake exe cache get` \
+                      invocation to run, and otherwise reports that no cache is configured. Remote \
+                      fetch is not implemented.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Building,
         examples: &[Example {
             cmd: "clean lake cache get",
-            what: "populate the local cache from remote",
+            what: "report the configured cache locations",
         }],
         see_also: &["lake cache put", "lake cache add"],
         references: COMMON_REFS,
@@ -92,14 +111,15 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "cache", "put"],
-        summary: "Upload .olean files to the build cache",
-        description: "Pushes locally built `.olean` files to the configured remote cache so other \
-                      machines can pick them up via `lake cache get`.",
+        summary: "Copy built .olean files into the local cache directory",
+        description: "Copies locally built `.olean` files into `.lake/cache`. Cloud upload is not \
+                      implemented — the command says so and stops, so nothing reaches a remote that \
+                      another machine could fetch.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Usable,
         examples: &[Example {
             cmd: "clean lake cache put",
-            what: "publish the local cache to remote",
+            what: "copy built oleans into the local cache",
         }],
         see_also: &["lake cache get", "lake cache add"],
         references: COMMON_REFS,
@@ -150,14 +170,19 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "check-build"],
-        summary: "Report whether the project would build",
-        description: "Performs the same analysis as `lake build` but stops before producing artifacts. \
-                      Useful as a fast local/release gate when only type-check results are needed.",
+        summary: "Report whether the project builds",
+        description: "Reports whether every target builds, exiting non-zero with a per-module error \
+                      list if any does not. It is artifact-free: every module is elaborated in \
+                      dependency order into a scratch directory that is deleted when the command \
+                      returns, so the project's `.lake/build` is neither written nor read. Because \
+                      it reads no existing artifact it cannot inherit a verdict from one — it \
+                      re-elaborates every module from source every time, which is what makes the \
+                      answer a check, and which also means it is never cheaper than `lake build`.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Usable,
         examples: &[Example {
             cmd: "clean lake check-build",
-            what: "dry-run the full project build",
+            what: "report whether every target builds (artifacts are still written)",
         }],
         see_also: &["lake build", "lake check-test", "lake check-lint"],
         references: COMMON_REFS,
@@ -168,8 +193,11 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "check-test"],
         summary: "Report whether the project's tests would pass",
-        description: "Dry-run analogue of `lake test`: runs the same checks without executing test \
-                      bodies, so local/release checks can surface failures early.",
+        description: "Analogue of `lake test` that elaborates the test targets and lists what it \
+                      WOULD run without executing any test body — verified: a test whose body \
+                      prints stays silent here. Like `lake check-build` the elaboration is \
+                      artifact-free: it runs in a scratch directory that is deleted on return, so \
+                      the project's `.lake/build` is untouched.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[Example {
@@ -184,14 +212,16 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "check-lint"],
-        summary: "Report whether the project would pass linting",
-        description: "Dry-run analogue of `lake lint`: runs linter analyses without applying fixes, \
-                      producing the same diagnostic output for automation.",
+        summary: "Check that the lint targets resolve and elaborate",
+        description: "Resolves the library targets that `lake lint` would run over and verifies they \
+                      ELABORATE (a check-only build), then lists them. It does not run linter \
+                      analyses and produces no lint diagnostics — use `lake lint` for those. An \
+                      unknown `--target` name is refused rather than reported as zero targets.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Usable,
         examples: &[Example {
             cmd: "clean lake check-lint",
-            what: "dry-run every linter",
+            what: "check that every lint target elaborates",
         }],
         see_also: &["lake lint", "lake check-build"],
         references: COMMON_REFS,
@@ -201,14 +231,16 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "pack"],
-        summary: "Pack built .olean files into a release archive",
-        description: "Bundles every built `.olean` in the current workspace into a single archive \
-                      (written to `--output` if provided, otherwise a conventional filename).",
+        summary: "Collect built .olean files into a distribution DIRECTORY",
+        description: "Copies every built `.olean` in the current workspace into an output DIRECTORY \
+                      alongside a `manifest.json`. This is a Clean-local layout, NOT a Lake/Mathlib \
+                      cache archive: no tarball is produced, and the command prints the `tar` \
+                      invocation to run if an archive is wanted.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Usable,
         examples: &[Example {
-            cmd: "clean lake pack --output dist.tar.zst",
-            what: "produce a release archive",
+            cmd: "clean lake pack --output dist",
+            what: "collect built oleans into a distribution directory",
         }],
         see_also: &["lake unpack", "lake upload"],
         references: COMMON_REFS,
@@ -218,14 +250,16 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "unpack"],
-        summary: "Unpack a prior `lake pack` archive",
-        description: "Restores `.olean` files from a previously-packed archive into the local build \
-                      tree so the project can be used without re-building.",
+        summary: "Restore .olean files from a `lake pack` directory",
+        description: "Restores `.olean` files from a directory previously produced by `lake pack` \
+                      into the local build tree, so the project can be used without re-building. \
+                      Reads the Clean-local `manifest.json` layout, not a Lake/Mathlib cache \
+                      archive.",
         category: Category::Build,
-        stability: Stability::V1,
+        stability: Stability::Usable,
         examples: &[Example {
-            cmd: "clean lake unpack dist.tar.zst",
-            what: "restore a release archive",
+            cmd: "clean lake unpack dist",
+            what: "restore oleans from a pack directory",
         }],
         see_also: &["lake pack"],
         references: COMMON_REFS,
@@ -235,21 +269,17 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "upload"],
-        summary: "Upload build artifacts to Reservoir",
-        description: "Publishes the current build artifacts to Reservoir (the Lean package registry). \
-                      Use `--dry-run` to print the upload plan without mutating remote state.",
+        summary: "Reservoir publish — DECLARED, NOT IMPLEMENTED",
+        description: "Intended to publish the current build artifacts to Reservoir (the Lean \
+                      package registry). NOT IMPLEMENTED: the command validates that a build \
+                      directory exists and then fails with an explicit \"not yet implemented\" \
+                      error (tracked as #421). `--dry-run` does not print an upload plan.",
         category: Category::Build,
-        stability: Stability::V1,
-        examples: &[
-            Example {
-                cmd: "clean lake upload --dry-run",
-                what: "preview a Reservoir upload",
-            },
-            Example {
-                cmd: "clean lake upload",
-                what: "publish to Reservoir",
-            },
-        ],
+        stability: Stability::Building,
+        examples: &[Example {
+            cmd: "clean lake upload",
+            what: "currently fails: Reservoir upload is not implemented",
+        }],
         see_also: &["lake pack"],
         references: COMMON_REFS,
         domain_root: Some("lake"),

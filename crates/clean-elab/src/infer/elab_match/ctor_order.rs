@@ -1039,8 +1039,8 @@ impl<'a> ElabCtx<'a> {
             let actual_ty = self.infer_type(&body)?;
             if !self.is_def_eq(&actual_ty, branch_ty) {
                 return Err(ElabError::TypeMismatch {
-                    expected: format!("complete column-split branch of type {branch_ty:?}"),
-                    actual: format!("{actual_ty:?}"),
+                    expected: format!("complete column-split branch of type {branch_ty}"),
+                    actual: format!("{actual_ty}"),
                 });
             }
             Ok(Some(body))
@@ -2006,7 +2006,7 @@ impl<'a> ElabCtx<'a> {
                     expected: format!(
                         "{expected_binder_count} constructor-field/IH binders for nested recursive minor `{ctor_name}`"
                     ),
-                    actual: format!("minor telescope ended after {binder_idx} binders at {whnf:?}"),
+                    actual: format!("minor telescope ended after {binder_idx} binders at {whnf}"),
                 });
             };
             let dom = dom.as_ref().clone();

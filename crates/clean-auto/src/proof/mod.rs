@@ -41,10 +41,10 @@ mod forest;
 mod step;
 mod trace;
 
-pub use builder::*;
-pub use forest::*;
-pub use step::*;
-pub use trace::*;
+pub(crate) use builder::*;
+pub(crate) use forest::*;
+pub(crate) use step::*;
+pub(crate) use trace::*;
 
 #[cfg(test)]
 mod tests;

@@ -241,6 +241,7 @@ pub fn extend_ivc_with_cert(
 mod tests {
     use super::*;
     use crate::r1cs::R1CSBuilder;
+    use std::sync::Arc;
 
     /// Create a simple multiplication constraint: x * y = z
     fn create_mul_shape() -> R1CSShape {
@@ -491,9 +492,9 @@ mod tests {
             let arg_cert = ProofCert::Sort { level: Level::Zero };
 
             let cert = ProofCert::App {
-                fn_cert: Box::new(fn_cert),
+                fn_cert: Arc::new(fn_cert),
                 fn_type: Box::new(Expr::sort(Level::Zero)),
-                arg_cert: Box::new(arg_cert),
+                arg_cert: Arc::new(arg_cert),
                 result_type: Box::new(Expr::sort(Level::Zero)),
             };
             let env = empty_env();

@@ -252,7 +252,7 @@ enum ExprWork {
 
 impl<'a> CompactedRegion<'a> {
     /// Read an Expr object at a file offset (iterative to avoid stack overflow)
-    pub fn read_expr_at(&self, offset: usize) -> OleanResult<ParsedExpr> {
+    pub(crate) fn read_expr_at(&self, offset: usize) -> OleanResult<ParsedExpr> {
         // Convert offset to pointer for the unified parsing loop
         let ptr = self.offset_to_ptr(offset);
         self.read_expr_iterative(ptr)

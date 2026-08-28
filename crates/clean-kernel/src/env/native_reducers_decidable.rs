@@ -124,8 +124,12 @@ pub(crate) fn reduce_inst_decidable_eq_nat(args: &[&Expr]) -> Option<Expr> {
     if args.len() < 2 {
         return None;
     }
-    let a = get_nat_val(args[0])?;
-    let b = get_nat_val(args[1])?;
+    // BigNat extraction, not the u64-capped `get_nat_val`: `USize.size_eq`'s
+    // 64-bit arm decides `2^64 = 18446744073709551616`, whose literal is
+    // `Big([0, 1])`. Capped at the same range `Nat.beq` reduces, because the
+    // `isFalse` witness's `Eq.refl (Nat.beq a b)` only type-checks there.
+    let a = super::native_reducers_arith::get_nat_pred_val(args[0])?;
+    let b = super::native_reducers_arith::get_nat_pred_val(args[1])?;
     if a == b {
         Some(mk_dec_is_true(&NAT_NAME, args[0]))
     } else {

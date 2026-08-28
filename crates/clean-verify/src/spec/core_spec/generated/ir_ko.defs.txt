@@ -1,0 +1,10 @@
+def ir_ko_tenum : IRTy := IRTy.enum_ ir_d2
+def ir_ko_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_ko_tenum ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield (IRTy.uint_ ir_d8) ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d5 ir_nl0 (ir_sc ir_d0 ir_d1 (ir_sc ir_d1 ir_d2 (ir_sc ir_d2 ir_d3 (ir_sc ir_d3 ir_d4 ir_sc0)))) Bool.false)))
+def ir_ko_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ (IRTy.uint_ ir_d8) (IRConst.int_ ir_d0)) ir_d4) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d4))))
+def ir_ko_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ (IRTy.uint_ ir_d8) (IRConst.int_ ir_d1)) ir_d5) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d5))))
+def ir_ko_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ (IRTy.uint_ ir_d8) (IRConst.int_ ir_d2)) ir_d6) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d6))))
+def ir_ko_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ (IRTy.uint_ ir_d8) (IRConst.int_ ir_d3)) ir_d7) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d7))))
+def ir_ko_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ (IRTy.uint_ ir_d8) (IRConst.int_ ir_d4)) ir_d8) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d8))))
+def ir_ko_b6 : IRBlock := IRBlock.mk ir_d6 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))
+def ir_ko_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_ko_b0 (ir_blk ir_ko_b1 (ir_blk ir_ko_b2 (ir_blk ir_ko_b3 (ir_blk ir_ko_b4 (ir_blk ir_ko_b5 (ir_blk ir_ko_b6 ir_blk0)))))))
+def ir_ko_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_ko_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)

@@ -91,8 +91,15 @@ pub fn have_i(state: &mut ProofState, name: &str, ty: Expr) -> TacticResult {
     let ty_for_inst = ty.clone();
 
     // Capture the fvar ID that have_() will allocate for the local hypothesis.
-    // have_() in the no-proof path calls fresh_fvar() once (forward.rs:101).
-    let inst_fvar = FVarId::new(state.next_fvar);
+    // have_()'s no-proof path mints GOAL-DERIVED (see existential.rs by_cases),
+    // so predict the same id from the same goal — nothing mutates `state`
+    // between here and the mint, so the prediction is exact. Predicting from
+    // the raw cursor would desync whenever the cursor sits above the goal's
+    // binder base.
+    let inst_fvar = {
+        let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
+        FVarId::new(state.goal_binder_base(goal))
+    };
 
     // haveI creates a new goal for the instance, then adds it to context
     have_(state, name, ty, None)?;

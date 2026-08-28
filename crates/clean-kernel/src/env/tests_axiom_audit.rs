@@ -1668,3 +1668,165 @@ fn test_transitive_trust_marker_deps_isolates_sorry_ax_3554() {
         "trust_marker_deps must contain sorryAx (#3554)",
     );
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// foundational_axiom_deps — the half `axiom_deps` throws away
+//
+// `axiom_deps` returning ∅ is what makes a theorem `ProofQuality::Constructive`
+// and therefore what puts it in the clean-native shard the
+// `gate::constructive` ratchet pins. Those tests pin that an empty result is
+// NOT evidence the proof rests on nothing: `Classical.em` is
+// `Constructive` under that predicate while consuming classical choice. An
+// auditor adjudicating the ratchet needs to see which foundational axioms were
+// actually consumed, and these tests pin that they can.
+// ════════════════════════════════════════════════════════════════════════════
+
+/// Collect a dependency set into sorted name strings, so assertions do not
+/// depend on which `HashSet` implementation the kernel happens to use.
+fn sorted_names(set: impl IntoIterator<Item = Name>) -> Vec<String> {
+    let mut names: Vec<String> = set.into_iter().map(|n| n.to_string()).collect();
+    names.sort();
+    names
+}
+
+/// A theorem reaching ONLY `Classical.choice` has an EMPTY `axiom_deps` — so
+/// `ProofQuality::Constructive` — yet is not constructive in the ordinary
+/// mathematical sense. `foundational_axiom_deps` is what makes that visible.
+#[test]
+fn test_foundational_axiom_deps_exposes_classical_choice_behind_empty_axiom_deps() {
+    let mut env = base_env();
+    let prop = Expr::prop();
+
+    env.add_decl_structural(Declaration::Axiom {
+        name: Name::from_string("Classical.choice"),
+        level_params: vec![],
+        type_: prop.clone(),
+    })
+    .expect("add Classical.choice");
+
+    env.add_decl_structural(Declaration::Theorem {
+        name: Name::from_string("uses_choice"),
+        level_params: vec![],
+        type_: prop,
+        value: Expr::const_str("Classical.choice"),
+    })
+    .expect("add theorem");
+
+    let name = Name::from_string("uses_choice");
+
+    // The predicate the native shard filters on says "constructive"…
+    assert!(
+        env.axiom_deps(&name).expect("axiom_deps").is_empty(),
+        "Classical.choice is foundational, so axiom_deps must be empty",
+    );
+    assert!(
+        matches!(env.proof_quality(&name), Some(ProofQuality::Constructive)),
+        "…and proof_quality must therefore report Constructive",
+    );
+
+    // …while the proof demonstrably rests on classical choice.
+    let foundational = env
+        .foundational_axiom_deps(&name)
+        .expect("foundational_axiom_deps");
+    assert!(
+        foundational.contains(&Name::from_string("Classical.choice")),
+        "foundational_axiom_deps MUST surface Classical.choice; got {foundational:?}",
+    );
+}
+
+/// The two accessors partition the full axiom closure: disjoint, and together
+/// they account for every axiom reached. A theorem reaching one foundational
+/// and one domain axiom must show exactly one in each.
+#[test]
+fn test_foundational_axiom_deps_and_axiom_deps_partition_the_closure() {
+    let mut env = base_env();
+    let prop = Expr::prop();
+
+    for axiom in ["propext", "MyDomain.axiom"] {
+        env.add_decl_structural(Declaration::Axiom {
+            name: Name::from_string(axiom),
+            level_params: vec![],
+            type_: prop.clone(),
+        })
+        .expect("add axiom");
+    }
+
+    // Proof term mentions both axioms: `propext MyDomain.axiom`.
+    env.add_decl_structural(Declaration::Theorem {
+        name: Name::from_string("mixed"),
+        level_params: vec![],
+        type_: prop,
+        value: Expr::app(
+            Expr::const_str("propext"),
+            Expr::const_str("MyDomain.axiom"),
+        ),
+    })
+    .expect("add theorem");
+
+    let name = Name::from_string("mixed");
+    // Compared as sorted name strings rather than as sets: the kernel's
+    // `HashSet` is `hashbrown`'s, not `std`'s, and pinning the concrete set
+    // type here would couple this test to that choice for no benefit.
+    let domain = sorted_names(env.axiom_deps(&name).expect("axiom_deps"));
+    let foundational = sorted_names(
+        env.foundational_axiom_deps(&name)
+            .expect("foundational_axiom_deps"),
+    );
+
+    assert_eq!(domain, vec!["MyDomain.axiom".to_owned()], "domain half");
+    assert_eq!(
+        foundational,
+        vec!["propext".to_owned()],
+        "foundational half"
+    );
+    assert!(
+        domain.iter().all(|d| !foundational.contains(d)),
+        "the two halves must never overlap: {domain:?} vs {foundational:?}",
+    );
+}
+
+/// Trust markers are non-foundational (#3554), so a theorem reaching `sorryAx`
+/// must show it in `axiom_deps` and NOT launder it into the foundational half.
+#[test]
+fn test_foundational_axiom_deps_never_absorbs_a_trust_marker() {
+    let mut env = base_env();
+    let prop = Expr::prop();
+
+    env.add_decl_structural(Declaration::Axiom {
+        name: Name::from_string("sorryAx"),
+        level_params: vec![],
+        type_: prop.clone(),
+    })
+    .expect("add sorryAx");
+    env.add_decl_structural(Declaration::Theorem {
+        name: Name::from_string("sorried"),
+        level_params: vec![],
+        type_: prop,
+        value: Expr::const_str("sorryAx"),
+    })
+    .expect("add theorem");
+
+    let name = Name::from_string("sorried");
+    assert!(
+        env.foundational_axiom_deps(&name)
+            .expect("foundational_axiom_deps")
+            .is_empty(),
+        "a trust marker must never be reported as a foundational dependency",
+    );
+    assert!(
+        env.axiom_deps(&name)
+            .expect("axiom_deps")
+            .contains(&Name::from_string("sorryAx")),
+        "sorryAx belongs to the non-foundational half",
+    );
+}
+
+/// An absent declaration is `None` from both accessors — never an empty set
+/// that reads as "depends on nothing".
+#[test]
+fn test_foundational_axiom_deps_missing_declaration_is_none() {
+    let env = base_env();
+    let name = Name::from_string("nope.not.here");
+    assert!(env.foundational_axiom_deps(&name).is_none());
+    assert!(env.axiom_deps(&name).is_none());
+}

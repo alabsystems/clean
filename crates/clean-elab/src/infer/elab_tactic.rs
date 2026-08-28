@@ -233,7 +233,20 @@ impl<'a> ElabCtx<'a> {
         // only let currently-failing-but-valid proofs through, never an unsound
         // one. Mirrors Lean's `getMainTarget` (instantiateMVars before the
         // tactic block sees the goal).
-        let target = tactic::simp::beta_reduce(&self.metas.instantiate(&target));
+        // U2 stage 1a (entry): resolve SOLVED universe levels through the
+        // ElabCtx metas before anything crosses the bridge. `instantiate`
+        // substitutes expression metas only, so without `instantiate_levels`
+        // the goal and the locals could carry a param the ElabCtx has already
+        // solved (e.g. `u_0 := 1` from header elaboration) into a ProofState
+        // that has no access to that solution — and, with the seeded rigid
+        // set below, could not even re-derive it. Genuinely-unsolved params
+        // (declared `.{u}`, still-abstract `Sort*` mints) pass through
+        // unchanged, exactly as before.
+        let target = tactic::simp::beta_reduce(
+            &self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&target)),
+        );
 
         let elab_locals: Vec<_> = self
             .locals
@@ -241,7 +254,7 @@ impl<'a> ElabCtx<'a> {
             .map(|(name, fvar, ty)| tactic::LocalDecl {
                 fvar: *fvar,
                 name: name.clone(),
-                ty: ty.clone(),
+                ty: self.metas.instantiate_levels(ty),
                 value: None,
             })
             .collect();
@@ -259,6 +272,43 @@ impl<'a> ElabCtx<'a> {
         // simp lemma lookup only tries the literal name and fails.
         ps.set_namespace_state(self.namespace_state.clone());
 
+        // U2 stage 1a — level identity across the ElabCtx↔ProofState bridge.
+        // The ProofState must not re-mint a `u_N` name this declaration
+        // already uses, and EVERY enclosing-declaration level name is rigid
+        // inside the tactic block — declared `.{u}` because it is genuinely
+        // fixed, and still-unsolved ElabCtx mints because the bridge has no
+        // sound way to hand a tactic-side solution of them back (simp's
+        // env-lemma path records constraints under lemmas' OWN declared
+        // param names, so a write-back could silently monomorphize or
+        // weaken the statement — the p30/p37 class; stage 3's mint registry
+        // makes names UNIQUE, it does not make them provenance-carrying, so
+        // this refusal is still the right posture). A tactic unification
+        // that genuinely needs to solve an enclosing level therefore refuses
+        // LOUDLY, never silently. See `ProofState::seed_universe_world`.
+        // U2 stage 3 (2026-08-25): the counter is SHARED, not copied. Stage
+        // 1a handed over a `u64` snapshot, which left both authorities
+        // starting at the same value for the whole block — and a single
+        // tactic STEP mints on both sides (its term arguments through this
+        // ElabCtx, its lemma instances on the ProofState), so the first
+        // mid-block mint on each side was the same string. Measured at HEAD
+        // before the fix: `rw [pid_eq]` then `have hn := pid_eq 0` in one
+        // block minted `u_3` on the ProofState and `u_3` on the ElabCtx —
+        // two different levels, one name. One handle, one monotone counter,
+        // no window.
+        let mut tactic_rigid = self.metas.rigid_level_params_snapshot();
+        for name in &self.universe_params {
+            tactic_rigid.insert(clean_kernel::name::Name::from_string(name));
+        }
+        ps.seed_universe_world(
+            self.universe_params.clone(),
+            self.level_mint.clone(),
+            tactic_rigid,
+        );
+        debug_assert!(
+            ps.level_mint.shares_counter_with(&self.level_mint),
+            "U2 stage 3: the bridge must hand the ProofState this ElabCtx's mint handle"
+        );
+
         // Populate ProofState with elaborator-scope FVars (#2212).
         // When a theorem has parameters (e.g., `theorem t (A : Prop) (a : A) : A`),
         // the elaborator creates FVars for those parameters. The ProofState
@@ -273,6 +323,38 @@ impl<'a> ElabCtx<'a> {
 
         match ps.closed_proof() {
             Some(proof) => {
+                // U2 stage 1 exit path (§1.3 item 5 of the plan): realize the
+                // levels the TACTIC side solved before the ElabCtx ever looks
+                // at the proof. Level solutions recorded only in `ps.metas`
+                // (e.g. a rewrite lemma's fresh param unified with the goal's
+                // level) are invisible to `self.metas`, so without this the
+                // returned proof still carries raw tactic-minted params and
+                // `verify_tactic_proof` / the decl-close kernel re-check
+                // correctly reject it — the measured sub-class A face.
+                let proof = ps.metas.instantiate_levels(&proof);
+                // U2 stage 3: no counter copy-back is needed or possible —
+                // the ProofState minted from THIS ElabCtx's counter, so its
+                // ids are already spent here. (Stage 1a raised `next_universe`
+                // to `max(self, ps)` at this point; with one shared counter
+                // that assignment is the identity.) The NAMES still have to
+                // be merged: `finalize_level_params` generalizes over
+                // `self.universe_params`, and a param the tactic minted and
+                // left abstract in the proof must appear there.
+                for name in &ps.universe_params {
+                    if !self.universe_params.contains(name) {
+                        self.universe_params.push(name.clone());
+                    }
+                }
+                // Deliberately NO write-back of tactic-side level solutions
+                // into the ElabCtx: every enclosing name is rigid inside the
+                // block (above), so `ps.metas` can only have solved
+                // TACTIC-MINTED params, and those are fully realized into the
+                // proof by the `instantiate_levels` call just before this.
+                // (A general flush was drafted and rejected: simp's
+                // env-lemma path records constraints under lemmas' own
+                // declared param names, and importing those into the
+                // declaration's world could silently monomorphize or weaken
+                // the statement — the p30/p37 class.)
                 // Realize any universe-level *parameters* solved during tactic
                 // elaboration (e.g. `Exists.{u_1}` → `Exists.{1}`, committed by
                 // `elab_anonymous_ctor`/`existsi` into the ElabCtx level union-find)
@@ -298,9 +380,9 @@ impl<'a> ElabCtx<'a> {
                     let mut detail = String::new();
                     for goal in goals.iter().take(5) {
                         for decl in &goal.local_ctx {
-                            detail.push_str(&format!("\n{} : {:?}", decl.name, decl.ty));
+                            detail.push_str(&format!("\n{} : {}", decl.name, decl.ty));
                         }
-                        detail.push_str(&format!("\n⊢ {:?}", goal.target));
+                        detail.push_str(&format!("\n⊢ {}", goal.target));
                     }
                     if n_goals > 5 {
                         detail.push_str(&format!("\n... and {} more goal(s)", n_goals - 5));
@@ -346,8 +428,8 @@ impl<'a> ElabCtx<'a> {
                 if !self.is_def_eq(&proof_ty, target) {
                     let target_inst = self.metas.instantiate(target);
                     return Err(ElabError::ProofTypeMismatch {
-                        expected: format!("{target_inst:?}"),
-                        actual: format!("{proof_ty:?}"),
+                        expected: format!("{target_inst}"),
+                        actual: format!("{proof_ty}"),
                     });
                 }
                 Ok(())
@@ -355,7 +437,7 @@ impl<'a> ElabCtx<'a> {
             Err(e) => {
                 let target_inst = self.metas.instantiate(target);
                 Err(ElabError::ProofTypeMismatch {
-                    expected: format!("{target_inst:?}"),
+                    expected: format!("{target_inst}"),
                     actual: format!("ill-typed: {e}"),
                 })
             }
@@ -839,12 +921,11 @@ impl<'a> ElabCtx<'a> {
             }
         };
 
-        // Pop tactic locals (even on error). Clear any let-value side-channel
-        // entries for the popped fvars in lock-step so a `let`-local's value
-        // cannot leak into a later, unrelated tactic's term elaboration.
-        for (_, fvar, _) in self.locals.drain(locals_before..) {
-            self.local_let_values.remove(&fvar);
-        }
+        // Pop tactic locals (even on error). `LocalBindings::truncate` drops
+        // the let-value side-channel entries for the popped fvars in
+        // lock-step so a `let`-local's value cannot leak into a later,
+        // unrelated tactic's term elaboration.
+        self.locals.truncate(locals_before);
 
         // After each successful tactic, remove goals whose metavariables
         // are already assigned (transitively solved). Matches Lean 4's

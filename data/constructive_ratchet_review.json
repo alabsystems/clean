@@ -1,0 +1,4481 @@
+{
+  "reviewed": "2026-08-25",
+  "trust_base": "438a64131da4cc30340f651d7cba65826db78ece",
+  "what_this_file_is": "The adjudication behind the 318 -> 396 refresh of data/constructive_ratchet.json. gate::constructive went RED on its first honest run (it was an ORPHAN from 2026-06-12 until 2026-08-25, so nothing had measured it in between) with +78 / -0. This file records which theorems appeared, why each is admissible under the shard's own predicate, and the MEASURED axiom closure behind that verdict. The baseline was NOT refreshed silently.",
+  "how_to_reproduce": "MATHVERSE_DUMP_ACCEPTED_CLOSURE=<path> cargo run --locked --release -p clean-mathverse --bin mathverse_shard -- build-native <dir>  (the dump is off unless the variable is set; the default build path is unchanged). Closures come from Environment::axiom_deps and Environment::foundational_axiom_deps, which share ONE traversal (Environment::axiom_closure_all) with the classifier itself, so the evidence cannot drift from the gate by re-implementing the walk.",
+  "baseline_before": 318,
+  "baseline_after": 396,
+  "added": 78,
+  "removed": 0,
+  "added_by_class": {
+    "Nat": 45,
+    "NNVerify": 22,
+    "Rat": 8,
+    "Classical": 2,
+    "funext": 1
+  },
+  "measured_invariants_over_all_accepted": {
+    "accepted": 396,
+    "every_one_is_a_Theorem": true,
+    "every_one_carries_a_proof_value": true,
+    "every_domain_axiom_closure_is_empty": true,
+    "violations": {},
+    "declaration_verification_census": {
+      "FullKernelCheck": 396
+    }
+  },
+  "foundational_axioms_consumed": {
+    "Quot": 180,
+    "Quot.mk": 180,
+    "Quot.lift": 179,
+    "Quot.ind": 174,
+    "propext": 136,
+    "Quot.sound": 111,
+    "Classical.choice": 2
+  },
+  "reaches_classical_choice": {
+    "count": 2,
+    "names": [
+      "Classical.byContradiction",
+      "Classical.em"
+    ],
+    "note": "THE NAMING CAVEAT, MEASURED. ProofQuality::Constructive means 'transitive axiom closure contains no DOMAIN-specific axiom'. FOUNDATIONAL_AXIOMS includes Classical.choice, so a theorem resting on classical choice is labelled Constructive by this predicate. That is the repo's 'prove' rule (closure subseteq {propext, Quot.sound, Classical.choice, Eq builtins}), and it is WEAKER than constructive in the ordinary mathematical sense. Classical.em is the sharpest instance: it IS the law of excluded middle, derived from choice by Diaconescu, and it is in this shard. The classifier is not wrong about its own predicate; the word 'constructive' overstates it. ADJUDICATED 2026-08-25 (lane LOOSE) -- see `naming_decision` below; this note is no longer 'recorded, not fixed'."
+  },
+  "added_names": [
+    "Classical.byContradiction",
+    "Classical.em",
+    "NNVerify.Block.blockwise_complexity",
+    "NNVerify.Block.blockwise_crown_sound",
+    "NNVerify.IntervalArith.interval_width_le_monotone",
+    "NNVerify.LayerNorm.width_out_le_width_in_pointwise",
+    "NNVerify.LayerNorm.zonotope_generators_offdiagonal",
+    "NNVerify.LayerNorm.zonotope_generators_reset",
+    "NNVerify.LayerNorm.zonotope_reset",
+    "NNVerify.LayerNorm.zonotope_reset_upper",
+    "NNVerify.LayerNorm.zonotope_width_preserved",
+    "NNVerify.ibp_linear_per_component",
+    "NNVerify.ibp_linear_sound",
+    "NNVerify.ibp_propagate_eq",
+    "NNVerify.ibp_tightness_base",
+    "NNVerify.ibp_tightness_bound",
+    "NNVerify.ibp_tightness_bound_inductive",
+    "NNVerify.ibp_tightness_step",
+    "NNVerify.infinity_norm_nonneg",
+    "NNVerify.linear_bounds_preserves_eq",
+    "NNVerify.norm_product_nonneg",
+    "NNVerify.rat_zero_le_one",
+    "NNVerify.rat_zero_le_two",
+    "NNVerify.relu_bounds_preserves_eq",
+    "Nat.add_le_add",
+    "Nat.add_le_add_left",
+    "Nat.add_le_add_right",
+    "Nat.add_lt_add",
+    "Nat.add_lt_add_left",
+    "Nat.add_lt_add_right",
+    "Nat.add_sub_cancel_left",
+    "Nat.ble_eq_true_of_le",
+    "Nat.ble_refl",
+    "Nat.ble_succ_right_eq_true",
+    "Nat.div_add_mod",
+    "Nat.divmodAux.add_right_comm",
+    "Nat.divmodAux.divmod_id",
+    "Nat.divmodAux.key",
+    "Nat.divmodAux.le_zero",
+    "Nat.divmodAux.modCore_lt",
+    "Nat.divmodAux.modCore_zero",
+    "Nat.divmodAux.mod_zero",
+    "Nat.divmodAux.nmul_succ_left",
+    "Nat.divmodAux.nmul_zero_left",
+    "Nat.divmodAux.sub_add_cancel",
+    "Nat.divmodAux.sub_pos_lt",
+    "Nat.divmodAux.sub_zero_le",
+    "Nat.divmodAux.succ_sub_succ",
+    "Nat.divmodAux.zero_sub",
+    "Nat.le_of_ble_eq_true",
+    "Nat.lt_of_lt_of_le",
+    "Nat.mod_lt",
+    "Nat.mul_le_mul",
+    "Nat.mul_le_mul_right",
+    "Nat.mul_lt_mul_left",
+    "Nat.not_le_of_ble_eq_false",
+    "Nat.pred_le",
+    "Nat.pred_le_pred",
+    "Nat.right_distrib",
+    "Nat.sub_le",
+    "Nat.sub_le_sub_left",
+    "Nat.sub_le_sub_right",
+    "Nat.sub_lt",
+    "Nat.sub_lt_of_lt_add",
+    "Nat.sub_self",
+    "Nat.succ_pred_of_pos",
+    "Nat.succ_sub",
+    "Nat.succ_sub_self",
+    "Nat.succ_sub_succ",
+    "Rat.add_sub_sub_self_eq_add",
+    "Rat.le_of_lt",
+    "Rat.mul_le_mul_of_nonneg_left",
+    "Rat.mul_le_mul_of_nonneg_right",
+    "Rat.neg_mul_neg",
+    "Rat.neg_neg",
+    "Rat.sq_le_one_of_abs_le_one",
+    "Rat.sq_nonneg",
+    "funext"
+  ],
+  "removed_names": [],
+  "per_name_closure_evidence": [
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Classical.choice",
+        "Quot",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Classical.byContradiction"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Classical.choice",
+        "Quot",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Classical.em"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Eq.subst"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Eq.symm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Eq.trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.castSucc_inj"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.castSucc_ne_last"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.mk"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.kron_castSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.last_ne_castSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_congr"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_single"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_smul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_sub"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Fin.sum_zero_fn"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Iff.symm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Iff.trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.NonNeg.add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.NonNeg.mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_negSucc_negSucc_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_negSucc_negSucc_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_negSucc_ofNat_succ_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_negSucc_ofNat_succ_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_ofNat"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_ofNat_succ_negSucc_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_ofNat_succ_negSucc_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_ofNat_succ_ofNat_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_zero_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_zero_middle"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_assoc_zero_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_comm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_le_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_le_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_lt_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_lt_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_negSucc_negSucc_subNatNat_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_negSucc_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_negSucc_subNatNat"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_neg_cancel_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_neg_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_ofNat_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_ofNat_succ_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_ofNat_succ_subNatNat"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_one_sub_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_right_cancel"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_subNatNat_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_subNatNat_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_subNatNat_zero_left_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_subNatNat_zero_right_negSucc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_subNatNat_zero_right_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_sub_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_sub_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.add_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.ble_eq_of_le_iff"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.ble_eq_true_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.isNonNeg_eq_true_NonNeg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_antisymm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_cross_trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_of_add_le_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_of_add_le_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_of_ble_eq_true"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_of_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_of_mul_le_mul_left_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_self_add_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_total"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.le_trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.left_distrib"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_cross_trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_cross_trans'"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_iff_le_not_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_irrefl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_of_add_lt_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_of_add_lt_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_of_le_of_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_of_lt_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_of_mul_lt_mul_left_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.lt_trichotomy"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.max_def"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.max_def'"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.min_def"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.min_def'"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_assoc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_comm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_le_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_le_mul_of_nonneg_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_le_mul_of_nonneg_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_left_cancel_ofNat_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_lt_mul_of_pos_right_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_pos"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_rearrange"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.mul_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.negOfNat_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.negSucc_mul_subNatNat"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.neg_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.neg_add_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.neg_mul_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.neg_mul_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.neg_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.neg_subNatNat"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.ofNat_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.ofNat_mul_subNatNat"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.ofNat_zero_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.one_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.right_distrib"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.subNatNat_add_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.subNatNat_eq_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.subNatNat_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.subNatNat_succ_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.subNatNat_zero_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.subNatNat_zero_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.subNatNat_zero_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.sub_add_one_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.sub_add_sub_cancel"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.sub_eq_add_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.sub_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.zero_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Int.zero_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Block.blockwise_complexity"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Block.blockwise_crown_equiv_faithful"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Block.blockwise_crown_sound"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Block.compose_count_eq_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Block.compose_faithful_succ_unfold"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Block.compose_faithful_zero_eq_input"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C004.crown_backward_eq_interval_hull"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C004.crown_backward_layernorm_faithful_refl_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C004.crown_equals_ibp"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C004.crown_equals_ibp_chain"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C004.ibp_forward_layernorm_faithful_refl_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C004.interval_hull_eq_ibp_forward"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C006.blockwise_base"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C006.blockwise_equals_monolithic"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C006.blockwise_nat_induction"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.C006.blockwise_step"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_abs_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_add_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_am_gm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_bernstein"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_cauchy_schwarz"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_chebyshev"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_contains_self_lower"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_contains_self_upper"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_div_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_intersection_sound"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_monotone_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_mul_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_neg_correct"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_pow_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_power_mean"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_recip_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_sqrt_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_sturm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_sub_contains"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_subset_refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_union_sound"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_width_le_monotone"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.interval_width_monotone"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.IntervalArith.neg_valid_helper"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.LayerNorm.width_out_le_width_in_pointwise"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.LayerNorm.zonotope_generators_offdiagonal"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.LayerNorm.zonotope_generators_reset"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.LayerNorm.zonotope_reset"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.LayerNorm.zonotope_reset_upper"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.LayerNorm.zonotope_width_preserved"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Nat.le_of_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Nat.lt_of_succ_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Nat.succ_le_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Nat.zero_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.add_left_neg_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.add_neg_self_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.interval_add_valid"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.interval_hull_fst_hi_le_hi"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.interval_hull_lo_le_fst_lo"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.le_refl_max_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.le_refl_min_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.le_refl_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.max_eq_min_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.max_le_min_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.max_max_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.max_min_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.max_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.max_zero_zero_alt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.min_eq_max_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.min_le_max_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.min_min_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.min_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.min_zero_zero_alt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.mul_neg_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.mul_one_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.mul_zero_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.mul_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.neg_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.zero_eq_max_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.Rat.zero_eq_min_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.add_le_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.entailment_transitivity"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.eps_ball_width_is_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_linear_per_component"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_linear_sound"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_propagate_eq"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_relu_soundness"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_tightness_base"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_tightness_bound"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_tightness_bound_inductive"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_tightness_step"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_width_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.ibp_width_zero_at_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.infinity_norm_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.interval_contains_refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.le_of_eq_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.le_of_le_of_eq"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.linear_bounds_preserves_eq"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.mul_nonneg_le_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.mul_nonpos_le_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.norm_product_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.rat_max_zero_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.rat_zero_le_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.rat_zero_le_two"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.relu_bounds_preserves_eq"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.relu_monotone"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.relu_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.relu_of_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.relu_of_nonpos"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.w_decompose"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.w_neg_nonpos"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "NNVerify.w_pos_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_assoc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_comm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_le_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_le_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_le_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_lt_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_lt_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_lt_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_sub_cancel_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.add_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.beq_refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.ble_eq_true_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.ble_refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.ble_succ_right_eq_true"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.div_add_mod"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.add_right_comm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.divmod_id"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.key"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.le_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.modCore_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.modCore_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.mod_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.nmul_succ_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.nmul_zero_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.sub_add_cancel"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.sub_pos_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.sub_zero_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.succ_sub_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.divmodAux.zero_sub"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_add_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_antisymm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_of_ble_eq_true"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_of_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_of_mul_le_mul_left_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_of_succ_le_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_or_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_total"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.le_trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.left_distrib"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.lt_asymm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.lt_irrefl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.lt_of_le_of_ne"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.lt_of_lt_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.lt_or_eq_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.lt_trichotomy"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mod_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_assoc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_comm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_le_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_le_mul_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_le_mul_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_left_cancel_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_lt_mul_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_lt_mul_left_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.mul_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.ne_of_beq_false"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.not_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.not_le_of_ble_eq_false"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.not_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.not_succ_le_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.one_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.pred_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.pred_le_pred"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.right_distrib"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.sub_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.sub_le_sub_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.sub_le_sub_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.sub_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.sub_lt_of_lt_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.sub_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_inj"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_le_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_lt_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_pred_of_pos"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_sub"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_sub_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.succ_sub_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.zero_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.zero_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.zero_lt_succ"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Nat.zero_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.Int.mulMulMulComm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.Raw.Equiv.refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.Raw.Equiv.symm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.Raw.Equiv.trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_add_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_of_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_of_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_sub_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.abs_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_assoc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_comm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_le_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_le_add_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_le_add_left.qworker"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_left_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_neg_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_right_cancel"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_sub_sub_self_eq_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.add_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.ble_eq_true_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.inv_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_add_of_nonneg_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_antisymm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_max_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_max_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_min"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_of_ble_eq_true"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_of_lt"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_of_sub_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_refl"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_total"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.le_trans"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.left_distrib"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.lt_iff_le_not_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.max_def"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.max_def'"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.max_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.min_def"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.min_def'"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.min_le_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.min_le_max"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.min_le_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_assoc"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_comm"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_inv_cancel"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_le_mul_of_nonneg_left"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_le_mul_of_nonneg_right"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_pos"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_sub"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.mul_zero"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.neg_le_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.neg_mul_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.neg_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.one_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.right_distrib"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.sq_le_one_of_abs_le_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.sq_nonneg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.sub_add_sub"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.sub_le_sub"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.sub_nonneg_of_le"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.sub_self"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.zero_add"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "propext"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.zero_lt_one"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "Rat.zero_mul"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "congr"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "congrArg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "congrFun"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "congrFun'"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [
+        "Quot",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound"
+      ],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "funext"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "if_neg"
+    },
+    {
+      "declaration_verification": "FullKernelCheck",
+      "domain_axiom_closure": [],
+      "foundational_axiom_closure": [],
+      "has_value": true,
+      "kind": "Theorem",
+      "name": "if_pos"
+    }
+  ],
+  "naming_decision": {
+    "decided": "2026-08-25",
+    "by": "lane-loose",
+    "verdict": "(c) KEEP the name, RENAME what the artifacts and the gate SAY, and make the exception set a measured baseline field rather than a footnote.",
+    "options_considered": [
+      {
+        "option": "(a) narrow the predicate so Classical.choice disqualifies Constructive",
+        "verdict": "REFUSED",
+        "why": "It is a policy change wearing a naming fix. Classical.choice is in FOUNDATIONAL_AXIOMS by deliberate decision, and CLAUDE.md's proof-soundness rule is STATED as 'closure subseteq FOUNDATIONAL_AXIOMS (propext, Quot.sound, Classical.choice, Eq built-ins)'. Narrowing puts ProofQuality in direct contradiction with the written rule and with data/axiom_audit.json's domain-axiom metric, and silently reclassifies every downstream count (SoundnessReport::constructive_theorems, the native shard's accept filter, the gamma-crown reports). There is also no variant to move the 2 theorems INTO: AxiomDependent carries a domain-axiom list they do not have. A change of that size needs an owner ruling on the foundation, not a gate lane."
+      },
+      {
+        "option": "(b) rename ProofQuality::Constructive kernel-wide",
+        "verdict": "REFUSED",
+        "why": "1109 `ProofQuality::Constructive` sites across the workspace (1819 ProofQuality mentions), on a #[non_exhaustive] public kernel enum -- a mechanical edit of that size buys no new truth. The reader who is misled reads the NUMBER, in data/constructive_ratchet.json and in the gate's output line, not the variant name at the definition site."
+      },
+      {
+        "option": "(c) keep the name and record the exact exception set",
+        "verdict": "TAKEN, with teeth",
+        "why": "Plain (c) is what this file already did, and it decays: a static footnote saying '2 of 396' cannot notice 2 becoming 40. So (c) is implemented as a GATE, not a sentence."
+      }
+    ],
+    "what_changed": [
+      "data/constructive_ratchet.json gains `classical_choice_dependents` (the exact names) and a `metric` field that states the PREDICATE instead of the word.",
+      "scripts/check_constructive_ratchet.py measures that set on every run from MATHVERSE_DUMP_ACCEPTED_CLOSURE -- the same dump this review was adjudicated from -- cross-checks the dump's accepted set against the shard sidecar, and REDs on any movement. Unlike name drift, the exception set is NOT laundered by staging the ratchet file: only --update --notes can move it.",
+      "The gate's green line now reads 'N foundational-axiom-only theorems' and names the Classical.choice exceptions out loud.",
+      "The ProofQuality::Constructive doc comment in crates/clean-kernel/src/env/axiom_audit.rs said 'Genuinely proved'. It now states the predicate, names the overstatement, and points here.",
+      "scripts/test_constructive_ratchet.py gains arms 8-10 (exception set grows -> RED; refused even when staged; an ABSENT field is not an empty set)."
+    ],
+    "falsified": {
+      "date": "2026-08-25",
+      "how": "Deleting ONLY the exception-set check from do_check turns exactly arms 8, 9 and 10 red and leaves the other 11 green. Prepending `return 0` to do_check turns all TEN do_check arms red and leaves the 4 update arms green -- the literal count the registry claims."
+    },
+    "reproduced_at": {
+      "commit": "0b3b94e5b",
+      "accepted": 396,
+      "full_kernel_check": 396,
+      "nonempty_domain_axiom_closure": 0,
+      "reaches_classical_choice": [
+        "Classical.byContradiction",
+        "Classical.em"
+      ],
+      "note": "Independently reproduces lane CONSTR's numbers, measured at 438a64131 in this same file. Two trust bases, byte-identical exception set."
+    }
+  }
+}

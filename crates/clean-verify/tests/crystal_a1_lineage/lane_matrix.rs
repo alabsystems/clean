@@ -97,10 +97,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "level_kind_ord",
         fixture: "level_kind_ord.trust-ir.txt",
-        spec: "eval_ir_kind_ord.rs",
-        blocks_prefix: "const SRC_IR_KO_B",
+        spec: "generated/ir_ko.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_ko_",
         block_marker: "def ir_ko_b",
-        func_prefix: "const SRC_IR_KO_FUNC",
+        func_prefix: "def ir_ko_func",
         nonempty: &[
             "blocks",
             "int_consts",
@@ -123,10 +123,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "from_source_system",
         fixture: "from_source_system.trust-ir.txt",
-        spec: "eval_ir_from_source.rs",
-        blocks_prefix: "const SRC_IR_FS_B",
+        spec: "generated/ir_fs.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_fs_",
         block_marker: "def ir_fs_b",
-        func_prefix: "const SRC_IR_FS_FUNC",
+        func_prefix: "def ir_fs_func",
         // No `loads`: the argument arrives BY VALUE, which is what made this
         // chain structurally different from the first two.
         nonempty: &[
@@ -149,10 +149,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "flat_flags_contains",
         fixture: "flat_flags_contains.trust-ir.txt",
-        spec: "eval_ir_contains.rs",
-        blocks_prefix: "const SRC_IR_FC_B",
+        spec: "generated/ir_fc.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_fc_",
         block_marker: "def ir_fc_b",
-        func_prefix: "const SRC_IR_FC_FUNC",
+        func_prefix: "def ir_fc_func",
         // ONE block: it computes and returns, so it reaches no control-flow lane
         // and materializes no constant at all.
         nonempty: &[
@@ -170,10 +170,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "bvar_in_range",
         fixture: "bvar_in_range.trust-ir.txt",
-        spec: "eval_ir_bvar_range.rs",
-        blocks_prefix: "const SRC_IR_BR_B",
+        spec: "generated/ir_br.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_br_",
         block_marker: "def ir_br_b",
-        func_prefix: "const SRC_IR_BR_FUNC",
+        func_prefix: "def ir_br_func",
         // Branches instead of dispatching, so `cases` / `default` / `switch_on`
         // are empty where the first three chains fill them.
         nonempty: &[
@@ -195,10 +195,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "is_valid_char",
         fixture: "is_valid_char.trust-ir.txt",
-        spec: "eval_ir_valid_char.rs",
-        blocks_prefix: "const SRC_IR_VC_B",
+        spec: "generated/ir_vc.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_vc_",
         block_marker: "def ir_vc_b",
-        func_prefix: "const SRC_IR_VC_FUNC",
+        func_prefix: "def ir_vc_func",
         nonempty: &[
             "blocks",
             "consts",
@@ -218,10 +218,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "expr_path_step_clone",
         fixture: "expr_path_step_clone.trust-ir.txt",
-        spec: "eval_ir_path_step.rs",
-        blocks_prefix: "const SRC_IR_EP_B",
+        spec: "generated/ir_ep.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_ep_",
         block_marker: "def ir_ep_b",
-        func_prefix: "const SRC_IR_EP_FUNC",
+        func_prefix: "def ir_ep_func",
         nonempty: &[
             "blocks",
             "agg_consts",
@@ -244,10 +244,11 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "float_div",
         fixture: "float_div.trust-ir.txt",
-        spec: "eval_ir_float_div.rs",
-        blocks_prefix: "const SRC_IR_FD_B",
+        // MINTED (2026-08-21): the generated script the spec stage replays.
+        spec: "generated/ir_fd.defs.txt",
+        blocks_prefix: "def ir_fd_",
         block_marker: "def ir_fd_b",
-        func_prefix: "const SRC_IR_FD_FUNC",
+        func_prefix: "def ir_fd_func",
         // FOUR lanes on the whole body. This is the row that says why the
         // eighth chain had to add `binop_tys` and `rets`: without them the row
         // would read `blocks, binops` and the gate would be comparing a block
@@ -257,10 +258,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "get_char_val_trunc",
         fixture: "get_char_val_trunc.trust-ir.txt",
-        spec: "eval_ir_trunc.rs",
-        blocks_prefix: "const SRC_IR_GC_B",
+        spec: "generated/ir_gc.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_gc_",
         block_marker: "def ir_gc_b",
-        func_prefix: "const SRC_IR_GC_FUNC",
+        func_prefix: "def ir_gc_func",
         // And this is the row that says why the ninth had to add `casts` and
         // `cast_tys`: without them it would read `blocks, rets` — one block and
         // a returned id — for a body whose entire content is the cast.
@@ -269,10 +270,10 @@ const CHAINS: &[Chain] = &[
     Chain {
         who: "meta_tag_shl",
         fixture: "meta_tag_shl.trust-ir.txt",
-        spec: "eval_ir_meta_tag.rs",
-        blocks_prefix: "const SRC_IR_MT_B0",
+        spec: "generated/ir_mt.defs.txt", // MINTED 2026-08-21: the generated script the spec stage replays
+        blocks_prefix: "def ir_mt_",
         block_marker: "def ir_mt_b0",
-        func_prefix: "const SRC_IR_MT_FUNC",
+        func_prefix: "def ir_mt_func",
         // The TENTH chain, and the only row with `asserts` in it. It is also
         // the row that made the three constant lanes per-INSTRUCTION: three
         // integer constants in ONE block, which the block-keyed lanes kept one

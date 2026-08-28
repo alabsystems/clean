@@ -89,6 +89,42 @@ theorem h2 : Stream.head (Stream.tail (Stream.tail (natsFrom 0))) = 2 := rfl
 }
 
 #[test]
+fn test_codata_stream_encoding_survives_small_thread_stack() {
+    // Regression pin for the 2026-08-26 stack-overflow cliff: on a default
+    // 2 MB libtest thread (any invocation where `.cargo/config.toml`'s
+    // `RUST_MIN_STACK = 64 MB` does not reach the test binary) the seed
+    // elaboration overflowed — the elaborator recursion IS stack_safe-guarded,
+    // but one debug-build cycle between checkpoints outgrew the old 32 KB
+    // red zone, so the guard faulted inside `stacker::__grow` (see
+    // `MIN_STACK_RED_ZONE` in `lib.rs`). Running the measured-deepest codata
+    // e2e on a deliberately small 1 MB stack forces the guard to ENGAGE
+    // (the 64 MB cargo default never lets it), so this test fails-closed if
+    // the red zone regresses below one elaborator cycle again.
+    let src = format!(
+        "{STREAM_SRC}
+def natsFrom (n : Nat) : Stream Nat := Stream.corec (fun k => k) Nat.succ n
+theorem h0 : Stream.head (natsFrom 0) = 0 := rfl
+theorem h1 : Stream.head (Stream.tail (natsFrom 0)) = 1 := rfl
+theorem h2 : Stream.head (Stream.tail (Stream.tail (natsFrom 0))) = 2 := rfl
+"
+    );
+    let handle = std::thread::Builder::new()
+        .name("codata-small-stack".into())
+        .stack_size(1024 * 1024)
+        .spawn(move || {
+            let env = elab_all(&src);
+            assert!(
+                env.get_const(&Name::from_string("h2")).is_some(),
+                "two tails deep must still compute by rfl on a 1 MB thread"
+            );
+        })
+        .expect("small-stack thread must spawn");
+    handle
+        .join()
+        .expect("codata seed elaboration must survive a 1 MB thread stack");
+}
+
+#[test]
 fn test_codata_parameterless_ticker() {
     // The QPFTypes parameterless answer: no dummy parameter needed.
     let src = r#"

@@ -35,6 +35,11 @@ pub(crate) mod names {
     name!(pub(crate) DECIDABLE_IS_FALSE = "Decidable.isFalse");
     name!(pub(crate) EQ_REFL = "Eq.refl");
 
+    // Canonical elaborated-numeral wrapper (`get_nat_val_peeling_canonical_ofnat`).
+    name!(pub(crate) NAT = "Nat");
+    name!(pub(crate) OFNAT_OFNAT = "OfNat.ofNat");
+    name!(pub(crate) INST_OFNAT_NAT = "instOfNatNat");
+
     name!(pub(crate) UINT8 = "UInt8");
     name!(pub(crate) UINT16 = "UInt16");
     name!(pub(crate) UINT32 = "UInt32");
@@ -246,6 +251,55 @@ pub(crate) fn reduce_uint_ble(args: &[&Expr]) -> Option<Expr> {
     with_binary_nat_args(args, |a, b| mk_bool(a <= b))
 }
 
+/// Extract a `Nat` literal, additionally peeling the CANONICAL elaborated
+/// numeral wrapper `@OfNat.ofNat Nat <lit> (instOfNatNat _)`.
+///
+/// A source numeral inside an application (e.g. `UInt32.ofNat 4294967295` in a
+/// `.lean` file) elaborates to `UInt32.ofNat (@OfNat.ofNat Nat 4294967295
+/// (instOfNatNat 4294967295))`, NOT to a raw `Lit` — so the bare-literal
+/// [`get_nat_val`] declined, [`get_uint_ctor_val`] declined with it, and the
+/// kernel fell back to δι-grinding the real structural `decEq` — Θ(value)
+/// unary work, a measured multi-minute hang at `UInt32 == ` on `2^32 - 1`
+/// (`clean extract` differential, kernel leg).
+///
+/// SOUNDNESS / fail-closed: `@OfNat.ofNat Nat k inst` is definitionally `k`
+/// ONLY for the canonical instance (`instOfNatNat k` is `⟨k⟩` and `ofNat`
+/// projects it back out). A CUSTOM instance (`OfNat Nat 5 := ⟨7⟩`) makes the
+/// term mean a *different* numeral, so anything but a `Nat`-typed wrapper
+/// whose instance head is `instOfNatNat` declines and the δι fallback keeps
+/// the verdict. The literal-payload arg being def-eq to the instance's index
+/// is guaranteed by typing (`instOfNatNat : (n : Nat) → OfNat Nat n`).
+fn get_nat_val_peeling_canonical_ofnat(e: &Expr) -> Option<u64> {
+    if let Some(v) = get_nat_val(e) {
+        return Some(v);
+    }
+    let head = e.get_app_fn();
+    let ExprKind::Const(name, _) = head.kind() else {
+        return None;
+    };
+    if *name != *names::OFNAT_OFNAT {
+        return None;
+    }
+    // `@OfNat.ofNat <ty> <lit> <inst>` — exactly 3 args, `<ty>` must be `Nat`.
+    let args = e.get_app_args();
+    let [ty, lit, inst] = args.as_slice() else {
+        return None;
+    };
+    let ExprKind::Const(ty_name, _) = ty.kind() else {
+        return None;
+    };
+    if *ty_name != *names::NAT {
+        return None;
+    }
+    let ExprKind::Const(inst_name, _) = inst.get_app_fn().kind() else {
+        return None;
+    };
+    if *inst_name != *names::INST_OFNAT_NAT {
+        return None;
+    }
+    get_nat_val(lit)
+}
+
 /// Extract the underlying `Nat` from a concrete UInt value.
 ///
 /// GENUINE v4.30 CARRIER: `<T>.ofBitVec : BitVec <width> → <T>`, so a concrete
@@ -260,6 +314,10 @@ pub(crate) fn reduce_uint_ble(args: &[&Expr]) -> Option<Expr> {
 /// *well-typed* `Decidable (@Eq <T> a b)` the operands have type `<T>`, so after
 /// WHNF they are such applications; anything else makes the reducer decline.
 ///
+/// Every literal read goes through [`get_nat_val_peeling_canonical_ofnat`], so
+/// the payload may be either a raw `Nat` literal or the canonical elaborated
+/// numeral (`@OfNat.ofNat Nat <lit> (instOfNatNat _)`).
+///
 /// `modulus` is `2^width` (or `None` for width-abstract USize — no compute).
 fn get_uint_ctor_val(e: &Expr, type_name: &Name, modulus: Option<u64>) -> Option<u64> {
     let head = e.get_app_fn();
@@ -269,7 +327,7 @@ fn get_uint_ctor_val(e: &Expr, type_name: &Name, modulus: Option<u64>) -> Option
     // `<T>.ofNat <lit>` — value is `<lit> mod 2^width`.
     if *name == Name::from_string(&format!("{type_name}.ofNat")) {
         let arg = e.get_app_args().into_iter().next()?;
-        let v = get_nat_val(arg)?;
+        let v = get_nat_val_peeling_canonical_ofnat(arg)?;
         return Some(modulus.map_or(v, |m| v % m));
     }
     // `<T>.ofBitVec <bv>` — peel the BitVec payload.
@@ -286,19 +344,26 @@ fn get_uint_ctor_val(e: &Expr, type_name: &Name, modulus: Option<u64>) -> Option
             let fin_head = fin.get_app_fn();
             if let ExprKind::Const(fname, _) = fin_head.kind() {
                 if *fname == Name::from_string("Fin.mk") {
-                    return fin.get_app_args().get(1).and_then(|a| get_nat_val(a));
+                    return fin
+                        .get_app_args()
+                        .get(1)
+                        .and_then(|a| get_nat_val_peeling_canonical_ofnat(a));
                 }
             }
             return None;
         }
         if *bv_name == Name::from_string("BitVec.ofNat") {
             // BitVec.ofNat <w> <lit>  — value is <lit> mod 2^width
-            let v = bv_args.get(1).and_then(|a| get_nat_val(a))?;
+            let v = bv_args
+                .get(1)
+                .and_then(|a| get_nat_val_peeling_canonical_ofnat(a))?;
             return Some(modulus.map_or(v, |m| v % m));
         }
         if *bv_name == Name::from_string("BitVec.ofNatLT") {
             // BitVec.ofNatLT <w> <lit> <proof>  — value is <lit> (in range)
-            return bv_args.get(1).and_then(|a| get_nat_val(a));
+            return bv_args
+                .get(1)
+                .and_then(|a| get_nat_val_peeling_canonical_ofnat(a));
         }
     }
     None

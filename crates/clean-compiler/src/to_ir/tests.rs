@@ -4880,3 +4880,59 @@ fn test_bitvec_ofnatlt_opaque_width_declines_decode() {
         "expected the C5b object-carrier refusal, got {err:?}"
     );
 }
+
+/// SEAM A (slice-independent scalar typing): a saturated `UIntW.{add,sub,mul}`
+/// application is typed at its LCNF-declared scalar width even when the
+/// callee is NOT in the slice. Before, `lower_const_application` dropped
+/// `LetDecl.ty` on the floor and returned `Object`; the boxing pass repaired
+/// it only from an IN-SLICE callee signature, so lanes that skip the
+/// primitives (the trust-ir native-BinOp path) reverted to `Ptr` and
+/// fail-closed at the emitter. Both directions pinned: the primitive with the
+/// AGREEING declared type is scalar; a non-primitive with the same declared
+/// type stays `Object` (name-table evidence required, type grounds alone are
+/// not enough).
+#[test]
+fn test_uint_arith_apply_takes_declared_scalar_type_without_callee() {
+    let u32_ty = || Expr::const_str("UInt32");
+    let apply = |callee: &str| LetValue::Const {
+        name: name(callee),
+        levels: vec![],
+        args: vec![Arg::FVar(fvar(0)), Arg::FVar(fvar(1))],
+    };
+    let mk_decl = |callee: &str| {
+        Decl::new(
+            name("root"),
+            vec![],
+            u32_ty(),
+            vec![
+                Param::new(fvar(0), name("a"), u32_ty()),
+                Param::new(fvar(1), name("b"), u32_ty()),
+            ],
+            Code::let_bind(
+                LetDecl::new(fvar(2), name("_r"), u32_ty(), apply(callee)),
+                Code::ret(fvar(2)),
+            ),
+            false,
+        )
+    };
+
+    let ir = lower_decl_ok(&mk_decl("UInt32.mul"));
+    let IRBody::VDecl { ty, .. } = &ir.body else {
+        panic!("expected a VDecl body, got {:?}", ir.body);
+    };
+    assert_eq!(
+        *ty,
+        IRType::UInt32,
+        "the primitive apply must carry its declared scalar type"
+    );
+
+    let ir = lower_decl_ok(&mk_decl("myMul"));
+    let IRBody::VDecl { ty, .. } = &ir.body else {
+        panic!("expected a VDecl body, got {:?}", ir.body);
+    };
+    assert_eq!(
+        *ty,
+        IRType::Object,
+        "a non-primitive callee must stay Object regardless of the declared type"
+    );
+}

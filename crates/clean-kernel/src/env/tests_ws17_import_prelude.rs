@@ -797,6 +797,7 @@ fn test_ws_level_import_prelude_suppresses_string_repr_tostring_stubs() {
         "instReprNat",
         "instReprString",
         "instReprBool",
+        "instReprInt",
         "instReprList",
         "ToString",
         "ToString.mk",

@@ -1,0 +1,31 @@
+-- p16 — THIRD MASK, the second signature position. Unresolved head in a
+-- RESULT TYPE.
+--
+-- PROVES: the p15 mechanism is not specific to binder types. The theorem's
+-- STATEMENT is `nosuchfn a a`, and it fails with the identical shape —
+-- including, since 2026-08-27, the identifier:
+--
+--   before:  TooManyArguments { func_type: "Sort(Param(u_0))", remaining_args: 2 }
+--   after:   Unknown identifier: nosuchfn; auto-bound implicit of type
+--            `Sort ?u_0` in a signature position, then applied to 2 argument(s)
+--            it cannot take. Define `nosuchfn`, or `set_option autoImplicit
+--            false` so an unresolved name in a signature is a hard error
+--
+-- WHY IT IS ITS OWN PROBE: p15 alone is compatible with "binder types are
+-- elaborated in some special mode". They are not — every signature position is
+-- outside `with_term_body_scope`, so all of them auto-bind. Two positions, one
+-- mechanism, one message.
+--
+-- The two also share the swallowed name with p14's identifier ON PURPOSE:
+-- `nosuchfn` here and in p14 is the SAME name in the same prelude, so the pair
+-- shows one identifier reported two ways by position alone — named in a value
+-- position all along, named in a signature position only since this repair.
+--
+-- The body of this theorem is deliberately `sorry`: the declaration must fail
+-- in its SIGNATURE, and a `sorry` body proves the failure is not the proof's.
+-- (It never reaches the trust counter — elaboration refuses first.)
+--
+-- CONTROLS: p14 — move this same application into a value position and the
+-- identifier is reported by name, with the pre-existing message. p30 — a real
+-- binder over-applied keeps the untouched `TooManyArguments` message.
+theorem probe_sorthead_result_type (a : Nat) : nosuchfn a a := sorry

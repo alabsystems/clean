@@ -1,0 +1,30 @@
+-- p11 — CLASS I, the CANDIDATE face. The probe that decided the fix shape.
+--
+-- RE-PINNED 2026-08-26 (FRONTIER STAGE I-1): FAIL -> PASS, 0/1 -> 1/0.
+-- Renamed from `p11_unwhnfd_goal_MUST_FAIL.lean`. Together with p08 this is
+-- the stage's exit criterion.
+--
+-- WHAT IT PINNED BEFORE: the goal here is NOT whnf'd — `elab_infer_instance`
+-- (`infer/elab_core.rs`) does not normalise, and the printed goal was the
+-- un-reduced `App(Const(DecidableEq, [Succ(Zero)]), FVar(FVarId(0)))`. It
+-- failed ANYWAY. So the local-instance loop's own `whnf` of the CANDIDATE
+-- (`infer/instance.rs`) plus the `is_class` gate were sufficient ON THEIR OWN
+-- to lose a `[DecidableEq α]` binder — the goal-side normalisation was never
+-- the whole cause.
+--
+-- WHAT IT RULED OUT, and still rules out: "just drop the goal-side `whnf` at
+-- the two `elab_app.rs` call sites." That was the recon's explicitly
+-- NOT-recommended first cut (§4.3), and this probe is why: it hands the
+-- search an un-whnf'd goal and the search failed regardless. The landed fix
+-- touches neither call site; it adds a candidate-side match and removes no
+-- normalisation from the hot application path.
+--
+-- WHAT IT PINS NOW: match (A) — the goal as handed in, against each local's
+-- type as bound, with no normalisation on either side. A local whose declared
+-- type unifies with the goal's declared type inhabits it whatever the head
+-- reduces to.
+--
+-- CONTROL: p10 (a `class`-declared class in the same position resolved before
+-- and resolves now) and p12 (the explicit dictionary threads fine). p20 is
+-- the refusal control for the match this probe exercises.
+def probe_inferinstance {α : Type} [DecidableEq α] : DecidableEq α := inferInstance

@@ -31,10 +31,10 @@ OUT="$(mktemp)"; trap 'rm -f "$OUT"' EXIT
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 BIN="${CRYSTAL_BIN:?set CRYSTAL_BIN to the compiled crystal_a1_lineage test binary}"
 
-VC_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_valid_char.rs"
+VC_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_vc.defs.txt"
 VC_FIX="$REPO/crates/clean-verify/tests/fixtures/is_valid_char.trust-ir.txt"
 VC_JSON="$REPO/crates/clean-verify/tests/fixtures/is_valid_char.lineage.json"
-EP_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_path_step.rs"
+EP_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_ep.defs.txt"
 EP_FIX="$REPO/crates/clean-verify/tests/fixtures/expr_path_step_clone.trust-ir.txt"
 EP_JSON="$REPO/crates/clean-verify/tests/fixtures/expr_path_step_clone.lineage.json"
 
@@ -61,20 +61,37 @@ reason() { awk '/panicked at/{f=1} f{print "     | " $0} /^note: run with/{exit}
 # tests that quote the same block sources verbatim, so a whole-file anchor is not
 # unique; a silent no-substitution would make a MUTATED run look green, which is
 # the exact false negative this script exists to rule out.
-sub() { python3 - "$1" "$2" "$3" <<'PY'
+sub() { python3 - "$1" "$2" "$3" "${4:-1}" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b, want = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 lines = open(p).read().split("\n")
 decl_only = p.endswith(".rs")
 hits = [i for i, l in enumerate(lines)
         if a in l and (not decl_only or l.startswith("const SRC_"))]
-assert len(hits) == 1, "anchor must match exactly one line, matched %d: %s" % (len(hits), a[:80])
-i = hits[0]
-assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
-lines[i] = lines[i].replace(a, b, 1)
+# `want` > 1 exists for ONE measured reason: the 2026-08-21 a152 rebaseline
+# (b03937e74) added a `current_source_bound_pin` stanza that RESTATES the
+# measured row's values, so those anchors now denote TWO lines that must move
+# together.  Still fail-closed: any other count aborts, naming pattern + count.
+assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+for i in hits:
+    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
-} || exit 9
+  rc=$?
+  # A FAILED substitution is the false negative this whole script exists to
+  # rule out: the file stays as it was, the next `expect` would run against an
+  # unchanged (or still-mutated) tree, and every case after it would be
+  # meaningless.  Abort loudly instead — the assertion above already named the
+  # pattern and the match count.  NOTE the binding: writing `|| exit 9` after
+  # the closing brace of the function DEFINITION binds to the (always-zero)
+  # definition itself, never to the calls — that construct let failed
+  # substitutions continue silently, which is why $? is captured HERE.
+  if [[ $rc -ne 0 ]]; then
+    echo "FATAL: substitution failed in $1 (anchor: $2)"
+    exit 9
+  fi
+}
 
 echo "== baseline =="
 expect PASS "baseline: all crystal_a1_lineage gates green"
@@ -105,16 +122,16 @@ expect PASS "Q3 reverted"
 
 echo
 echo "== Q4: the LEFT-OPERAND comparison's operand order =="
-sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d5 ir_d0) ir_d6" "(IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d5) ir_d6"
+sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d5 ir_d0) ir_d6" "(IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d0 ir_d5) ir_d6"
 expect FAIL "Q4 mutated: 0xDFFF < n becomes n < 0xDFFF — same op, same result id, same graph"; reason
-sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d5) ir_d6" "(IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d5 ir_d0) ir_d6"
+sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d0 ir_d5) ir_d6" "(IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d5 ir_d0) ir_d6"
 expect PASS "Q4 reverted"
 
 echo
 echo "== Q5: the COMPARISON OPERATOR =="
-sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d8) ir_d9" "(IRInst.icmp IRICmpOp.ule ir_vc_tu64 ir_d0 ir_d8) ir_d9"
+sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d0 ir_d8) ir_d9" "(IRInst.icmp IRICmpOp.ule (IRTy.uint_ 64) ir_d0 ir_d8) ir_d9"
 expect FAIL "Q5 mutated: ult becomes ule at the upper bound — the two differ at exactly one input"; reason
-sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ule ir_vc_tu64 ir_d0 ir_d8) ir_d9" "(IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d8) ir_d9"
+sub "$VC_SPEC" "(IRInst.icmp IRICmpOp.ule (IRTy.uint_ 64) ir_d0 ir_d8) ir_d9" "(IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d0 ir_d8) ir_d9"
 expect PASS "Q5 reverted"
 
 echo
@@ -133,9 +150,10 @@ expect PASS "Q7 reverted"
 
 echo
 echo "== Q8: markers_exact NON-VACUITY =="
-sub "$VC_JSON" '"markers_detail": "12 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"'
+# trailing 2: the a152 pin stanza RESTATES this value — two lines move together
+sub "$VC_JSON" '"markers_detail": "12 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"' 2
 expect FAIL "Q8 mutated: the 12-line marker sequence becomes empty"; reason
-sub "$VC_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "12 marker line(s) identical"'
+sub "$VC_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "12 marker line(s) identical"' 2
 expect PASS "Q8 reverted"
 
 echo
@@ -157,9 +175,9 @@ FILTER=expr_path_step_clone
 
 echo
 echo "== Q11: the DEFAULT edge's answer =="
-sub "$EP_SPEC" "(IRInst.const_ ir_ep_tstep (ir_cvar ir_d10)) ir_d14" "(IRInst.const_ ir_ep_tstep (ir_cvar ir_d9)) ir_d14"
+sub "$EP_SPEC" "(IRInst.const_ ir_ep_tstep (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d10) IRConst.vnil))) ir_d14" "(IRInst.const_ ir_ep_tstep (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d9) IRConst.vnil))) ir_d14"
 expect FAIL "Q11 mutated: cloning a ProjExpr yields an MDataExpr — wrong for exactly one variant, the one with no explicit case"; reason
-sub "$EP_SPEC" "(IRInst.const_ ir_ep_tstep (ir_cvar ir_d9)) ir_d14" "(IRInst.const_ ir_ep_tstep (ir_cvar ir_d10)) ir_d14"
+sub "$EP_SPEC" "(IRInst.const_ ir_ep_tstep (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d9) IRConst.vnil))) ir_d14" "(IRInst.const_ ir_ep_tstep (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d10) IRConst.vnil))) ir_d14"
 expect PASS "Q11 reverted"
 
 echo
@@ -185,9 +203,9 @@ expect PASS "Q14 reverted"
 
 echo
 echo "== Q15: the EXTRACTFIELD's field index =="
-sub "$EP_SPEC" "(IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3" "(IRInst.extractfield ir_tU8 ir_d2 ir_d1) ir_d3"
+sub "$EP_SPEC" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d2 ir_d0) ir_d3" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d2 ir_d1) ir_d3"
 expect FAIL "Q15 mutated: the discriminant is read from field 1 instead of field 0"; reason
-sub "$EP_SPEC" "(IRInst.extractfield ir_tU8 ir_d2 ir_d1) ir_d3" "(IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3"
+sub "$EP_SPEC" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d2 ir_d1) ir_d3" "(IRInst.extractfield (IRTy.uint_ ir_d8) ir_d2 ir_d0) ir_d3"
 expect PASS "Q15 reverted"
 
 echo
@@ -199,23 +217,23 @@ expect PASS "Q16 reverted"
 
 echo
 echo "== Q17: the recorded VACUITY of markers_exact =="
-sub "$EP_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "9 marker line(s) identical"'
+sub "$EP_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "9 marker line(s) identical"' 2
 expect FAIL "Q17 mutated: the fixture claims marker content this body does not have — the gate asserts the vacuity in BOTH directions, so an overclaim fails too"; reason
-sub "$EP_JSON" '"markers_detail": "9 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"'
+sub "$EP_JSON" '"markers_detail": "9 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"' 2
 expect PASS "Q17 reverted"
 
 echo
 echo "== Q18: the CANONICAL-line count this chain actually rests on =="
-sub "$EP_JSON" '"detail": "16 canonical line(s) identical"' '"detail": "3 canonical line(s) identical"'
+sub "$EP_JSON" '"detail": "16 canonical line(s) identical"' '"detail": "3 canonical line(s) identical"' 2
 expect FAIL "Q18 mutated: with the marker channel vacuous here, the canonical count IS the evidence"; reason
-sub "$EP_JSON" '"detail": "3 canonical line(s) identical"' '"detail": "16 canonical line(s) identical"'
+sub "$EP_JSON" '"detail": "3 canonical line(s) identical"' '"detail": "16 canonical line(s) identical"' 2
 expect PASS "Q18 reverted"
 
 echo
 echo "== Q19: the interpreter differential's honesty =="
-sub "$EP_JSON" '"samples": 0,' '"samples": 125,'
+sub "$EP_JSON" '"samples": 0,' '"samples": 125,' 2
 expect FAIL "Q19 mutated: the fixture claims 125 interpreter samples for a differential the producer refused to run"; reason
-sub "$EP_JSON" '"samples": 125,' '"samples": 0,'
+sub "$EP_JSON" '"samples": 125,' '"samples": 0,' 2
 expect PASS "Q19 reverted"
 
 # ───────────────────────── fail-closed, both chains ───────────────────────

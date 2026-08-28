@@ -321,11 +321,15 @@ impl Specification {
              no RedEnvFaithful projection, no conversion, nothing left to prove. \
              \
              WHAT REMAINS, and why it is the honest floor rather than laziness. Two accessibility \
-             witnesses: these CANNOT be discharged, because strong normalisation is FALSE for this \
-             calculus as reflected — the sort structure admits Girard's paradox, so an SN campaign \
-             would not be hard but unprovable. Carrying accessibility is therefore the correct shape \
-             for the theorem, not a gap in it. And hnf, the const case's genuine cost, which is \
-             open. \
+             witnesses. Earlier prose blamed Girard's paradox here; that was WRONG about this \
+             calculus — the spec's Typing is level-stratified (sort n : sort (succ n), pi via imax, \
+             mirroring the deployed kernel), and it is the LEAN RUNG calculus lambda-star, with its \
+             single self-typing sort, where sn_false holds. The honest reason the witnesses are \
+             carried: the accessibility premises range over RAW UNTYPED KExpr, where reduction \
+             genuinely diverges; discharging them for well-typed terms is the (open, hard, \
+             provable-in-principle) stratified SN campaign, not an impossibility. Carrying \
+             accessibility is therefore the correct CURRENT shape for the theorem, not a gap in it. \
+             And hnf, the const case's genuine cost, which is open. \
              \
              SCOPE is inherited unchanged from def_eq_fuel_complete and must travel with any public \
              statement: complete against DefEq, which has no eta, no proof irrelevance, no \

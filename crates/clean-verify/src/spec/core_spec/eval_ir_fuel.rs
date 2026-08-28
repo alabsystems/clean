@@ -8,7 +8,7 @@
 //! cannot be stated at a fixed fuel: steps grow with `|l|`, and `ir_run` reports
 //! exhaustion as `IROutcome.fuel_out`, *"its OWN outcome, distinct from every
 //! real result, so no theorem can mistake it for success"*. So A4 carries a
-//! `Le (ir_lz_fuel l) fuel` premise, and that premise is useless without the
+//! `Le (ir_lzm_cost l) fuel` premise, and that premise is useless without the
 //! monotonicity proved here.
 //!
 //! ## The statement has to be about successful returns
@@ -25,7 +25,7 @@
 //! come in Prop and Type twins because the kernel is non-cumulative and the
 //! induction's goal is an `Eq`.
 //!
-//! Also here: `ir_lz_init_mem_is_mem0`, discharging the globals-shadowing
+//! Also here: `ir_lzm_init_mem_is_mem0`, discharging the globals-shadowing
 //! hazard. `ir_init` concatenates globals in front of the caller heap and
 //! lookup is first-match, so a global at a live address would shadow a caller
 //! cell and void A2's premise. It is `Eq.refl` today and is registered so that
@@ -44,7 +44,7 @@ const SRC_RUN_SUCC_RET: &str = "def ir_run_succ_ret (m : IRModule) (f : Nat) : f
 
 const SRC_RUN_LE_RET: &str = "def ir_run_le_ret (m : IRModule) (f : Nat) (g : Nat) (hle : Le f g) : forall (c : IRConfig) (v : IRList IRScalar), Eq IROutcome (ir_run f m c) (IROutcome.ret v) -> Eq IROutcome (ir_run g m c) (IROutcome.ret v) := Le.rec f (fun (g : Nat) (_hg : Le f g) => forall (c : IRConfig) (v : IRList IRScalar), Eq IROutcome (ir_run f m c) (IROutcome.ret v) -> Eq IROutcome (ir_run g m c) (IROutcome.ret v)) (fun (c : IRConfig) (v : IRList IRScalar) (h : Eq IROutcome (ir_run f m c) (IROutcome.ret v)) => h) (fun (g2 : Nat) (_h2 : Le f g2) (ih : forall (c : IRConfig) (v : IRList IRScalar), Eq IROutcome (ir_run f m c) (IROutcome.ret v) -> Eq IROutcome (ir_run g2 m c) (IROutcome.ret v)) (c : IRConfig) (v : IRList IRScalar) (h : Eq IROutcome (ir_run f m c) (IROutcome.ret v)) => ir_run_succ_ret m g2 c v (ih c v h)) g hle";
 
-const SRC_INIT_MEM_IS_MEM0: &str = "def ir_lz_init_mem_is_mem0 : forall (mem : IRList IRMemSlot), Eq (IRList IRMemSlot) (ir_mem_concat (ir_globals_mem (ir_mod_globals ir_lz_module)) mem) mem := fun (mem : IRList IRMemSlot) => Eq.refl (IRList IRMemSlot) mem";
+const SRC_INIT_MEM_IS_MEM0: &str = "def ir_lzm_init_mem_is_mem0 : forall (mem : IRList IRMemSlot), Eq (IRList IRMemSlot) (ir_mem_concat (ir_globals_mem (ir_mod_globals ir_lzm_module)) mem) mem := fun (mem : IRList IRMemSlot) => Eq.refl (IRList IRMemSlot) mem";
 
 impl Specification {
     /// Fuel monotonicity, its discriminators, and the globals discharge.
@@ -57,13 +57,13 @@ Stated for SUCCESSFUL RETURNS on purpose: the unconditional form Eq (ir_run f m 
 \
 Nat.rec on the fuel generalised over the configuration, with an IRConfig.rec convoy in each arm. The zero/running case is where the discriminator earns its place -- there ir_run computes to fuel_out, and the hypothesis says that equals ret v. Every halted case is the identity because ir_run returns a halted outcome unchanged at any fuel. \
 \
-Without this, crystal A4's Le (ir_lz_fuel l) fuel premise is unusable: a forall-l theorem at fixed fuel is false, since steps grow with the size of l. DerivedProved, zero axiom_deps.")?;
+Without this, crystal A4's Le (ir_lzm_cost l) fuel premise is unusable: a forall-l theorem at fixed fuel is false, since steps grow with the size of l. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_RUN_LE_RET, "ir_run_le_ret: fuel monotonicity at a bound rather than a successor -- if the run succeeds at f and Le f g, it succeeds at g with the same result. Le.rec over the ordering, iterating ir_run_succ_ret. This is the exact shape A4's fuel premise supplies. \
 \
 Note Le's first argument is a PARAMETER, so Le.rec takes it before the motive and the motive ranges over the second argument plus the proof. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_INIT_MEM_IS_MEM0, "ir_lz_init_mem_is_mem0: the globals-shadowing hazard, DISCHARGED -- and left as an alarm. \
+        self.add_recursive_def(SRC_INIT_MEM_IS_MEM0, "ir_lzm_init_mem_is_mem0: the globals-shadowing hazard, DISCHARGED -- and left as an alarm. \
 \
-ir_init builds the machine's memory as ir_mem_concat (ir_globals_mem ...) mem0, and ir_mem_lookup is head-first first-match, so a global cell at the same address would SHADOW a caller cell and silently invalidate A2's representation premise. Today ir_lz_module declares no globals, so the concatenation is the identity and this is Eq.refl. \
+ir_init builds the machine's memory as ir_mem_concat (ir_globals_mem ...) mem0, and ir_mem_lookup is head-first first-match, so a global cell at the same address would SHADOW a caller cell and silently invalidate A2's representation premise. Today ir_lzm_module declares no globals, so the concatenation is the identity and this is Eq.refl. \
 \
 That is exactly why it is worth registering rather than assuming: when A0 emits a body that does declare globals, this lemma STOPS REDUCING and the build fails, instead of the theorem quietly ceasing to be true. DerivedProved, zero axiom_deps.")?;
         Ok(())
@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn test_globals_discharge_is_by_computation() {
         assert!(SRC_INIT_MEM_IS_MEM0.contains("Eq.refl"));
-        assert!(SRC_INIT_MEM_IS_MEM0.contains("ir_globals_mem (ir_mod_globals ir_lz_module)"));
+        assert!(SRC_INIT_MEM_IS_MEM0.contains("ir_globals_mem (ir_mod_globals ir_lzm_module)"));
     }
 
     #[test]

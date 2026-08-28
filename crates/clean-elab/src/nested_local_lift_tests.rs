@@ -280,3 +280,148 @@ deriving DeepInduction
         "explicit deriving on a non-nested type must fail loudly"
     );
 }
+
+// ── deriving ContainerMap (rank 3's production caller) ──
+
+/// `deriving ContainerMap` synthesizes and REGISTERS `C.map`.
+///
+/// `synthesize_container_map` shipped reachable from tests only — real dead-code
+/// debt, since its sibling `synthesize_deep_induction` has had a production
+/// caller in `register.rs` all along. This is that caller, and this test is what
+/// makes it real: it goes through the ordinary elaboration path, not the kernel
+/// API directly.
+#[test]
+fn test_deriving_container_map_registers_the_map_definition() {
+    let env = elab_all(
+        "\
+inductive Box (a : Type) : Type
+  | mk : a → Box a
+  deriving ContainerMap
+",
+    );
+    let map = env
+        .get_const(&Name::from_string("Box.map"))
+        .expect("`deriving ContainerMap` must register Box.map");
+    assert!(
+        map.value.is_some(),
+        "Box.map must be a definition with a body, not an opaque declaration"
+    );
+}
+
+/// Nothing is synthesized WITHOUT the derive: it is strictly opt-in.
+#[test]
+fn test_container_map_is_opt_in_only() {
+    let env = elab_all(
+        "\
+inductive Box2 (a : Type) : Type
+  | mk : a → Box2 a
+",
+    );
+    assert!(
+        env.get_const(&Name::from_string("Box2.map")).is_none(),
+        "an inductive without `deriving ContainerMap` must get no Box2.map"
+    );
+}
+
+/// An EXPLICIT derive is never silently skipped — a decline is a loud error.
+///
+/// Mirrors `deriving DeepInduction`'s loudness rule. Silent skipping is how a
+/// user ends up calling `C.map` that was never registered.
+#[test]
+fn test_deriving_container_map_declines_loudly_out_of_class() {
+    let mut env = Environment::with_prelude();
+    let decls = parse_file(
+        "\
+inductive Idx : Nat → Type
+  | z : Idx 0
+  deriving ContainerMap
+",
+    )
+    .expect("should parse");
+    let err = decls
+        .iter()
+        .try_fold((), |(), d| {
+            elaborate_decl_and_register(&mut env, d).map(|_| ())
+        })
+        .expect_err("an indexed container is out of the v1 map class and must refuse");
+    assert!(
+        format!("{err:?}").contains("ContainerMap"),
+        "the refusal must name the derive that failed, got: {err:?}"
+    );
+}
+
+// ── deriving ContainerRel (rank 3's rel caller) ──
+
+/// `deriving ContainerRel` synthesizes and REGISTERS the `C.rel` family.
+///
+/// `C.rel` shipped reachable from tests only — the same dead-code debt `C.map`
+/// carried until `deriving ContainerMap` landed. This is its caller.
+///
+/// Unlike `map` (a definition), `rel` is an inductive FAMILY, so this also
+/// checks that its constructors registered — a bare name would not prove the
+/// family is usable.
+#[test]
+fn test_deriving_container_rel_registers_the_rel_family() {
+    let env = elab_all(
+        "\
+inductive BoxR (a : Type) : Type
+  | mk : a → BoxR a
+  deriving ContainerRel
+",
+    );
+    let rel = env
+        .get_inductive(&Name::from_string("BoxR.rel"))
+        .expect("`deriving ContainerRel` must register BoxR.rel");
+    assert_eq!(
+        rel.num_params, 3,
+        "params are A, B, R — the two carriers plus the element relation"
+    );
+    assert_eq!(
+        rel.num_indices, 2,
+        "both containers are indices: each ctor pins them to its own application"
+    );
+    assert!(
+        env.get_constructor(&Name::from_string("BoxR.rel.mk"))
+            .is_some(),
+        "the lifted constructor must register too — a bare family name is unusable"
+    );
+}
+
+/// Nothing is synthesized WITHOUT the derive.
+#[test]
+fn test_container_rel_is_opt_in_only() {
+    let env = elab_all(
+        "\
+inductive BoxR2 (a : Type) : Type
+  | mk : a → BoxR2 a
+",
+    );
+    assert!(
+        env.get_inductive(&Name::from_string("BoxR2.rel")).is_none(),
+        "an inductive without `deriving ContainerRel` must get no BoxR2.rel"
+    );
+}
+
+/// An EXPLICIT derive declines LOUDLY out of class.
+#[test]
+fn test_deriving_container_rel_declines_loudly_out_of_class() {
+    let mut env = Environment::with_prelude();
+    let decls = parse_file(
+        "\
+inductive IdxR : Nat → Type
+  | z : IdxR 0
+  deriving ContainerRel
+",
+    )
+    .expect("should parse");
+    let err = decls
+        .iter()
+        .try_fold((), |(), d| {
+            elaborate_decl_and_register(&mut env, d).map(|_| ())
+        })
+        .expect_err("an indexed container is out of the v1 rel class and must refuse");
+    assert!(
+        format!("{err:?}").contains("ContainerRel"),
+        "the refusal must name the derive that failed, got: {err:?}"
+    );
+}

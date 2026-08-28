@@ -195,7 +195,7 @@ impl HygieneState {
     }
 
     /// Apply current scopes to an existing name
-    pub fn apply_scopes(&self, name: &str) -> ScopedName {
+    pub(crate) fn apply_scopes(&self, name: &str) -> ScopedName {
         ScopedName::with_scopes(name, self.current_scopes())
     }
 
@@ -253,7 +253,7 @@ impl HygieneContext {
     }
 
     /// Create a scoped name with current context
-    pub fn scoped_name(&self, name: &str) -> ScopedName {
+    pub(crate) fn scoped_name(&self, name: &str) -> ScopedName {
         self.state.apply_scopes(name)
     }
 }

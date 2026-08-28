@@ -27,6 +27,7 @@ pub mod toml_config;
 pub mod workspace;
 
 pub use build::{BuildContext, BuildOptions, BuildResult};
+pub use cli::DEFAULT_CLEAN_TOOLCHAIN;
 pub use config::{
     LakeConfig, LakeScript, LakefileParseMode, LeanExe, LeanLib, LeanTest, PackageConfig,
     SkippedConstruct,

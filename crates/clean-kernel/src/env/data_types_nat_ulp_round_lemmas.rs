@@ -3053,6 +3053,29 @@ impl Environment {
 
 #[cfg(test)]
 mod tests {
+    use crate::expr::{Expr, ExprKind};
+
+    /// Structural search for a `Const` by name.
+    ///
+    /// These shape assertions used to string-match the pretty-printer
+    /// (`s.contains("And ")`). That broke the moment `Display for Expr` learned
+    /// Lean notation in 6d1663115 and started printing `∧` — a test that
+    /// asserts a term's SHAPE has no business depending on how it is rendered,
+    /// so it asks the term instead.
+    fn mentions_const(e: &Expr, name: &str) -> bool {
+        match e.kind() {
+            ExprKind::Const(n, _) => n.to_string() == name,
+            ExprKind::App(f, a) => mentions_const(f, name) || mentions_const(a, name),
+            ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
+                mentions_const(t, name) || mentions_const(b, name)
+            }
+            ExprKind::Let(_, t, v, b, _) => {
+                mentions_const(t, name) || mentions_const(v, name) || mentions_const(b, name)
+            }
+            ExprKind::Proj(_, _, s) => mentions_const(s, name),
+            _ => false,
+        }
+    }
     use super::*;
     use crate::env::ConstantKind;
 
@@ -3135,7 +3158,7 @@ mod tests {
             .unwrap();
         let s = format!("{}", ci.type_);
         // symbolic: the exponent `n` survives inside `Nat.pow 2 n`, unreduced.
-        assert!(s.contains("And "), "missing And: {s}");
+        assert!(mentions_const(&ci.type_, "And"), "missing And: {s}");
         assert!(s.contains("Nat.roundHalfEvenMod"), "missing round: {s}");
         assert!(
             s.contains("Nat.pow"),

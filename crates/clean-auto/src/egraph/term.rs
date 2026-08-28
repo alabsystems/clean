@@ -8,7 +8,7 @@ use super::{EClassId, EGraph};
 
 /// A term (for extraction)
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Term {
+pub(crate) enum Term {
     /// A constant
     Const(String),
     /// A function application
@@ -17,7 +17,7 @@ pub enum Term {
 
 impl Term {
     /// Get the size of this term (number of nodes)
-    pub fn size(&self) -> usize {
+    pub(crate) fn size(&self) -> usize {
         match self {
             Term::Const(_) => 1,
             Term::App(_, children) => 1 + children.iter().map(Term::size).sum::<usize>(),
@@ -25,7 +25,7 @@ impl Term {
     }
 
     /// Pretty print the term
-    pub fn to_string_pretty(&self) -> String {
+    pub(crate) fn to_string_pretty(&self) -> String {
         match self {
             Term::Const(name) => name.clone(),
             Term::App(name, children) if children.is_empty() => name.clone(),
@@ -38,18 +38,18 @@ impl Term {
 }
 
 /// Builder for adding complex terms to an e-graph
-pub struct TermBuilder<'a> {
+pub(crate) struct TermBuilder<'a> {
     egraph: &'a mut EGraph,
 }
 
 impl<'a> TermBuilder<'a> {
     /// Create a new term builder
-    pub fn new(egraph: &'a mut EGraph) -> Self {
+    pub(crate) fn new(egraph: &'a mut EGraph) -> Self {
         TermBuilder { egraph }
     }
 
     /// Add a term to the e-graph
-    pub fn add_term(&mut self, term: &Term) -> EClassId {
+    pub(crate) fn add_term(&mut self, term: &Term) -> EClassId {
         match term {
             Term::Const(name) => self.egraph.add_const(name.as_str()),
             Term::App(name, children) => {

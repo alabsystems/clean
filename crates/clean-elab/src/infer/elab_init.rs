@@ -94,7 +94,11 @@ fn init_instances_from_env(env: &Environment) -> InstanceTable {
                 continue;
             };
 
-            instances.add_instance_with_synth_order(
+            // Bulk path: append now, sort once below. The per-insert sorted
+            // variant was measured QUADRATIC per class and dominated every
+            // declaration's elaboration once instance resolution was fixed
+            // (see `InstanceTable::push_instance_unsorted`).
+            instances.push_instance_unsorted(
                 inst_info.name.clone(),
                 inst_info.class_name.clone(),
                 inst_expr,
@@ -105,6 +109,7 @@ fn init_instances_from_env(env: &Environment) -> InstanceTable {
             );
         }
     }
+    instances.sort_instances_by_priority();
 
     instances
 }
@@ -122,13 +127,14 @@ impl<'a> ElabCtx<'a> {
 
         Self {
             env,
-            locals: Vec::new(),
-            local_let_values: HashMap::new(),
+            locals: local_bindings::LocalBindings::new(),
             shared_if_let_scrutinees: Vec::new(),
             universe_params: Vec::new(),
+            file_universe_params: Vec::new(),
+            decl_explicit_universes: None,
             metas: MetaState::new(),
             next_fvar: 0,
-            next_universe: 0,
+            level_mint: crate::level_mint::LevelMint::new(),
             instances,
             local_instances: Vec::new(),
             hidden_instances: std::collections::HashSet::new(),
@@ -136,6 +142,8 @@ impl<'a> ElabCtx<'a> {
             default_instances: HashMap::new(),
             instance_cache: HashMap::new(),
             tc_caches: RefCell::new(TcCaches::default()),
+            local_ctx_cache: RefCell::new(None),
+            decl_memo: RefCell::new(demand_local_ctx::DeclMemo::default()),
             recursor_auth_cache: RefCell::new(HashMap::new()),
             cases_on_auth_cache: RefCell::new(HashMap::new()),
             macro_ctx: MacroCtx::new(),
@@ -171,6 +179,7 @@ impl<'a> ElabCtx<'a> {
             collected_init: Vec::new(),
             collected_default_instance: Vec::new(),
             collected_instance_attrs: Vec::new(),
+            collected_class_attrs: Vec::new(),
             collected_derive_handler: Vec::new(),
             collected_attribute_removals: Vec::new(),
             auto_implicits: Vec::new(),
@@ -178,6 +187,7 @@ impl<'a> ElabCtx<'a> {
             in_decl_context: false, // Default to false for standalone expression elaboration
             in_term_body: false,
             section_binder_stack: Vec::new(),
+            included_var_stack: Vec::new(),
             current_expected_type: None,
             recursive_def_ctx: None,
             explicit_mode: false,
@@ -198,6 +208,8 @@ impl<'a> ElabCtx<'a> {
             match_index_discriminating_punit: None,
             nested_mutual_aux_arms: None,
             hole_names: HashMap::new(),
+            self_reference: None,
+            unstaged_siblings: Vec::new(),
         }
     }
 
@@ -218,128 +230,133 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Take collected simp lemma attributes for registration
-    pub fn take_simp_attrs(&mut self) -> Vec<(Name, KernelSimpPriority)> {
+    pub(crate) fn take_simp_attrs(&mut self) -> Vec<(Name, KernelSimpPriority)> {
         std::mem::take(&mut self.collected_simp_attrs)
     }
 
     /// Take collected reducibility attributes for registration
-    pub fn take_reducibility(&mut self) -> Vec<(Name, Reducibility)> {
+    pub(crate) fn take_reducibility(&mut self) -> Vec<(Name, Reducibility)> {
         std::mem::take(&mut self.collected_reducibility)
     }
 
     /// Take collected extern bindings for registration
-    pub fn take_extern(&mut self) -> Vec<(Name, String)> {
+    pub(crate) fn take_extern(&mut self) -> Vec<(Name, String)> {
         std::mem::take(&mut self.collected_extern)
     }
 
     /// Take collected export bindings for registration
-    pub fn take_export(&mut self) -> Vec<(Name, String)> {
+    pub(crate) fn take_export(&mut self) -> Vec<(Name, String)> {
         std::mem::take(&mut self.collected_export)
     }
 
     /// Take collected deprecations for registration
-    pub fn take_deprecated(&mut self) -> Vec<(Name, Option<String>)> {
+    pub(crate) fn take_deprecated(&mut self) -> Vec<(Name, Option<String>)> {
         std::mem::take(&mut self.collected_deprecated)
     }
 
     /// Take collected inline hints for registration
-    pub fn take_inline(&mut self) -> Vec<Name> {
+    pub(crate) fn take_inline(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_inline)
     }
 
     /// Take collected noinline hints for registration
-    pub fn take_noinline(&mut self) -> Vec<Name> {
+    pub(crate) fn take_noinline(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_noinline)
     }
 
     /// Take collected always_inline hints for registration
-    pub fn take_always_inline(&mut self) -> Vec<Name> {
+    pub(crate) fn take_always_inline(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_always_inline)
     }
 
     /// Take collected specialize hints for registration
-    pub fn take_specialize(&mut self) -> Vec<Name> {
+    pub(crate) fn take_specialize(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_specialize)
     }
 
     /// Take collected csimp lemmas for registration
-    pub fn take_csimp(&mut self) -> Vec<Name> {
+    pub(crate) fn take_csimp(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_csimp)
     }
 
     /// Take collected congr lemmas for registration
-    pub fn take_congr(&mut self) -> Vec<Name> {
+    pub(crate) fn take_congr(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_congr)
     }
 
     /// Take collected ext lemmas for registration
-    pub fn take_ext(&mut self) -> Vec<Name> {
+    pub(crate) fn take_ext(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_ext)
     }
 
     /// Take collected refl lemmas for registration
-    pub fn take_refl(&mut self) -> Vec<Name> {
+    pub(crate) fn take_refl(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_refl)
     }
 
     /// Take collected symm lemmas for registration
-    pub fn take_symm(&mut self) -> Vec<Name> {
+    pub(crate) fn take_symm(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_symm)
     }
 
     /// Take collected macro_inline hints for registration
-    pub fn take_macro_inline(&mut self) -> Vec<Name> {
+    pub(crate) fn take_macro_inline(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_macro_inline)
     }
 
     /// Take collected inline_if_reduce hints for registration
-    pub fn take_inline_if_reduce(&mut self) -> Vec<Name> {
+    pub(crate) fn take_inline_if_reduce(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_inline_if_reduce)
     }
 
     /// Take collected nospecialize hints for registration
-    pub fn take_nospecialize(&mut self) -> Vec<Name> {
+    pub(crate) fn take_nospecialize(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_nospecialize)
     }
 
     /// Take collected @[implemented_by] bindings for registration
-    pub fn take_implemented_by(&mut self) -> Vec<(Name, String)> {
+    pub(crate) fn take_implemented_by(&mut self) -> Vec<(Name, String)> {
         std::mem::take(&mut self.collected_implemented_by)
     }
 
     /// Take collected @[coe] coercion registrations
-    pub fn take_coe(&mut self) -> Vec<Name> {
+    pub(crate) fn take_coe(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_coe)
     }
 
     /// Take collected @[match_pattern] registrations
-    pub fn take_match_pattern(&mut self) -> Vec<Name> {
+    pub(crate) fn take_match_pattern(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_match_pattern)
     }
 
     /// Take collected @[init] registrations
-    pub fn take_init(&mut self) -> Vec<Name> {
+    pub(crate) fn take_init(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_init)
     }
 
     /// Take collected @[default_instance] registrations (name, priority)
-    pub fn take_default_instance(&mut self) -> Vec<(Name, u32)> {
+    pub(crate) fn take_default_instance(&mut self) -> Vec<(Name, u32)> {
         std::mem::take(&mut self.collected_default_instance)
     }
 
     /// Take collected `attribute [instance]` / `@[instance N]` registrations
     /// (name, priority) for kernel-side instance registration (B06).
-    pub fn take_instance_attrs(&mut self) -> Vec<(Name, u32)> {
+    pub(crate) fn take_instance_attrs(&mut self) -> Vec<(Name, u32)> {
         std::mem::take(&mut self.collected_instance_attrs)
     }
 
+    /// Take the `attribute [class] X` targets collected this declaration.
+    pub(crate) fn take_class_attrs(&mut self) -> Vec<Name> {
+        std::mem::take(&mut self.collected_class_attrs)
+    }
+
     /// Take collected @[derive_handler] registrations.
-    pub fn take_derive_handler(&mut self) -> Vec<Name> {
+    pub(crate) fn take_derive_handler(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_derive_handler)
     }
 
     /// Take collected file-scope attribute removals.
-    pub fn take_attribute_removals(&mut self) -> Vec<(Name, String)> {
+    pub(crate) fn take_attribute_removals(&mut self) -> Vec<(Name, String)> {
         std::mem::take(&mut self.collected_attribute_removals)
     }
 
@@ -361,11 +378,24 @@ impl<'a> ElabCtx<'a> {
         self.namespace_state = state;
     }
 
+    /// Declare which same-batch declarations contributed no forward-resolvable
+    /// header, so an identifier naming one gets a refusal that points at the
+    /// SIBLING rather than a name-distance guess.
+    ///
+    /// Diagnostic-only, and read only where resolution has already failed
+    /// ([`ElabCtx::unknown_ident_error`]): it cannot make a name resolve, and
+    /// it cannot make one stop resolving. Empty for every caller that is not
+    /// [`crate::module_batch`]'s body phase, which leaves those callers'
+    /// messages byte-identical.
+    pub(crate) fn set_unstaged_siblings(&mut self, siblings: Vec<UnstagedSibling>) {
+        self.unstaged_siblings = siblings;
+    }
+
     /// Take the namespace state out of this context, replacing it with empty.
     ///
     /// Called after elaboration to persist open/export aliases back to
     /// [`FileContext`] for use by subsequent declarations.
-    pub fn take_namespace_state(&mut self) -> crate::namespace::NamespaceState {
+    pub(crate) fn take_namespace_state(&mut self) -> crate::namespace::NamespaceState {
         std::mem::take(&mut self.namespace_state)
     }
 
@@ -373,13 +403,14 @@ impl<'a> ElabCtx<'a> {
     pub fn with_instances(env: &'a Environment, instances: InstanceTable) -> Self {
         Self {
             env,
-            locals: Vec::new(),
-            local_let_values: HashMap::new(),
+            locals: local_bindings::LocalBindings::new(),
             shared_if_let_scrutinees: Vec::new(),
             universe_params: Vec::new(),
+            file_universe_params: Vec::new(),
+            decl_explicit_universes: None,
             metas: MetaState::new(),
             next_fvar: 0,
-            next_universe: 0,
+            level_mint: crate::level_mint::LevelMint::new(),
             instances,
             local_instances: Vec::new(),
             hidden_instances: std::collections::HashSet::new(),
@@ -387,6 +418,8 @@ impl<'a> ElabCtx<'a> {
             default_instances: HashMap::new(),
             instance_cache: HashMap::new(),
             tc_caches: RefCell::new(TcCaches::default()),
+            local_ctx_cache: RefCell::new(None),
+            decl_memo: RefCell::new(demand_local_ctx::DeclMemo::default()),
             recursor_auth_cache: RefCell::new(HashMap::new()),
             cases_on_auth_cache: RefCell::new(HashMap::new()),
             macro_ctx: MacroCtx::new(),
@@ -422,6 +455,7 @@ impl<'a> ElabCtx<'a> {
             collected_init: Vec::new(),
             collected_default_instance: Vec::new(),
             collected_instance_attrs: Vec::new(),
+            collected_class_attrs: Vec::new(),
             collected_derive_handler: Vec::new(),
             collected_attribute_removals: Vec::new(),
             auto_implicits: Vec::new(),
@@ -429,6 +463,7 @@ impl<'a> ElabCtx<'a> {
             in_decl_context: false,
             in_term_body: false,
             section_binder_stack: Vec::new(),
+            included_var_stack: Vec::new(),
             current_expected_type: None,
             recursive_def_ctx: None,
             explicit_mode: false,
@@ -449,6 +484,8 @@ impl<'a> ElabCtx<'a> {
             match_index_discriminating_punit: None,
             nested_mutual_aux_arms: None,
             hole_names: HashMap::new(),
+            self_reference: None,
+            unstaged_siblings: Vec::new(),
         }
     }
 
@@ -458,7 +495,7 @@ impl<'a> ElabCtx<'a> {
     /// `@[default_instance]` table (class → entries in declaration order).
     /// All three default to empty, leaving resolution unchanged for callers
     /// that construct an `ElabCtx` without file-scope state.
-    pub fn set_instance_scope_state(
+    pub(crate) fn set_instance_scope_state(
         &mut self,
         hidden: std::collections::HashSet<Name>,
         scoped: HashMap<Name, Name>,
@@ -490,7 +527,7 @@ impl<'a> ElabCtx<'a> {
     /// Returns a slice of `(FVarId, Expr)` pairs representing instance-implicit
     /// binders that are in scope. These are searched before global instances
     /// during instance resolution.
-    pub fn local_instance_entries(&self) -> &[(FVarId, Expr)] {
+    pub(crate) fn local_instance_entries(&self) -> &[(FVarId, Expr)] {
         &self.local_instances
     }
 
@@ -498,7 +535,7 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Used by anonymous constructor syntax `⟨...⟩` to determine which structure
     /// to construct. Should be set before elaborating definition bodies with type annotations.
-    pub fn set_expected_type(&mut self, ty: Option<Expr>) {
+    pub(crate) fn set_expected_type(&mut self, ty: Option<Expr>) {
         self.current_expected_type = ty;
     }
 
@@ -511,7 +548,7 @@ impl<'a> ElabCtx<'a> {
     /// function names so a sibling self-call inside a minor body rewrites to its
     /// induction hypothesis. Pass `None` to clear it. See
     /// [`super::NestedMutualAuxArms`].
-    pub fn set_nested_mutual_aux_arms(
+    pub(crate) fn set_nested_mutual_aux_arms(
         &mut self,
         source: Option<(String, Vec<clean_parser::SurfaceMatchArm>, Vec<String>)>,
     ) {

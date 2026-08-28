@@ -214,15 +214,50 @@ const SRC_IR_VC_C2: &str = "def ir_vc_c2 (n : Nat) : Bool := ir_nat_ltb (ir_wrap
 const SRC_IR_VC_C3: &str = "def ir_vc_c3 (n : Nat) : Bool := ir_nat_ltb (ir_wrap ir_d64 n) (ir_wrap ir_d64 (ir_wrap ir_d64 1114112))";
 const SRC_ENV_IS_VALID_CHAR: &str = "def env_is_valid_char (n : Nat) : Bool := Bool.rec (fun (_ : Bool) => Bool) (Bool.rec (fun (_ : Bool) => Bool) Bool.false (ir_vc_c3 n) (ir_vc_c2 n)) Bool.true (ir_vc_c1 n)";
 const SRC_ENCODESU64VAL: &str = "inductive EncodesU64Val : IRScalar -> Nat -> Type\n| mk : forall (n : Nat), EncodesU64Val (IRScalar.int_ n) n";
-const SRC_IR_VC_B0: &str = "def ir_vc_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 55296)) ir_d3) (ir_nd1 (IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d3) ir_d4) (ir_nd (IRInst.condbr ir_d4 ir_d2 ir_nl0 ir_d1 ir_nl0)))";
-const SRC_IR_VC_B1: &str = "def ir_vc_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 57343)) ir_d5) (ir_nd1 (IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d5 ir_d0) ir_d6) (ir_nd (IRInst.condbr ir_d6 ir_d4 ir_nl0 ir_d5 ir_nl0)))";
-const SRC_IR_VC_B2: &str = "def ir_vc_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.true)) ir_d7) (ir_nd (IRInst.br ir_d3 (ir_nl1 ir_d7))))";
-const SRC_IR_VC_B3: &str = "def ir_vc_b3 : IRBlock := IRBlock.mk ir_d3 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))";
-const SRC_IR_VC_B4: &str = "def ir_vc_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 1114112)) ir_d8) (ir_nd1 (IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d0 ir_d8) ir_d9) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d9))))";
-const SRC_IR_VC_B5: &str = "def ir_vc_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.false)) ir_d10) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d10))))";
-const SRC_IR_VC_B6: &str = "def ir_vc_b6 : IRBlock := IRBlock.mk ir_d6 (ir_nl1 ir_d2) (ir_bd1 (ir_nd (IRInst.br ir_d3 (ir_nl1 ir_d2))))";
-const SRC_IR_VC_FUNC: &str = "def ir_vc_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_vc_b0 (ir_blk ir_vc_b1 (ir_blk ir_vc_b2 (ir_blk ir_vc_b3 (ir_blk ir_vc_b4 (ir_blk ir_vc_b5 (ir_blk ir_vc_b6 ir_blk0)))))))";
-const SRC_IR_VC_MODULE: &str = "def ir_vc_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_vc_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_vc.core.txt` + `generated/ir_vc.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_vc.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — THREE divergent lines of the nine, ONE notation class,
+/// printed before adoption: `ir_vc_b0`/`b1`/`b4` inline `(IRTy.uint_ 64)`
+/// where the hand lines named `ir_vc_tu64` (which deltas to
+/// `IRTy.uint_ ir_d64`, and `ir_d64` computes to the literal 64). The other
+/// six lines (`ir_vc_b2`, `b3`, `b5`, `b6`, `ir_vc_func`, `ir_vc_module`)
+/// minted byte-identical.
+const MINTED_IR_VC: &str = include_str!("generated/ir_vc.defs.txt");
+
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_VC_DOCS: &[&str] = &[
+    "ir_vc_b0: entry block, MINTED FROM THE EMITTED ARTIFACT (generated/ir_vc.core.txt; reader B's copy of the same body is tests/fixtures/is_valid_char.trust-ir.txt). Materialize 0xD800 into %3, compare n against it into %4, and CONDBR. Then-target bb2 (the immediate `true`), else-target bb1 -- the OPPOSITE polarity to the fifth chain's entry condbr, which is precisely the drift the condbr lane of the CFG gate exists to catch. DerivedProved, zero axiom_deps.",
+    "ir_vc_b1: the `||`'s right-hand side. Materialize 0xDFFF into %5 and compare it against n with the CONSTANT AS THE LEFT OPERAND (`icmp ult u64 %5, %0`), then branch. Swapping the two operands turns `0xDFFF < n` into `n < 0xDFFF` and changes the function; the icmp lane compares operand order and result id, so it fails here. DerivedProved, zero axiom_deps.",
+    "ir_vc_b2: the first disjunct held -- materialize Bool.true and go straight to the OUTER join. It does not pass through bb6: the two sides of the `||` reach the return by different routes, and a transcription that funnelled both through the inner join would be a different CFG. DerivedProved, zero axiom_deps.",
+    "ir_vc_b3: the OUTER join, taking a bool block parameter, and the only block that returns. DerivedProved, zero axiom_deps.",
+    "ir_vc_b4: the `&&`'s taken side -- materialize 0x110000 and evaluate `n < 0x110000`, then carry the answer to the inner join. Reached only when both preceding branches went the long way. DerivedProved, zero axiom_deps.",
+    "ir_vc_b5: the `&&`'s untaken side -- materialize Bool.false WITHOUT evaluating the upper bound. This block is the whole operational content of the short circuit, and the reason a concrete witness for the SURROGATE range is cheaper than one for the valid range above it: this path never touches the 1,114,112 constant. DerivedProved, zero axiom_deps.",
+    "ir_vc_b6: the INNER join, taking a bool block parameter and immediately branching to the OUTER join with it. Two join blocks in a chain; collapsing them would agree on every answer and be a different graph, which is why the branch lane compares bb6 -> bb3 explicitly. DerivedProved, zero axiom_deps.",
+    "ir_vc_func: is_valid_char as EvalIR -- one parameter (the code point, by value, SSA id 0), entry block 0, seven blocks, matching the emitted control-flow graph exactly. DerivedProved, zero axiom_deps.",
+    "ir_vc_module: the module for env::native_reducers_char::is_valid_char, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger -- no switch, so the emitted text fully determines the core module; see crate::ir_mint for what that establishes and what it does not. Checked graph-for-graph, including the condbr lane and both operand orders, by tests/crystal_a1_lineage/is_valid_char.rs. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order.
+static MINTED_IR_VC_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_VC
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `is_valid_char` module definitions, in registration order.
+#[must_use]
+pub fn ir_vc_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_VC_LINES
+}
+
 const SRC_IR_VC_MACH0: &str = "def ir_vc_mach0 (n : Nat) (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl1 ir_d0) (ir_vl1 (IRScalar.int_ n)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
 const SRC_IR_VC_M1: &str = "def ir_vc_m1 (n : Nat) (mem : IRList IRMemSlot) (na : Nat) : IRMachine := ir_cfg_mach (ir_bind_result (ir_vc_mach0 n mem na) (ir_nl1 ir_d3) (IRStepResult.value (IRScalar.int_ (ir_wrap ir_d64 55296)))) (ir_vc_mach0 n mem na)";
 const SRC_IR_VC_M2: &str = "def ir_vc_m2 (n : Nat) (mem : IRList IRMemSlot) (na : Nat) (b : Bool) : IRMachine := ir_cfg_mach (ir_bind_result (ir_vc_m1 n mem na) (ir_nl1 ir_d4) (IRStepResult.value (IRScalar.bool_ b))) (ir_vc_mach0 n mem na)";
@@ -287,15 +322,20 @@ impl Specification {
         self.add_recursive_def(SRC_IR_VC_C3, "ir_vc_c3: `n < 0x110000` at u64, reached only when the sentinel test failed AND the lower surrogate bound was cleared -- the right-hand operand of the source's short-circuit &&, made explicit as control flow by the emitted CFG. Its dividend is 1,114,112, which is why no concrete witness in this module reached it until 2026-08-15: deciding it at one argument measured 439.8 s and now measures 0.008 s, because the ir_wrap literal-folding lemma makes the residue independent of the dividend (its quotient is zero). What is still linear in the ARGUMENT is ir_nat_ltb's own peel, which is why the concrete runs that reach this comparison (31.4 s at 70000, 210.1 s at 1114112, both measured and both passing) are recorded in the module doc rather than registered. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_ENV_IS_VALID_CHAR, "env_is_valid_char: the reflected env::native_reducers_char::is_valid_char (native_reducers_char.rs:111-113). \n\nWritten as nested Bool.rec, and the shape mirrors the emitted CFG rather than the source's `||` and `&&`: the emitted body contains no `or` and no `and` instruction, both short circuits are branches. Bool.rec's minor order is (false, true), so the FIRST minor of the outer recursion is the `n >= 0xD800` arm (which still has to decide the surrogate range) and the second is the plain `true` arm. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESU64VAL, "EncodesU64Val r n: the runtime value r is the integer n. \n\nDeliberately NOT a reuse of EncodesU32Val even though the two inductives have the same shape. That relation is named for a width and this body is at another; sharing it would make one of the two names false, and it is the naming -- not the shape -- that the vacuity firewall and the premise-witness gate audit. It is not decorative either: this body takes its argument BY VALUE, performs no load and touches no aggregate, so the only thing a premise can say is that the argument arrived as an integer scalar rather than as a pointer, a bool or an undef -- and ir_int2 faults type_error not_int on anything else, so without it A4 is false. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_B0, "ir_vc_b0: entry block, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/is_valid_char.trust-ir.txt). Materialize 0xD800 into %3, compare n against it into %4, and CONDBR. Then-target bb2 (the immediate `true`), else-target bb1 -- the OPPOSITE polarity to the fifth chain's entry condbr, which is precisely the drift the condbr lane of the CFG gate exists to catch. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_B1, "ir_vc_b1: the `||`'s right-hand side. Materialize 0xDFFF into %5 and compare it against n with the CONSTANT AS THE LEFT OPERAND (`icmp ult u64 %5, %0`), then branch. Swapping the two operands turns `0xDFFF < n` into `n < 0xDFFF` and changes the function; the icmp lane compares operand order and result id, so it fails here. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_B2, "ir_vc_b2: the first disjunct held -- materialize Bool.true and go straight to the OUTER join. It does not pass through bb6: the two sides of the `||` reach the return by different routes, and a transcription that funnelled both through the inner join would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_B3, "ir_vc_b3: the OUTER join, taking a bool block parameter, and the only block that returns. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_B4, "ir_vc_b4: the `&&`'s taken side -- materialize 0x110000 and evaluate `n < 0x110000`, then carry the answer to the inner join. Reached only when both preceding branches went the long way. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_B5, "ir_vc_b5: the `&&`'s untaken side -- materialize Bool.false WITHOUT evaluating the upper bound. This block is the whole operational content of the short circuit, and the reason a concrete witness for the SURROGATE range is cheaper than one for the valid range above it: this path never touches the 1,114,112 constant. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_B6, "ir_vc_b6: the INNER join, taking a bool block parameter and immediately branching to the OUTER join with it. Two join blocks in a chain; collapsing them would agree on every answer and be a different graph, which is why the branch lane compares bb6 -> bb3 explicitly. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_FUNC, "ir_vc_func: is_valid_char as EvalIR -- one parameter (the code point, by value, SSA id 0), entry block 0, seven blocks, matching the emitted control-flow graph exactly. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_VC_MODULE, "ir_vc_module: the module for env::native_reducers_char::is_valid_char, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/is_valid_char.trust-ir.txt and checked graph-for-graph and instruction-for-instruction, including the condbr lane and both operand orders, by tests/crystal_a1_lineage/is_valid_char.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_kind_ord.rs posture.
+        let minted = ir_vc_module_defs();
+        if minted.len() != MINTED_IR_VC_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_vc script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_VC_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_VC_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_VC_MACH0, "ir_vc_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds ONE parameter positionally. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_VC_M1, "ir_vc_m1: the machine after ONE step, with the materialized 0xD800 bound at %3. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_VC_M2, "ir_vc_m2: the machine after TWO steps, with the first comparison's result ABSTRACTED to a Bool parameter. Same device as the fifth chain and for the same reason: ir_condbr_exec dispatches with Bool.rec on the scrutinee, and this body's scrutinee is a computed Bool over a symbolic u64 residue, so the machine is stuck there and no fuel unsticks it. At b := ir_vc_c1 n this term is DEFINITIONALLY ir_step applied twice to ir_vc_mach0. DerivedProved, zero axiom_deps.")?;

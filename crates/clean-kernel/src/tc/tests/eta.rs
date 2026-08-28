@@ -259,10 +259,9 @@ fn test_eta_expansion_fvar_with_pi_type_succeeds() {
     let pi_type = Expr::pi(BinderInfo::Default, Expr::prop(), Expr::prop());
 
     // Create a fresh FVar with type (Prop → Prop) in the local context
-    let fvar_id =
-        tc.ctx
-            .borrow_mut()
-            .push(Name::from_string("h"), pi_type.clone(), BinderInfo::Default);
+    let fvar_id = tc
+        .ctx_mut()
+        .push(Name::from_string("h"), pi_type.clone(), BinderInfo::Default);
 
     let fvar = Expr::fvar(fvar_id);
 
@@ -333,10 +332,9 @@ fn test_struct_eta_8_field_exercises_batch_cache() {
     let tc = TypeChecker::new(&env);
 
     // Create FVar x : S8
-    let x_id =
-        tc.ctx
-            .borrow_mut()
-            .push(Name::from_string("x"), s8_ref.clone(), BinderInfo::Default);
+    let x_id = tc
+        .ctx_mut()
+        .push(Name::from_string("x"), s8_ref.clone(), BinderInfo::Default);
     let x = Expr::fvar(x_id);
 
     // Build S8.mk (proj 0 x) (proj 1 x) ... (proj 7 x)
@@ -400,14 +398,12 @@ fn test_struct_eta_dependent_fields_batch_cache() {
     let tc = TypeChecker::new(&env);
 
     // Create two FVars of type S4
-    let a_id =
-        tc.ctx
-            .borrow_mut()
-            .push(Name::from_string("a"), s4_ref.clone(), BinderInfo::Default);
-    let b_id =
-        tc.ctx
-            .borrow_mut()
-            .push(Name::from_string("b"), s4_ref.clone(), BinderInfo::Default);
+    let a_id = tc
+        .ctx_mut()
+        .push(Name::from_string("a"), s4_ref.clone(), BinderInfo::Default);
+    let b_id = tc
+        .ctx_mut()
+        .push(Name::from_string("b"), s4_ref.clone(), BinderInfo::Default);
     let a = Expr::fvar(a_id);
     let b = Expr::fvar(b_id);
 

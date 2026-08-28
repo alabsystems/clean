@@ -114,7 +114,14 @@ impl RecursionNameParts {
     }
 }
 
-fn normalize_root_prefix(name: &str) -> &str {
+/// Strip every `_root_.` prefix from a name.
+///
+/// Shared with `infer::elab_core`'s recursion-aware unknown-identifier
+/// refusal, which must decide "is this identifier the name being defined?"
+/// under exactly the normalization recursion DETECTION already uses — two
+/// answers to that question would let the diagnostic and the lowering
+/// disagree about what a self-reference is.
+pub(super) fn normalize_root_prefix(name: &str) -> &str {
     let mut current = name;
     while let Some(stripped) = current.strip_prefix("_root_.") {
         current = stripped;

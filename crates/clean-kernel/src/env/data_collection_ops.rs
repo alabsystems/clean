@@ -2429,6 +2429,11 @@ impl Environment {
             }
         }
 
+        // `List.reverse_reverse` / `List.map_map` (kernel-proved, axiom-free;
+        // internally gated with the same import-mode cluster as the seeds they
+        // state goals over). Lives in `data_list_reverse_map_lemmas.rs`.
+        self.init_list_reverse_map_lemmas()?;
+
         self.list_ops_init = true;
         Ok(())
     }

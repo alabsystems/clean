@@ -37,6 +37,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 BIN="${CRYSTAL_BIN:?set CRYSTAL_BIN to the compiled crystal_a1_lineage test binary}"
 
 MT_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_meta_tag.rs"
+MT_DEFS="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_mt.defs.txt"
 MT_FIX="$REPO/crates/clean-verify/tests/fixtures/meta_tag_shl.trust-ir.txt"
 MT_JSON="$REPO/crates/clean-verify/tests/fixtures/meta_tag_shl.lineage.json"
 
@@ -60,22 +61,34 @@ expect() { # expect <FAIL|PASS> <label>
 
 reason() { awk '/panicked at/{f=1} f{print "     | " $0} /^note: run with/{exit}' "$OUT" | head -6; }
 
-sub() { python3 - "$1" "$2" "$3" <<'PY'
+sub() { python3 - "$1" "$2" "$3" "${4:-1}" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b, want = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 lines = open(p).read().split("\n")
 decl_only = p.endswith(".rs")
 hits = [i for i, l in enumerate(lines)
         if a in l and (not decl_only or l.startswith("const SRC_"))]
-assert len(hits) == 1, "anchor must match exactly one line, matched %d: %s" % (len(hits), a[:80])
-i = hits[0]
-assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
-lines[i] = lines[i].replace(a, b, 1)
+# `want` > 1 exists for ONE measured reason: the 2026-08-21 a152 rebaseline
+# (b03937e74) added a `current_source_bound_pin` stanza that RESTATES the
+# measured row's values, so those anchors now denote TWO lines that must move
+# together.  Still fail-closed: any other count aborts, naming pattern + count.
+assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+for i in hits:
+    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
   rc=$?
+  # A FAILED substitution is the false negative this whole script exists to
+  # rule out: the file stays as it was, the next `expect` would run against an
+  # unchanged (or still-mutated) tree, and every case after it would be
+  # meaningless.  Abort loudly instead — the assertion above already named the
+  # pattern and the match count.  NOTE the binding: writing `|| exit 9` after
+  # the closing brace of the function DEFINITION binds to the (always-zero)
+  # definition itself, never to the calls — that construct let failed
+  # substitutions continue silently, which is why $? is captured HERE.
   if [[ $rc -ne 0 ]]; then
-    echo "FATAL: substitution failed in $1 (anchor did not match exactly one declaration line)"
+    echo "FATAL: substitution failed in $1 (anchor: $2)"
     exit 9
   fi
 }
@@ -113,15 +126,16 @@ echo "== baseline =="
 expect PASS "baseline: all meta_tag_shl gates green"
 
 # ── the GUARD ITSELF, proved rather than trusted ───────────────────────────
-# `IRInst.const_ ir_vc_tu64 (IRConst.int_ 1)` appears in the shipped module AND
-# in both counterfactual modules — three declaration lines — so an anchor on it
-# must ABORT rather than silently mutate one of them.
+# `IRInst.const_ ir_vc_tu64 (IRConst.int_ 1)` appears in BOTH counterfactual
+# modules — two declaration lines (the shipped module is MINTED now and lives
+# in generated/ir_mt.defs.txt at its own spelling) — so an anchor on it must
+# ABORT rather than silently mutate one of them.
 echo
 echo "== G0: the substitution guard ABORTS on an ambiguous anchor =="
 ( sub "$MT_SPEC" "IRInst.const_ ir_vc_tu64 (IRConst.int_ 1)" "IRInst.const_ ir_vc_tu64 (IRConst.int_ 2)" ) >/dev/null 2>&1
 grc=$?
 if [[ $grc -eq 9 ]]; then
-  echo "OK   [ABORT] G0: an anchor matching 3 declaration lines is FATAL, not a silent no-op"
+  echo "OK   [ABORT] G0: an anchor matching 2 declaration lines is FATAL, not a silent no-op"
   pass=$((pass+1))
 else
   echo "BAD  [want abort rc=9, rc=$grc] G0: the substitution guard did not fire"
@@ -133,16 +147,16 @@ expect PASS "G0: the tree is untouched after the refused substitution"
 
 echo
 echo "== P1: THE ASSERT, DELETED FROM THE PROVED MODULE =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd (IRInst.assert ir_d4)) (ir_nd1 (IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (ir_nd1 (IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1) ir_d5)"
+sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)"
 expect FAIL "P1 mutated: the proved module asserts TWICE — the assert lane and the order lane both see it, and before the assert lane neither did"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (ir_nd1 (IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (ir_nd1 (IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1) ir_d5)"
+sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)"
 expect PASS "P1 reverted"
 
 echo
 echo "== P2: THE ASSERT'S SCRUTINEE — %4 becomes %0 =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.assert ir_d4" "IRInst.assert ir_d0"
+sub "$MT_DEFS" "IRInst.assert ir_d4" "IRInst.assert ir_d0"
 expect FAIL "P2 mutated: the module asserts the CONSTANT 1 rather than the comparison — an integer, which ir_as_bool declines. The order lane cannot see it: same class, same empty result list"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.assert ir_d0" "IRInst.assert ir_d4"
+sub "$MT_DEFS" "IRInst.assert ir_d0" "IRInst.assert ir_d4"
 expect PASS "P2 reverted"
 
 echo
@@ -152,8 +166,11 @@ python3 - "$MT_FIX" <<'PY'
 import sys
 p = sys.argv[1]
 s = open(p).read()
-assert s.count("    assert %4") == 1
-open(p, "w").write(s.replace("    assert %4  ; #proof: shift_in_range  ; #loc: 435 157 30\n", ""))
+line = "    assert %4  ; #proof: shift_in_range  ; #loc: 437 157 30\n"
+# assert on the EXACT text being removed: asserting a prefix while replacing
+# the full line is how a moved #loc turned this mutation into a silent no-op.
+assert s.count(line) == 1, "expected exactly one assert line, found %d" % s.count(line)
+open(p, "w").write(s.replace(line, ""))
 PY
 expect FAIL "P3 mutated: the artifact side loses its assert — an unchecked shift is a different program"; reason
 restore "$MT_FIX"
@@ -161,32 +178,32 @@ expect PASS "P3 reverted"
 
 echo
 echo "== P4: THE ASSERT BINDS A RESULT =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd (IRInst.assert ir_d4))" "(ir_nd1 (IRInst.assert ir_d4) ir_d7)"
+sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4))" "(ir_nd1 (IRInst.assert ir_d4) ir_d7)"
 expect FAIL "P4 mutated: Assert is VALUE-LESS — the machine advances past it without binding. A module that binds a result there is a different program, and only the program-order lane's RESULT LIST can see it"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.assert ir_d4) ir_d7)" "(ir_nd (IRInst.assert ir_d4))"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.assert ir_d4) ir_d7)" "(ir_nd (IRInst.assert ir_d4))"
 expect PASS "P4 reverted"
 
 # ────────────────────── THE ASSERT'S CONDITION, NEGATED ────────────────────
 
 echo
 echo "== P5: THE CONDITION NEGATED — ult becomes uge =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3" "IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d2 ir_d3"
+sub "$MT_DEFS" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3" "IRInst.icmp IRICmpOp.uge (IRTy.uint_ 32) ir_d2 ir_d3"
 expect FAIL "P5 mutated: the proved module asserts \`amount >= 64\` — the exact NEGATION of the range check, so the shipped body's passing arm becomes the panicking one"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3"
+sub "$MT_DEFS" "IRInst.icmp IRICmpOp.uge (IRTy.uint_ 32) ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3"
 expect PASS "P5 reverted"
 
 echo
 echo "== P6: THE CONDITION'S OPERAND ORDER — \`64 < amount\` =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d3 ir_d2"
+sub "$MT_DEFS" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d3 ir_d2"
 expect FAIL "P6 mutated: the operands are exchanged, which is the negation again and changes no type"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d3 ir_d2" "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3"
+sub "$MT_DEFS" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d3 ir_d2" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3"
 expect PASS "P6 reverted"
 
 echo
 echo "== P7: THE CONDITION'S WIDTH — u32 becomes u64 =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d2 ir_d3"
+sub "$MT_DEFS" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d2 ir_d3"
 expect FAIL "P7 mutated: ir_int_cmp canonicalizes BOTH operands at the declared width, so the same operands decide a different predicate (ir_mt_icmp_width_is_semantic executes exactly that at width 8)"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.icmp IRICmpOp.ult ir_vc_tu64 ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3"
+sub "$MT_DEFS" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 64) ir_d2 ir_d3" "IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3"
 expect PASS "P7 reverted"
 
 # ───────────── WHERE THE ASSERT GOES WHEN IT FAILS (no target in IR) ────────
@@ -230,81 +247,81 @@ expect PASS "P12 reverted"
 
 echo
 echo "== P13: THE FIRST CONSTANT — the shifted value =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 1)) ir_d0) (ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 2)) ir_d0) (ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)"
+sub "$MT_DEFS" "(IRInst.const_ (IRTy.uint_ 64) (IRConst.int_ ir_d1))" "(IRInst.const_ (IRTy.uint_ 64) (IRConst.int_ ir_d2))"
 expect FAIL "P13 mutated: the body shifts 2 rather than 1 — a different constant, and the one a block-keyed lane WOULD have caught"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 2)) ir_d0) (ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 1)) ir_d0) (ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)"
+sub "$MT_DEFS" "(IRInst.const_ (IRTy.uint_ 64) (IRConst.int_ ir_d2))" "(IRInst.const_ (IRTy.uint_ 64) (IRConst.int_ ir_d1))"
 expect PASS "P13 reverted"
 
 echo
 echo "== P14: THE SECOND CONSTANT — the shift amount. INVISIBLE before this chain =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 62)) ir_d1)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.const_ (IRTy.int_ 32) (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ (IRTy.int_ 32) (IRConst.int_ 62)) ir_d1)"
 expect FAIL "P14 mutated: the tag bit moves from 63 to 62. The pre-2026-08-16 int_consts lane was keyed by BLOCK and held only the FIRST constant of bb0, so this was compared by nothing"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 62)) ir_d1)" "(ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.const_ (IRTy.int_ 32) (IRConst.int_ 62)) ir_d1)" "(ir_nd1 (IRInst.const_ (IRTy.int_ 32) (IRConst.int_ 63)) ir_d1)"
 expect PASS "P14 reverted"
 
 echo
 echo "== P15: THE THIRD CONSTANT — the width bound. ALSO invisible before =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 64)) ir_d3)" "(ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 99)) ir_d3)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.const_ (IRTy.uint_ 32) (IRConst.int_ 64)) ir_d3)" "(ir_nd1 (IRInst.const_ (IRTy.uint_ 32) (IRConst.int_ 99)) ir_d3)"
 expect FAIL "P15 mutated: the range check compares against 99 rather than the register width"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 99)) ir_d3)" "(ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 64)) ir_d3)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.const_ (IRTy.uint_ 32) (IRConst.int_ 99)) ir_d3)" "(ir_nd1 (IRInst.const_ (IRTy.uint_ 32) (IRConst.int_ 64)) ir_d3)"
 expect PASS "P15 reverted"
 
 echo
 echo "== P16: A CONSTANT'S TYPE — i32 becomes u32, so the sext stops sign-extending =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 63)) ir_d1)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.const_ (IRTy.int_ 32) (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ (IRTy.uint_ 32) (IRConst.int_ 63)) ir_d1)"
 expect FAIL "P16 mutated: the shift amount is materialized UNSIGNED. Same value, same id, different type — and the const_tys lane is the only one that reads it"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.const_ (IRTy.uint_ 32) (IRConst.int_ 63)) ir_d1)" "(ir_nd1 (IRInst.const_ (IRTy.int_ 32) (IRConst.int_ 63)) ir_d1)"
 expect PASS "P16 reverted"
 
 # ───────────────────────── THE TWO CASTS OF ONE OPERAND ────────────────────
 
 echo
 echo "== P17: THE OPCODES SWAPPED — bitcast becomes sext =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.sext ir_mt_ti32 ir_br_tu32 ir_d1"
+sub "$MT_DEFS" "IRInst.cast IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 32) ir_d1"
 expect FAIL "P17 mutated: the range check would see the SIGN-EXTENDED amount. At the i32 sign bit the two disagree — 2^31 versus 2^64 - 2^31 — which is the executed pair the chain registers"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.cast IRCastOp.sext ir_mt_ti32 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_br_tu32 ir_d1"
+sub "$MT_DEFS" "IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) ir_d1"
 expect PASS "P17 reverted"
 
 echo
 echo "== P18: THE BITCAST'S DESTINATION WIDTH =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_vc_tu64 ir_d1"
+sub "$MT_DEFS" "IRInst.cast IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1"
 expect FAIL "P18 mutated: a bitcast between DIFFERENT widths, which ir_bitcast_eval refuses — the narrowing the tenth chain's build item deliberately kept"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_vc_tu64 ir_d1" "IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_br_tu32 ir_d1"
+sub "$MT_DEFS" "IRInst.cast IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1" "IRInst.cast IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) ir_d1"
 expect PASS "P18 reverted"
 
 echo
 echo "== P19: THE SEXT'S OPERAND — %1 becomes %2 =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1" "IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d2"
+sub "$MT_DEFS" "IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1" "IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d2"
 expect FAIL "P19 mutated: the shift amount comes from the BITCAST rather than from the constant, which changes no type at all"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d2" "IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1"
+sub "$MT_DEFS" "IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d2" "IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1"
 expect PASS "P19 reverted"
 
 echo
 echo "== P20: THE SHIFT'S OPERAND ORDER =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.binop IRBinOp.shl ir_vc_tu64 ir_d0 ir_d5" "IRInst.binop IRBinOp.shl ir_vc_tu64 ir_d5 ir_d0"
+sub "$MT_DEFS" "IRInst.binop IRBinOp.shl (IRTy.uint_ 64) ir_d0 ir_d5" "IRInst.binop IRBinOp.shl (IRTy.uint_ 64) ir_d5 ir_d0"
 expect FAIL "P20 mutated: \`63 << 1\` rather than \`1 << 63\` — a different number, and the operand lane is the only one that sees it"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.binop IRBinOp.shl ir_vc_tu64 ir_d5 ir_d0" "IRInst.binop IRBinOp.shl ir_vc_tu64 ir_d0 ir_d5"
+sub "$MT_DEFS" "IRInst.binop IRBinOp.shl (IRTy.uint_ 64) ir_d5 ir_d0" "IRInst.binop IRBinOp.shl (IRTy.uint_ 64) ir_d0 ir_d5"
 expect PASS "P20 reverted"
 
 echo
 echo "== P21: THE RETURNED VALUE — the shift result becomes the constant =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.ret (ir_nl1 ir_d6)" "IRInst.ret (ir_nl1 ir_d0)"
+sub "$MT_DEFS" "IRInst.ret (ir_nl1 ir_d6)" "IRInst.ret (ir_nl1 ir_d0)"
 expect FAIL "P21 mutated: the body returns 1 rather than 1 << 63"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "IRInst.ret (ir_nl1 ir_d0)" "IRInst.ret (ir_nl1 ir_d6)"
+sub "$MT_DEFS" "IRInst.ret (ir_nl1 ir_d0)" "IRInst.ret (ir_nl1 ir_d6)"
 expect PASS "P21 reverted"
 
 echo
 echo "== P22: PROGRAM ORDER — the assert hoisted above the comparison =="
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd1 (IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3) ir_d4) (ir_nd (IRInst.assert ir_d4))" "(ir_nd (IRInst.assert ir_d4)) (ir_nd1 (IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3) ir_d4)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4) (IRList.cons IRNode (ir_nd (IRInst.assert ir_d4))" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4)"
 expect FAIL "P22 mutated: the assert reads %4 before anything binds it. Every per-KIND lane is bit-identical; only the program-order lane sees the interleaving"; reason
-subin "$MT_SPEC" SRC_IR_MT_B0 "(ir_nd (IRInst.assert ir_d4)) (ir_nd1 (IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3) ir_d4)" "(ir_nd1 (IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3) ir_d4) (ir_nd (IRInst.assert ir_d4))"
+sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4)" "(ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4) (IRList.cons IRNode (ir_nd (IRInst.assert ir_d4))"
 expect PASS "P22 reverted"
 
 echo
 echo "== P23: THE FUNCTION SIGNATURE — a parameter appears =="
-subin "$MT_SPEC" SRC_IR_MT_FUNC "IRFunc.mk ir_d0 ir_nl0 ir_d0 (ir_blk ir_mt_b0 ir_blk0)" "IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_mt_b0 ir_blk0)"
+sub "$MT_DEFS" "IRFunc.mk ir_d0 ir_nl0 ir_d0 (ir_blk ir_mt_b0 ir_blk0)" "IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_mt_b0 ir_blk0)"
 expect FAIL "P23 mutated: a const initializer takes NO arguments; a module that declares one reads its input from a binding the caller never makes"; reason
-subin "$MT_SPEC" SRC_IR_MT_FUNC "IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_mt_b0 ir_blk0)" "IRFunc.mk ir_d0 ir_nl0 ir_d0 (ir_blk ir_mt_b0 ir_blk0)"
+sub "$MT_DEFS" "IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_mt_b0 ir_blk0)" "IRFunc.mk ir_d0 ir_nl0 ir_d0 (ir_blk ir_mt_b0 ir_blk0)"
 expect PASS "P23 reverted"
 
 # ───────────────────────── FAIL-CLOSED ON MISSING INPUT ────────────────────
@@ -338,19 +355,20 @@ mv "$MT_JSON.bak" "$MT_JSON"
 expect PASS "P27 reverted"
 
 echo
-echo "== P28: THE SPEC MODULE, EMPTIED =="
-cp "$MT_SPEC" "$MT_SPEC.bak"; : > "$MT_SPEC"
+echo "== P28: THE MINTED SCRIPT, EMPTIED =="
+cp "$MT_DEFS" "$MT_DEFS.bak"; : > "$MT_DEFS"
 expect FAIL "P28: with no registered module the Clean side is empty — two empty Cfgs compare equal, so this MUST be caught by the coverage denominator rather than by the equality"; reason
-mv "$MT_SPEC.bak" "$MT_SPEC"
+mv "$MT_DEFS.bak" "$MT_DEFS"
 expect PASS "P28 reverted"
 
 # ───────────────────────────── THE MEASURED ROW ────────────────────────────
 
 echo
 echo "== P29: markers_detail ZEROED — already zero, so it is INVERTED =="
-sub "$MT_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "2 marker line(s) identical"'
+# trailing 2: the a152 pin stanza RESTATES this value — two lines move together
+sub "$MT_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "2 marker line(s) identical"' 2
 expect FAIL "P29 mutated: this chain's markers_exact IS vacuous and the gate says so. Claiming two real marker lines would make it look like the ninth chain's, which it is not"; reason
-sub "$MT_JSON" '"markers_detail": "2 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"'
+sub "$MT_JSON" '"markers_detail": "2 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"' 2
 expect PASS "P29 reverted"
 
 echo
@@ -362,9 +380,23 @@ expect PASS "P30 reverted"
 
 echo
 echo "== P31: THE SEAM =="
-sub "$MT_JSON" '"seam": "ctfe"' '"seam": "codegen"'
+# Path-addressed: the a152 pin stanza's flip_event.seam is GENUINELY
+# "codegen" (the current pin flipped there), so a text revert anchored on
+# `"seam": "codegen"` would match TWO lines and corrupt the pin. Mutate by
+# JSON path, restore byte-exactly from the snapshot.
+snap "$MT_JSON"
+python3 - "$MT_JSON" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+assert d["flip_event"]["seam"] == "ctfe", "expected the measured flip_event.seam to be ctfe, found %r" % d["flip_event"]["seam"]
+d["flip_event"]["seam"] = "codegen"
+json.dump(d, open(p, "w"), indent=4)
+PY
+rc=$?
+if [[ $rc -ne 0 ]]; then echo "FATAL: P31 path-addressed mutation failed"; exit 9; fi
 expect FAIL "P31 mutated: the seam is what link 2b MEANS. A CTFE flip binds the VALUE the const-eval interpreter produced; a codegen flip binds the instruction stream. They are not interchangeable"; reason
-sub "$MT_JSON" '"seam": "codegen"' '"seam": "ctfe"'
+restore "$MT_JSON"
 expect PASS "P31 reverted"
 
 echo
@@ -495,9 +527,9 @@ expect PASS "P46 reverted"
 
 echo
 echo "== P47: THE INSTRUCTION COUNT =="
-sub "$MT_JSON" '"instr_count": 9' '"instr_count": 8'
+sub "$MT_JSON" '"instr_count": 9' '"instr_count": 8' 2
 expect FAIL "P47 mutated: nine nodes, the longest block any chain has transcribed"; reason
-sub "$MT_JSON" '"instr_count": 8' '"instr_count": 9'
+sub "$MT_JSON" '"instr_count": 8' '"instr_count": 9' 2
 expect PASS "P47 reverted"
 
 echo
@@ -512,8 +544,11 @@ python3 - "$MT_FIX" <<'PYX'
 import sys
 p = sys.argv[1]
 s = open(p).read()
-assert s.count("    assert %4") == 1
-open(p, "w").write(s.replace("    assert %4  ; #proof: shift_in_range  ; #loc: 435 157 30\n", ""))
+line = "    assert %4  ; #proof: shift_in_range  ; #loc: 437 157 30\n"
+# assert on the EXACT text being removed: asserting a prefix while replacing
+# the full line is how a moved #loc turned this mutation into a silent no-op.
+assert s.count(line) == 1, "expected exactly one assert line, found %d" % s.count(line)
+open(p, "w").write(s.replace(line, ""))
 PYX
 "$BIN" the_lane_matrix_is_pinned_for_every_chain --test-threads=1 >"$OUT" 2>&1
 lrc=$?

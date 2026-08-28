@@ -49,6 +49,14 @@ clean-features = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 
 [dev-dependencies]
+# THE INCUMBENT, kept linkable for the differential and nothing else.
+# `expr::level_vec_serde` replaces smallvec's own serde impl for `LevelVec`;
+# its acceptance gate is byte-identity against that impl, which requires both
+# to exist in one process. Dev-kind, so it does NOT put the
+# `smallvec -> serde` edge back into the shipping closure — that edge is what
+# the replacement removes. Delete this line only together with the
+# `shim_bytes_match_the_incumbent_*` tests, and say so.
+smallvec = { workspace = true, features = ["serde"] }
 proptest.workspace = true
 criterion.workspace = true
 clean-elab.workspace = true
@@ -79,6 +87,14 @@ cli = ["dep:anyhow", "dep:clap", "dep:clean-features"]
 
 # Expose test_utils module for cross-crate test stack/timeout helpers (#2101)
 test-utils = ["dep:anyhow", "dep:tempfile"]
+
+# Cross-crate test-fixture door (R1-TESTDOOR): compiles
+# `Environment::add_constant_unchecked_for_test` — cfg(any(test, feature =
+# "test-fixtures")) — so downstream crates' soundness tests can mint
+# deliberately ill-typed constants. Enable ONLY via [dev-dependencies]; a
+# production dependency edge must never turn this on
+# (data/env_bypass_census.json row "test-door").
+test-fixtures = []
 
 # Feature flag for verbose WHNF debugging (for #643 investigation)
 # Usage: cargo test --features debug-whnf

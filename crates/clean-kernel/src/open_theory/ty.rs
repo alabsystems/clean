@@ -29,7 +29,7 @@ pub struct OtTypeOperator {
 
 impl OtTypeOperator {
     #[must_use]
-    pub fn primitive_bool() -> Self {
+    pub(crate) fn primitive_bool() -> Self {
         Self {
             name: OtName::global("bool"),
             origin: OtSymbolOrigin::Primitive,
@@ -38,7 +38,7 @@ impl OtTypeOperator {
     }
 
     #[must_use]
-    pub fn primitive_arrow() -> Self {
+    pub(crate) fn primitive_arrow() -> Self {
         Self {
             name: OtName::global("->"),
             origin: OtSymbolOrigin::Primitive,
@@ -71,19 +71,19 @@ impl OtTypeOperator {
     }
 
     #[must_use]
-    pub fn with_arity(&self, arity: usize) -> Self {
+    pub(crate) fn with_arity(&self, arity: usize) -> Self {
         let mut out = self.clone();
         out.arity = Some(arity);
         out
     }
 
     #[must_use]
-    pub fn is_primitive_bool(&self) -> bool {
+    pub(crate) fn is_primitive_bool(&self) -> bool {
         self.origin == OtSymbolOrigin::Primitive && self.name == OtName::global("bool")
     }
 
     #[must_use]
-    pub fn is_primitive_arrow(&self) -> bool {
+    pub(crate) fn is_primitive_arrow(&self) -> bool {
         self.origin == OtSymbolOrigin::Primitive && self.name == OtName::global("->")
     }
 }
@@ -152,7 +152,7 @@ impl OtType {
     }
 
     #[must_use]
-    pub fn as_function(&self) -> Option<(&OtType, &OtType)> {
+    pub(crate) fn as_function(&self) -> Option<(&OtType, &OtType)> {
         match self {
             Self::Function { domain, codomain } => Some((domain, codomain)),
             _ => None,
@@ -160,7 +160,7 @@ impl OtType {
     }
 
     #[must_use]
-    pub fn substitute_types(&self, substitutions: &[(OtName, OtType)]) -> Self {
+    pub(crate) fn substitute_types(&self, substitutions: &[(OtName, OtType)]) -> Self {
         match self {
             Self::Var(name) => substitutions
                 .iter()
@@ -183,7 +183,7 @@ impl OtType {
     }
 
     #[must_use]
-    pub fn free_type_vars(&self) -> Vec<OtName> {
+    pub(crate) fn free_type_vars(&self) -> Vec<OtName> {
         let mut vars = Vec::new();
         self.collect_free_type_vars(&mut vars);
         vars

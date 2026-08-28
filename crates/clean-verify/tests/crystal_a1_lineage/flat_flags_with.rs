@@ -53,7 +53,9 @@
 //!
 //! Structural correspondence, not a semantic proof that Clean's `IRInst`
 //! encoding means what trust-ir's does. The lineage digest is RECORDED, not
-//! recomputed. `ir_fw_module` is hand-transcribed: this makes an incorrect
+//! recomputed. Since 2026-08-21 `ir_fw_module` is MINTED rather than
+//! hand-transcribed (`tests/crystal_a2_mint_fw.rs`, `src/ir_mint`); this gate
+//! reads the same generated script the spec replays. Historically: it made an incorrect
 //! transcription FAIL, it does not make a correct one automatic.
 
 use super::*;
@@ -68,7 +70,9 @@ fn flat_flags_with_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_flat_flags_with.rs", "const SRC_IR_FW_B"),
+        // The registered block is the MINTED script (crystal A2,
+        // `src/ir_mint`) as of 2026-08-21 — the same lines the spec replays.
+        &clean_block_sources("generated/ir_fw.defs.txt", "def ir_fw_b"),
         "def ir_fw_b",
     );
 
@@ -167,7 +171,7 @@ fn flat_flags_with_proved_module_matches_the_emitted_artifact() {
     // the registered `IRFunc`.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_flat_flags_with.rs", "const SRC_IR_FW_FUNC"),
+        &clean_block_sources("generated/ir_fw.defs.txt", "def ir_fw_func"),
         "flat_flags_with",
     );
     assert_lanes(&emitted, &clean, "flat_flags_with");
@@ -476,7 +480,7 @@ fn flat_flags_with_the_write_lane_catches_what_every_old_lane_misses() {
 #[test]
 fn flat_flags_with_the_lanes_catch_a_drifted_spec_module_too() {
     let emitted = parse_emitted(&fixture("flat_flags_with.trust-ir.txt"));
-    let src = clean_block_sources("eval_ir_flat_flags_with.rs", "const SRC_IR_FW_B");
+    let src = clean_block_sources("generated/ir_fw.defs.txt", "def ir_fw_b");
     let good = parse_clean(&src, "def ir_fw_b");
     assert_eq!(
         emitted.insertfields, good.insertfields,
@@ -509,8 +513,8 @@ fn flat_flags_with_the_lanes_catch_a_drifted_spec_module_too() {
     // The registered write into the first argument instead of the template.
     let into_arg = parse_clean(
         &src.replace(
-            "ir_fc_tflags ir_d5 ir_d0 ir_d4",
-            "ir_fc_tflags ir_d0 ir_d0 ir_d4",
+            "ir_fw_tflags ir_d5 ir_d0 ir_d4",
+            "ir_fw_tflags ir_d0 ir_d0 ir_d4",
         ),
         "def ir_fw_b",
     );
@@ -521,8 +525,8 @@ fn flat_flags_with_the_lanes_catch_a_drifted_spec_module_too() {
     // and the type slot exist for.
     let at_u8 = parse_clean(
         &src.replace(
-            "IRInst.insertfield ir_fc_tflags",
-            "IRInst.insertfield ir_tU8",
+            "IRInst.insertfield ir_fw_tflags",
+            "IRInst.insertfield (IRTy.uint_ ir_d8)",
         ),
         "def ir_fw_b",
     );
@@ -542,7 +546,10 @@ fn flat_flags_with_the_lanes_catch_a_drifted_spec_module_too() {
 
     // The registered template at value 1.
     let tpl_one = parse_clean(
-        &src.replace("(ir_cvar ir_d0)", "(ir_cvar ir_d1)"),
+        &src.replace(
+            "(IRConst.vcons (IRConst.int_ ir_d0) IRConst.vnil)",
+            "(IRConst.vcons (IRConst.int_ ir_d1) IRConst.vnil)",
+        ),
         "def ir_fw_b",
     );
     assert_ne!(emitted.agg_consts, tpl_one.agg_consts);

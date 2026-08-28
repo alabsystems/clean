@@ -28,6 +28,15 @@ pub struct Document {
     pub elaborated: Option<ElaboratedDocument>,
     /// Incremental elaboration state (cached results)
     pub incremental_state: IncrementalState,
+    /// The environment this document last elaborated against: the shared
+    /// import closure (prelude floor included) for its `import` header.
+    ///
+    /// Stored as an `Arc` clone of the process-wide closure, so it costs a
+    /// pointer rather than an `Environment` copy. Hover reads it to answer
+    /// with the type of an *imported* constant under the cursor (`Nat`,
+    /// `rfl`, …), which is otherwise unavailable to a synchronous request
+    /// handler — the closure loader is blocking and must not run there.
+    pub imports_env: Option<std::sync::Arc<clean_kernel::Environment>>,
 }
 
 impl Document {
@@ -42,6 +51,7 @@ impl Document {
             parsed: None,
             elaborated: None,
             incremental_state: IncrementalState::default(),
+            imports_env: None,
         }
     }
 
@@ -98,10 +108,21 @@ impl Document {
             }
         }
 
-        // Invalidate parsed/elaborated results (but keep incremental state for partial edits)
-        // The incremental state will be used to determine which commands need re-elaboration
+        // Invalidate the parse (but keep incremental state for partial edits;
+        // it determines which commands need re-elaboration). The `didChange`
+        // handler re-parses synchronously before it returns, so a stale parse
+        // is never observable.
+        //
+        // `elaborated` is deliberately PRESERVED: it is the last *committed*
+        // elaboration snapshot, and elaboration runs as a per-URI background
+        // task (see `backend::background`). A hover / plainGoal / inlay
+        // request racing that task answers from this snapshot — its byte
+        // offsets may lag the edited text slightly, the standard LSP
+        // staleness tradeoff, matching Lean's own server — rather than going
+        // dark for the whole elaboration window. `commit_elaboration`
+        // replaces it only with a result computed at the document's current
+        // version.
         self.parsed = None;
-        self.elaborated = None;
     }
 
     /// Convert LSP position to byte offset

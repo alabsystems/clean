@@ -42,20 +42,36 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
     match decl {
         // Variable declarations add their binders to the context
         SurfaceDecl::Variable { binders, span } => {
-            // Validation-scope fix: a later `variable`'s type may reference
-            // EARLIER section variables (`variable {β : α → Sort*}` after
-            // `variable {α}`). `elab_variable_binders` validates types by
-            // elaborating them, so hand it the full accumulated telescope —
-            // prior binders first, this command's after — or the reference
-            // auto-binds as a bare Sort and dies with TooManyArguments.
-            // Only the NEW binders are accumulated into the file context.
-            let mut full = file_ctx.current_variables().to_vec();
-            file_ctx.add_variables(binders);
-            full.extend(binders.iter().cloned());
+            // `apply_variable_command` resolves Lean's binder-annotation-UPDATE
+            // form (`variable (P Q a b)`, `variable {P Q}`: no type ascription,
+            // so it re-binds an ALREADY-DECLARED variable in place rather than
+            // declaring a new one) and appends the rest, then returns the full
+            // accumulated telescope.
+            //
+            // The telescope is handed to `elab_variable_binders` WHOLE — prior
+            // binders first, this command's after — because a later
+            // `variable`'s type may reference an earlier section variable
+            // (`variable {β : α → Sort*}` after `variable {α}`), and that
+            // validator elaborates types; given only the new binders the
+            // reference auto-binds as a bare Sort and dies with
+            // TooManyArguments.
+            let full = file_ctx.apply_variable_command(binders);
             SurfaceDecl::Variable {
                 span: *span,
                 binders: full,
             }
+        }
+
+        // `include x` / `omit x` steer which section variables the FOLLOWING
+        // declarations receive. They register nothing; they update the context
+        // that the value-declaration arms below consult.
+        SurfaceDecl::IncludeVars { names, .. } => {
+            file_ctx.include_variables(names);
+            decl.clone()
+        }
+        SurfaceDecl::OmitVars { names, .. } => {
+            file_ctx.omit_variables(names);
+            decl.clone()
         }
 
         // Universe declarations add their names to the context
@@ -110,6 +126,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
+                        file_ctx.included_variables(),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
@@ -167,6 +184,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
+                        file_ctx.included_variables(),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
@@ -220,6 +238,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
+                        file_ctx.included_variables(),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders
@@ -416,6 +435,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
+                        file_ctx.included_variables(),
                     );
                     new_binders.extend(binders.iter().cloned());
                     new_binders

@@ -175,7 +175,7 @@ fn test_whnf_core_no_delta_unfolds_let_fvar() {
     let tc = TypeChecker::new(&env);
 
     // Create an FVar with a let-binding value
-    let fvar_id = tc.ctx.borrow_mut().push_let(
+    let fvar_id = tc.ctx_mut().push_let(
         Name::from_string("x"),
         Expr::type_(),
         Expr::prop(), // let-bound to Prop
@@ -196,10 +196,9 @@ fn test_whnf_core_no_delta_keeps_non_let_fvar() {
     let tc = TypeChecker::new(&env);
 
     // Create an FVar WITHOUT a let-binding value
-    let fvar_id =
-        tc.ctx
-            .borrow_mut()
-            .push(Name::from_string("y"), Expr::type_(), BinderInfo::Default);
+    let fvar_id = tc
+        .ctx_mut()
+        .push(Name::from_string("y"), Expr::type_(), BinderInfo::Default);
     let fvar = Expr::fvar(fvar_id);
 
     let result = tc.whnf_core_no_delta(&fvar, true);

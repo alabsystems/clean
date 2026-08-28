@@ -337,6 +337,74 @@ fn test_obtain_single_name_pattern_parses() {
     }
 }
 
+// -------------------------------------------------------------------------
+// Tactic-mode `let ⟨a, b⟩ := e` (2026-08-26)
+//
+// `parse_tactic_let` opened with `expect_ident("let")`, so `⟨` was rejected
+// outright ("expected identifier in let, got LAngle") and the whole
+// declaration fell into parser recovery, which then MISNAMED the failure
+// after the preceding tactic. It now mirrors `parse_tactic_have`'s
+// destructuring route into `obtain`'s pattern engine.
+// -------------------------------------------------------------------------
+
+#[test]
+fn test_tactic_let_tuple_pattern_desugars_to_obtain() {
+    let t = by_tactics("by let ⟨a, b⟩ := p");
+    assert_eq!(t.len(), 1, "expected a single tactic, got {:?}", t);
+    match &t[0] {
+        SurfaceTactic::Obtain {
+            pattern, ty, term, ..
+        } => {
+            assert_eq!(pattern, "⟨a, b⟩", "pattern text round-trips");
+            assert!(ty.is_none(), "no type ascription expected");
+            assert!(
+                matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "p"),
+                "RHS term should be `p`, got {:?}",
+                term
+            );
+        }
+        other => unreachable!("expected SurfaceTactic::Obtain, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_tactic_let_nested_pattern_and_ascription_desugar_to_obtain() {
+    match &by_tactics("by let ⟨⟨a, b⟩, c⟩ := h")[0] {
+        SurfaceTactic::Obtain { pattern, .. } => {
+            assert_eq!(pattern, "⟨⟨a, b⟩, c⟩", "nested pattern text round-trips");
+        }
+        other => unreachable!("expected SurfaceTactic::Obtain, got {:?}", other),
+    }
+    match &by_tactics("by let ⟨x, hx⟩ : Foo := h")[0] {
+        SurfaceTactic::Obtain { pattern, ty, .. } => {
+            assert_eq!(pattern, "⟨x, hx⟩");
+            assert!(ty.is_some(), "type ascription `: Foo` should be captured");
+        }
+        other => unreachable!("expected SurfaceTactic::Obtain, got {:?}", other),
+    }
+}
+
+/// Control: the NAMED `let` forms must be untouched by the destructuring
+/// route — they still produce `SurfaceTactic::Let`, with and without the
+/// `: T` ascription.
+#[test]
+fn test_named_tactic_let_still_parses_to_let() {
+    match &by_tactics("by let x := p")[0] {
+        SurfaceTactic::Let(_, name, ty, _) => {
+            assert_eq!(name, "x");
+            assert!(ty.is_none());
+        }
+        other => unreachable!("expected SurfaceTactic::Let, got {:?}", other),
+    }
+    match &by_tactics("by let x : Nat := p")[0] {
+        SurfaceTactic::Let(_, name, ty, _) => {
+            assert_eq!(name, "x");
+            assert!(ty.is_some(), "`: Nat` should be captured");
+        }
+        other => unreachable!("expected SurfaceTactic::Let, got {:?}", other),
+    }
+}
+
 #[test]
 fn test_obtain_with_type_ascription_parses() {
     let t = by_tactics("by obtain ⟨x, hx⟩ : Foo := h");

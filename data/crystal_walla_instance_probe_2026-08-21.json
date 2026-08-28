@@ -1,0 +1,99 @@
+{
+ "schema": "clean.crystal.walla_instance_probe/1",
+ "date": "2026-08-21",
+ "lane": "LANE WA \u2014 wall A scoped: the instance-level flip seam, probed",
+ "question": "Can the flip install derived trust-ir as the codegen root PER INSTANCE \u2014 the recorded generic Module lowered at the instance's concrete ABI anchors, differentially re-checked against rustc's own instantiation of its own MIR, flipping only on per-instance DerivedAgreed?",
+ "headline": "YES ON EVERY MEASURED AXIS: the FROZEN comparator reaches DerivedAgreed on the instantiated pair (level_eq x CertVerifier, x CertBuilder; try_type_directed_eq x CertBuilder \u2014 '7 canonical line(s) identical' each), the instance-level ABI rederivation from tcx alone is EXACT against rustc's own instantiation at all 3, and all 18 (-O0) / 12 (-O3) codegen-demanded mono instances of stashed wall-A bodies pass abi-rederive + derived-lowering + exact-ABI-vs-instantiated-optimized_mir with 0 anomalies. THE CENSUS IS THE CEILING: only 5 of 45 wall-A bodies have ANY local mono instance at -O0 (4 at -O3, the inliner eats one family), and all 27 serde `expecting` DefId rows have ZERO local instances \u2014 a per-instance flip lane is architecturally sound and buys at most 5 bodies / 18 instances in this crate today.",
+ "probe": {
+  "flag": "-Ztrust-instance-flip-probe=* (off by default; option-domain gate requires -Ztrust-verify=off -Ztrust-ir-lower and refuses every -Ztrust-dump sink)",
+  "trust_base": "a0447fa6b231073e7177667de0b5ea0e2a0a5a4c",
+  "trust_base_reason": "origin/main tip dc99dbf67e is UNBUILDABLE under --locked: merge 696d517ab2 rewound first-party/ay to an ay-0.10 gitlink and acb08e7616 then pinned trust-mc/clean/ny to ay-0.13-demanding revs; every tip resolution wants a git-sourced ay 0.13 the committed lock does not carry. a0447fa6b2 is the last local rev whose pins, lock and patch table cohere.",
+  "trust_probe_commit": "5e99e9a47bd205251405550ee3c3f642e6871709",
+  "clean_worktree": "746ef6cee9cfae221c8be0495905dbe1eef37a45",
+  "driver_seal_sha256": "37a1648088d844c9851f16384eaaa2c515e6b856cc84d05521d5f9bdd2bfbe82",
+  "driver_metadata_version": 12,
+  "sysroot": "scratchpad/laneMV/sysroot-v12 (sysrootcheck OK, driver=12 sysroot=12; the v13 sysroot pairs with the METADATA_VERSION-13 tip this lane could not build)",
+  "frozen_files_untouched": [
+   "mir_differential.rs",
+   "flip_registry.rs",
+   "crate_module.rs",
+   "differential.rs"
+  ],
+  "command": "cargo rustc --locked --release -p clean-kernel --lib -- [-Copt-level=0 -Cdebug-assertions=off] -Ztrust-ir-lower=on -Ztrust-instance-flip-probe='*'  (RUSTFLAGS=-Ztrust-verify=off -Cdebuginfo=0; RUSTC_LOG=rustc_mir_transform::trust_ir_flip=info)"
+ },
+ "runs": {
+  "O0": {
+   "capture": "scratchpad/laneWA/wc-WA/O0.probe.txt",
+   "capture_sha256": "3c513ade918fac50dd3ab53cc889c9a9cdafe47c42cff43ce2bec7524451ba1e",
+   "flip_events": 649,
+   "fallback_reason_census": {
+    "shim: abi rederive: generic fn signature": 43,
+    "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "shim: abi rederive: generic closure": 2,
+    "local type outside fragment: &'{erased} level::Level": 2,
+    "local type outside fragment: &'{erased} str": 2,
+    "local type outside fragment: env::origin::OriginTrust": 2,
+    "local type outside fragment: expr::types::BinderInfo": 1,
+    "local type outside fragment: &'{erased} expr::Expr": 1
+   },
+   "stashed_generic_agreed_bodies": 45,
+   "channel_A_certexpr_lines": [
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::level_eq inst_args=[cert::verifier::CertVerifier<'{erased}>] residual_generic=false abi_rederive_at_instance=exact verdict=DerivedAgreed markers_exact=false detail=7 canonical line(s) identical",
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::level_eq inst_args=[cert::builder::state::CertBuilder<'{erased}>] residual_generic=false abi_rederive_at_instance=exact verdict=DerivedAgreed markers_exact=false detail=7 canonical line(s) identical",
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::try_type_directed_eq impl=cert::def_eq::<impl CertExprEqContext for CertVerifier<'env>> resolve=overridden-by-impl (resolves to cert::def_eq::<impl CertExprEqContext for CertVerifier<'env>>::try_type_directed_eq)",
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::try_type_directed_eq inst_args=[cert::builder::state::CertBuilder<'{erased}>] residual_generic=false abi_rederive_at_instance=exact verdict=DerivedAgreed markers_exact=true detail=7 canonical line(s) identical"
+   ],
+   "channel_B_summary": "TRUST-WALLA-PROBE B summary stashed_bodies=45 bodies_with_instances=5 distinct_instances=18",
+   "channel_B_instance_rows": 18,
+   "channel_B_all_exact": true,
+   "channel_B_bodies_with_instances": [
+    "<LimitedSeqAccess<A> as SeqAccess<'de>>::size_hint",
+    "<TypedStateHolder<S> as ExtensionStateHolder>::mark_initialized",
+    "CertExprEqContext::level_eq",
+    "CertExprEqContext::try_type_directed_eq",
+    "LimitedDeserializer::<D>::accept_pending_byte"
+   ],
+   "no_mono_instance_bodies": 17,
+   "anomalies": {
+    "panics": 0,
+    "mismatches": 0,
+    "rederive_err": 0,
+    "lowering_err": 0
+   }
+  },
+  "O3": {
+   "capture": "scratchpad/laneWA/wc-WA/O3.probe.txt",
+   "capture_sha256": "479637307dd05c6feceaa0830e801b09e9ba8939c2fcac6c7c6727c0af3d0dd0",
+   "flip_events": 225,
+   "fallback_reason_census": {
+    "shim: abi rederive: generic fn signature": 15,
+    "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "shim: abi rederive: generic closure": 2
+   },
+   "stashed_generic_agreed_bodies": 45,
+   "channel_A_certexpr_lines": [
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::level_eq inst_args=[cert::verifier::CertVerifier<'{erased}>] residual_generic=false abi_rederive_at_instance=exact verdict=DerivedAgreed markers_exact=false detail=7 canonical line(s) identical",
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::level_eq inst_args=[cert::builder::state::CertBuilder<'{erased}>] residual_generic=false abi_rederive_at_instance=exact verdict=DerivedAgreed markers_exact=false detail=7 canonical line(s) identical",
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::try_type_directed_eq impl=cert::def_eq::<impl CertExprEqContext for CertVerifier<'env>> resolve=overridden-by-impl (resolves to cert::def_eq::<impl CertExprEqContext for CertVerifier<'env>>::try_type_directed_eq)",
+    "TRUST-WALLA-PROBE A def=CertExprEqContext::try_type_directed_eq inst_args=[cert::builder::state::CertBuilder<'{erased}>] residual_generic=false abi_rederive_at_instance=exact verdict=DerivedAgreed markers_exact=true detail=7 canonical line(s) identical"
+   ],
+   "channel_B_summary": "TRUST-WALLA-PROBE B summary stashed_bodies=45 bodies_with_instances=4 distinct_instances=12",
+   "channel_B_instance_rows": 12,
+   "channel_B_all_exact": true,
+   "channel_B_bodies_with_instances": [
+    "<LimitedSeqAccess<A> as SeqAccess<'de>>::size_hint",
+    "<TypedStateHolder<S> as ExtensionStateHolder>::mark_initialized",
+    "CertExprEqContext::level_eq",
+    "CertExprEqContext::try_type_directed_eq"
+   ],
+   "no_mono_instance_bodies": 18,
+   "anomalies": {
+    "panics": 0,
+    "mismatches": 0,
+    "rederive_err": 0,
+    "lowering_err": 0
+   }
+  }
+ },
+ "verdict": "GO \u2014 bounded. The mechanism is measured-real end to end (comparator, ABI independence, lowering at concrete anchors, exact ABI vs the optimized incumbent), the build items are enumerated in the design doc, and the honest ceiling for the crystal subject crate is 5 bodies / 18 instances at -O0, 4 / 12 at the deployed -O3 \u2014 NOT 45 bodies, and NOT the 27 serde rows, which have no local instances to flip. Wall A is hereby re-priced from 'unscoped promise' to 'sound, small, and bounded by the instance census'."
+}

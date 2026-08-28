@@ -533,6 +533,160 @@
         "stlc-typecheck-decidable"
       ]
     },
+    "stratified": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-whnf-conversion"
+      ],
+      "inductive HasType::a6f199bcf604f4c9": [
+        "stratified-whnf-conversion"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "stratified-whnf-conversion"
+      ],
+      "inductive Tm::46f736b5a0617d50": [
+        "stratified-whnf-conversion"
+      ]
+    },
+    "stratified-bool": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-bool-whnf-conversion"
+      ],
+      "inductive HasType::529844cd09cb5250": [
+        "stratified-bool-whnf-conversion"
+      ],
+      "inductive Step::d7e9fc075f30fb2a": [
+        "stratified-bool-whnf-conversion"
+      ],
+      "inductive Tm::7ba63eda116f8231": [
+        "stratified-bool-whnf-conversion"
+      ]
+    },
+    "stratified-coproduct": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-coproduct-whnf-conversion"
+      ],
+      "inductive HasType::45858574dcc10a1a": [
+        "stratified-coproduct-whnf-conversion"
+      ],
+      "inductive Step::9b6e0c0398b9007c": [
+        "stratified-coproduct-whnf-conversion"
+      ],
+      "inductive Tm::b169d9a0b11baf2f": [
+        "stratified-coproduct-whnf-conversion"
+      ]
+    },
+    "stratified-id-j": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-id-j-whnf-conversion"
+      ],
+      "inductive HasType::96c236fad9043982": [
+        "stratified-id-j-whnf-conversion"
+      ],
+      "inductive Step::f2f56c9c26527b6e": [
+        "stratified-id-j-whnf-conversion"
+      ],
+      "inductive Tm::8a1dec72d969fd43": [
+        "stratified-id-j-whnf-conversion"
+      ]
+    },
+    "stratified-nat": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-nat-whnf-conversion"
+      ],
+      "inductive HasType::e660e9d7fee98bd2": [
+        "stratified-nat-whnf-conversion"
+      ],
+      "inductive Step::7efc69f30752f8cc": [
+        "stratified-nat-whnf-conversion"
+      ],
+      "inductive Tm::941dc5dfc100a116": [
+        "stratified-nat-whnf-conversion"
+      ]
+    },
+    "stratified-sigma": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-sigma-whnf-conversion"
+      ],
+      "inductive HasType::97d9c64db3b25135": [
+        "stratified-sigma-whnf-conversion"
+      ],
+      "inductive Step::f30899a462716928": [
+        "stratified-sigma-whnf-conversion"
+      ],
+      "inductive Tm::8a7ff0b196bc8e25": [
+        "stratified-sigma-whnf-conversion"
+      ]
+    },
+    "stratified-sn": {
+      "def Confl::8577d12e5d4790d3": [
+        "stratified-sn"
+      ],
+      "inductive HasType::a6f199bcf604f4c9": [
+        "stratified-sn"
+      ],
+      "inductive Step::9977d292dccf72cc": [
+        "stratified-sn"
+      ],
+      "inductive Tm::5e5039b968d19a9d": [
+        "stratified-sn"
+      ]
+    },
+    "stratified-unified-core": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-unified-core-whnf-conversion"
+      ],
+      "inductive HasType::88746f6631a0e7ca": [
+        "stratified-unified-core-whnf-conversion"
+      ],
+      "inductive Step::9645af5ac5b69fe4": [
+        "stratified-unified-core-whnf-conversion"
+      ],
+      "inductive Tm::3e65fed48a2e74cd": [
+        "stratified-unified-core-whnf-conversion"
+      ]
+    },
+    "stratified-unified-full": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-unified-full-whnf-conversion"
+      ],
+      "inductive HasType::389fe96e7085fb3e": [
+        "stratified-unified-full-whnf-conversion"
+      ],
+      "inductive Step::e7b33a0fa1e68e59": [
+        "stratified-unified-full-whnf-conversion"
+      ],
+      "inductive Tm::0a20355bb9f4bc41": [
+        "stratified-unified-full-whnf-conversion"
+      ]
+    },
+    "stratified-unified-sn": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-unified-sn"
+      ],
+      "inductive HasType::389fe96e7085fb3e": [
+        "stratified-unified-sn"
+      ],
+      "inductive Step::e7b33a0fa1e68e59": [
+        "stratified-unified-sn"
+      ],
+      "inductive Tm::0a20355bb9f4bc41": [
+        "stratified-unified-sn"
+      ]
+    },
+    "stratified-wtype": {
+      "def Confl::7ab53c8ed7228851": [
+        "stratified-wtype-whnf-conversion"
+      ],
+      "inductive HasType::60e8b6ec0d52f8ac": [
+        "stratified-wtype-whnf-conversion"
+      ],
+      "inductive Step::85e41389e73c2b00": [
+        "stratified-wtype-whnf-conversion"
+      ],
+      "inductive Tm::2d04d3648e9acc9b": [
+        "stratified-wtype-whnf-conversion"
+      ]
+    },
     "system-t": {
       "inductive Tm::c2176a06f60f36a8": [
         "system-t-cr"
@@ -661,6 +815,17 @@
         "stlc-decide-defeq",
         "stlc-products-decidable",
         "stlc-sum-decidable",
+        "stratified-bool-whnf-conversion",
+        "stratified-coproduct-whnf-conversion",
+        "stratified-id-j-whnf-conversion",
+        "stratified-nat-whnf-conversion",
+        "stratified-sigma-whnf-conversion",
+        "stratified-sn",
+        "stratified-unified-core-whnf-conversion",
+        "stratified-unified-full-whnf-conversion",
+        "stratified-unified-sn",
+        "stratified-whnf-conversion",
+        "stratified-wtype-whnf-conversion",
         "univ-strat-sr-r3",
         "whnf-conversion"
       ],
@@ -677,6 +842,17 @@
         "dependent-unified-full-whnf-conversion",
         "dependent-whnf-conversion",
         "dependent-wtype-whnf-conversion",
+        "stratified-bool-whnf-conversion",
+        "stratified-coproduct-whnf-conversion",
+        "stratified-id-j-whnf-conversion",
+        "stratified-nat-whnf-conversion",
+        "stratified-sigma-whnf-conversion",
+        "stratified-sn",
+        "stratified-unified-core-whnf-conversion",
+        "stratified-unified-full-whnf-conversion",
+        "stratified-unified-sn",
+        "stratified-whnf-conversion",
+        "stratified-wtype-whnf-conversion",
         "whnf-conversion"
       ],
       "status": "UNDISCHARGED_BUT_9_OF_10_RUNGS_ARE_PROVED_VACUOUS"
@@ -711,6 +887,17 @@
         "stlc-decide-defeq",
         "stlc-products-decidable",
         "stlc-sum-decidable",
+        "stratified-bool-whnf-conversion",
+        "stratified-coproduct-whnf-conversion",
+        "stratified-id-j-whnf-conversion",
+        "stratified-nat-whnf-conversion",
+        "stratified-sigma-whnf-conversion",
+        "stratified-sn",
+        "stratified-unified-core-whnf-conversion",
+        "stratified-unified-full-whnf-conversion",
+        "stratified-unified-sn",
+        "stratified-whnf-conversion",
+        "stratified-wtype-whnf-conversion",
         "whnf-conversion"
       ],
       "status": "FALSE_UNDER_TYPE_IN_TYPE__REFUTED_ON_ALL_9_DEPENDENT_RUNGS"
@@ -751,6 +938,7 @@
     }
   },
   "hypothesis_names": [
+    "H",
     "IH",
     "ac",
     "acc",
@@ -766,11 +954,14 @@
     "cr3B",
     "d",
     "decWH",
+    "emb",
     "esn",
     "h",
     "h'",
+    "h0",
     "h1",
     "h2",
+    "h3",
     "hA",
     "hA'",
     "hA's",
@@ -781,15 +972,19 @@
     "hB2",
     "hBty",
     "hC",
+    "hCB",
     "hEnv",
     "hF",
     "hFbnd",
+    "hG",
     "hJ",
     "hP",
+    "hS",
     "hT",
     "hT'",
     "hTT",
     "hV",
+    "hW",
     "hX",
     "hY",
     "ha",
@@ -808,10 +1003,12 @@
     "hcA",
     "hcA'",
     "hcAA'",
+    "hcB",
     "hcBB'",
     "hcX",
     "hcY",
     "hcZ",
+    "hch",
     "hcod",
     "hcoh",
     "hcomp",
@@ -826,6 +1023,7 @@
     "hdom",
     "he",
     "hec",
+    "hemb",
     "hf",
     "hf'",
     "hg",
@@ -862,13 +1060,19 @@
     "hsn",
     "hsound",
     "hst",
+    "hsubst",
     "hsucc",
     "hsup",
+    "hsx",
+    "hsy",
     "ht",
     "hterm",
     "hty",
     "hu",
     "hv",
+    "hvar",
+    "hwa",
+    "hwb",
     "hwt",
     "hx",
     "hxy",
@@ -900,7 +1104,7 @@
     "whnf_pi",
     "whnf_reduces"
   ],
-  "rung_count": 80,
+  "rung_count": 91,
   "rungs": {
     "confluence-3way": {
       "banned": {},
@@ -3116,6 +3320,670 @@
       "theorems": 3,
       "vacuity": {}
     },
+    "stratified-bool-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "529844cd09cb5250",
+        "inductive Step": "d7e9fc075f30fb2a",
+        "inductive Tm": "7ba63eda116f8231"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-bool-whnf-conversion/solution/StratifiedBool/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-bool-whnf-conversion/solution/StratifiedBool/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-bool-whnf-conversion/solution/StratifiedBool/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-bool-whnf-conversion/solution/StratifiedBool/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-bool-whnf-conversion/solution/StratifiedBool/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-bool-whnf-conversion/solution/StratifiedBool/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-bool-whnf-conversion/solution/StratifiedBool.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hB",
+        "hP",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "ht",
+        "ih",
+        "sn"
+      ],
+      "lines": 2433,
+      "theorems": 152,
+      "vacuity": {}
+    },
+    "stratified-coproduct-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "45858574dcc10a1a",
+        "inductive Step": "9b6e0c0398b9007c",
+        "inductive Tm": "b169d9a0b11baf2f"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-coproduct-whnf-conversion/solution/StratifiedCoproduct/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-coproduct-whnf-conversion/solution/StratifiedCoproduct/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-coproduct-whnf-conversion/solution/StratifiedCoproduct/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-coproduct-whnf-conversion/solution/StratifiedCoproduct/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-coproduct-whnf-conversion/solution/StratifiedCoproduct/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-coproduct-whnf-conversion/solution/StratifiedCoproduct/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-coproduct-whnf-conversion/solution/StratifiedCoproduct.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h0",
+        "h1",
+        "h2",
+        "h3",
+        "hA",
+        "hB",
+        "hP",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "ht",
+        "ih",
+        "sn"
+      ],
+      "lines": 3039,
+      "theorems": 199,
+      "vacuity": {}
+    },
+    "stratified-id-j-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "96c236fad9043982",
+        "inductive Step": "f2f56c9c26527b6e",
+        "inductive Tm": "8a1dec72d969fd43"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-id-j-whnf-conversion/solution/StratifiedIdJ/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-id-j-whnf-conversion/solution/StratifiedIdJ/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-id-j-whnf-conversion/solution/StratifiedIdJ/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-id-j-whnf-conversion/solution/StratifiedIdJ/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-id-j-whnf-conversion/solution/StratifiedIdJ/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-id-j-whnf-conversion/solution/StratifiedIdJ/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-id-j-whnf-conversion/solution/StratifiedIdJ.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h0",
+        "h1",
+        "h2",
+        "hA",
+        "hP",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hp",
+        "ht",
+        "ih",
+        "sn"
+      ],
+      "lines": 2769,
+      "theorems": 191,
+      "vacuity": {}
+    },
+    "stratified-nat-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "e660e9d7fee98bd2",
+        "inductive Step": "7efc69f30752f8cc",
+        "inductive Tm": "941dc5dfc100a116"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-nat-whnf-conversion/solution/StratifiedNat/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-nat-whnf-conversion/solution/StratifiedNat/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-nat-whnf-conversion/solution/StratifiedNat/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-nat-whnf-conversion/solution/StratifiedNat/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-nat-whnf-conversion/solution/StratifiedNat/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-nat-whnf-conversion/solution/StratifiedNat/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-nat-whnf-conversion/solution/StratifiedNat.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hB",
+        "hP",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "hn",
+        "hs",
+        "ht",
+        "hz",
+        "ih",
+        "sn"
+      ],
+      "lines": 2587,
+      "theorems": 161,
+      "vacuity": {}
+    },
+    "stratified-sigma-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "97d9c64db3b25135",
+        "inductive Step": "f30899a462716928",
+        "inductive Tm": "8a7ff0b196bc8e25"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-sigma-whnf-conversion/solution/StratifiedSigma/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-sigma-whnf-conversion/solution/StratifiedSigma/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sigma-whnf-conversion/solution/StratifiedSigma/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sigma-whnf-conversion/solution/StratifiedSigma/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sigma-whnf-conversion/solution/StratifiedSigma/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sigma-whnf-conversion/solution/StratifiedSigma/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sigma-whnf-conversion/solution/StratifiedSigma.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hB",
+        "hP",
+        "hT",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "hp",
+        "ht",
+        "ih",
+        "sn"
+      ],
+      "lines": 2785,
+      "theorems": 176,
+      "vacuity": {}
+    },
+    "stratified-sn": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "8577d12e5d4790d3",
+        "inductive HasType": "a6f199bcf604f4c9",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "5e5039b968d19a9d"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Axioms.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Axioms.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsBidir.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsCC.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsFragment.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsGoalB.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsRound3.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsRound5.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsRound6.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsValueModel.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsWall.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/AxiomsWhnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Bidir.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/BidirCC.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/BidirExamples.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/BidirShapeSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/BidirWhnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CC.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CCExamples.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CCSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CCShape.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CCWK.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CCWall.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Cand.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CandLattice.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/CoupledModel.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Depth.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/ElBoundary.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/FGood.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/FInterp.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/FOmega.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/FOmegaExamples.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/FOmegaSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/FOmegaWall.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/FWK.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Floor.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Fundamental.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Generation.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/GirardModel.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/GradedModel.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/LevelBound.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/MaxDomain.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Model.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/NfExamples.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/NfFragment.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/NfFundamental.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Obstruction.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/OrderTower.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/PSubst.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/PTS.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/PolyDomain.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Rig.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/RigExamples.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/RigSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/RigShape.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/RigWK.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/RigWall.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/SN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Schema.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Separation.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/ShapeDomain.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Shapes.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/StageTower.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Subst.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/SubstConvWall.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/TyStruct.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniBound.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniDep.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniExamples.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniFrag.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniShape.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniWK.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/UniWall.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/ValueDomain.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/WhnfCC.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/WhnfDec.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/WhnfDefs.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/WhnfInv.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/WhnfReduce.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified/WhnfSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-sn/solution/Stratified.lean"
+      ],
+      "hypotheses": [
+        "H",
+        "cr",
+        "d",
+        "decWH",
+        "emb",
+        "h",
+        "h'",
+        "h1",
+        "h2",
+        "hA",
+        "hB",
+        "hCB",
+        "hF",
+        "hG",
+        "hP",
+        "hS",
+        "hT",
+        "ha",
+        "hacc",
+        "hb",
+        "hc",
+        "hcA",
+        "hcB",
+        "hconv",
+        "hd",
+        "he",
+        "hemb",
+        "hf",
+        "hg",
+        "hinv",
+        "hlam",
+        "hm",
+        "hn",
+        "hnf",
+        "hsa",
+        "hsb",
+        "hsn",
+        "hsubst",
+        "hsx",
+        "hsy",
+        "ht",
+        "hv",
+        "hvar",
+        "hwa",
+        "hwb",
+        "hwt",
+        "hx",
+        "hy",
+        "ih",
+        "sn"
+      ],
+      "lines": 15912,
+      "theorems": 908,
+      "vacuity": {}
+    },
+    "stratified-unified-core-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "88746f6631a0e7ca",
+        "inductive Step": "9645af5ac5b69fe4",
+        "inductive Tm": "3e65fed48a2e74cd"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-unified-core-whnf-conversion/solution/StratifiedUnifiedCore/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-unified-core-whnf-conversion/solution/StratifiedUnifiedCore/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-core-whnf-conversion/solution/StratifiedUnifiedCore/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-core-whnf-conversion/solution/StratifiedUnifiedCore/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-core-whnf-conversion/solution/StratifiedUnifiedCore/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-core-whnf-conversion/solution/StratifiedUnifiedCore/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-core-whnf-conversion/solution/StratifiedUnifiedCore.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h0",
+        "h1",
+        "h2",
+        "h3",
+        "hA",
+        "hB",
+        "hP",
+        "hT",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "hn",
+        "hp",
+        "hs",
+        "ht",
+        "hz",
+        "ih",
+        "sn"
+      ],
+      "lines": 5392,
+      "theorems": 331,
+      "vacuity": {}
+    },
+    "stratified-unified-full-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "389fe96e7085fb3e",
+        "inductive Step": "e7b33a0fa1e68e59",
+        "inductive Tm": "0a20355bb9f4bc41"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-unified-full-whnf-conversion/solution/StratifiedUnifiedFull/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-unified-full-whnf-conversion/solution/StratifiedUnifiedFull/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-full-whnf-conversion/solution/StratifiedUnifiedFull/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-full-whnf-conversion/solution/StratifiedUnifiedFull/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-full-whnf-conversion/solution/StratifiedUnifiedFull/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-full-whnf-conversion/solution/StratifiedUnifiedFull/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-full-whnf-conversion/solution/StratifiedUnifiedFull.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h0",
+        "h1",
+        "h2",
+        "h3",
+        "hA",
+        "hB",
+        "hP",
+        "hT",
+        "hW",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "hn",
+        "hp",
+        "hq",
+        "hs",
+        "ht",
+        "hz",
+        "ih",
+        "sn"
+      ],
+      "lines": 7774,
+      "theorems": 477,
+      "vacuity": {}
+    },
+    "stratified-unified-sn": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "389fe96e7085fb3e",
+        "inductive Step": "e7b33a0fa1e68e59",
+        "inductive Tm": "0a20355bb9f4bc41"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/AxiomsCCU.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/AxiomsCCU.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/CCU.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/CCUBranch.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/CCUSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/CCUShape.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/CCUWK.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/Cand.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/DataCand.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/PSubst.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/SN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/Shapes.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/WhnfCCU.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/WhnfDec.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/WhnfInv.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/WhnfReduce.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU/WhnfSN.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-unified-sn/solution/StratifiedU.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "d",
+        "decWH",
+        "h",
+        "h0",
+        "h1",
+        "h2",
+        "h3",
+        "hA",
+        "hB",
+        "hCB",
+        "hF",
+        "hG",
+        "hP",
+        "hT",
+        "hW",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hc",
+        "hch",
+        "hconv",
+        "hd",
+        "hdom",
+        "he",
+        "hf",
+        "hg",
+        "hinv",
+        "hn",
+        "hp",
+        "hq",
+        "hs",
+        "hsa",
+        "hsb",
+        "hsn",
+        "hsx",
+        "hsy",
+        "ht",
+        "hv",
+        "hwa",
+        "hwb",
+        "hx",
+        "hy",
+        "hz",
+        "ih",
+        "sn"
+      ],
+      "lines": 14710,
+      "theorems": 805,
+      "vacuity": {}
+    },
+    "stratified-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "a6f199bcf604f4c9",
+        "inductive Step": "9977d292dccf72cc",
+        "inductive Tm": "46f736b5a0617d50"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-whnf-conversion/solution/Stratified/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-whnf-conversion/solution/Stratified/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-whnf-conversion/solution/Stratified/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-whnf-conversion/solution/Stratified/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-whnf-conversion/solution/Stratified/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-whnf-conversion/solution/Stratified/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-whnf-conversion/solution/Stratified.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h1",
+        "h2",
+        "hA",
+        "hB",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "ht",
+        "ih",
+        "sn"
+      ],
+      "lines": 1760,
+      "theorems": 120,
+      "vacuity": {}
+    },
+    "stratified-wtype-whnf-conversion": {
+      "banned": {},
+      "blocks": {
+        "def Confl": "7ab53c8ed7228851",
+        "inductive HasType": "60e8b6ec0d52f8ac",
+        "inductive Step": "85e41389e73c2b00",
+        "inductive Tm": "2d04d3648e9acc9b"
+      },
+      "elab_errors": 0,
+      "elab_sorries": 0,
+      "elaborates": true,
+      "file": "proofs/aristotle-whnf-model-guides/stratified-wtype-whnf-conversion/solution/StratifiedWType/Blocking.lean",
+      "files": [
+        "proofs/aristotle-whnf-model-guides/stratified-wtype-whnf-conversion/solution/StratifiedWType/Blocking.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-wtype-whnf-conversion/solution/StratifiedWType/Confluence.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-wtype-whnf-conversion/solution/StratifiedWType/Core.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-wtype-whnf-conversion/solution/StratifiedWType/Meta.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-wtype-whnf-conversion/solution/StratifiedWType/Whnf.lean",
+        "proofs/aristotle-whnf-model-guides/stratified-wtype-whnf-conversion/solution/StratifiedWType.lean"
+      ],
+      "hypotheses": [
+        "cr",
+        "decWH",
+        "h",
+        "h0",
+        "h1",
+        "h2",
+        "hA",
+        "hB",
+        "hP",
+        "hW",
+        "hX",
+        "ha",
+        "hacc",
+        "hb",
+        "hconv",
+        "he",
+        "hf",
+        "hq",
+        "ht",
+        "ih",
+        "sn"
+      ],
+      "lines": 3153,
+      "theorems": 205,
+      "vacuity": {}
+    },
     "system-t-cr": {
       "banned": {},
       "blocks": {
@@ -3359,8 +4227,8 @@
     }
   },
   "toolchain": "leanprover/lean4:v4.30.0-rc2",
-  "total_lines": 114430,
-  "total_theorems": 5361,
+  "total_lines": 176744,
+  "total_theorems": 9086,
   "undischarged_assumption_count": 8,
   "vacuity_debt": 0
 }

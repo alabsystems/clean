@@ -30,6 +30,10 @@ round-trip-compile = []
 # downstream crates) do not pay for clap + clean-features unless they opt in.
 cli = ["dep:clap", "dep:clean-features", "dep:tracing"]
 [dev-dependencies]
+# test-fixtures: tests/wf_recursion_e2e.rs mints a deliberately unchecked
+# constant via Environment::add_constant_unchecked_for_test (R1-TESTDOOR —
+# the door only compiles for dev targets).
+clean-kernel = { workspace = true, features = ["test-fixtures"] }
 clean-runtime = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }

@@ -48,10 +48,10 @@ mod ordering;
 mod prover;
 mod terms;
 
-pub use clause::*;
-pub use ordering::*;
-pub use prover::*;
-pub use terms::*;
+pub(crate) use clause::*;
+pub(crate) use ordering::*;
+pub(crate) use prover::*;
+pub(crate) use terms::*;
 
 #[cfg(test)]
 mod tests;

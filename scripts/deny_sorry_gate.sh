@@ -76,11 +76,44 @@ record_lane() {
         >>"$LANES_FILE"
 }
 
-check_unchecked_decl_ratchet_zero() {
+# The unchecked-decl ratchet lane.
+#
+# G6 (2026-08-23) — WHAT THIS LANE USED TO ASSERT AND WHY THAT CHANGED. It read
+# `data/unchecked_decl_ratchet.json`, checked the JSON against itself, and then
+# required the two counts to be the literal 0. Nothing here, and nothing
+# anywhere else, ever read a line of Rust: "the unchecked-decl ratchet is at
+# 0/0" was a claim about a JSON literal, and it was FALSE — the tree has always
+# had one production `add_decl_unchecked` call site (the mm_axiom_only proof-drop
+# arm of `Environment::add_decl`, the Metamath two-pass PASS-1), which is now
+# counted, argued and pinned. A gate that can only pass while the artifact lies
+# is worse than no gate.
+#
+# So the lane no longer asks "is the number zero". It asks the question the
+# number was standing in for, and it asks the SOURCE TREE:
+#   1. scripts/check_add_decl_ratchet.py --selftest, then a full re-derivation of
+#      every production call site from crates/**/*.rs. That is the part the old
+#      lane was missing entirely; it also enforces the // SOUNDNESS: comment and
+#      the in-code SANCTIONED_SITES allowlist, so no bypass can be legalised by
+#      writing JSON about it.
+#   2. the artifact's own internal consistency (rows + production sites sum to
+#      the declared counts) — retained verbatim from the old lane.
+#   3. every counted occurrence is a SANCTIONED site, at or under its pinned cap,
+#      with a non-empty trust justification. The allowlist is imported from the
+#      scanner rather than copied, so the two cannot drift.
+# Net: strictly more is enforced than before, on strictly more evidence. The one
+# thing no longer enforced is the literal 0, which was never true.
+check_unchecked_decl_ratchet_accounted() {
     python3 <<'PY'
 import json
 import sys
 from pathlib import Path
+
+sys.path.insert(0, "scripts")
+try:
+    import check_add_decl_ratchet as scanner
+except ImportError as exc:  # fail closed: no scanner, no lane
+    print(f"unchecked-decl ratchet: FAIL: cannot import the source scanner: {exc}", file=sys.stderr)
+    sys.exit(1)
 
 RATCHET_PATH = Path("data/unchecked_decl_ratchet.json")
 
@@ -162,10 +195,44 @@ if unchecked_sum != unchecked:
         f"add_decl_unchecked_count={unchecked} but file rows + "
         f"production sites sum to {unchecked_sum}"
     )
-if structural != 0 or unchecked != 0:
-    fail(f"expected add_decl_structural_count=0 and add_decl_unchecked_count=0, got {structural}/{unchecked}")
+# Every counted occurrence must be a SANCTIONED site, at or under its pinned
+# cap. The allowlist is the scanner's, imported — never a second copy.
+counted: dict[tuple[str, str], int] = {}
+for sites_key, expected_method in (
+    ("add_decl_structural_production_sites", "add_decl_structural"),
+    ("add_decl_unchecked_production_sites", "add_decl_unchecked"),
+):
+    for site in ratchet.get(sites_key, []) or []:
+        key = (site.get("file"), site.get("method", expected_method))
+        counted[key] = counted.get(key, 0) + int(site.get("occurrences", 1))
 
-print("unchecked-decl ratchet: PASS (add_decl_structural_count=0, add_decl_unchecked_count=0)")
+for key, occurrences in sorted(counted.items()):
+    cap = scanner.SANCTIONED_SITES.get(key)
+    if cap is None:
+        fail(
+            f"{key[0]} / {key[1]} is counted in the ratchet but is not in SANCTIONED_SITES "
+            f"in scripts/check_add_decl_ratchet.py. A bypass cannot be legalised by an "
+            f"artifact row; sanction it in code, with its argument, or remove it."
+        )
+    if occurrences > cap:
+        fail(f"{key[0]} / {key[1]} counts {occurrences} occurrences, sanctioned cap is {cap}")
+
+# `files` rows are file-granularity legacy entries with no site identity, so they
+# can never be matched against the allowlist. They must stay empty.
+legacy = structural_sum + unchecked_sum - sum(counted.values())
+if legacy:
+    fail(f"{legacy} legacy `files` occurrence(s) carry no site identity and cannot be sanctioned")
+
+# THE PART THE OLD LANE DID NOT HAVE: re-derive from the source tree.
+if scanner.selftest() != 0:
+    fail("the add_decl scanner's own mutation arms no longer fire")
+if scanner.run(scanner.REPO_ROOT) != 0:
+    fail("the source tree disagrees with data/unchecked_decl_ratchet.json (see above)")
+
+print(
+    f"unchecked-decl ratchet: PASS (source-measured; add_decl_structural_count={structural}, "
+    f"add_decl_unchecked_count={unchecked}, all occurrences sanctioned)"
+)
 PY
 }
 
@@ -184,7 +251,12 @@ write_evidence() {
 import hashlib
 import json
 import os
-from datetime import UTC, datetime
+# `datetime.UTC` is 3.11+ and this heredoc runs under the AMBIENT python3
+# (3.9.6 on macOS CommandLineTools), so the import raised and `set -e` killed
+# the gate before its own PASS/FAILED line — the same defect this script's
+# sibling kernel_soundness_gate.sh documents at its line 73. `timezone.utc`
+# is 3.9-safe. Fixed 2026-08-27.
+from datetime import datetime, timezone
 from pathlib import Path
 
 SCHEMA_VERSION = os.environ["DENY_SORRY_EVIDENCE_SCHEMA_VERSION"]
@@ -198,6 +270,40 @@ SOURCE_PATHS = [
     Path("crates/clean-kernel/tests/lint_sorry_bypass.rs"),
     RATCHET_PATH,
 ]
+
+
+# TRUST-CORE PINS (added 2026-08-27). The in-binary validator
+# (cmd_replacement/launch_validation.rs -> validate_trust_core_module_tree_sha)
+# and scripts/check_trustcore_evidence_staleness.py both REQUIRE these two
+# keys, but this minter never wrote them, so every freshly minted artifact was
+# born stale and the only previous remedy was hand-editing a generated file
+# (2b3ee69ee). Mint them instead.
+TRUST_CORE_MODULE_FILE = Path("crates/clean-cli/src/cmd_replacement.rs")
+TRUST_CORE_MODULE_DIR = Path("crates/clean-cli/src/cmd_replacement")
+TRUST_CORE_MODULE_TREE_KEY = "crates/clean-cli/src/cmd_replacement/**/*.rs"
+
+
+def trust_core_module_tree_digest(root: Path) -> str:
+    """Byte-identical replication of `sha256_repo_module_tree` (artifact_io.rs)."""
+    entries = []
+    for path in root.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        stem, dot, ext = path.name.rpartition(".")
+        if dot != "." or stem == "" or ext != "rs":
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith("tests/"):
+            continue
+        entries.append((rel.encode("utf-8"), path.read_bytes()))
+    entries.sort(key=lambda entry: entry[0])
+    hasher = hashlib.sha256()
+    for rel_bytes, data in entries:
+        hasher.update(rel_bytes)
+        hasher.update(b"\x00")
+        hasher.update(len(data).to_bytes(8, "little"))
+        hasher.update(data)
+    return hasher.hexdigest()
 
 
 def sha256_file(path: Path) -> str:
@@ -226,7 +332,7 @@ ratchet = json.loads(RATCHET_PATH.read_text(encoding="utf-8"))
 artifact = {
     "schema_version": SCHEMA_VERSION,
     "generated_by": "./scripts/deny_sorry_gate.sh",
-    "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "gate_command": "./scripts/deny_sorry_gate.sh",
     "status": os.environ["DENY_SORRY_GATE_STATUS"],
     "summary": {
@@ -241,7 +347,11 @@ artifact = {
         "add_decl_unchecked_count": ratchet["add_decl_unchecked_count"],
         "sha256": sha256_file(RATCHET_PATH),
     },
-    "source_sha256": {str(path): sha256_file(path) for path in SOURCE_PATHS},
+    "source_sha256": {
+        **{str(p): sha256_file(p) for p in SOURCE_PATHS},
+        str(TRUST_CORE_MODULE_FILE): sha256_file(TRUST_CORE_MODULE_FILE),
+        TRUST_CORE_MODULE_TREE_KEY: trust_core_module_tree_digest(TRUST_CORE_MODULE_DIR),
+    },
     "lanes": lanes,
 }
 EVIDENCE_PATH.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -289,14 +399,17 @@ else
     record_lane "lint_sorry_bypass" "Static lint: lint_sorry_bypass" "" "false" "failed"
 fi
 
-# Step 2: Unchecked-decl ratchet closure must stay at 0/0
-step "Unchecked-decl ratchet: structural 0 / unchecked 0"
-if check_unchecked_decl_ratchet_zero; then
+# Step 2: every unchecked-decl bypass in the SOURCE TREE is sanctioned, argued
+# and at or under its pinned cap (G6, 2026-08-23 — this used to assert a literal
+# 0/0 against the JSON, which was false; see check_unchecked_decl_ratchet_accounted)
+LANE_2_DESC="Unchecked-decl ratchet: every production bypass source-measured and sanctioned"
+step "$LANE_2_DESC"
+if check_unchecked_decl_ratchet_accounted; then
     pass
-    record_lane "unchecked_decl_ratchet_zero" "Unchecked-decl ratchet: structural 0 / unchecked 0" "" "true" "passed"
+    record_lane "unchecked_decl_ratchet_accounted" "$LANE_2_DESC" "" "true" "passed"
 else
-    fail "unchecked-decl ratchet is not closed at 0/0"
-    record_lane "unchecked_decl_ratchet_zero" "Unchecked-decl ratchet: structural 0 / unchecked 0" "" "false" "failed"
+    fail "an unchecked-decl bypass is unaccounted, unsanctioned, over its cap, or the artifact disagrees with the tree"
+    record_lane "unchecked_decl_ratchet_accounted" "$LANE_2_DESC" "" "false" "failed"
 fi
 
 # Step 3: Subprocess enforcement proof — DENY_SORRY actually blocks sorry

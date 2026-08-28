@@ -265,7 +265,7 @@ pub fn fourier_coefficient(f: &BooleanFunction, subset: u32) -> Result<f64, Four
 /// Compute all 2^n Fourier coefficients of f.
 ///
 /// Returns a vector indexed by subset bitmask.
-pub fn compute_all_fourier(f: &BooleanFunction) -> Result<Vec<f64>, FourierError> {
+pub(crate) fn compute_all_fourier(f: &BooleanFunction) -> Result<Vec<f64>, FourierError> {
     let n = f.num_vars();
     let size = 1usize << n;
     let mut coeffs = Vec::with_capacity(size);

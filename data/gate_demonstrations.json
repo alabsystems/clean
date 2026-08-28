@@ -1,0 +1,473 @@
+{
+  "schema": "clean.gate-demonstrations/v1",
+  "what_this_is": "Executable falsifications. Each arm names a gate, a mutation to a tracked file, and the command that must go RED. `scripts/check_gate_registry.py --demonstrate` applies the mutation to the real tree, runs the real gate, requires a non-zero exit AND the recorded diagnostic, then restores the file from git. A demonstration in this repo is a thing that RUNS, not a sentence in a header that was true once.",
+  "rules": [
+    "An arm refuses to run if its target file is already dirty; it restores from git and will not clobber an edit.",
+    "An arm that finds the UNMUTATED gate already red is a FAILURE, not a pass: a red arm on a red tree proves nothing.",
+    "A mutation whose pattern does not match is a FAILURE, not a skip. That silent no-op is instance 4 (four perturbation batteries, vacuous because a failed substitution never aborted).",
+    "expect_contains pins WHY it went red. A gate that exits non-zero for an unrelated reason has not been demonstrated."
+  ],
+  "arms": {
+    "tcb_target_ratchet": [
+      {
+        "arm": "a domain axiom reappears in the cert golden axiom list",
+        "mutate": {
+          "file": "data/soundness_tcb.json",
+          "op": "regex-sub",
+          "pattern": "\"axioms\": \\[",
+          "replacement": "\"axioms\": [\n    \"Demo.plantedDomainAxiom\","
+        },
+        "command": "python3 scripts/tcb_target_ratchet.py",
+        "expect_contains": "domain axioms grew",
+        "why": "MEASURED 2026-08-24: the ratchet derives the domain set from the `axioms` LIST, not from admitted_domain_count. Bumping that count alone leaves it GREEN -- which is correct behaviour (the list is the stronger source) and is why the arm plants an axiom instead of editing a counter."
+      },
+      {
+        "arm": "the 3-axiom denominator is moved (a 4th 'foundational' axiom)",
+        "mutate": {
+          "file": "data/soundness_tcb.json",
+          "op": "json-set",
+          "path": [
+            "foundational_count"
+          ],
+          "value": 4
+        },
+        "command": "python3 scripts/tcb_target_ratchet.py",
+        "expect_contains": "FAIL"
+      }
+    ],
+    "check_prelude_collision_ratchet": [
+      {
+        "arm": "a new prelude name discards a Lean declaration at import",
+        "mutate": {
+          "file": "data/prelude_collision_ratchet.json",
+          "op": "json-set",
+          "path": [
+            "baseline_type_differing"
+          ],
+          "value": 404
+        },
+        "command": "python3 scripts/check_prelude_collision_ratchet.py",
+        "expect_contains": "FAIL"
+      }
+    ],
+    "check_prelude_instance_priority_ratchet": [
+      {
+        "arm": "the measured denominator shrinks -- rows deleted instead of priorities fixed",
+        "mutate": {
+          "file": "data/prelude_instance_priority_ratchet.json",
+          "op": "json-set",
+          "path": [
+            "baseline_colliding"
+          ],
+          "value": 61
+        },
+        "command": "python3 scripts/check_prelude_instance_priority_ratchet.py",
+        "expect_contains": "SHRANK",
+        "why": "MEASURED 2026-08-24: live colliding=60 / prelude_instances=152 against baselines 56 / 148, so the arm must clear 60 to reach the shrink comparison. The numerator arm (mismatched) is unreachable from the ledger because live mismatched is 0 and the check is `>`."
+      }
+    ],
+    "check_silent_tactic_ratchet": [
+      {
+        "arm": "a tactic gains a silent failure path",
+        "mutate": {
+          "file": "data/silent_tactic_ratchet.json",
+          "op": "json-set",
+          "path": [
+            "baseline_unnamed"
+          ],
+          "value": 87
+        },
+        "command": "python3 scripts/check_silent_tactic_ratchet.py",
+        "expect_contains": "FAIL"
+      }
+    ],
+    "aristotle_corpus_gate": [
+      {
+        "arm": "a landed rung disappears from the corpus",
+        "mutate": {
+          "file": "data/aristotle_corpus_ratchet.json",
+          "op": "json-set",
+          "path": [
+            "rung_count"
+          ],
+          "value": 92
+        },
+        "command": "python3 scripts/aristotle_corpus_gate.py --fast",
+        "expect_contains": "rung count fell",
+        "why": "MEASURED 2026-08-24: the checked-in ratchet floor is rung_count 80 / total_theorems 5361 while the LIVE corpus is 91 rungs / 9086 theorems, so the floor sits far below the tree and an 81 or 5360 arm passes. The arm has to clear the live value to reach the comparison at all -- which is itself the finding: this ratchet's floors have drifted and enforce far less than they read as enforcing."
+      },
+      {
+        "arm": "vacuity debt rises",
+        "mutate": {
+          "file": "data/aristotle_corpus_ratchet.json",
+          "op": "json-set",
+          "path": [
+            "vacuity_debt"
+          ],
+          "value": -1
+        },
+        "command": "python3 scripts/aristotle_corpus_gate.py --fast",
+        "expect_contains": "vacuity",
+        "why": "MEASURED 2026-08-24: `--fast` (the mode BOTH local_gate.sh and the pre-push hook run) skips Lean elaboration, so the elaborates/banned-construct arms are unreachable there. The vacuity and rung-count arms are static and DO fire under --fast. That asymmetry is a finding, not a workaround: the hook's aristotle leg enforces strictly less than the full gate."
+      }
+    ],
+    "crystal_freshness_scope": [
+      {
+        "arm": "a chained body's own pinned source moved (CONTENT-SCOPE)",
+        "mutate": {
+          "file": "data/crystal_freshness_scope.json",
+          "op": "regex-sub",
+          "pattern": "\"body_sha256\": \"03b1a0baf03442e1",
+          "replacement": "\"body_sha256\": \"0000000000000000"
+        },
+        "command": "python3 scripts/crystal_freshness_scope.py",
+        "expect_contains": "CONTENT-SCOPE",
+        "why": "MEASURED 2026-08-24: moving the aggregate clean_kernel_src_sha256 yields NUMBERING-SCOPE, which is ledgered and NOT a failure by design (whole-crate renumbering is not a proof invalidation). Only a chained BODY moving is red, so that is what the arm moves."
+      }
+    ],
+    "check_hook_coverage": [
+      {
+        "arm": "a fast leg loses its curation row (the hook silently stops covering it)",
+        "mutate": {
+          "file": "scripts/githooks/gate-legs.txt",
+          "op": "regex-sub",
+          "pattern": "(?m)^IN_HOOK \\| both +\\| tcb-target-ratchet.*\\n",
+          "replacement": ""
+        },
+        "command": "python3 scripts/check_hook_coverage.py",
+        "expect_contains": "tcb-target-ratchet"
+      },
+      {
+        "arm": "a COST row claims 'full gate only' about a leg the fast gate runs",
+        "mutate": {
+          "file": "scripts/githooks/gate-legs.txt",
+          "op": "regex-sub",
+          "pattern": "(?m)^(COST +\\| )both( +\\| soundness-cert)",
+          "replacement": "\\1full\\2"
+        },
+        "command": "python3 scripts/check_hook_coverage.py",
+        "expect_contains": "declares mode='full'",
+        "why": "MEASURED 2026-08-25. The first arm only proves the checker compares NAMES. It went green for months while five COST rows asserted 'Full gate only' about legs local_gate.sh ran in --fast -- trust-verify-soundness among them, which made the documented pre-push command red on a Trust-side toolchain no Clean pusher controls. This arm pins the MODE axis: the row is re-derived from where the leg's `# GATE-LEG:` marker sits, so prose can no longer disagree with the code."
+      }
+    ],
+    "check_enum_tag_pin": [
+      {
+        "arm": "a chained kernel enum is renumbered in source",
+        "mutate": {
+          "file": "crates/clean-kernel/src/mode.rs",
+          "op": "regex-sub",
+          "pattern": "    Cubical = 2,",
+          "replacement": "    Cubical = 7,"
+        },
+        "command": "python3 scripts/check_enum_tag_pin.py",
+        "expect_contains": "FAIL"
+      }
+    ],
+    "check_lint_coverage": [
+      {
+        "arm": "a gate site drops --workspace and re-opens the 8-of-27-crate blind spot",
+        "mutate": {
+          "file": "scripts/local_gate.sh",
+          "op": "regex-sub",
+          "pattern": "scripts/rust_frontend.sh clippy --locked --workspace --all-targets",
+          "replacement": "scripts/rust_frontend.sh clippy --locked --all-targets"
+        },
+        "command": "python3 scripts/check_lint_coverage.py",
+        "expect_contains": "FAIL"
+      }
+    ],
+    "check_extend_constants_ratchet": [
+      {
+        "arm": "a bulk extend_constants bypass loses its ledger row",
+        "mutate": {
+          "file": "data/unchecked_decl_ratchet.json",
+          "op": "regex-sub",
+          "pattern": "\"extend_constants_unchecked\"",
+          "replacement": "\"extend_constants_unchecked_RENAMED\""
+        },
+        "command": "python3 scripts/check_extend_constants_ratchet.py",
+        "expect_contains": "FAIL"
+      }
+    ],
+    "check_trust_verdict_emitters": [
+      {
+        "arm": "a KernelVerified emitter appears that nobody classified",
+        "mutate": {
+          "file": "data/trust_verdict_emitters.json",
+          "op": "json-set",
+          "path": [
+            "asserts_own_authority_ratchet",
+            "clean_kernel_count"
+          ],
+          "value": 4
+        },
+        "command": "python3 scripts/check_trust_verdict_emitters.py",
+        "expect_contains": "FAIL"
+      }
+    ],
+    "crystal_fixture_freshness": [
+      {
+        "arm": "a chained fixture goes stale against the LIVE trustc dump (an instruction the shipped body does not have)",
+        "mutate": {
+          "file": "crates/clean-verify/tests/fixtures/has_cubical_layer.trust-ir.txt",
+          "op": "regex-sub",
+          "pattern": "%4 = const bool true",
+          "replacement": "%4 = const bool false"
+        },
+        "command": "python3 scripts/crystal_fixture_freshness.py \"${TRUST_IR_BUILD_DUMP:?arm prerequisite: a TRUST_IR_BUILD_DUMP directory holding clean_kernel.trust-ir.txt + clean_kernel.coverage.json}\"",
+        "expect_contains": "STRUCTURAL drift",
+        "why": "MEASURED 2026-08-24 against the dump at trust/scratchpad/laneETP/dump_ctl (clean_kernel.trust-ir.txt 5.4 MB, coverage 17 MB, build.log present, producer era 2026-08-20). UNMUTATED: 21 bodies, 20 NUMBERING-ONLY + 1 IDENTICAL, zero STRUCTURAL -> exit 0. MUTATED: `has_cubical_layer STRUCTURAL classes=STRUCTURAL,loc-file-index` and `STRUCTURAL drift -- %4 = const bool false -> %4 = const bool true` -> exit 1. The arm deliberately does NOT run with --strict: --strict makes whole-crate NUMBERING drift red too, so a --strict baseline is red on any dump from a different producer build and would make this a red-arm-on-a-red-tree. The non-strict mode is the one that isolates the soundness claim (an instruction moved), which is what this row claims. PREREQUISITE, stated rather than hidden: this arm needs a trustc dump, which is not in the git tree; export TRUST_IR_BUILD_DUMP or it fails closed rather than silently skipping."
+      }
+    ],
+    "axiom-audit-consistency": [
+      {
+        "arm": "the axiom census drifts: axiom_audit.json's TCB mirror stops matching the cert golden",
+        "mutate": {
+          "file": "data/axiom_audit.json",
+          "op": "json-set",
+          "path": [
+            "soundness_tcb_mirror",
+            "domain_axiom_count"
+          ],
+          "value": 1
+        },
+        "command": "cargo test -p clean-kernel --test verify_axiom_audit_integration --locked -q -- axiom_audit_tcb_mirror_matches_soundness_tcb_golden",
+        "expect_contains": "domain_axiom_count=1",
+        "why": "The leg is a cargo test, not a script, so it needs its own arm rather than inheriting one. Both JSON files are read at RUNTIME (fs::read_to_string in verify_axiom_audit_integration.rs), not include_str!'d, so the arm costs no recompile once the test binary exists. Planting a domain axiom in the MIRROR is the honest mutation: the live TCB is 3 foundational / 0 domain, and clause (2) of the test recomputes domain_axiom_count == admitted_domain_count + other_admitted_count from the GOLDEN, so a mirror that claims one more domain axiom than the golden admits is exactly the silent-TCB-growth this leg exists to block."
+      }
+    ],
+    "soundness-cert": [
+      {
+        "arm": "a fourth trusted axiom is added to the C2 golden and the live cert does not have it",
+        "mutate": {
+          "file": "data/soundness_tcb.json",
+          "op": "regex-sub",
+          "pattern": "\"axioms\": \\[",
+          "replacement": "\"axioms\": [\n    \"Demo.plantedTrustedAxiom\","
+        },
+        "command": "cargo test -p clean-kernel --lib --locked --features math-overlays -q -- golden_matches_live_axioms",
+        "expect_contains": "golden TCB diverged from live axiom set",
+        "why": "The leg is a cargo test, so it needs its own arm. data/soundness_tcb.json is include_str!'d at soundness_certificate.rs:56, so this mutation DOES force a clean-kernel recompile -- the arm is minutes, not seconds, and that is inherent to the leg rather than a defect in the arm. The command is narrowed to golden_matches_live_axioms (one of the four filters the leg passes) because that is the filter carrying the soundness claim: the golden TCB is pinned fail-closed to the LIVE axiom set, so a trusted axiom cannot be added, removed or renamed silently."
+      }
+    ],
+    "kernel_soundness_gate": [
+      {
+        "arm": "the differential corpus is edited without re-minting the baseline",
+        "mutate": {
+          "file": "tests/differential/expressions.txt",
+          "op": "append",
+          "content": "(this-is-not-a-valid-expression\n"
+        },
+        "command": "bash scripts/kernel_soundness_gate.sh",
+        "expect_contains": "expressions_sha256 mismatch",
+        "why": "MEASURED 2026-08-27: the gate pins its own corpus by digest, so a silently-edited differential input is refused before any lane can pass on it. Recorded because this row was pinned but had NO arms."
+      }
+    ],
+    "kv_invariance_gate": [
+      {
+        "arm": "the load-time source-olean content binding is disabled, so a stale or swapped shard serves anyway",
+        "mutate": {
+          "file": "crates/clean-mathverse/src/cli/closure_load.rs",
+          "op": "regex-sub",
+          "pattern": "    if recomputed_hash != hdr_hash \\|\\| recomputed_len != hdr_len \\{",
+          "replacement": "    if false && (recomputed_hash != hdr_hash || recomputed_len != hdr_len) {"
+        },
+        "command": "bash scripts/kv_invariance_gate.sh",
+        "expect_contains": "always-on v3 closure-binding / independent-parity unit tests failed",
+        "why": "The ALWAYS-ON seed leg, not the corpus leg -- and deliberately NOT KVINV_GATE_REQUIRE_MEASURED=1, which would only prove the gate refuses a deferral. This plants a real defect in the production serve path: `verify_one_closure_shard` stops comparing the recomputed blake3 of the on-disk .olean against the shard header, so a shard that is stale or swapped relative to its module is marked verified and its constants are served. `test_load_time_hash_mismatch_refuses` flips one byte of the on-disk olean and requires not-verified => not-served; with the binding gone it is served, the seed leg goes red, and the gate exits 1. LIMIT, stated because the verdict line states it too: at HEAD on this machine the gate then reports `KVINV_GATE=seed-only:no-target` -- the corpus-scale eager-vs-lazy stamp is NOT measured here and this arm does not claim it."
+      }
+    ],
+    "check_env_bypass_census": [
+      {
+        "arm": "a NEW unaccounted env-bypass call lands in a production file",
+        "mutate": {
+          "file": "crates/clean-tla/src/lib.rs",
+          "op": "append",
+          "text": "\n// GATE-DEMO (check_env_bypass_census): planted bypass call -- the demonstrator restores this file from git.\npub fn gate_demo_planted_bypass(env: &mut clean_kernel::env::Environment) {\n    env.extend_inductives_unchecked(Vec::new());\n}\n"
+        },
+        "command": "python3 scripts/check_env_bypass_census.py",
+        "expect_contains": "unaccounted environment-bypass call site",
+        "why": "MEASURED 2026-08-25: the planted dot-call reds the scanner against the REAL tree (crates/clean-tla/src/lib.rs:105, exit 1), where the 16-arm --selftest only ever proves the rules on a synthetic tree. The target file is deliberately a low-churn production file OUTSIDE clean-kernel: the scan is repo-wide over crates/**, so the arm also demonstrates that a door smuggled far from the kernel cannot hide."
+      },
+      {
+        "arm": "the census loses its accounting row for a watched door (method renamed in the artifact)",
+        "mutate": {
+          "file": "data/env_bypass_census.json",
+          "op": "regex-sub",
+          "pattern": "\"add_skolem_axiom\"",
+          "replacement": "\"add_skolem_axiom_RENAMED\""
+        },
+        "command": "python3 scripts/check_env_bypass_census.py",
+        "expect_contains": "does not watch",
+        "why": "MEASURED 2026-08-25: one rename fires FOUR verdicts at once -- the row names an unwatched method, add_skolem_axiom has no census row (completeness), its live call at crates/clean-auto/src/bridge/superposition_reconstruction/types.rs:156 goes unaccounted, and the row's named site goes stale. The needle pins the first; the string occurs exactly once in the artifact so count=1 cannot land elsewhere."
+      }
+    ],
+    "a0a6_probe_transcription": [
+      {
+        "arm": "a source record's A0 verdict is flipped to 6-of-6 without a re-mint",
+        "mutate": {
+          "file": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+          "op": "regex-sub",
+          "pattern": "\"bodyful_reachable_closure\": false",
+          "replacement": "\"bodyful_reachable_closure\": true"
+        },
+        "command": "python3 scripts/check_a0a6_probe_transcription.py",
+        "expect_contains": "the committed probe disagrees with the records it cites",
+        "why": "This is the edit somebody makes who believes the page's prose rather than the record: A0's one remaining FAIL flipped in the SOURCE while the probe still reads 5-of-6. It is the exact drift the re-mint would otherwise have shipped unguarded. The pattern is not anchored to the target body -- it is the only `false` bodyful_reachable_closure in that record's scorecards, and if that ever stops being true the arm fails as a non-matching or over-matching substitution rather than passing quietly."
+      },
+      {
+        "arm": "a lineage digest in a source record is altered",
+        "mutate": {
+          "file": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+          "op": "json-set",
+          "path": [
+            "tracked_chain_bodies",
+            "rows",
+            "level_is_zero",
+            "event_lineage"
+          ],
+          "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "command": "python3 scripts/check_a0a6_probe_transcription.py",
+        "expect_contains": "the committed probe disagrees with the records it cites",
+        "why": "A6's whole claim is EQUAL(event lineage, coverage-row lineage). The probe transcribes both values; moving either in the source must be red, because a digest that no longer matches the record it was copied from is the one thing a transcription can silently get wrong."
+      }
+    ],
+    "clean-elab::tactic::tests::core::bypass_ratchets": [
+      {
+        "arm": "a production close_goal_unchecked call site is added",
+        "mutate": {
+          "file": "crates/clean-elab/src/tactic/core/mod.rs",
+          "op": "append",
+          "content": "\n#[allow(dead_code)]\nfn __demo_planted_bypass_site() {\n    fn local_stub(_x: u8) {}\n    let close_goal_unchecked = local_stub;\n    close_goal_unchecked(0u8);\n}\n"
+        },
+        "command": "cargo test --locked -j 2 -p clean-elab --lib close_goal_unchecked_site_count_ratchet",
+        "expect_contains": "close_goal_unchecked ratchet VIOLATED: 1 production call sites found (max: 0)",
+        "why": "MEASURED 2026-08-26: a real (non-string, non-comment) call site is counted and the ratchet refuses. Planted, observed red, reverted, observed green in one session."
+      },
+      {
+        "arm": "a string literal containing the token does NOT count (the lexed property)",
+        "mutate": {
+          "file": "crates/clean-elab/src/tactic/core/mod.rs",
+          "op": "append",
+          "content": "\n#[allow(dead_code)]\nfn __demo_string_only() { let _ = \"close_goal_unchecked(\"; }\n"
+        },
+        "command": "cargo test --locked -j 2 -p clean-elab --lib close_goal_unchecked_site_count_ratchet",
+        "expect_contains": "test result: ok",
+        "why": "MEASURED 2026-08-26: the CONTROL for source_scan.kind=lexed. A raw-lines scanner would redden here; this one correctly stays green, which is what makes the soundness claim readable."
+      }
+    ],
+    "prelude-axiom-ratchet": [
+      {
+        "arm": "the census stops naming an axiom the default `clean check` prelude really asserts",
+        "mutate": {
+          "file": "data/prelude_axiom_ratchet.json",
+          "op": "json-set",
+          "path": [
+            "debt_proposition"
+          ],
+          "value": [
+            "Fact.mk"
+          ]
+        },
+        "command": "cargo test -p clean-kernel --lib --locked --features math-overlays -q -- prelude_axiom",
+        "expect_contains": "Fact.out",
+        "why": "Dropping Fact.out from the pinned list is the same event, in reverse, as an init_* function ADDING an axiom: the live set stops being a subset of the pinned one. The gate names the offender rather than only moving a counter, which is why expect_contains can pin the axiom itself. Deliberately NOT a counter bump -- baseline_debt_proposition stays 2, so this arm exercises refusal 1 (the by-name subset check) in isolation rather than refusal 2. RETARGETED 2026-08-27 (#49): the arm used to drop Nat.lt_succ_iff, but that axiom is now a kernel-checked theorem (nat_lt_succ_iff_proof.rs), and dropping a name the prelude no longer asserts would be VACUOUS -- the pinned set would merely become a superset of the live one and refusal 1 would not fire at all. Fact.out is one of the two asserted propositions the default prelude still ships. The ratchet is read at RUNTIME, so the arm costs no clean-kernel recompile once the test binary exists; both the unmutated baseline and the mutated run are ~80 s of test. TWO FURTHER ARMS NEED NO MUTATION AT ALL and run in this same command: prelude_axiom_ratchet_refuses_a_theorem_that_wraps_a_prelude_axiom (a kernel-ACCEPTED `Declaration::Theorem` whose value IS `Fact.out` -- CLAUDE.md's 'wrapping an Axiom is NOT a proof' shape -- must be flagged by the real theorem_debt_problems predicate; it asserts its target is still an axiom, so it fails LOUDLY rather than going vacuous when that target is drained, which is exactly how the #49 retirement was caught) and prelude_axiom_ratchet_refuses_a_newly_planted_axiom (`axiom _ : True` must land in debt_proposition, `axiom _ : Prop` in debt_signature, and new_axiom_problems must fire on both the by-name check and the count)."
+      }
+    ],
+    "deny_sorry_gate": [
+      {
+        "arm": "the unchecked-decl ratchet count disagrees with the source-measured sites",
+        "mutate": {
+          "file": "data/unchecked_decl_ratchet.json",
+          "op": "json-set",
+          "path": [
+            "add_decl_unchecked_count"
+          ],
+          "value": 99
+        },
+        "command": "bash scripts/deny_sorry_gate.sh",
+        "expect_contains": "unchecked-decl ratchet: FAIL: add_decl_unchecked_count=99 but file rows + production sites sum to 1",
+        "why": "MEASURED 2026-08-27: the ratchet lane re-derives the count from Rust SOURCE and refuses a JSON that disagrees, so the count cannot be edited into compliance. Recorded because this row was pinned but had NO arms \u2014 demonstrated on faith, replayable by nobody."
+      }
+    ],
+    "u2_battery": [
+      {
+        "arm": "a pinned fixture is edited -- the battery refuses before it runs a single probe",
+        "mutate": {
+          "file": "tests/fixtures/universes/p01_poly_def_two_uses.lean",
+          "op": "append",
+          "text": "\n-- GATE-DEMO (u2_battery): planted by scripts/check_gate_registry.py --demonstrate,\n-- which restores this file from git. If you are reading it in a committed tree,\n-- an arm was interrupted: `git checkout -- tests/fixtures/universes/p01_poly_def_two_uses.lean`.\ndef gateDemoExtraDecl : Nat := 0\n"
+        },
+        "command": "bash -c 'a=reports/u2-battery.json; s=$(mktemp); cp \"$a\" \"$s\"; scripts/u2_battery.sh; rc=$?; cp \"$s\" \"$a\"; rm -f \"$s\"; exit $rc'",
+        "expect_contains": "gate inputs dirty",
+        "why": "MEASURED 2026-08-27 at 7422b63a0: planted, observed RED (exit 1, `[u2-battery] FAIL: gate inputs dirty:` naming the fixture), reverted, observed GREEN (51 probes, 16.60s, exit 0). WHAT THIS DEMONSTRATES AND WHAT IT DOES NOT, stated plainly because the difference matters: it demonstrates the PROVENANCE tooth -- this battery refuses to pin anything against an uncommitted fixture -- and it does NOT demonstrate the probe layer. That is not a choice. The guard is unconditional and runs before the first probe, and its scope is every fixture in tests/fixtures/universes PLUS scripts/u2_battery.sh, i.e. every file the demonstrator is able to mutate, so on a dirty tree the probe layer is unreachable by construction. The probe layer is demonstrated on source_frontier_battery, whose provenance guard is opt-in and whose pass_probe/fail_probe helpers are the same shape; that is an inference from code identity, not a measurement of this script. Reaching this battery's probe layer for real needs an elaborator mutation plus a release rebuild -- which IS the regression path this leg exists to catch, and is not a cheap arm. The command snapshots and restores reports/u2-battery.json around the run for the same reason the local_gate leg does: the battery rewrites that tracked artifact on the GREEN baseline pass, and a demonstrator that leaves gate output dirty teaches people to `git checkout` past it."
+      }
+    ],
+    "source_frontier_battery": [
+      {
+        "arm": "THE PROBE LAYER: a PASS-pinned probe's exact declaration count drifts",
+        "mutate": {
+          "file": "tests/fixtures/source_frontier/p10_control_class_declared.lean",
+          "op": "append",
+          "text": "\n-- GATE-DEMO (source_frontier_battery): planted by scripts/check_gate_registry.py --demonstrate,\n-- which restores this file from git. If you are reading it in a committed tree,\n-- an arm was interrupted: `git checkout -- tests/fixtures/source_frontier/p10_control_class_declared.lean`.\ndef gateDemoExtraDecl : Nat := 0\n"
+        },
+        "command": "bash -c 'a=reports/source-frontier-battery.json; s=$(mktemp); cp \"$a\" \"$s\"; scripts/source_frontier_battery.sh; rc=$?; cp \"$s\" \"$a\"; rm -f \"$s\"; exit $rc'",
+        "expect_contains": "expected '3 passed, 0 failed'",
+        "why": "MEASURED 2026-08-27 at 7422b63a0: planted, observed RED (exit 1, `[srcfrontier] FAIL: p10_control_class_declared.lean expected '3 passed, 0 failed', got:   4 passed, 0 failed`), reverted, observed GREEN (26 probes, 9.88s, exit 0). The count is pinned EXACTLY, so this arm also shows the direction people forget: a change that resolves MORE declarations fails the battery too, which is what keeps a capability-adding elaborator change from silently widening what a control fixture proves. Run WITHOUT SRCFRONTIER_REQUIRE_PINNED on purpose -- unset, a dirty input only prints a provenance warning, which is what leaves the probe layer reachable from a mutated tree. Arm 2 covers the pinned form, which is the one the local_gate leg runs. The command snapshots and restores reports/source-frontier-battery.json for the same reason the leg does: the battery rewrites it on a green run, and a demonstrator that leaves tracked reports dirty teaches people to `git checkout` past gate output."
+      },
+      {
+        "arm": "THE PROVENANCE LAYER: the leg's own invocation (SRCFRONTIER_REQUIRE_PINNED=1) refuses a dirty fixture",
+        "mutate": {
+          "file": "tests/fixtures/source_frontier/p20_wrong_carrier_refused_MUST_FAIL.lean",
+          "op": "append",
+          "text": "\n-- GATE-DEMO (source_frontier_battery): planted by scripts/check_gate_registry.py --demonstrate,\n-- which restores this file from git. If you are reading it in a committed tree,\n-- an arm was interrupted: `git checkout -- tests/fixtures/source_frontier/p20_wrong_carrier_refused_MUST_FAIL.lean`.\ndef gateDemoExtraDecl : Nat := 0\n"
+        },
+        "command": "bash -c 'a=reports/source-frontier-battery.json; s=$(mktemp); cp \"$a\" \"$s\"; SRCFRONTIER_REQUIRE_PINNED=1 scripts/source_frontier_battery.sh; rc=$?; cp \"$s\" \"$a\"; rm -f \"$s\"; exit $rc'",
+        "expect_contains": "gate inputs not tracked-and-clean",
+        "why": "MEASURED 2026-08-27 at 7422b63a0: planted, observed RED (exit 1, `[srcfrontier] FAIL: gate inputs not tracked-and-clean:` naming the fixture), reverted, observed GREEN. This is the exact command scripts/local_gate.sh's `source-frontier-battery` leg runs, and it is a different tooth from arm 1: without the variable the same dirty tree only PRINTS `PROVENANCE: UNPINNED` and the run continues, recording inputs_pinned=false into the artifact. That is the right default for a human iterating on a fixture and the wrong one for a gate, which is why the battery's own header designates this variable for 'wherever the battery is wired into a gate' -- and why an arm has to prove the gate actually sets it. Deliberately a DIFFERENT fixture from arm 1 (a MUST_FAIL one), so the two arms cannot both be passing on one accident."
+      }
+    ],
+    "everyday-battery": [
+      {
+        "arm": "an R100 LOCKED snippet regresses",
+        "mutate": {
+          "file": "crates/clean-elab/src/lean4_corpus_tests.rs",
+          "op": "regex-sub",
+          "pattern": "theorem and_comm_impl \\(p q : Prop\\) : p \u2227 q \u2192 q \u2227 p := by\n  intro h\n  exact \u27e8h\\.2, h\\.1\u27e9",
+          "replacement": "theorem and_comm_impl (p q : Prop) : p \u2227 q \u2192 q \u2227 p := by\n  intro h\n  exact gateDemoNoSuchTerm"
+        },
+        "command": "scripts/cargo_test_nonvacuous.sh everyday-battery -- cargo test --locked -j 2 -p clean-elab --lib -q -- test_r100_everyday_battery_full",
+        "expect_contains": "R100 locked snippets regressed inside the full battery",
+        "why": "MEASURED 2026-08-27 at 7422b63a0, replayed through the real demonstrator (`scripts/check_gate_registry.py --demonstrate everyday-battery`): the UNMUTATED baseline ran GREEN (63/63), the mutation was applied, the re-run exited 101 carrying `R100 locked snippets regressed inside the full battery`, and the file was restored -- verbatim verdict `[ok] everyday-battery :: an R100 LOCKED snippet regresses: rc=101`, `GATE_DEMOS arms=1 failed=0`, 2383.71s wall for the pair (baseline run, rebuild, mutated run) with other lanes on the box. IT TARGETS THE STRONGER OF THIS TEST'S TWO TEETH. Replacing the tactic body of the locked snippet `logic_and-comm-impl` (`exact <h.2, h.1>` -> `exact gateDemoNoSuchTerm`, an unknown identifier) makes that snippet fail to elaborate, and the locked-regression assert fires BEFORE the artifact comparison is reached -- so this arm proves the half that pins the 38 snippets which are byte-identical to the 2026-07-20 R100 measurement, not merely the half that compares against a committed JSON. THE OTHER TOOTH IS NOT DEMONSTRATED HERE, and the reason is recorded rather than hidden: reaching it means editing reports/everyday-battery.json, which this lane was instructed not to touch. The leg's own ABSENT-artifact refusal was verified separately, by deleting that file inside a detached worktree and running the leg body verbatim -- `LOCAL GATE: FAIL - everyday battery - REFUSING: reports/everyday-battery.json is absent`, exit 1. The mutation is in a Rust source file, so BOTH runs pay a clean-elab lib-test build; the arm is tens of minutes and that is inherent to the leg, not a defect in the arm."
+      }
+    ],
+    "check_gate_registry": [
+      {
+        "arm": "a gate-shaped script lands with no registry row (R2 INVENTORY)",
+        "mutate": {
+          "file": "scripts/check_demo_planted_gate.py",
+          "op": "create",
+          "content": "#!/usr/bin/env python3\n\"\"\"Planted demonstration artifact.\"\"\"\nimport sys\nsys.exit(0)\n"
+        },
+        "command": "python3 scripts/check_gate_registry.py",
+        "expect_contains": "is gate-shaped by name, and has NO row in data/gate_registry.json",
+        "why": "MEASURED 2026-08-27: the inventory rule is what stops an enforcement artifact from entering the tree unclassified. Planted, observed red, removed, observed the red disappear. Recorded because this row \u2014 the REGISTRY'S OWN \u2014 was pinned with NO arms, the fourth such row found this week; a checker that cannot be replayed cannot be trusted to have ever refused anything."
+      }
+    ],
+    "rust_frontend": [
+      {
+        "arm": "a tracked source file drifts from the PINNED formatter and the driver must name it",
+        "mutate": {
+          "file": "crates/clean-kernel/src/beta_congruence.rs",
+          "op": "regex-sub",
+          "pattern": "(?m)^//! Part of #2859\\.$",
+          "replacement": "//! Part of #2859.\n\nfn __rust_frontend_arm_probe( ) ->u32{1}"
+        },
+        "command": "bash scripts/rust_frontend.sh fmt --all -- --check",
+        "expect_contains": "crates/clean-kernel/src/beta_congruence.rs",
+        "why": "AUTHORED 2026-08-27 because this row had NO ARMS AT ALL while carrying a `demonstrated` sha -- so it could never be re-demonstrated and R7 FRESH was unsatisfiable after any edit to the driver. The gap surfaced when scripts/rust_frontend.sh was fixed for GNU hosts: both its mktemp calls used the BSD `-t <prefix>` spelling, which GNU coreutils reads as a TEMPLATE and refuses, so the driver exited 2 before doing any work and local_gate.sh full mode was unrunnable on this clone. A driver that cannot RUN reports no violations, which is indistinguishable from a clean tree -- this arm makes that indistinguishable state impossible to fake by planting a formatting violation and requiring the driver to NAME the offending file."
+      }
+    ]
+  }
+}

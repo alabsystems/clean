@@ -49,7 +49,7 @@ pub fn exact_with_cert(state: &mut ProofState, proof: Expr) -> CertifiedTacticRe
             Ok(cert)
         }
         UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-            expected: format!("{target:?}"),
+            expected: format!("{target}"),
             actual: msg,
         }),
         UnifyResult::Stuck => Err(TacticError::UnificationFailed(

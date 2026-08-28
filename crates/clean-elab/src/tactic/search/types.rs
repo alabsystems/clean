@@ -22,7 +22,7 @@ pub struct GoalId(pub(super) u64);
 
 /// Unique identifier for rule applications
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RappId(pub(super) u64);
+pub(crate) struct RappId(pub(super) u64);
 
 /// Success probability (0.0 to 1.0)
 ///
@@ -127,7 +127,7 @@ pub enum NodeState {
 /// OR semantics: the goal is proven if ANY child rapp is proven.
 /// When one rapp succeeds, siblings become irrelevant.
 #[derive(Debug, Clone)]
-pub struct GoalData {
+pub(crate) struct GoalData {
     /// Parent rule application (None for root goal)
     pub parent: Option<RappId>,
     /// Child rule applications (attempts to prove this goal)
@@ -147,7 +147,7 @@ pub struct GoalData {
 /// AND semantics: the rapp is proven if ALL subgoals are proven.
 /// If any subgoal becomes unprovable, the entire rapp fails.
 #[derive(Debug, Clone)]
-pub struct RappData {
+pub(crate) struct RappData {
     /// Parent goal this rapp is trying to prove
     pub parent: GoalId,
     /// Subgoals produced by applying this rule
@@ -229,25 +229,25 @@ impl SearchTree {
 
     /// Get a goal by id
     /// ENSURES: Returns `Some` iff a goal with id `id` is currently stored in the tree.
-    pub fn get_goal(&self, id: GoalId) -> Option<&GoalData> {
+    pub(crate) fn get_goal(&self, id: GoalId) -> Option<&GoalData> {
         self.goals.get(&id)
     }
 
     /// Get a mutable goal by id
     /// ENSURES: Returns `Some` iff a goal with id `id` is currently stored in the tree.
-    pub fn get_goal_mut(&mut self, id: GoalId) -> Option<&mut GoalData> {
+    pub(crate) fn get_goal_mut(&mut self, id: GoalId) -> Option<&mut GoalData> {
         self.goals.get_mut(&id)
     }
 
     /// Get a rapp by id
     /// ENSURES: Returns `Some` iff a rapp with id `id` is currently stored in the tree.
-    pub fn get_rapp(&self, id: RappId) -> Option<&RappData> {
+    pub(crate) fn get_rapp(&self, id: RappId) -> Option<&RappData> {
         self.rapps.get(&id)
     }
 
     /// Get a mutable rapp by id
     /// ENSURES: Returns `Some` iff a rapp with id `id` is currently stored in the tree.
-    pub fn get_rapp_mut(&mut self, id: RappId) -> Option<&mut RappData> {
+    pub(crate) fn get_rapp_mut(&mut self, id: RappId) -> Option<&mut RappData> {
         self.rapps.get_mut(&id)
     }
 
@@ -255,7 +255,7 @@ impl SearchTree {
     /// REQUIRES: `parent_rapp` refers to a rapp in this tree when callers expect parent/child linkage.
     /// ENSURES: Inserts a new goal node whose `parent` field is `Some(parent_rapp)`.
     /// ENSURES: If `parent_rapp` exists, its `children` list gains the returned goal id.
-    pub fn add_goal(&mut self, parent_rapp: RappId, goal: Goal) -> GoalId {
+    pub(crate) fn add_goal(&mut self, parent_rapp: RappId, goal: Goal) -> GoalId {
         let id = GoalId(self.next_goal_id);
         self.next_goal_id += 1;
 
@@ -293,7 +293,7 @@ impl SearchTree {
     /// REQUIRES: `parent_goal` refers to a goal in this tree when callers expect parent/child linkage.
     /// ENSURES: Inserts a new rapp node whose `parent` field is `parent_goal`.
     /// ENSURES: If `parent_goal` exists, its `children` list gains the returned rapp id.
-    pub fn add_rapp(&mut self, parent_goal: GoalId) -> RappId {
+    pub(crate) fn add_rapp(&mut self, parent_goal: GoalId) -> RappId {
         let id = RappId(self.next_rapp_id);
         self.next_rapp_id += 1;
 
@@ -315,7 +315,7 @@ impl SearchTree {
 
     /// Check if the root is proven
     /// ENSURES: Returns `true` iff the root goal currently exists and `GoalState::is_proven()` is true.
-    pub fn is_root_proven(&self) -> bool {
+    pub(crate) fn is_root_proven(&self) -> bool {
         self.goals
             .get(&self.root)
             .map(|g| g.state.is_proven())
@@ -324,7 +324,7 @@ impl SearchTree {
 
     /// Check if the root is unprovable
     /// ENSURES: Returns `true` iff the root goal currently exists and is marked `GoalState::Unprovable`.
-    pub fn is_root_unprovable(&self) -> bool {
+    pub(crate) fn is_root_unprovable(&self) -> bool {
         self.goals
             .get(&self.root)
             .map(|g| g.state == GoalState::Unprovable)
@@ -382,7 +382,7 @@ impl AesopSearchState {
     }
 
     /// Mutably access the underlying search tree.
-    pub fn tree_mut(&mut self) -> &mut SearchTree {
+    pub(crate) fn tree_mut(&mut self) -> &mut SearchTree {
         &mut self.tree
     }
 

@@ -245,10 +245,9 @@ fn test_cert_known_fvar_returns_type_and_cert() {
     let env = Environment::new();
     let tc = TypeChecker::new(&env);
     let nat = nat_ty();
-    let fvar_id =
-        tc.ctx
-            .borrow_mut()
-            .push(Name::from_string("x"), nat.clone(), BinderInfo::Default);
+    let fvar_id = tc
+        .ctx_mut()
+        .push(Name::from_string("x"), nat.clone(), BinderInfo::Default);
     let e = Expr::from_kind(ExprKind::FVar(fvar_id));
     let (ty, cert) = tc
         .infer_type_with_cert(&e)

@@ -150,6 +150,13 @@ pub(crate) fn mk_funext(
     body_new: &Expr,
     body_proof: &Expr,
 ) -> Option<Expr> {
+    // Fail closed rather than mint a term naming a constant the environment
+    // does not have: Clean's own prelude is not guaranteed to carry `funext`,
+    // and an `UnknownConst` at the kernel is a worse outcome than simp
+    // reporting the step as unproved. (Reachable since `simp::binder` opened
+    // binders — before that, `body_proof` was always `None` here.)
+    state.env().get_const(&Name::from_string("funext"))?;
+
     // Infer α (domain type) universe level
     let u = get_sort_level(state, goal, ty)?;
 
@@ -190,13 +197,40 @@ pub(crate) fn mk_funext(
     Some(proof)
 }
 
-/// Build `forall_congr + propext` proof for Pi body simplification.
+/// Build a `forall_congr` proof for Pi body simplification.
 ///
 /// Given `body_proof : body_old = body_new` (both under a Pi binder, may contain BVar(0)),
 /// produces proof of `(∀ x : ty, body_old) = (∀ x : ty, body_new)`.
 ///
 /// Only works for Prop-valued Pi types (∀ x, P x where P : Prop).
-/// Uses: `propext (forall_congr (λ x, iff_of_eq body_proof))`.
+///
+/// # Which `forall_congr`
+///
+/// Lean 4 core (`Init/SimpLemmas.lean`) declares
+///
+/// ```text
+/// theorem forall_congr {α : Sort u} {p q : α → Prop}
+///     (h : ∀ a, p a = q a) : (∀ a, p a) = (∀ a, q a)
+/// ```
+///
+/// — an **`Eq`** in, an **`Eq`** out. This builder used to emit the
+/// `Iff`-shaped Mathlib-style variant instead, wrapping the body proof in
+/// `iff_of_eq` and the result in `propext`. That term is ill-typed against the
+/// real constant and references `iff_of_eq`, which Clean's own prelude does not
+/// even declare. It went unnoticed because the path was unreachable: the body
+/// proof was always `None` under a binder (see `simp::binder`), and the one
+/// test covering the shape asserted head names without ever kernel-checking.
+/// Opening binders made it reachable, so it is now built to Lean's signature —
+/// the body proof IS the `h` the constant wants, and no `propext` is involved.
+///
+/// # Fail-closed
+///
+/// Returns `None` when the environment has no `forall_congr`, or has one whose
+/// conclusion is not an equation (a differently-shaped homonym). Dropping the
+/// proof restores the pre-binder-opening behaviour for that step — `simp` then
+/// reports the change as non-definitional through `replace_target_def_eq`
+/// rather than handing the kernel a term built against a signature that is not
+/// there.
 ///
 /// # Contract
 ///
@@ -204,7 +238,8 @@ pub(crate) fn mk_funext(
 /// REQUIRES: `ty` is the Pi binder domain type
 /// REQUIRES: `(∀ x : ty, body_old) : Prop` (Pi type must be Prop-valued)
 /// ENSURES: On Some, result proves `(∀ x : ty, body_old) = (∀ x : ty, body_new)`
-/// ENSURES: On None, Pi is non-Prop or type inference failed
+/// ENSURES: On None, Pi is non-Prop, `forall_congr` is absent or wrongly
+///   shaped, or type inference failed
 pub(crate) fn mk_forall_congr(
     state: &ProofState,
     goal: &Goal,
@@ -222,7 +257,11 @@ pub(crate) fn mk_forall_congr(
         _ => return None, // Non-Prop Pi — cannot use forall_congr
     }
 
-    let pi_new = Expr::pi(BinderInfo::Default, ty.clone(), body_new.clone());
+    // The environment must actually carry Lean's `forall_congr`, and it must
+    // conclude in an equation. A missing or Iff-shaped homonym means no proof.
+    let forall_congr_name = Name::from_string("forall_congr");
+    let decl = state.env().get_const(&forall_congr_name)?;
+    let (_conclusion_lhs, _conclusion_rhs) = super::expr::extract_equality_from_type(&decl.type_)?;
 
     // Universe level of domain α
     let u = get_sort_level(state, goal, ty)?;
@@ -231,34 +270,15 @@ pub(crate) fn mk_forall_congr(
     let p = Expr::lam(BinderInfo::Default, ty.clone(), body_old.clone());
     let q = Expr::lam(BinderInfo::Default, ty.clone(), body_new.clone());
 
-    // h_iff = λ x : α, @iff_of_eq body_old body_new body_proof
-    // iff_of_eq : {a b : Prop} → a = b → (a ↔ b)
-    let iff_term = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::const_(Name::from_string("iff_of_eq"), vec![]),
-                body_old.clone(),
-            ),
-            body_new.clone(),
-        ),
-        body_proof.clone(),
-    );
-    let h_iff = Expr::lam(BinderInfo::Default, ty.clone(), iff_term);
+    // h = λ x : α, body_proof   :   ∀ a, p a = q a   (beta)
+    let h = Expr::lam(BinderInfo::Default, ty.clone(), body_proof.clone());
 
-    // @forall_congr.{u} α p q h_iff
-    // forall_congr : {α : Sort u} → {p q : α → Prop} → (∀ a, p a ↔ q a) → ((∀ a, p a) ↔ (∀ a, q a))
-    let mut forall_congr_proof = Expr::const_(Name::from_string("forall_congr"), vec![u]);
-    forall_congr_proof = Expr::app(forall_congr_proof, ty.clone());
-    forall_congr_proof = Expr::app(forall_congr_proof, p);
-    forall_congr_proof = Expr::app(forall_congr_proof, q);
-    forall_congr_proof = Expr::app(forall_congr_proof, h_iff);
-
-    // @propext (∀ x : α, body_old) (∀ x : α, body_new) (forall_congr ...)
-    // propext : {a b : Prop} → (a ↔ b) → a = b
-    let mut proof = Expr::const_(Name::from_string("propext"), vec![]);
-    proof = Expr::app(proof, pi_old);
-    proof = Expr::app(proof, pi_new);
-    proof = Expr::app(proof, forall_congr_proof);
+    // @forall_congr.{u} α p q h : (∀ a, p a) = (∀ a, q a)
+    let mut proof = Expr::const_(forall_congr_name, vec![u]);
+    proof = Expr::app(proof, ty.clone());
+    proof = Expr::app(proof, p);
+    proof = Expr::app(proof, q);
+    proof = Expr::app(proof, h);
     Some(proof)
 }
 

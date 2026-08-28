@@ -77,6 +77,8 @@ impl Parser {
         let attrs = self.attributes()?;
 
         let span = self.current_span();
+        // Column of the command keyword, for the binder-run line barrier.
+        let keyword_col = self.current().col;
 
         match self.current_kind() {
             TokenKind::Def => {
@@ -152,11 +154,11 @@ impl Parser {
             }
             TokenKind::Universe => {
                 self.advance();
-                self.universe_decl(span)
+                self.universe_decl(span, keyword_col)
             }
             TokenKind::Variable => {
                 self.advance();
-                self.variable_decl(span)
+                self.variable_decl(span, keyword_col)
             }
             TokenKind::Open => {
                 self.advance();
@@ -290,6 +292,34 @@ impl Parser {
                 mods.scope = DeclScope::Scoped;
                 self.decl_with_modifiers(mods)
             }
+            // Lean 4 `include x y` / `omit x y` — section-variable inclusion
+            // control. Neither word is a reserved keyword in Lean (`include` is
+            // a perfectly good identifier), so these fire only when the word is
+            // followed by an identifier, which is the only shape the commands
+            // have.
+            //
+            // Before this existed, `include h` was not a command to this
+            // parser at all: the PRECEDING `variable` line's bare-name binder
+            // run absorbed both words as untyped section variables, and the
+            // minted `h` shadowed the real `(h : Involutive f)`. That is fixed
+            // in two independent places — the barrier in `variable_decl` stops
+            // the absorption, and this arm gives the command a meaning.
+            TokenKind::Ident(name)
+                if (name == "include" || name == "omit")
+                    && self.peek_token(1).is_some_and(|t| {
+                        matches!(t.kind, TokenKind::Ident(_)) && !t.preceded_by_newline
+                    }) =>
+            {
+                let include = name == "include";
+                self.advance();
+                let names =
+                    self.include_omit_names(if include { "include" } else { "omit" }, keyword_col)?;
+                Ok(if include {
+                    SurfaceDecl::IncludeVars { span, names }
+                } else {
+                    SurfaceDecl::OmitVars { span, names }
+                })
+            }
             // Handle declare_syntax_cat as a proper command
             TokenKind::Ident(name) if name == "declare_syntax_cat" => {
                 self.advance();
@@ -407,6 +437,22 @@ impl Parser {
                     }
                 }
                 Ok(SurfaceDecl::RawDecl { span, content })
+            }
+            // An identifier in command position that no arm above claimed is
+            // an UNKNOWN COMMAND. Name it.
+            //
+            // LANE FAILOPEN: the generic arm below labels the recovery with the
+            // raw token debug (`Ident("frobnicate") frobnicate h`), which reads
+            // as parser noise rather than as a refusal, and the words that
+            // followed it were often not even reachable here — the preceding
+            // `variable` had already eaten them. With that absorption closed,
+            // this is the path every unrecognised command line takes, so it
+            // says what it refused and why. A named refusal beats a silent
+            // guess: the declaration still fails (`RawDecl` is an error at
+            // elaboration), but the diagnostic now names the token.
+            TokenKind::Ident(name) => {
+                let raw = format!("unknown command `{name}`");
+                Ok(self.skip_to_next_decl(&raw, span))
             }
             _ => {
                 let raw = format!("{:?}", self.current_kind());

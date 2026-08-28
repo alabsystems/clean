@@ -50,7 +50,7 @@
 //! below is what makes a silent re-deletion fail rather than pass.
 //!
 //! A5 here is an INVERSION (machine answer → reflected predicate), not the
-//! denotational step `ir_lz_machine_sound` takes: that one composes with
+//! denotational step `ir_lzm_machine_sound` takes: that one composes with
 //! `level_is_zero_sound` to reach `level_eval`, and this spec has no comparable
 //! semantics of `CleanMode` to compose with. Said plainly so the two are not
 //! quoted as equals.
@@ -275,11 +275,11 @@ A1 is pinned by tests/crystal_a1_lineage.rs: the registered CFG is checked again
 \
 RESTORED 2026-08-12. This declaration landed in 08d4c6cb1 as ir_hcl_machine_sound and was DELETED by 9c37f0ef0 when the module was re-authored from measured output; nothing replaced it, so the chain that is supposed to close stopped at the equality theorem while the design docs went on describing a six-rung A0..A6. Here it is again, re-typed against the transcribed module (fuel ir_d6, not ir_d5) and renamed to the ir_h2_ family. \
 \
-STATED SCOPE, which must travel with it. This is an INVERSION -- from an observation about the running machine back to the reflected predicate -- and NOT the denotational step its counterpart ir_lz_machine_sound takes. That one composes with level_is_zero_sound to conclude a fact about level_eval under every assignment; there is no comparable semantics of CleanMode in this spec to compose with, so the honest conclusion here is the reflected predicate itself. Deeper would require a mode semantics that does not exist yet. \
+STATED SCOPE, which must travel with it. This is an INVERSION -- from an observation about the running machine back to the reflected predicate -- and NOT the denotational step its counterpart ir_lzm_machine_sound takes. That one composes with level_is_zero_sound to conclude a fact about level_eval under every assignment; there is no comparable semantics of CleanMode in this spec to compose with, so the honest conclusion here is the reflected predicate itself. Deeper would require a mode semantics that does not exist yet. \
 \
 The composition is an equality argument, not three injectivity lemmas: apply ir_outcome_bool to both sides with Eq.cong and let the kernel compute, since ir_outcome_bool (ret [bool b]) reduces to b. That is why this stage must run AFTER add_eval_ir_correct, which registers it. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_H2_MACHINE_SOUND_WITNESS, "ir_h2_machine_sound_witness: A5 is not vacuous, and the witness RUNS THE MACHINE. Instantiated at the one-cell heap encoding Directed -- the 2LTT bridge, and the arm most easily lost to a misrouted Switch -- with every premise discharged concretely: the representation by EncodesCleanMode.mk, the fuel bound by Le.refl at exactly 6, and the observation by Eq.refl, which the kernel discharges by executing the body. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_H2_NEVER_FAULTS, "ir_h2_never_faults: *** NO UB, NO PANIC, NO EXHAUSTION -- on any represented mode. *** A corollary of ir_h2_correct, and the analogue of ir_lz_never_faults for this chain. IROutcome separates success from ub, type_error, unmodelled, stuck and fuel_out, so proving the outcome is a ret rules out all five at once. \
+        self.add_recursive_def(SRC_IR_H2_NEVER_FAULTS, "ir_h2_never_faults: *** NO UB, NO PANIC, NO EXHAUSTION -- on any represented mode. *** A corollary of ir_h2_correct, and the analogue of ir_lzm_never_faults for this chain. IROutcome separates success from ub, type_error, unmodelled, stuck and fuel_out, so proving the outcome is a ret rules out all five at once. \
 \
 Concretely for the emitted body: the default edge is taken on four of the six tags and is a real answer rather than a trap, no load faults bad_addr or null_deref, and 6 steps always suffice. All of it is earned by EncodesCleanMode's premise -- one live cell whose payload is the tag -- rather than assumed. DerivedProved, zero axiom_deps.")?;
         Ok(())

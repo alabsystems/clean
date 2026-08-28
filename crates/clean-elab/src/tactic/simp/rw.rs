@@ -7,8 +7,9 @@
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, Level};
 
+use super::budget::SimpBudget;
 use super::cache::collect_simp_lemmas_cached;
-use super::expr::{extract_eq_sides, simp_expr};
+use super::expr::{extract_eq_sides, simp_expr_budgeted};
 use super::lemmas::{extract_local_equality_template, mk_local_proof_template};
 use super::types::{SimpConfig, SimpIndexMode, SimpLemma};
 use crate::tactic::discr_tree::{mk_path, query_path_is_too_generic, IndexMode};
@@ -123,8 +124,26 @@ pub fn simp_rw(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
     simp_config.aesop_simp_lemmas = collect_local_rw_simp_lemmas(state, &goal, &lemmas)?;
     let simp_lemmas = collect_simp_lemmas_cached(state, &simp_config);
 
+    // Same per-traversal budget `simp` carries (see `simp/budget.rs`); a trip
+    // is a refusal, not a truncated rewrite chain.
+    let budget = SimpBudget::for_target(&current_target);
+
     while steps < simp_config.max_steps {
-        let simp_result = simp_expr(state, &goal, &current_target, &simp_lemmas, &simp_config);
+        budget.refuel();
+        let simp_result = simp_expr_budgeted(
+            state,
+            &goal,
+            &current_target,
+            &simp_lemmas,
+            &simp_config,
+            &budget,
+        );
+        if let Some(detail) = budget.detail() {
+            return Err(TacticError::BudgetExceeded {
+                tactic: "simp_rw".into(),
+                detail,
+            });
+        }
         if simp_result.expr == current_target {
             break;
         }

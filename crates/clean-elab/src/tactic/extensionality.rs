@@ -64,6 +64,10 @@ pub fn funext(state: &mut ProofState, var_name: &str) -> TacticResult {
     // unconvertible → `closed_proof()` fails closed → `ProofNotProduced`. So we
     // snapshot `next_fvar`, use the placeholder purely for inference, then
     // restore it so `intro` gets the depth-aligned id.
+    // CURSOR MINTING OK (wf_5584ceff audit): inference-only scratch — never
+    // reaches a subgoal context or the assignment fragment. (`intro` now mints
+    // goal-derived, so the snapshot/restore is belt-and-braces rather than
+    // load-bearing, but it stays: it keeps the cursor tight.)
     let saved_next_fvar = state.next_fvar;
     let fvar_expr = Expr::fvar(state.fresh_fvar());
     let result_ty = state.whnf(&goal, &cod.clone().instantiate(&fvar_expr));

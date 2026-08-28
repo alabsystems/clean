@@ -1,0 +1,36 @@
+-- p09 — CLASS I, the GOAL face (the exact shape of the 34 corpus entries).
+--
+-- RE-PINNED 2026-08-26 (FRONTIER STAGE I-1): FAIL -> PASS, 1/2 -> 2/0.
+-- Renamed from `p09_deceq_goal_face_MUST_FAIL.lean`.
+--
+-- READ THIS BEFORE PLANNING STAGE I-2. The recon (§4.5, §6) scheduled p09 to
+-- flip at stage I-2 — the goal-side ∀-telescope — and expected stage I-1 to
+-- leave it red. It went green at stage I-1 instead, and the reason matters:
+-- the goal here is `[DecidableEq α]` at a carrier that is a LOCAL BINDER of
+-- the same declaration, so once a local can be matched at all, the goal does
+-- not need to be built — it needs to be FOUND. Match (C) of
+-- `resolve_local_instance_telescoped` finds it by unifying the whole
+-- normalised goal (`elab_app.rs` δ-unfolded it to `(x x1 : α) → Decidable
+-- (Eq α x x1)` before the search ever saw it) against the whole normalised
+-- type of the local, and returns the binder.
+--
+-- What p09 flipping does NOT mean is that the goal side is done. A Pi-shaped
+-- alias goal whose answer must be CONSTRUCTED — no local of that type in
+-- scope, the body answerable only from the global table — still fails. That
+-- residue is p18, and it is what stage I-2 is now for.
+--
+-- WHAT IT PINNED BEFORE: an instance goal `DecidableEq α` is δ-unfolded to
+-- its Pi BEFORE the search sees it (`infer/elab_app.rs`,
+-- `resolve_deferred_instances` and the eager fallback both `whnf` the goal),
+-- and `resolve_instance_candidates` bailed on a Pi-shaped goal in one line
+-- (`extract_class_app_with_levels(&goal_ty)?`). The printed goal was
+-- therefore the Pi, character-for-character the corpus family:
+--   `(x : α) -> (x1 : α) -> Decidable (Eq {u} α x x1)`
+--
+-- CONTROL: p10 rules out "instance synthesis through a callee's binder is
+-- broken" — the identical shape over a `class`-declared class passed before
+-- and passes now. p12 rules out "the DecidableEq TERM cannot be threaded".
+-- p18 is the residue control: same shape, no local, still fails.
+def callee {α : Type} [DecidableEq α] (a : α) : Nat := 0
+
+theorem probe_face1 {α : Type} [DecidableEq α] (a : α) : callee a = 0 := rfl

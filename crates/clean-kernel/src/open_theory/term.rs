@@ -19,7 +19,7 @@ pub struct OtConstant {
 
 impl OtConstant {
     #[must_use]
-    pub fn primitive_eq(principal_type: Option<OtType>) -> Self {
+    pub(crate) fn primitive_eq(principal_type: Option<OtType>) -> Self {
         Self {
             name: OtName::global("="),
             origin: OtSymbolOrigin::Primitive,
@@ -56,7 +56,7 @@ impl OtConstant {
     }
 
     #[must_use]
-    pub fn is_primitive_eq(&self) -> bool {
+    pub(crate) fn is_primitive_eq(&self) -> bool {
         self.origin == OtSymbolOrigin::Primitive && self.name == OtName::global("=")
     }
 }
@@ -247,7 +247,7 @@ impl OtTerm {
 
     /// Check whether any term in the slice is alpha-equivalent to `self`.
     #[must_use]
-    pub fn alpha_mem(&self, haystack: &[OtTerm]) -> bool {
+    pub(crate) fn alpha_mem(&self, haystack: &[OtTerm]) -> bool {
         haystack.iter().any(|t| self.alpha_eq(t))
     }
 
@@ -270,7 +270,7 @@ impl OtTerm {
     }
 
     #[must_use]
-    pub fn dest_eq(&self) -> Option<(&OtTerm, &OtTerm)> {
+    pub(crate) fn dest_eq(&self) -> Option<(&OtTerm, &OtTerm)> {
         let Self::App { func, arg: rhs } = self else {
             return None;
         };
@@ -311,7 +311,7 @@ impl OtTerm {
     }
 
     #[must_use]
-    pub fn substitute_types(&self, substitutions: &[(OtName, OtType)]) -> Self {
+    pub(crate) fn substitute_types(&self, substitutions: &[(OtName, OtType)]) -> Self {
         match self {
             Self::Var(variable) => Self::Var(OtVariable {
                 name: variable.name.clone(),
@@ -343,7 +343,7 @@ impl OtTerm {
     }
 
     #[must_use]
-    pub fn substitute_terms(&self, substitutions: &[(OtVariable, OtTerm)]) -> Self {
+    pub(crate) fn substitute_terms(&self, substitutions: &[(OtVariable, OtTerm)]) -> Self {
         match self {
             Self::Var(variable) => substitutions
                 .iter()
@@ -429,7 +429,7 @@ impl OtTheorem {
     }
 
     #[must_use]
-    pub fn union_hypotheses(left: &[OtTerm], right: &[OtTerm]) -> Vec<OtTerm> {
+    pub(crate) fn union_hypotheses(left: &[OtTerm], right: &[OtTerm]) -> Vec<OtTerm> {
         let mut out = left.to_vec();
         for term in right {
             if !term.alpha_mem(&out) {
@@ -440,7 +440,7 @@ impl OtTheorem {
     }
 
     #[must_use]
-    pub fn without_hypothesis(hypotheses: &[OtTerm], target: &OtTerm) -> Vec<OtTerm> {
+    pub(crate) fn without_hypothesis(hypotheses: &[OtTerm], target: &OtTerm) -> Vec<OtTerm> {
         hypotheses
             .iter()
             .filter(|term| !term.alpha_eq(target))
@@ -454,7 +454,7 @@ impl OtTheorem {
     }
 
     #[must_use]
-    pub fn substitute_types(&self, substitutions: &[(OtName, OtType)]) -> Self {
+    pub(crate) fn substitute_types(&self, substitutions: &[(OtName, OtType)]) -> Self {
         Self::new(
             self.hypotheses
                 .iter()
@@ -465,7 +465,7 @@ impl OtTheorem {
     }
 
     #[must_use]
-    pub fn substitute_terms(&self, substitutions: &[(OtVariable, OtTerm)]) -> Self {
+    pub(crate) fn substitute_terms(&self, substitutions: &[(OtVariable, OtTerm)]) -> Self {
         Self::new(
             self.hypotheses
                 .iter()

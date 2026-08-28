@@ -93,16 +93,18 @@ pub(crate) const RECORD: &str = "data/crystal_chain_revalidation_2026-08-19.json
 /// manufacture a record describing neither.
 pub(crate) const RECORD_2: &str = "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json";
 /// The newest current-source revalidation. It is append-only: older records
-/// remain the evidence for the exact builds they measured.
-pub(crate) const CURRENT_RECORD: &str = "data/crystal_chain_revalidation_2026-08-21_b03937e74.json";
+/// remain the evidence for the exact builds they measured. The lane18 record
+/// is the chain-18 addition event: 19 chains, the c4e667ca51 producer, and
+/// the first call-bearing body.
+pub(crate) const CURRENT_RECORD: &str = "data/crystal_chain_revalidation_2026-08-21_lane18.json";
 /// The append-only old->new ledger produced by the source-bound fixture
 /// rebaseline that makes strict freshness derivably green.
 pub(crate) const CURRENT_REBASELINE: &str =
-    "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json";
+    "data/crystal_fixture_rebaseline_2026-08-21_lane18.json";
 /// The reviewed load-bearing proof/spec/tag bindings required before the
 /// rebaseline tool will move any fixture.
 pub(crate) const CURRENT_REBASELINE_BINDINGS: &str =
-    "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json";
+    "data/crystal_fixture_rebaseline_bindings_2026-08-21_lane18.json";
 /// The mechanism that produces it.
 pub(crate) const SCRIPT: &str = "scripts/crystal_fixture_freshness.py";
 
@@ -128,6 +130,7 @@ pub(crate) const EVIDENCE: &[(&str, &str)] = &[
     ("strict_monads", "strict_monads.lineage.json"),
     ("flat_flags_with", "flat_flags_with.lineage.json"),
     ("node_id_index", "node_id_index.lineage.json"),
+    ("has_loose_bvars", "has_loose_bvars.lineage.json"),
 ];
 
 /// Chains whose fixture **IS** the live-dump comparison rather than a dated pin
@@ -163,6 +166,11 @@ pub(crate) const HEAD_MEASURED: &[&str] = &[
     "strict_monads",
     "flat_flags_with",
     "node_id_index",
+    // Chain 18, 2026-08-21 — the first call-bearing chain, and the first fixture
+    // of the c4e667ca51 producer era. Its record covers every fixture in the
+    // tree at that era (the prior fixtures read NUMBERING-ONLY there, which is
+    // the freshness script's own classification, not a weakening).
+    "has_loose_bvars",
 ];
 
 /// The chains the two committed revalidation records actually measured:

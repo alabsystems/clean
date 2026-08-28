@@ -7,7 +7,6 @@
 //! the original single-file `proof_terms` module verbatim.
 
 use super::super::super::isabelle_pure::IsaProof;
-use super::super::*;
 use super::*;
 use clean_kernel::{BinderInfo, Expr};
 

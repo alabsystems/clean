@@ -47,6 +47,9 @@ use registration::{
     notation_pattern_to_syntax, notation_to_name, pattern_kind_from_items, pattern_to_name,
     surface_expr_to_syntax_quote, syntax_pattern_to_syntax,
 };
+// The declaration router (`infer::elaborate_decl`) reuses the `(cat| …)` head
+// recognition to route `(tactic| …)` macros to tactic-position registration.
+pub(crate) use registration::quotation_category_head;
 
 use clean_macro::registry::SyntaxCategoryRegistry;
 use clean_macro::{

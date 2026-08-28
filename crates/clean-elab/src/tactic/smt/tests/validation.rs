@@ -81,3 +81,59 @@ fn test_smt_sort_to_lean_type_real_maps_to_real() {
 
 // Accepted-candidate finalization tests live in reconstruction_gate_tests.rs.
 // Raw acceptance semantics now live on the clean-auto side of the #302 boundary.
+
+/// `infer_type` runs infer-only: application arguments are NOT checked against
+/// binder domains, so `(fun (_ : False) => True.intro) True.intro` infers `True`
+/// although it is ill-typed (`True.intro : True`, not `False`). An ill-typed
+/// bridge term must never close a goal: `validate_proof_term` re-runs the FULL
+/// kernel check (`check_type`, `infer_only = false`) and must reject it.
+#[test]
+#[serial]
+fn test_validate_proof_term_rejects_ill_typed_application_argument() {
+    use crate::tactic::TacticError;
+    use clean_kernel::{BinderInfo, TypeChecker};
+
+    let mut env = Environment::new();
+    env.init_true_false().expect("True/False should initialize");
+    let goal_ty = Expr::const_(Name::from_string("True"), vec![]);
+    let state = ProofState::new(env, goal_ty.clone());
+    let goal = state.current_goal().expect("should have a goal").clone();
+
+    let true_intro = Expr::const_(Name::from_string("True.intro"), vec![]);
+    let bad_proof = Expr::app(
+        Expr::lam(
+            BinderInfo::Default,
+            Expr::const_(Name::from_string("False"), vec![]),
+            true_intro.clone(),
+        ),
+        true_intro.clone(),
+    );
+
+    // Pin the hazard: the shallow infer-only pass alone accepts the term with
+    // exactly the goal type, while the full kernel check rejects it.
+    let tc = TypeChecker::with_context(state.env(), state.build_local_ctx(&goal));
+    let inferred = tc
+        .infer_type(&bad_proof)
+        .expect("infer-only must accept the ill-typed application (that is the hazard)");
+    assert!(
+        tc.is_def_eq(&inferred, &goal_ty),
+        "infer-only type of the ill-typed term should be the goal `True`"
+    );
+    assert!(
+        tc.check_type(&bad_proof, &goal_ty).is_err(),
+        "full check_type must reject `True.intro : False`"
+    );
+
+    let result = decide::validate_proof_term(&state, &goal, &bad_proof, &goal_ty);
+    assert!(
+        matches!(result, Err(TacticError::TypeCheckFailed(_))),
+        "validate_proof_term must reject an ill-typed application argument, got {result:?}"
+    );
+
+    // The well-typed proof of the same goal still validates.
+    let ok = decide::validate_proof_term(&state, &goal, &true_intro, &goal_ty);
+    assert!(
+        ok.is_ok(),
+        "True.intro must validate against True, got {ok:?}"
+    );
+}

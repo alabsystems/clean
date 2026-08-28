@@ -11,6 +11,7 @@
 
 mod ast;
 mod encode;
+mod gate;
 mod kernel_verify;
 mod parser;
 mod resolve;
@@ -22,6 +23,10 @@ mod tests;
 pub use ast::{
     CompressedProof, Database, EssentialHyp, Formula, Proof, ResolvedAssertion, ResolvedDatabase,
     ResolvedStatement, Statement,
+};
+pub use gate::{
+    dependency_closure_gate, ground_reuse_exposure, parse_verified_labels, provable_dependencies,
+    render_verified_labels, Reusability, VerifiedLabels, VERIFIED_FORMAT_HEADER,
 };
 pub use kernel_verify::{
     kernel_verify_database, kernel_verify_database_prefix,

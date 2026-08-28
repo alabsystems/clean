@@ -78,33 +78,6 @@ impl CompletionItemData {
 }
 
 impl CleanBackend {
-    /// Get hover information at a position
-    pub(crate) fn get_hover_at(&self, uri: &Url, position: Position) -> Option<Hover> {
-        let doc = self.documents.get(uri)?;
-
-        if let Some(elab) = &doc.elaborated {
-            for decl in &elab.declarations {
-                let start_pos = doc.offset_to_position(decl.start);
-                let end_pos = doc.offset_to_position(decl.end);
-
-                if start_pos <= position && position < end_pos {
-                    return Some(Hover {
-                        contents: HoverContents::Markup(MarkupContent {
-                            kind: MarkupKind::Markdown,
-                            value: format!("```lean\n{} : {}\n```", decl.name, decl.type_str),
-                        }),
-                        range: Some(Range {
-                            start: start_pos,
-                            end: end_pos,
-                        }),
-                    });
-                }
-            }
-        }
-
-        None
-    }
-
     /// Get the identifier at a position in a document
     pub(crate) fn get_identifier_at(&self, uri: &Url, position: Position) -> Option<String> {
         let doc = self.documents.get(uri)?;
@@ -365,7 +338,7 @@ impl CleanBackend {
     pub(crate) fn find_references(&self, name: &str, include_definition: bool) -> Vec<Location> {
         let mut references = Vec::new();
 
-        for doc_entry in &self.documents {
+        for doc_entry in self.documents.iter() {
             let uri = doc_entry.key();
             let doc = doc_entry.value();
             let text = doc.text();
@@ -1054,7 +1027,7 @@ impl CleanBackend {
         let mut symbols = Vec::new();
         let query_lower = query.to_lowercase();
 
-        for entry in &self.definitions {
+        for entry in self.definitions.iter() {
             let name = entry.key();
             let def_info = entry.value();
 

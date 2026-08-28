@@ -133,7 +133,7 @@ impl PcProofSystem {
 
     /// Check if any derived polynomial is the contradiction.
     #[must_use]
-    pub fn has_contradiction(&self) -> bool {
+    pub(crate) fn has_contradiction(&self) -> bool {
         self.derived.iter().any(Gf2Poly::is_one)
     }
 

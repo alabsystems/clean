@@ -81,16 +81,19 @@
 //!
 //! | construct | verdict | fault tag |
 //! |---|---|---|
-//! | `Overflow` (all 3 ops) | unmodelled | `width_bounded` |
+//! | **`Overflow` (all 3 ops)** | **MODELLED since 2026-08-25 (plan W3)** — two-result value+flag semantics, `ir_overflow_exec` | `not_int` on non-integer types/operands |
 //! | `Cast` inttoptr / transmute | unmodelled | `width_bounded` |
 //! | **`Cast` bitcast** | **PARTLY MODELLED — see below** | `width_bounded` outside it |
 //! | `Cast` nullptr-to-int (no reserved null address) | unmodelled | `width_bounded` |
-//! | `Cast` fptrunc/fpext/fptoui/fptosi/uitofp/sitofp/fptosisat/fptouisat | unmodelled | `float_domain` |
-//! | `FCmp` (all 12 ops) | unmodelled | `float_domain` |
+//! | `Cast` fptrunc/fpext/fptoui/fptosi/uitofp/sitofp/fptosisat/fptouisat | unmodelled — DATED refusals, kernel-witnessed universally (`ir_cast_*_unmodelled`, 2026-08-25) | `float_domain` |
+//! | **`FCmp` (all 12 ops)** | **MODELLED since 2026-08-25 (plan W4)** on classified binary64 — TOTAL there, NaNs answer | `float_domain` at widths ≠ 64 |
 //! | **`BinOp` fadd/fsub/fmul** | **MODELLED on the classified AND the finite fragment** | `float_domain` outside it |
-//! | **`BinOp` fdiv** | **MODELLED on the classified fragment only** | `float_domain` outside it |
-//! | `BinOp` frem/fmin/fmax | unmodelled | `float_domain` |
-//! | `UnOp` fneg/fabs/fsqrt/ffloor/fceil/ftrunc | unmodelled | `float_domain` |
+//! | **`BinOp` fdiv** | **MODELLED on the classified fragment only** | `float_domain` outside it (finite/finite refusal now UNIVERSAL, `ir_fdiv_fin_fin_unmodelled`, 2026-08-25) |
+//! | **`BinOp` fmin/fmax** | **MODELLED since 2026-08-25 (residue wave)** — NaN-ignoring minNum/maxNum on the classified fragment | `float_domain` on the both-NaN and opposite-signed-zero cells (the host may return either), and at widths ≠ 64 |
+//! | `BinOp` frem | unmodelled — DATED refusal, kernel-witnessed universally (`ir_frem_unmodelled`, 2026-08-25) | `float_domain` |
+//! | **`UnOp` fneg/fabs** | **MODELLED since 2026-08-25 (residue wave)** — sign-bit ops, TOTAL on genuine patterns, NaNs answer payload-preserved | `float_domain` on junk carriers (n ≥ 2^64) and at widths ≠ 64 |
+//! | **`UnOp` ffloor/fceil/ftrunc** | **MODELLED since 2026-08-25 (residue wave)** — exponent-guided exact rounding on every non-NaN pattern | `float_domain` on NaNs (result payload is the host libm's) and at widths ≠ 64 |
+//! | `UnOp` fsqrt | unmodelled — DATED refusal, kernel-witnessed universally (`ir_fsqrt_unmodelled`, 2026-08-25) | `float_domain` |
 //!
 //! **The row that changed, 2026-08-15.** [`super::eval_ir_float`] gives the
 //! four float arithmetic operators a real binary64 evaluation on the fragment
@@ -113,6 +116,42 @@
 //! claim that the finite case *cannot* be added in this substrate was right
 //! about `ir_nat_div` and `ir_nat_mul` as they are written and wrong about the
 //! substrate. Nothing that used to evaluate changed; strictly more evaluates.
+//!
+//! **The two CONSTRUCTOR-level rows retired, 2026-08-25 (plan W3 + W4).**
+//! `Overflow` was the whole-constructor tag `unmodelled width_bounded`; the W3
+//! wave gave it real two-result semantics (wrapped value + carry/overflow
+//! flag, bound positionally — [`super::eval_ir_machine`]'s `ir_overflow_exec`,
+//! the math in [`super::eval_ir_ops`]). `FCmp` was 12 arms of the blanket
+//! float refusal; the W4 wave gave all 12 predicates real semantics on the
+//! classified binary64 fragment ([`super::eval_ir_fcmp`]) — and unlike the
+//! arithmetic rows, comparison is TOTAL on classified operands: a NaN
+//! produces an ANSWER (ordered false / unordered true), because a Bool has no
+//! implementation-defined payload to invent. With both retired, ZERO `ir_exec`
+//! dispatch arms are the unmodelled outcome; every remaining `unmodelled` row
+//! in this table is operator- or fragment-level inside an arm that computes.
+//!
+//! **The float RESIDUE, 2026-08-25 (the wave `evalir_w4.PENDING.md` delta 5
+//! named).** Seven of the nine remaining refused float OPERATORS became real:
+//! `fneg`/`fabs` (sign-bit operations, total on genuine patterns — a NaN
+//! ANSWERS with its payload preserved, because IEEE 754 §5.5.1 makes
+//! negate/abs quiet bit operations with no payload freedom),
+//! `ffloor`/`fceil`/`ftrunc` (exponent-guided exact integer rounding on every
+//! non-NaN pattern, `ir_nat_divpow2`/`ir_nat_shl` on the O(bit-length)
+//! substrate), and `fmin`/`fmax` (NaN-ignoring minNum/maxNum: one NaN operand
+//! returns the other operand; only the both-NaN and opposite-signed-zero
+//! cells refuse, because the host may return either result there). See
+//! [`super::eval_ir_float_res`]. The refusals that REMAIN are now DATED and
+//! each is a registered UNIVERSAL kernel witness rather than a silent arm
+//! ([`super::eval_ir_float_res_witnesses`]): `frem` (`ir_frem_unmodelled` —
+//! the fdiv-finite cost class), `fsqrt` (`ir_fsqrt_unmodelled` — that class
+//! compounded), `fdiv` finite/finite (`ir_fdiv_fin_fin_unmodelled`,
+//! promoting the old single-point witness to every operand pair), the
+//! binary32 boundary of the residue dispatchers (`ir_fneg_f32_unmodelled` +
+//! siblings), and all eight fp casts (`ir_cast_*_unmodelled`). The pinned
+//! interpreter ANSWERS every operation in that remainder — each
+//! refusal is a fragment boundary of THIS model, recorded in
+//! `data/evalir_float_residue.PENDING.md` and the adequacy grid's
+//! declared-delta rows, never a silent gap.
 //!
 //! **The second row that changed, 2026-08-16 (the TENTH chain).** `bitcast` was
 //! a blanket `ir_width_fault`, and the reason given — a cell-addressed model

@@ -347,8 +347,8 @@ impl<'a> InheritExtResolver<'a> {
                 if !structural_type_eq(&own.type_expr, &inherited.type_expr) {
                     return Err(InheritExtError::OverrideTypeMismatch {
                         field: own.name.clone(),
-                        expected: format!("{:?}", inherited.type_expr),
-                        actual: format!("{:?}", own.type_expr),
+                        expected: format!("{}", inherited.type_expr),
+                        actual: format!("{}", own.type_expr),
                     });
                 }
             }

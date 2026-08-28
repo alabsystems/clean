@@ -37,8 +37,10 @@
 //!
 //! Structural correspondence, not a semantic proof that Clean's `IRInst`
 //! encoding means what trust-ir's does. The lineage digest is RECORDED, not
-//! recomputed. `ir_br_module` is hand-transcribed: this makes an incorrect
-//! transcription FAIL, it does not make a correct one automatic.
+//! recomputed. `ir_br_module` is MINTED from the emitted artifact as of
+//! 2026-08-21 (crystal A2, `src/ir_mint`, gated by
+//! `tests/crystal_a2_mint_br.rs`); this lane remains the independent reader D
+//! over the same fixture.
 
 use super::*;
 
@@ -52,7 +54,9 @@ fn bvar_in_range_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_bvar_range.rs", "const SRC_IR_BR_B"),
+        // The registered blocks are the MINTED script (crystal A2,
+        // `src/ir_mint`) as of 2026-08-21 — the same lines the spec replays.
+        &clean_block_sources("generated/ir_br.defs.txt", "def ir_br_b"),
         "def ir_br_b",
     );
 
@@ -148,7 +152,7 @@ fn bvar_in_range_proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_bvar_range.rs", "const SRC_IR_BR_FUNC"),
+        &clean_block_sources("generated/ir_br.defs.txt", "def ir_br_func"),
         "bvar_in_range",
     );
     assert_lanes(&emitted, &clean, "bvar_in_range");

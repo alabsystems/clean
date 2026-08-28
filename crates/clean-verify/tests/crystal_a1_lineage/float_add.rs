@@ -66,7 +66,9 @@ fn float_add_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_named_const_source("eval_ir_float_add.rs", "SRC_IR_FA_B0"),
+        // The registered blocks are the MINTED script (crystal A2, `src/ir_mint`),
+        // so the gate reads the SAME lines the specification registers.
+        &clean_block_sources("generated/ir_fa.defs.txt", "def ir_fa_b"),
         "def ir_fa_b",
     );
 
@@ -142,9 +144,12 @@ fn float_add_proved_module_matches_the_emitted_artifact() {
         1,
         "the closure environment pointer must be BOUND AND NEVER READ: {text}"
     );
-    let func = clean_block_sources("eval_ir_float_add.rs", "const SRC_IR_FA_FUNC");
+    let func = clean_block_sources("generated/ir_fa.defs.txt", "def ir_fa_func");
     assert!(
-        func.contains("IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0"),
+        func.contains(
+            "IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat \
+             ir_d2 (IRList.nil Nat)))) ir_d0"
+        ),
         "the registered IRFunc must bind the same three parameter ids in the same order: {func}"
     );
 
@@ -192,7 +197,7 @@ fn float_add_proved_module_matches_the_emitted_artifact() {
     // registered `IRFunc`. Not in `Cfg` — Clean's entry `IRBlock` carries `ir_nl0`.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_float_add.rs", "const SRC_IR_FA_FUNC"),
+        &clean_block_sources("generated/ir_fa.defs.txt", "def ir_fa_func"),
         "float_add",
     );
     assert_lanes(&emitted, &clean, "float_add");
@@ -293,13 +298,13 @@ fn float_add_the_new_lanes_catch_what_every_old_lane_misses() {
 /// Every drift above is in the artifact. A gate that only ever mutated the
 /// fixture would be blind to the failure mode this whole file exists for — the
 /// registered spec module drifting away from a body that never moved. These
-/// mutations are applied to the registered `SRC_IR_FA_B0` source itself, parsed
+/// mutations are applied to the registered MINTED `ir_fa_b0` line itself, parsed
 /// with the same reader the gate uses, and each must break exactly the lane
 /// that owns it.
 #[test]
 fn float_add_the_lanes_catch_a_drifted_spec_module_too() {
     let emitted = parse_emitted(&fixture("float_add.trust-ir.txt"));
-    let src = clean_named_const_source("eval_ir_float_add.rs", "SRC_IR_FA_B0");
+    let src = clean_block_sources("generated/ir_fa.defs.txt", "def ir_fa_b");
     let good = parse_clean(&src, "def ir_fa_b");
     assert_eq!(
         emitted.binops, good.binops,
@@ -310,7 +315,7 @@ fn float_add_the_lanes_catch_a_drifted_spec_module_too() {
 
     // The registered module at binary32.
     let at_f32 = parse_clean(
-        &src.replace("ir_fa_tf64", "(IRTy.float_ 32)"),
+        &src.replace("(IRTy.float_ 64)", "(IRTy.float_ 32)"),
         "def ir_fa_b",
     );
     assert_eq!(
@@ -349,7 +354,10 @@ fn float_add_the_lanes_catch_a_drifted_spec_module_too() {
 
     // The registered module with the operands exchanged.
     let swapped = parse_clean(
-        &src.replace("ir_fa_tf64 ir_d1 ir_d2", "ir_fa_tf64 ir_d2 ir_d1"),
+        &src.replace(
+            "(IRTy.float_ 64) ir_d1 ir_d2",
+            "(IRTy.float_ 64) ir_d2 ir_d1",
+        ),
         "def ir_fa_b",
     );
     assert_ne!(

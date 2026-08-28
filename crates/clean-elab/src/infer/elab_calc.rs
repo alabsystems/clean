@@ -111,15 +111,30 @@ impl<'a> ElabCtx<'a> {
             // Unify LHS with the previous RHS. For `_ ≤ c` this assigns the
             // placeholder metavariable; for an explicit middle term it checks the
             // chain actually connects and ERRORS otherwise (no over-accept).
+            //
+            // WITHOUT the initial WHNF: the default `unify` reduces both sides
+            // first, so the `_` placeholder was assigned `whnf(prev)` instead of
+            // the middle term AS WRITTEN — measured on
+            // `calc (n + 0) * 1 = n * 1 := by simp; _ = n := by simp`, where the
+            // second goal became `Nat.rec …(ι-stepped mul tower)… = n` (simp has
+            // no lemma at that spelling; the standalone `n * 1 = n := by simp`
+            // proves fine). Lean's `isDefEqGuarded lhs prevRhs` keeps the middle
+            // term syntactic in the next step's goal. `unify_no_initial_whnf`
+            // still whnf's internally on shape disagreement, so an explicit
+            // middle term that is def-eq-but-not-syntactic to the previous RHS
+            // connects exactly as before — only the ASSIGNED FORM changes.
             let unified = {
                 let ctx = self.build_local_ctx();
                 let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
-                matches!(unifier.unify(&lhs_inst, &prev), UnifyResult::Success)
+                matches!(
+                    unifier.unify_no_initial_whnf(&lhs_inst, &prev),
+                    UnifyResult::Success
+                )
             };
             if !unified {
                 return Err(ElabError::TypeMismatch {
-                    expected: format!("calc step LHS = previous RHS {prev:?}"),
-                    actual: format!("{lhs_inst:?}"),
+                    expected: format!("calc step LHS = previous RHS {prev}"),
+                    actual: format!("{lhs_inst}"),
                 });
             }
         }
@@ -495,8 +510,8 @@ impl<'a> ElabCtx<'a> {
             };
             if !unified {
                 return Err(ElabError::TypeMismatch {
-                    expected: format!("{expected:?}"),
-                    actual: format!("{proof_ty:?}"),
+                    expected: format!("{expected}"),
+                    actual: format!("{proof_ty}"),
                 });
             }
 

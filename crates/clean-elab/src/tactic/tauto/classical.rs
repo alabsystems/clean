@@ -109,6 +109,11 @@ pub(super) fn try_by_cases_for_disjunction(state: &mut ProofState) -> Result<boo
                         // Proof: by_cases on A
                         let hyp_name_for_cases = decl.name.clone();
                         let goals_backup = state.goals.clone();
+                        // Positional fvar discipline (see try_classical_atom_split): a
+                        // rolled-back `by_cases`/`cases` leaves `next_fvar` advanced, and
+                        // close_fvars ties FVar ids to binder depth — later minting at the
+                        // shifted cursor fails "assignment violates its creation scope".
+                        let next_fvar_backup = state.next_fvar;
 
                         let h_name = fresh_hyp_name(&goal.local_ctx, "hCase");
                         if by_cases(state, &h_name, inner_a.clone()).is_ok() {
@@ -178,6 +183,7 @@ pub(super) fn try_by_cases_for_disjunction(state: &mut ProofState) -> Result<boo
                         // Restore on failure
                         state.invalidate_tc_cache();
                         state.goals = goals_backup;
+                        state.next_fvar = next_fvar_backup;
                     }
                 }
             }

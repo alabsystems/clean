@@ -23,15 +23,20 @@ impl MetaState {
         // A param constrained to a member of its OWN equivalence class — most
         // importantly the literal reflexive `u := Param(u)` — is a vacuous,
         // already-satisfied constraint (`u = u`). The union-find already records
-        // the relation, so there is nothing to do. Crucially, the legacy
-        // `level_constraints` map (read by `instantiate_level` when a param is its
-        // own root) would otherwise store a SELF-REFERENTIAL entry
-        // `level_constraints[u] = Param(u)`, which makes `instantiate_level`
-        // recurse on `Param(u)` forever (observed: foundation `Eq.substType`
-        // elaboration looped on `u_0 := Param(u_0)` and OOM'd). Skipping the
-        // already-satisfied case is behavior-preserving: re-unioning members of a
-        // single class is a no-op, and the redundant legacy entry it would write
-        // is never consulted in a way that changes the resolved level.
+        // the relation, so there is nothing to do.
+        //
+        // HISTORY (U2 stage-3 deferral 2, 2026-08-26): this early return was
+        // added because the legacy `level_constraints` map — read by
+        // `instantiate_level` when a param was its own root — would otherwise
+        // store a SELF-REFERENTIAL entry `level_constraints[u] = Param(u)` and
+        // make `instantiate_level` recurse on `Param(u)` forever (observed:
+        // foundation `Eq.substType` elaboration looped on `u_0 := Param(u_0)`
+        // and OOM'd). That map is now GONE, so the loop it guarded against is
+        // gone with it — but the early return stays, because skipping a
+        // same-class constraint is still correct (re-unioning members of one
+        // class is a no-op: `level_union` returns at `root1 == root2`) and
+        // still cheaper than walking into it. Removing it would be
+        // behavior-identical; keeping it costs nothing.
         if let Level::Param(other_name) = &level {
             if self.level_find_immut(other_name) == self.level_find_immut(&param_name) {
                 return Ok(());
@@ -70,16 +75,9 @@ impl MetaState {
             _ => {}
         }
 
-        // Record undo for legacy map
-        let old_constraint = self.level_constraints.get(&param_name).cloned();
-        self.record_undo(UndoRecord::LevelConstraint {
-            name: param_name.clone(),
-            old_value: old_constraint,
-        });
-
-        // Store in legacy map for backwards compatibility
-        self.level_constraints
-            .insert(param_name.clone(), level.clone());
+        // Every write below is instantiation-relevant (`instantiate_level`
+        // reads all three level maps): re-mint the generation first.
+        self.touch();
 
         match &level {
             Level::Param(other_name) => {
@@ -104,10 +102,11 @@ impl MetaState {
                 // `?u := Succ(?v)`, `?u := Max(?v, w)`. U2 rung-1a: stored
                 // FIRST-CLASS at the canonical root (`level_bound`) so the
                 // assignment survives later re-rooting unions — the legacy
-                // map above only ever resolved when the param stayed its own
-                // root (the measured-dominant rung-0b histogram class).
-                // Cyclic values are defended by `instantiate_level`'s chain
-                // guard, exactly as for the legacy path.
+                // `level_constraints` map this replaced only ever resolved
+                // when the param stayed its own root (the measured-dominant
+                // rung-0b histogram class), which is why it was the hole and
+                // this is the fix. Cyclic values are defended by
+                // `instantiate_level`'s chain guard.
                 let root = self.level_find(&param_name);
                 let old_bound = self.level_bound.get(&root).cloned();
                 self.record_undo(UndoRecord::LevelBound {
@@ -123,11 +122,6 @@ impl MetaState {
             }
         }
         Ok(())
-    }
-
-    /// Get a universe level constraint (legacy interface)
-    pub fn get_level_constraint(&self, param_name: &Name) -> Option<&Level> {
-        self.level_constraints.get(param_name)
     }
 
     /// Find the canonical representative for a level param (union-find with path compression)
@@ -322,10 +316,13 @@ impl MetaState {
                     return resolved;
                 }
 
-                // Compound (bound) assignment at the root (U2 rung-1a): unlike
-                // the legacy fallback below, this resolves REGARDLESS of
-                // whether `name` is its own root, so `?u := Succ(?v)` survives
-                // a later union that re-roots `?u`'s class.
+                // Compound (bound) assignment at the root (U2 rung-1a): this
+                // resolves REGARDLESS of whether `name` is its own root, so
+                // `?u := Succ(?v)` survives a later union that re-roots `?u`'s
+                // class. (The legacy `level_constraints` map that used to sit
+                // below as an own-root-only fallback could not, which is why
+                // this store exists and why that map was removable — U2
+                // stage-3 deferral 2, 2026-08-26.)
                 if let Some(bound) = self.level_bound.get(&root) {
                     chain.push(root);
                     let resolved = self.instantiate_level_guarded(&bound.clone(), chain);
@@ -333,20 +330,12 @@ impl MetaState {
                     return resolved;
                 }
 
-                // No concrete assignment - return canonical param
-                // This ensures u_0 and u_1 both become the same param if unified
+                // No assignment - return the canonical param. This ensures
+                // u_0 and u_1 both become the same param if unified.
                 if &root != name {
                     Level::Param(root)
                 } else {
-                    // Fall back to legacy constraint lookup
-                    if let Some(assigned) = self.level_constraints.get(name) {
-                        chain.push(root);
-                        let resolved = self.instantiate_level_guarded(assigned, chain);
-                        chain.pop();
-                        resolved
-                    } else {
-                        level.clone()
-                    }
+                    level.clone()
                 }
             }
             Level::Succ(inner) => Level::succ(self.instantiate_level_guarded(inner, chain)),
@@ -364,8 +353,7 @@ impl MetaState {
 
     /// Substitute level constraints into an expression
     pub fn instantiate_levels(&self, expr: &Expr) -> Expr {
-        if self.level_constraints.is_empty()
-            && self.level_parent.is_empty()
+        if self.level_parent.is_empty()
             && self.level_concrete.is_empty()
             && self.level_bound.is_empty()
         {

@@ -10,25 +10,25 @@ use std::collections::{BTreeMap, HashMap};
 
 /// Variable identifier in the arithmetic theory
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ArithVar(pub(crate) u32);
+pub(crate) struct ArithVar(pub(crate) u32);
 
 impl ArithVar {
     /// Create a new arithmetic variable from a raw index
     #[inline]
-    pub fn new(raw: u32) -> Self {
+    pub(crate) fn new(raw: u32) -> Self {
         ArithVar(raw)
     }
 
     /// Get the raw variable index
     #[inline]
-    pub fn raw(self) -> u32 {
+    pub(crate) fn raw(self) -> u32 {
         self.0
     }
 }
 
 /// Type of bound
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BoundType {
+pub(crate) enum BoundType {
     /// x ≤ c
     Upper,
     /// x ≥ c
@@ -43,7 +43,7 @@ pub enum BoundType {
 /// - `x >= b` uses value `(b, 0)`
 /// - `x > b`  uses value `(b, +1)` meaning `b + epsilon`
 #[derive(Clone, Debug)]
-pub struct Bound {
+pub(crate) struct Bound {
     pub(crate) value: DeltaRational,
     /// The literal that justified this bound
     pub(crate) reason: Lit,
@@ -64,20 +64,20 @@ impl Bound {
 
 /// Linear expression: Σ aᵢxᵢ
 #[derive(Clone, Debug, Default)]
-pub struct LinearExpr {
+pub(crate) struct LinearExpr {
     /// Coefficients indexed by variable
     pub coeffs: BTreeMap<ArithVar, Rational>,
 }
 
 impl LinearExpr {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         LinearExpr {
             coeffs: BTreeMap::new(),
         }
     }
 
     /// Add a term: expr += coeff * var. Returns None on overflow.
-    pub fn add_term(&mut self, var: ArithVar, coeff: Rational) -> Option<()> {
+    pub(crate) fn add_term(&mut self, var: ArithVar, coeff: Rational) -> Option<()> {
         let entry = self.coeffs.entry(var).or_insert(Rational::ZERO);
         *entry = entry.add(&coeff)?;
         if entry.is_zero() {
@@ -155,7 +155,7 @@ impl TableauRow {
 
 /// Statistics for arithmetic theory
 #[derive(Clone, Debug, Default)]
-pub struct ArithStats {
+pub(crate) struct ArithStats {
     pub num_vars: usize,
     pub num_rows: usize,
     pub num_lower_bounds: usize,

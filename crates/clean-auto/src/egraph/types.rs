@@ -8,34 +8,34 @@ use std::sync::Arc;
 
 /// An e-class ID (equivalence class identifier)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct EClassId(u32);
+pub(crate) struct EClassId(u32);
 
 impl EClassId {
     /// Create a new e-class ID
     #[inline]
-    pub fn new(id: u32) -> Self {
+    pub(crate) fn new(id: u32) -> Self {
         EClassId(id)
     }
 
     /// Get the raw ID value
     #[inline]
-    pub fn id(self) -> u32 {
+    pub(crate) fn id(self) -> u32 {
         self.0
     }
 }
 
 /// A symbol (function name or constant name)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Symbol(Arc<str>);
+pub(crate) struct Symbol(Arc<str>);
 
 impl Symbol {
     /// Create a new symbol
-    pub fn new(name: impl AsRef<str>) -> Self {
+    pub(crate) fn new(name: impl AsRef<str>) -> Self {
         Symbol(Arc::from(name.as_ref()))
     }
 
     /// Get the symbol name
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.0
     }
 
@@ -66,7 +66,7 @@ impl From<&String> for Symbol {
 /// An e-node represents a function application.
 /// The children are e-class IDs, not direct terms.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ENode {
+pub(crate) struct ENode {
     /// The function symbol (or constant name if no children)
     pub symbol: Symbol,
     /// Child e-class IDs (empty for constants)
@@ -75,7 +75,7 @@ pub struct ENode {
 
 /// Reason why two e-classes were merged
 #[derive(Clone, Debug)]
-pub enum MergeReason {
+pub(crate) enum MergeReason {
     /// Direct union call (external assertion)
     External,
     /// Congruence: two function applications became equal
@@ -92,7 +92,7 @@ pub enum MergeReason {
 
 /// Record of a merge operation in the E-graph
 #[derive(Clone, Debug)]
-pub struct MergeRecord {
+pub(crate) struct MergeRecord {
     /// First e-class (before merge)
     pub ec1: EClassId,
     /// Second e-class (before merge)
@@ -103,7 +103,7 @@ pub struct MergeRecord {
 
 impl ENode {
     /// Create a constant (no children)
-    pub fn constant(symbol: impl Into<Symbol>) -> Self {
+    pub(crate) fn constant(symbol: impl Into<Symbol>) -> Self {
         ENode {
             symbol: symbol.into(),
             children: Vec::new(),
@@ -111,7 +111,7 @@ impl ENode {
     }
 
     /// Create a function application
-    pub fn app(symbol: impl Into<Symbol>, children: Vec<EClassId>) -> Self {
+    pub(crate) fn app(symbol: impl Into<Symbol>, children: Vec<EClassId>) -> Self {
         ENode {
             symbol: symbol.into(),
             children,
@@ -119,19 +119,19 @@ impl ENode {
     }
 
     /// Check if this is a constant (no children)
-    pub fn is_constant(&self) -> bool {
+    pub(crate) fn is_constant(&self) -> bool {
         self.children.is_empty()
     }
 
     /// Get the arity (number of children)
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.children.len()
     }
 
     /// Create a canonical version of this e-node using the given function
     /// to map e-class IDs to their canonical representatives
     #[must_use]
-    pub fn canonicalize(&self, mut find: impl FnMut(EClassId) -> EClassId) -> Self {
+    pub(crate) fn canonicalize(&self, mut find: impl FnMut(EClassId) -> EClassId) -> Self {
         ENode {
             symbol: self.symbol.clone(),
             children: self.children.iter().map(|&id| find(id)).collect(),
@@ -141,14 +141,14 @@ impl ENode {
     /// Returns `true` if all children are already canonical (i.e., `find(id) == id`
     /// for every child). When true, `canonicalize` would return a structurally
     /// identical node, so the caller can skip the allocation and clone `self`.
-    pub fn is_canonical(&self, mut find: impl FnMut(EClassId) -> EClassId) -> bool {
+    pub(crate) fn is_canonical(&self, mut find: impl FnMut(EClassId) -> EClassId) -> bool {
         self.children.iter().all(|&id| find(id) == id)
     }
 }
 
 /// An equivalence class containing e-nodes
 #[derive(Clone, Debug)]
-pub struct EClass {
+pub(crate) struct EClass {
     /// The canonical ID of this e-class
     pub id: EClassId,
     /// All e-nodes in this e-class

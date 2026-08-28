@@ -1,0 +1,53 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 3) (const (uint 64) (int 55296)))
+            (node (results 4) (icmp ult (uint 64) 0 3))
+            (node (results) (condbr 4 2 (args) 1 (args)))
+          ))
+        (block 1
+          (params)
+          (nodes
+            (node (results 5) (const (uint 64) (int 57343)))
+            (node (results 6) (icmp ult (uint 64) 5 0))
+            (node (results) (condbr 6 4 (args) 5 (args)))
+          ))
+        (block 2
+          (params)
+          (nodes
+            (node (results 7) (const (bool) (bool true)))
+            (node (results) (br 3 (args 7)))
+          ))
+        (block 3
+          (params 1)
+          (nodes
+            (node (results) (ret (vals 1)))
+          ))
+        (block 4
+          (params)
+          (nodes
+            (node (results 8) (const (uint 64) (int 1114112)))
+            (node (results 9) (icmp ult (uint 64) 0 8))
+            (node (results) (br 6 (args 9)))
+          ))
+        (block 5
+          (params)
+          (nodes
+            (node (results 10) (const (bool) (bool false)))
+            (node (results) (br 6 (args 10)))
+          ))
+        (block 6
+          (params 2)
+          (nodes
+            (node (results) (br 3 (args 2)))
+          ))
+      ))
+  )
+  (globals)
+)

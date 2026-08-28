@@ -1,0 +1,161 @@
+{
+  "schema": "clean.crystal.lane_crt.v1",
+  "date": "2026-08-26",
+  "lane": "CRT",
+  "question": "A0's bodyful reachable closure has never held for the designated target. The fixture calls the blocker a T-track BUILD ITEM. What is it, and does closing it close A0?",
+  "answer": "The encodability gap is real and closable (SiteTy had no reference variant). Closing it does NOT close A0, and the change as it stands is a NET REGRESSION. The binding constraint is elsewhere and is now measured: the assembled module is PER-CRATE and contains ZERO core/std/alloc bodies.",
+  "method": {
+    "design": "paired A/B, one variable",
+    "control": "trust/scratchpad/laneG17/seal-SUBJ2 (base 3495e42c45, wave-CRT absent), already measured on the same pinned corpus",
+    "subject": "same base + wave-CRT's three files, built and sealed as laneCRT/seal-CRT",
+    "corpus": "clean f21d6336bf778eca692b616258d13828b3dec6e7, tracked dirt EMPTY",
+    "frozen_files_byte_identical_by_hash": {
+      "mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+      "flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+      "crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+      "differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a"
+    },
+    "unit_suite": "807 passed, 0 failed (the build script refuses to build a driver on a red suite)"
+  },
+  "the_A0_blocker_MEASURED": {
+    "finding": "the assembled module contains 0 core/std/alloc bodies out of 13,906; `as_deref` does not appear at all",
+    "consequence": "any body whose closure leaves the crate has extern_decls>0 and a non-bodyful closure REGARDLESS of THIR availability, encoders or panics",
+    "corroboration": "the three bodies whose bodyful-closure cell reads `holds` all have 0 calls",
+    "what_closing_A0_would_require": "emitting monomorphized cross-crate instances into the assembled module - a change to what a MODULE is, not a missing rustc query",
+    "readings_RETRACTED": [
+      "'rustc has no cross-crate THIR' - names a real API gap that is NOT the binding constraint",
+      "'the closure terminates at the panic runtime' - my own reasoning earlier the same day; the measurement does not support it, the closure never gets that far"
+    ],
+    "CORRECTION_same_day_I_over_retracted": {
+      "what": "I retracted 'rustc has no cross-crate THIR' as not-the-binding-constraint. That retraction was WRONG.",
+      "why": "trust-thir-lower lowers from tcx.thir_body(def) (lib.rs:2552) and thir_body takes a LocalDefId. The module is per-crate BECAUSE the lowering is THIR-based, so core bodies cannot enter it by that path. The API gap IS the binding constraint.",
+      "what_the_page_was_actually_missing": "not a different cause, but the CONSEQUENCE - 0 of 13,906 bodies are cross-crate, which turns an API note into a measured wall",
+      "still_retracted": "'the closure terminates at the panic runtime' - my own reasoning, unsupported by the measurement",
+      "the_only_open_lead": "crates/trust-mir-extract is a MIR-based path, and cross-crate generic MIR IS serialized in crate metadata (that is how monomorphization works). Whether the module could be assembled or augmented from it is NOT investigated here. Large, but not obviously impossible - which is different from a floor."
+    },
+    "the_open_lead_TESTED_AND_CLOSED": {
+      "lead": "crates/trust-mir-extract, a MIR-based path; cross-crate generic MIR IS in crate metadata",
+      "verdict": "NOT a way in, for two independent reasons read off the source",
+      "reason_1": "it early-returns on !def_id.is_local() (lib.rs:763); its own comments at :92 and :396 call that keying the producer lane's invariant",
+      "reason_2": "it emits VerifiableFunction for the VC-gen/router pipeline, not trust-ir",
+      "generalisation": "EVERY body-producing path in this tree keys on def_id.is_local() - THIR lowering via thir_body, and the MIR extractor by explicit early return. Cross-crate bodies are excluded BY DESIGN at every entry point, not by one missing query.",
+      "what_A0_would_actually_require": "a new lowering that deliberately crosses the crate boundary AND agrees with the THIR->trust-ir lowering the crystal's semantics is defined over - a second adequacy obligation, not a reuse. A programme, not a lane."
+    }
+  },
+  "wave_CRT": {
+    "change": "SiteTy::Ref(Box<SiteTy>, Mutability): encode arm, rebuild at ReErased, lineage tag 10 APPENDED (tags 0..=9 keep their meaning, so no existing lineage digest moves)",
+    "soundness_basis": "wave-CR's argument one level deeper - the differential erase_regions on BOTH sides before pinning callee identity, and erase_regions is a DEEP traversal",
+    "it_works": {
+      "deref_refusal_reason_control": "shim: Call(callee site args not encodable / not concrete-mono)",
+      "deref_refusal_reason_subject": "shim: Call(track_caller callee: caller-Location fidelity)",
+      "gained_agreed": [
+        "<expr::types::AppArgsIter<'a> as std::clone::Clone>::clone"
+      ]
+    },
+    "it_REGRESSES": {
+      "gap_agreed_and_not_markers_exact": {
+        "control": 17,
+        "subject": 22,
+        "delta": 5
+      },
+      "markers_exact_True_to_False": [
+        "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+        "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+        "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion",
+        "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion"
+      ],
+      "why": "these are EXACTLY the four bodies lane G21 converted with the short-circuit-over-calls class. Making references encodable derives more callees, which changes the marker sequences; G21's plan was built against a world where those calls were not encodable.",
+      "verdict": "NOT LANDED. The capability needs its marker plans extended in the same wave - 'no capability without its caller' in a different guise."
+    },
+    "how_it_nearly_passed": "counting only the `agreed` column shows '+1 gained, 0 lost'. The regression is entirely in markers_exact. The second field is the whole story."
+  },
+  "next_blocker_if_someone_resumes_this": "after encodability, the deref is refused for `track_caller` caller-Location fidelity: codegen materializes the caller Location from the CALL SPAN and the shim carries only fn-level location. Declining is correct - faking it would misreport panic lines. trust-ir does carry per-call `#loc:` triples, so it is not obviously impossible.",
+  "re_measured_2026_08_26_from_both_dumps": {
+    "what": "The wave_CRT.it_REGRESSES block above was re-derived by diffing the two lanes' committed whole-crate coverage artifacts directly, rather than from the lane's own running notes. Three of its four numbers are wrong. The ORIGINAL block is left untouched above; this is the correction, not a rewrite.",
+    "sources": {
+      "control": "trust/scratchpad/laneG17/wc-subj2/dump_O3/clean_kernel.coverage.json",
+      "subject": "trust/scratchpad/laneCRT/wc/dump_O3/clean_kernel.coverage.json",
+      "both": "sealed + guard-verified, clean rev f21d6336bf778eca692b616258d13828b3dec6e7, DIRT []"
+    },
+    "corrections": {
+      "gap_control": {
+        "recorded": 17,
+        "measured": 15,
+        "note": "15 is independently corroborated by docs/CRYSTAL_STATUS.md, which quotes lane G17's residual gap as 15."
+      },
+      "gap_subject": {
+        "recorded": 22,
+        "measured": 22,
+        "note": "correct"
+      },
+      "delta": {
+        "recorded": 5,
+        "measured": 7
+      },
+      "bodies_losing_markers_exact": {
+        "recorded": 4,
+        "measured": 6
+      }
+    },
+    "the_two_bodies_the_record_MISSES": [
+      "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+      "env::sorry_summary::accounting::record_ay_reconstruction_success::{closure#0}"
+    ],
+    "why_it_matters": "A lane that fixes 'the four' named bodies would land wave-CRT still red on two closures. The fix list is SIX.",
+    "the_gained_body_is_itself_in_the_gap": {
+      "body": "<expr::types::AppArgsIter<'a> as std::clone::Clone>::clone",
+      "verdict": "agreed",
+      "markers_exact": false,
+      "note": "The record frames this as wave-CRT's win ('gained_agreed'). It is agreed WITHOUT exact markers, so it ADDS to the gap rather than being neutral. That is the +1 in the arithmetic below."
+    },
+    "arithmetic_closes_exactly": "15 (control gap) + 6 (bodies losing markers_exact) + 1 (newly-agreed body, itself markers_exact=false) = 22 (subject gap). Verified.",
+    "what_did_NOT_change": "All six regressed bodies are BYTE-IDENTICAL in trust-ir between the two dumps, every non-differential coverage field is identical (func_id, calls, lineage, instr_count), and derived_mir's canonical-line verdict is unchanged (e.g. is_fully_verified: 'agreed, 8 canonical line(s) identical' on BOTH sides). ONLY the marker prediction moved, from a full sequence to `<end>` at line 0 -- i.e. no markers emitted at all. So the record's stated cause ('which changes the marker sequences') cannot be right: the sequences had nothing to change from."
+  },
+  "REFUTED_2026_08_27_four_arm_factorial": {
+    "headline": "wave-CRT REGRESSES NOTHING. The `it_REGRESSES` verdict above -- and the `NOT LANDED` conclusion drawn from it -- came from a CONFOUNDED two-variable A/B. Measured with a 2x2 factorial: the markers_exact movement is caused ENTIRELY by lane G17's seventeenth whole-body plan being absent from the subject, and NOT AT ALL by wave-CRT.",
+    "the_confound": {
+      "what": "The control (laneG17/seal-SUBJ2) records REV 3495e42c45 and TREE: dirty. Its worktree carried lane G17's marker work UNCOMMITTED; that work was later committed as 925f19ad7f 'crystal(lane-G17): the DEEP UNIT-CHAIN emission -- the seventeenth whole-body plan', a DESCENDANT of 3495e42c45. The subject (laneCRT/seal-CRT) was built at 3495e42c45 + wave-CRT, WITHOUT that plan.",
+      "so_the_delta_was": "G17's seventeenth whole-body plan REMOVED *and* wave-CRT ADDED -- two variables, and the whole marker movement was attributed to the second.",
+      "independent_corroboration": "the sealed drivers' PERTURB_CLASSES differ: the G17-tip build carries `g21-ret-order` and `uc-unit-late`, which the 3495e42c45 builds do not. Different plan sets, visible in the seal metadata.",
+      "why_REV_did_not_catch_it": "TREE: dirty. seal_driver.sh records the worktree HEAD correctly (the laneMKD seal proves it, printing `rev 925f19ad7f9d [stated (--worktree)]` beside `shared-root rev 3495e42c456f (NOT this seal's rev)`), but a dirty worktree's REV does not identify what was compiled."
+    },
+    "the_2x2": {
+      "method": "four whole-crate dumps, same pinned corpus f21d6336bf DIRT [], same sysroot-v13, frozen files byte-identical in every arm",
+      "arms": {
+        "G17=yes wave-CRT=no  (laneG17/wc-subj2)": "all six bodies markers_exact TRUE",
+        "G17=no  wave-CRT=yes (laneCRT/wc)": "all six FALSE",
+        "G17=no  wave-CRT=no  (laneMKC/wc)": "all six FALSE  <-- NEW ARM: reproduces the 'regression' with wave-CRT ABSENT",
+        "G17=yes wave-CRT=yes (laneMKD/wc)": "all six TRUE   <-- NEW ARM: wave-CRT present and nothing regresses"
+      },
+      "reading": "markers_exact tracks G17 exactly and is independent of wave-CRT."
+    },
+    "the_correct_one_variable_measurement": {
+      "control": "laneG17/wc-subj2 (G17 tip, wave-CRT absent): agreed=1299, gap=15",
+      "subject": "laneMKD/wc       (G17 tip + wave-CRT):      agreed=1300, gap=16",
+      "markers_exact_True_to_False": 0,
+      "markers_exact_False_to_True": 0,
+      "verdict_gained_agreed": [
+        "<expr::types::AppArgsIter<'a> as std::clone::Clone>::clone"
+      ],
+      "verdict_lost_agreed": [],
+      "gap_delta_explained": "15 -> 16 is the ONE newly-agreed body entering the gap as agreed-and-not-markers_exact. No existing row regressed.",
+      "verdict": "wave-CRT: +1 agreed, 0 markers lost, 0 agreed lost. LANDABLE."
+    },
+    "the_target": {
+      "deref_control": "unsupported | shim: Call(callee site args not encodable / not concrete-mono)",
+      "deref_subject": "unsupported | shim: Call(track_caller callee: caller-Location fidelity)",
+      "meaning": "wave-CRT does what it claimed for the designated target: it takes <LevelArc as Deref>::deref PAST the encodability wall. The next wall is caller-Location fidelity, and that is now the real next question rather than a marker-plan repair that was never needed."
+    },
+    "what_this_retracts": [
+      "wave_CRT.it_REGRESSES.verdict 'NOT LANDED' -- refuted",
+      "wave_CRT.it_REGRESSES.why ('changes the marker sequences') -- refuted twice: the bodies are byte-identical, and the movement is G17's",
+      "re_measured_2026_08_26_from_both_dumps: its 15/22/+7/six-bodies arithmetic is ARITHMETICALLY correct but measured ACROSS THE CONFOUND, so it describes G17's absence, not wave-CRT"
+    ]
+  },
+  "reason_1_MISCITED_2026_08_27": {
+    "what": "the_A0_blocker_MEASURED.the_open_lead_TESTED_AND_CLOSED.reason_1 attributes an `!def_id.is_local()` early return to trust-mir-extract/src/lib.rs:763 and calls it the producer lane's keying. That line is inside `cross_namespace_tag` (:760) -- a NAME-RENDERING helper whose foreign-path skip exists to keep core::/alloc::/std:: spellings byte-identical. It gates a tag, not a body.",
+    "verified": "read directly 2026-08-27, and independently by workflow wf_1c3df27b's recon + feasibility reviews: `extract_function(tcx, body)` (lib.rs:2360) takes any mir::Body and has NO locality check.",
+    "what_actually_supports_the_sentence": "the callee-identity gate in crate_module.rs `resolve_callee` (:4434-4468): a non-local callee takes the DeclKind::Extern arm, and `lookup` is keyed on a bare intra-crate DefIndex (:245). The conclusion ('not a way in') stands -- via M1 of the workflow verdict -- on that mechanism, not on :763.",
+    "reason_2_stands": true
+  }
+}

@@ -52,6 +52,13 @@ mod census;
 #[path = "eval_ir/prelude_composition.rs"]
 mod prelude_composition;
 
+// GATE CLAUSE 5 (plan W5, 2026-08-25) — the adequacy grid: every field of
+// every IRInst constructor classified (read / proved-dropped / erased /
+// declared-delta), re-derived from the registered syntax and dispatch and
+// held against data/evalir_adequacy_grid.json. Spec-free by design.
+#[path = "eval_ir/adequacy_grid.rs"]
+mod adequacy_grid;
+
 use std::collections::BTreeSet;
 
 use census::{
@@ -338,13 +345,23 @@ fn eval_ir_wrap_folds_a_literal_residue_without_walking_it() {
     );
 }
 
-/// The module the witnesses run is the one the crystal will pin, and it is a
-/// single function so the width-one doctrine is visible in the artifact rather
-/// than only in the prose.
+/// Both `Level::is_zero` modules are registered and both are single functions,
+/// so the width-one doctrine is visible in the artifact rather than only in
+/// the prose: `ir_lzm_module` is the hand SEMANTIC MODEL the A4/A5 theorems
+/// are about, `ir_lz_module` is the MINTED emitted body (2026-08-22) over
+/// which A4 is refuted — see `eval_ir_level_minted.rs`.
 #[test]
 fn eval_ir_crystal_module_is_width_one() {
     let spec = build_eval_ir_spec_with_stack();
-    for name in ["ir_lz_module", "ir_lz_func", "ir_tLevel"] {
+    for name in [
+        "ir_lzm_module",
+        "ir_lzm_func",
+        "ir_tLevel",
+        "ir_lz_module",
+        "ir_lz_func",
+        "ir_lz_tlevel",
+        "ir_lz_on_max_stuck",
+    ] {
         assert!(
             env_knows(spec.env(), name),
             "{name} must be registered — it is part of the crystal's worked example"

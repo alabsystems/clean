@@ -422,18 +422,72 @@ def collect_source_commit_input_hashes(
     return hashes
 
 
+def gitignore_pattern_for(repo_root: Path, rel_repo_path: str) -> str | None:
+    """Return the .gitignore rule that excludes `rel_repo_path`, if any.
+
+    A required artifact can be missing for two very different reasons, and the
+    error text used to be the same for both. Either nobody produced it, or the
+    producer wrote it and GIT REFUSED TO TRACK IT. The second one happened here
+    and cost a day: `.gitignore` carries a bare `logs/` (a Pulse-runtime rule),
+    which also matches `reports/benchmarks/publication/<run>/logs/`, so all three
+    `*.stderr.log` artifacts of the 2026-08-10-pristine run were recorded in
+    current.json with their sha256 and never committed. `git check-ignore`
+    answers which, in one subprocess, and says which line did it.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "check-ignore", "-v", "--no-index", "--", rel_repo_path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    lines = result.stdout.strip().splitlines()
+    if not lines:
+        return None
+    # `<source>:<lineno>:<pattern>\t<pathname>`. With -v, git exits 0 whenever a
+    # pattern MATCHED -- including a NEGATION, which un-ignores the path. Reading
+    # the exit status alone reports the fix for this very bug as if it were the
+    # bug. The pattern field is what decides.
+    head = lines[0]
+    try:
+        pattern = head.split("\t", 1)[0].rsplit(":", 1)[1]
+    except IndexError:
+        return None
+    if pattern.startswith("!"):
+        return None
+    return head
+
+
 def collect_artifact_hashes(
-    run_dir: Path, artifact_root: str, errors: list[str]
+    run_dir: Path, artifact_root: str, errors: list[str], repo_root: Path | None = None
 ) -> dict[str, dict[str, Any]]:
     hashes: dict[str, dict[str, Any]] = {}
     for rel_path in REQUIRED_RUN_ARTIFACTS:
         path = run_dir / rel_path
+        repo_rel = f"{artifact_root}/{rel_path}"
+        ignored = (
+            gitignore_pattern_for(repo_root, repo_rel) if repo_root is not None else None
+        )
         if not path.exists():
+            detail = ""
+            if ignored:
+                detail = (
+                    " -- and .gitignore would refuse to track it anyway "
+                    f"({ignored}); a required publication artifact that git "
+                    "cannot store is unpublishable no matter who re-runs the suite"
+                )
             errors.append(
                 "current run directory is missing required artifact: "
-                f"{artifact_root}/{rel_path}"
+                f"{repo_rel}{detail}"
             )
             continue
+        if ignored:
+            # Present on disk, unstorable in the repo. Fail closed: the whole
+            # point of the publication contract is that a third party can check
+            # the numbers out of the tree, and this artifact never reaches them.
+            errors.append(
+                f"required publication artifact {repo_rel} is excluded by "
+                f"{ignored}; it exists in this working tree and cannot be committed"
+            )
         hashes[rel_path] = sha256_artifact(path)
     return hashes
 
@@ -743,7 +797,7 @@ def write_current(
             repo_root, publication_root / run_id, label="benchmark publication run"
         )
         artifact_hashes = collect_artifact_hashes(
-            publication_root / run_id, artifact_root, errors
+            publication_root / run_id, artifact_root, errors, repo_root
         )
         if errors:
             return errors
@@ -842,7 +896,7 @@ def validate_published_paths(
         )
     if current.get("required_artifacts") != REQUIRED_RUN_ARTIFACTS:
         errors.append("current.json required_artifacts must match the public contract")
-    actual_artifacts = collect_artifact_hashes(run_dir, artifact_root, errors)
+    actual_artifacts = collect_artifact_hashes(run_dir, artifact_root, errors, repo_root)
     expected_artifacts = current.get("artifacts")
     if not isinstance(expected_artifacts, dict):
         errors.append("current.json artifacts must be an object for published runs")

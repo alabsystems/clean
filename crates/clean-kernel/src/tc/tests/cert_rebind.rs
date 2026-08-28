@@ -8,6 +8,7 @@ use crate::cert::ProofCert;
 use crate::expr::{BinderInfo, Expr, ExprKind, FVarId, Literal};
 use crate::level::Level;
 use crate::tc::cert::convert_fvar_cert_to_bvar;
+use std::sync::Arc;
 
 fn nat_ty() -> Expr {
     Expr::const_str("Nat")
@@ -105,9 +106,9 @@ fn test_convert_fvar_cert_app_recurses() {
         type_: Box::new(nat_ty.clone()),
     };
     let cert = ProofCert::App {
-        fn_cert: Box::new(fn_cert),
+        fn_cert: Arc::new(fn_cert),
         fn_type: Box::new(nat_ty.clone()),
-        arg_cert: Box::new(arg_cert),
+        arg_cert: Arc::new(arg_cert),
         result_type: Box::new(nat_ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
@@ -135,8 +136,8 @@ fn test_convert_fvar_cert_lam_depth_increment() {
     };
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(arg_type_cert),
-        body_cert: Box::new(body_cert),
+        arg_type_cert: Arc::new(arg_type_cert),
+        body_cert: Arc::new(body_cert),
         result_type: Box::new(nat_ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
@@ -165,9 +166,9 @@ fn test_convert_fvar_cert_pi_depth_increment() {
     };
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(arg_type_cert),
+        arg_type_cert: Arc::new(arg_type_cert),
         arg_level: Level::succ(Level::zero()),
-        body_type_cert: Box::new(body_cert),
+        body_type_cert: Arc::new(body_cert),
         body_level: Level::zero(),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);
@@ -199,9 +200,9 @@ fn test_convert_fvar_cert_let_depth_increment() {
         type_: Box::new(nat_ty.clone()),
     };
     let cert = ProofCert::Let {
-        type_cert: Box::new(type_cert),
-        value_cert: Box::new(value_cert),
-        body_cert: Box::new(body_cert),
+        type_cert: Arc::new(type_cert),
+        value_cert: Arc::new(value_cert),
+        body_cert: Arc::new(body_cert),
         result_type: Box::new(nat_ty.clone()),
     };
     let result = convert_fvar_cert_to_bvar(cert, fvar_id, 0);

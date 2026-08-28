@@ -92,6 +92,36 @@ pub struct Parser {
     /// consuming `catch`/`finally` as function application arguments on single-line
     /// `do try expr catch e => expr` forms. See #2969.
     stop_at_catch_finally: bool,
+    /// Column of the command keyword whose binder list is being parsed, when
+    /// that list may NOT run past the start of the next source line.
+    ///
+    /// LANE FAILOPEN (2026-08-25). `variable`'s binder list accepts a run of
+    /// bare names (`variable α β`), and that run has no line discipline, so a
+    /// following COMMAND line the parser does not recognise was silently
+    /// absorbed as more binders. In Mathlib `Logic/Function/Basic.lean`:
+    ///
+    /// ```text
+    /// variable {α : Sort u} {f : α → α} (h : Involutive f)
+    ///
+    /// include h
+    /// ```
+    ///
+    /// parsed as FOUR section variables — `f`, `h`, and then untyped `include`
+    /// and `h`. The second, untyped `h` SHADOWED the real `(h : Involutive f)`,
+    /// so every declaration in `namespace Involutive` elaborated against a
+    /// meta FVar and died. Measured: `omit h` and even `frobnicate h` behaved
+    /// identically, so this was never about `include` — any unrecognised
+    /// `<ident> <ident>` line minted untyped section variables.
+    ///
+    /// Lean 4's own `variable` takes `many1 bracketedBinder` and rejects bare
+    /// names outright, so refusing to START a bare-name run on a new line at or
+    /// left of the keyword's own column is strictly MORE permissive than Lean:
+    /// it can only accept inputs Lean accepts, never reject one.
+    ///
+    /// Consumed by [`Parser::binders`] with `take()`, so it applies to exactly
+    /// one binder list and never leaks into a nested binder parse (a binder
+    /// TYPE containing `∀ a b, …` must stay unaffected).
+    binder_run_line_barrier: Option<u32>,
     /// When true, identifiers followed by `:=` (or binders then `:=`) are not
     /// considered atom starts. Used by `parse_where_local_defs` to prevent the
     /// expression parser for one where-clause body from consuming the next
@@ -158,6 +188,13 @@ pub struct Parser {
     /// `structExplicitBinder` grouping in `src/Lean/Elab/Structure.lean`. See
     /// brick B11.
     in_field_type: bool,
+    /// Delimiter nesting inside the CURRENT field type. `> 0` while the parse
+    /// is inside any `(…)`/`⟨…⟩`/`{…}`/`[…]` opened within a structure field's
+    /// type. The same-line next-field boundary (see `expr_app.rs`) fires only
+    /// at depth 0, so `x : Nat y : Nat` on one line splits into two fields
+    /// while a parenthesized `(f x : T)` ascription inside a field type stays
+    /// intact.
+    field_delim_depth: u32,
     /// Stack of block-opening reference columns for indentation-sensitive parsing.
     /// Each entry is the column of the **first child element** in the block (not the keyword).
     /// Matches Lean 4's `withPosition` + `sepBy1Indent` pattern.
@@ -207,6 +244,18 @@ pub struct Parser {
     /// full-expression entry (`expr()`), and only read when the file declared
     /// custom notation. See `custom_notation.rs` (B100).
     custom_min_prec: u32,
+    /// Which Lean precedence level the current full-expression slot opens.
+    ///
+    /// `↔` is `infix:20` — LOOSER than `→` (`infixr:25`) — so a `↔` met inside
+    /// an arrow CODOMAIN belongs to an enclosing `↔`, not to the codomain:
+    /// `a → b ↔ c` is `(a → b) ↔ c`. The hand-written precedence chain reaches
+    /// `arrow_expr` BELOW `iff_expr`, so without this marker the codomain's
+    /// full-precedence re-entry swallows that `↔`. Set to
+    /// `ArrowCodomain` only by [`Parser::arrow_codomain_expr`] and reset to
+    /// `Term` by every other full-expression entry ([`Parser::expr`]) — so a
+    /// parenthesized, quantifier-body or lambda-body codomain
+    /// (`a → (b ↔ c)`, `a → ∀ x, p x ↔ q x`) still consumes its own `↔`.
+    expr_slot: expr_operators::ExprSlot,
     /// Guards harvested from PARENTHESIZED bounded quantifier binders
     /// (`∀ (x ∈ s), p`, `∃ (n > 0), p`) while `explicit_binders` parses them.
     /// Lean desugars `∀ (x ∈ s), p` to `∀ x, x ∈ s → p` (and `∃ (x ∈ s), p`
@@ -266,6 +315,7 @@ impl Parser {
             stop_app_at_newline_outer_indent: false,
             forbid_do: false,
             stop_at_catch_finally: false,
+            binder_run_line_barrier: None,
             stop_app_at_by: false,
             type_atomic_in_arg: false,
             stop_app_at_generalizing_using: false,
@@ -273,6 +323,7 @@ impl Parser {
             in_struct_field: false,
             in_instance_field: false,
             in_field_type: false,
+            field_delim_depth: 0,
             indent_stack: Vec::new(),
             indent_context_stack: Vec::new(),
             recovery_diagnostics: Vec::new(),
@@ -284,6 +335,7 @@ impl Parser {
             custom_operators: Vec::new(),
             custom_mixfixes: Vec::new(),
             custom_min_prec: custom_notation::CUSTOM_PREC_FLOOR,
+            expr_slot: expr_operators::ExprSlot::Term,
             pending_binder_guards: Vec::new(),
             notation_ns_stack: Vec::new(),
             open_scoped_notation_ns: Vec::new(),
@@ -640,6 +692,8 @@ mod tokens;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_cmp_arrow;
 #[cfg(test)]
 mod tests_do;
 #[cfg(test)]

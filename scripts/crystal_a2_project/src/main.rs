@@ -29,9 +29,44 @@ mod ops;
 use ops::{binop, cast, cc, fcmp, icmp, ovop, unop};
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let mut raw_args: Vec<String> = std::env::args().collect();
+    // `--usize-bits <N>`: the ONE target fact this projector will resolve, and
+    // only because it was stated on the command line. `usize` is
+    // target-dependent; without this flag a body containing one is REFUSED
+    // (see `Projector::ty`), and with it the resolution is RECORDED in the
+    // provenance JSON so the chain's tag table can pin it as a target fact
+    // rather than inherit it silently.
+    let mut usize_bits: Option<u32> = None;
+    if let Some(i) = raw_args.iter().position(|a| a == "--usize-bits") {
+        let v = raw_args
+            .get(i + 1)
+            .unwrap_or_else(|| panic!("--usize-bits takes a value"));
+        usize_bits = Some(v.parse::<u32>().expect("--usize-bits takes a bit width"));
+        raw_args.drain(i..=i + 1);
+    }
+    // `--with <function-name>`, repeatable: an ADDITIONAL function projected
+    // into the SAME core module, after the root, under ONE interning
+    // namespace. It exists because a chain can be more than one body — the
+    // caller/callee pair of `has_loose_bvars` is one module with two functions
+    // — and a module whose second function was written by hand would leave
+    // exactly the transcription hole this projector exists to close. Without
+    // the flag the projection is the one-function module every earlier chain
+    // committed, byte for byte.
+    let mut with: Vec<String> = Vec::new();
+    while let Some(i) = raw_args.iter().position(|a| a == "--with") {
+        let v = raw_args
+            .get(i + 1)
+            .unwrap_or_else(|| panic!("--with takes a function name"))
+            .clone();
+        with.push(v);
+        raw_args.drain(i..=i + 1);
+    }
+    let args = raw_args;
     if args.len() < 4 {
-        eprintln!("usage: a2project <crate.trust-ir.bin> <function-name> <out-dir> [slug]");
+        eprintln!(
+            "usage: a2project <crate.trust-ir.bin> <function-name> <out-dir> [slug] \
+             [--with <function-name>]... [--usize-bits <N>]"
+        );
         std::process::exit(2);
     }
     let bin_path = &args[1];
@@ -73,9 +108,28 @@ fn main() {
         .map(|f| (f.id.0, f.name.clone()))
         .collect();
 
-    let mut p = Projector::default();
+    // The chain's bodies, ROOT FIRST. The order is load-bearing: it is the
+    // order the functions appear in the minted `IRModule`, and `ir_func_find`
+    // walks that list, so it is a fact about the module and not a formatting
+    // choice.
+    let mut chain: Vec<&trust_ir::Function> = vec![func];
+    for name in &with {
+        let f = module
+            .functions
+            .iter()
+            .find(|f| f.name == *name)
+            .unwrap_or_else(|| panic!("function {name} not in {bin_path}"));
+        let dups = module.functions.iter().filter(|g| g.name == *name).count();
+        assert_eq!(dups, 1, "function name is not unique in the artifact: {dups}");
+        chain.push(f);
+    }
+
+    let mut p = Projector {
+        usize_bits,
+        ..Projector::default()
+    };
     let core = p
-        .project(func)
+        .project_chain(&chain)
         .unwrap_or_else(|e| panic!("projection refused: {e}"));
     let text = core;
     let digest = core_digest(&text);
@@ -119,7 +173,34 @@ fn main() {
         .map(|value| json_string(&value))
         .unwrap_or_else(|| "null".to_owned());
     let _ = writeln!(prov, " \"artifact_producer\": {producer},");
+    if let Some(bits) = p.usize_bits {
+        let _ = writeln!(prov, " \"usize_bits\": {bits},");
+        let _ = writeln!(prov, " \"usize_sites_resolved\": {},", p.usize_seen);
+    }
     let _ = writeln!(prov, " \"core_digest\": \"{digest}\",");
+    if !with.is_empty() {
+        // Recorded only for a MULTI-BODY chain, so every earlier chain's
+        // committed provenance file stays byte-identical. One row per body, in
+        // module order, each carrying the canonical index the shared namespace
+        // gave it — which is the fact a text reader cannot see.
+        let _ = writeln!(prov, " \"chain_functions\": [");
+        for (i, f) in chain.iter().enumerate() {
+            let canonical = p.funcs.get(&f.id.0).copied().unwrap_or(u32::MAX);
+            let _ = writeln!(
+                prov,
+                "  {{ \"module_index\": {i}, \"canonical\": {canonical}, \"name\": {}, \
+                 \"artifact_func_id\": {}, \"artifact_functy_id\": {}, \"linkage\": \"{}\", \
+                 \"calling_conv\": \"{}\" }}{}",
+                json_string(&f.name),
+                f.id.0,
+                f.ty.0,
+                f.linkage,
+                f.calling_conv,
+                if i + 1 == chain.len() { "" } else { "," }
+            );
+        }
+        let _ = writeln!(prov, " ],");
+    }
     let _ = writeln!(prov, " \"crate_enum_ids_seen\": {:?},", p.enum_order);
     let _ = writeln!(prov, " \"crate_struct_ids_seen\": {:?},", p.struct_order);
     let _ = writeln!(prov, " \"crate_func_ids_seen\": {:?},", p.func_order);
@@ -209,6 +290,12 @@ struct Projector {
     aligns: Vec<String>,
     param_tys: Vec<String>,
     block_param_tys: Vec<String>,
+    /// The pinned width `usize` resolves to, from `--usize-bits`. `None`
+    /// REFUSES the type — a target assumption must be stated, never inherited.
+    usize_bits: Option<u32>,
+    /// How many `usize` sites the flag resolved, recorded in provenance so the
+    /// tag table's pinned count has an artifact-side witness.
+    usize_seen: u32,
 }
 
 pub(crate) type R<T> = Result<T, String>;
@@ -240,10 +327,32 @@ impl Projector {
         *self.globals.entry(id).or_insert(n)
     }
 
-    fn project(&mut self, f: &trust_ir::Function) -> R<String> {
+    /// Project one OR MORE functions into a single core module, under ONE
+    /// crate-level interning namespace.
+    ///
+    /// Each function's own id is interned immediately before its body is
+    /// walked, so the root takes canonical index 0 and every callee — a
+    /// sibling body included — interns above it in first-use order. For a
+    /// one-function chain this is exactly the previous behaviour, and every
+    /// committed `ir_*.core.txt` is byte-identical under it.
+    fn project_chain(&mut self, fs: &[&trust_ir::Function]) -> R<String> {
+        if fs.is_empty() {
+            return Err("a core module carries at least one function".into());
+        }
         let mut out = String::new();
         out.push_str("(module\n");
         out.push_str("  (funcs\n");
+        for f in fs {
+            out.push_str(&self.project_one(f)?);
+        }
+        out.push_str("  )\n");
+        out.push_str("  (globals)\n");
+        out.push_str(")\n");
+        Ok(out)
+    }
+
+    fn project_one(&mut self, f: &trust_ir::Function) -> R<String> {
+        let mut out = String::new();
         // *** ONE NAMESPACE. *** The function's own id and its callee ids are
         // the same namespace by the specification's own semantics:
         // `ir_func_find` resolves a callee by scanning for a function whose OWN
@@ -293,9 +402,6 @@ impl Projector {
             out.push_str("          ))\n");
         }
         out.push_str("      ))\n");
-        out.push_str("  )\n");
-        out.push_str("  (globals)\n");
-        out.push_str(")\n");
         Ok(out)
     }
 
@@ -312,6 +418,30 @@ impl Projector {
             Ty::U32 => "(uint 32)".into(),
             Ty::U64 => "(uint 64)".into(),
             Ty::U128 => "(uint 128)".into(),
+            Ty::Usize => match self.usize_bits {
+                // The image is the plain fixed-width integer: the CORE MODULE
+                // deliberately does not remember that the artifact said
+                // `usize`, because reader C (the registered kernel term) could
+                // never reproduce that distinction -- Clean's IRTy has no
+                // usize. What survives instead: this projector RECORDS the
+                // resolution (bits + site count) in provenance, and the tag
+                // table pins both, so a `u64`-for-`usize` swap is caught at
+                // the pinned site count, not by the core text.
+                Some(bits) => {
+                    self.usize_seen += 1;
+                    format!("(uint {bits})")
+                }
+                None => {
+                    return Err(
+                        "no Clean IRTy image for trust_ir::Ty::Usize without a pinned target \
+                         width: `usize` is TARGET-DEPENDENT, and resolving it silently would \
+                         bake an unstated word-size assumption into a committed core module. \
+                         Pass --usize-bits <N> (a target fact, recorded in provenance and \
+                         pinned in the chain's tag table) to resolve it."
+                            .into(),
+                    )
+                }
+            },
             Ty::F32 => "(float 32)".into(),
             Ty::F64 => "(float 64)".into(),
             Ty::Ptr => "(ptr)".into(),

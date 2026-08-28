@@ -46,7 +46,7 @@ mod stats;
 pub(crate) use stats::ExplanationStats;
 
 /// Equality theory solver using E-graphs
-pub struct EqualityTheory {
+pub(crate) struct EqualityTheory {
     /// The E-graph for congruence closure
     egraph: EGraph,
     /// Mapping from SMT term IDs to E-class IDs
@@ -112,7 +112,7 @@ pub struct EqualityTheory {
 
 impl EqualityTheory {
     /// Create a new equality theory solver
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         EqualityTheory {
             egraph: EGraph::new(),
             term_to_eclass: HashMap::new(),
@@ -159,12 +159,12 @@ impl EqualityTheory {
 
     /// Set the terms (called by SMT solver to share term information).
     /// Accepts both `Vec<SmtTerm>` and `Arc<[SmtTerm]>` via `Into`.
-    pub fn set_terms(&mut self, terms: impl Into<Arc<[SmtTerm]>>) {
+    pub(crate) fn set_terms(&mut self, terms: impl Into<Arc<[SmtTerm]>>) {
         self.terms = terms.into();
     }
 
     /// Register a hypothesis for an equality (for proof reconstruction)
-    pub fn register_hypothesis(&mut self, t1: TermId, t2: TermId, fvar: FVarId) {
+    pub(crate) fn register_hypothesis(&mut self, t1: TermId, t2: TermId, fvar: FVarId) {
         // Track undo entries for trail-based backtracking (#2406)
         if self.level > 0 {
             let old1 = self.term_to_hypothesis.get(&(t1, t2)).copied();
@@ -181,7 +181,7 @@ impl EqualityTheory {
     }
 
     /// Get the proof trace (for proof reconstruction)
-    pub fn proof_trace(&self) -> &ProofTrace {
+    pub(crate) fn proof_trace(&self) -> &ProofTrace {
         &self.proof_trace
     }
 
@@ -329,7 +329,7 @@ impl EqualityTheory {
     /// Idempotent: safe to call multiple times for the same term.
     /// Direct callers and tests should call this before `are_equal()`
     /// to ensure terms are registered (#2319).
-    pub fn internalize_term(&mut self, term_id: TermId) {
+    pub(crate) fn internalize_term(&mut self, term_id: TermId) {
         self.get_or_create_eclass(term_id);
     }
 
@@ -338,7 +338,7 @@ impl EqualityTheory {
     /// Both terms must already be internalized (via `internalize_term`,
     /// `internalize_atom`, or `assert_literal`). Returns `false` if
     /// either term has not been internalized (#2319).
-    pub fn are_equal(&self, t1: TermId, t2: TermId) -> bool {
+    pub(crate) fn are_equal(&self, t1: TermId, t2: TermId) -> bool {
         let ec1 = match self.term_to_eclass.get(&t1) {
             Some(&ec) => ec,
             None => return false,
@@ -351,22 +351,22 @@ impl EqualityTheory {
     }
 
     /// Get the E-graph (for debugging/inspection)
-    pub fn egraph(&self) -> &EGraph {
+    pub(crate) fn egraph(&self) -> &EGraph {
         &self.egraph
     }
 
     /// Get the term to E-class mapping (for E-matching instantiation)
-    pub fn term_to_eclass_map(&self) -> &HashMap<TermId, EClassId> {
+    pub(crate) fn term_to_eclass_map(&self) -> &HashMap<TermId, EClassId> {
         &self.term_to_eclass
     }
 
     /// Get the E-class ID for a term (if it exists)
-    pub fn get_eclass(&self, term_id: TermId) -> Option<u32> {
+    pub(crate) fn get_eclass(&self, term_id: TermId) -> Option<u32> {
         self.term_to_eclass.get(&term_id).map(|ec| ec.id())
     }
 
     /// Get the canonical E-class ID for a term (if it exists)
-    pub fn get_canonical_eclass(&self, term_id: TermId) -> Option<u32> {
+    pub(crate) fn get_canonical_eclass(&self, term_id: TermId) -> Option<u32> {
         self.term_to_eclass
             .get(&term_id)
             .map(|ec| self.egraph.find_const(*ec).id())

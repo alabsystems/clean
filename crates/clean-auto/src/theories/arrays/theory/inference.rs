@@ -276,13 +276,13 @@ impl ArrayTheory {
 
     /// Drain pending equalities implied by array axioms (#2294, #2330).
     /// `pending_set` is NOT cleared here — persists until `backtrack`.
-    pub fn drain_deduced_equalities(&mut self) -> Vec<(TermId, TermId, Vec<Lit>)> {
+    pub(crate) fn drain_deduced_equalities(&mut self) -> Vec<(TermId, TermId, Vec<Lit>)> {
         std::mem::take(&mut self.pending_equalities)
     }
 
     /// Drain pending extensionality requests discovered from asserted array
     /// disequalities. The dedup set persists until backtrack/reset.
-    pub fn drain_lemma_requests(&mut self) -> Vec<TheoryLemmaRequest> {
+    pub(crate) fn drain_lemma_requests(&mut self) -> Vec<TheoryLemmaRequest> {
         std::mem::take(&mut self.pending_extensionality)
             .into_iter()
             .map(

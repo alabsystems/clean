@@ -203,17 +203,51 @@ const SRC_IR_NL3: &str =
 
 const SRC_IR_VL3: &str = "def ir_vl3 (a : IRScalar) (b : IRScalar) (c : IRScalar) : IRList IRScalar := IRList.cons IRScalar a (ir_vl2 b c)";
 
-const SRC_IR_BR_B0: &str = "def ir_br_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 4294967295)) ir_d5) (ir_nd1 (IRInst.icmp IRICmpOp.eq_ ir_br_tu32 ir_d2 ir_d5) ir_d6) (ir_nd (IRInst.condbr ir_d6 ir_d1 ir_nl0 ir_d2 ir_nl0)))";
-const SRC_IR_BR_B1: &str = "def ir_br_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d0 ir_d1) ir_d7) (ir_nd (IRInst.br ir_d3 (ir_nl1 ir_d7))))";
-const SRC_IR_BR_B2: &str = "def ir_br_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.icmp IRICmpOp.uge ir_br_tu32 ir_d0 ir_d1) ir_d8) (ir_nd (IRInst.condbr ir_d8 ir_d4 ir_nl0 ir_d5 ir_nl0)))";
-const SRC_IR_BR_B3: &str = "def ir_br_b3 : IRBlock := IRBlock.mk ir_d3 (ir_nl1 ir_d3) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d3))))";
-const SRC_IR_BR_B4: &str = "def ir_br_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d0 ir_d2) ir_d9) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d9))))";
-const SRC_IR_BR_B5: &str = "def ir_br_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.false)) ir_d10) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d10))))";
-const SRC_IR_BR_B6: &str = "def ir_br_b6 : IRBlock := IRBlock.mk ir_d6 (ir_nl1 ir_d4) (ir_bd1 (ir_nd (IRInst.br ir_d3 (ir_nl1 ir_d4))))";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_br.core.txt` + `generated/ir_br.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_br.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — FIVE divergent lines of the nine, TWO notation classes,
+/// printed before adoption, both definitionally equal: `ir_br_b0`/`b1`/`b2`/
+/// `b4` inline `(IRTy.uint_ 32)` where the hand lines named `ir_br_tu32`
+/// (which deltas to `IRTy.uint_ ir_d32`, and `ir_d32` computes to the literal
+/// 32), and `ir_br_func` spells its three-parameter list as the raw
+/// `IRList.cons Nat` spine where the hand line named `ir_nl3` (which deltas to
+/// exactly that spine). `ir_br_b3`, `ir_br_b5`, `ir_br_b6` and
+/// `ir_br_module` minted byte-identical.
+const MINTED_IR_BR: &str = include_str!("generated/ir_br.defs.txt");
 
-const SRC_IR_BR_FUNC: &str = "def ir_br_func : IRFunc := IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0 (ir_blk ir_br_b0 (ir_blk ir_br_b1 (ir_blk ir_br_b2 (ir_blk ir_br_b3 (ir_blk ir_br_b4 (ir_blk ir_br_b5 (ir_blk ir_br_b6 ir_blk0)))))))";
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_BR_DOCS: &[&str] = &[
+    "ir_br_b0: entry block, MINTED FROM THE EMITTED ARTIFACT (generated/ir_br.core.txt; reader B's copy of the same body is tests/fixtures/bvar_in_range.trust-ir.txt). Materialize u32::MAX into %5, compare end against it into %6, and CONDBR -- the first conditional branch any chain in this program has contained. Then-target bb1 (the unbounded case), else-target bb2. DerivedProved, zero axiom_deps.",
+    "ir_br_b1: the unbounded arm. One comparison, `idx >= start`, straight into the outer join at bb3. Note it does NOT go through bb6: the two arms of the source `if` reach the return by different routes, and a transcription that funnelled both through the inner join would be a different CFG. DerivedProved, zero axiom_deps.",
+    "ir_br_b2: the bounded arm's FIRST half. It recomputes `idx >= start` into a DIFFERENT SSA id (%8, where bb1 used %7) and branches on it -- this is the short circuit: if the lower bound fails the upper bound is never evaluated. DerivedProved, zero axiom_deps.",
+    "ir_br_b3: the OUTER join, taking a bool block parameter, and the only block that returns. DerivedProved, zero axiom_deps.",
+    "ir_br_b4: the short circuit's taken side -- evaluate `idx < end` and carry it to the inner join. DerivedProved, zero axiom_deps.",
+    "ir_br_b5: the short circuit's untaken side -- materialize `false` WITHOUT evaluating the upper bound. This block is the entire operational content of `&&` and it is the only place a constant appears in this body's answer path. DerivedProved, zero axiom_deps.",
+    "ir_br_b6: the INNER join, taking a bool block parameter and immediately branching to the OUTER join with it. Two join blocks in a chain: a transcription that collapsed them into one would agree on every answer and be a different graph, which is why the branch lane compares bb6 -> bb3 explicitly. DerivedProved, zero axiom_deps.",
+    "ir_br_func: expr::bvar_in_range as EvalIR -- THREE parameters (idx, start, end at SSA ids 0,1,2), entry block 0, seven blocks, matching the emitted control-flow graph exactly. DerivedProved, zero axiom_deps.",
+    "ir_br_module: the module for expr::bvar_in_range, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger -- no switch, so the emitted text fully determines the core module; see crate::ir_mint for what that establishes and what it does not. Checked graph-for-graph, including the condbr lane, by tests/crystal_a1_lineage/bvar_in_range.rs. DerivedProved, zero axiom_deps.",
+];
 
-const SRC_IR_BR_MODULE: &str = "def ir_br_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_br_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+/// The minted script's lines, in registration order.
+static MINTED_IR_BR_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_BR
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `expr::bvar_in_range` module definitions, in registration order.
+#[must_use]
+pub fn ir_br_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_BR_LINES
+}
 
 const SRC_IR_CFG_MACH: &str = "def ir_cfg_mach (c : IRConfig) (dflt : IRMachine) : IRMachine := IRConfig.rec (fun (_ : IRConfig) => IRMachine) (fun (m : IRMachine) => m) (fun (_ : IROutcome) => dflt) c";
 
@@ -328,15 +362,20 @@ The SENTINEL IS THE LITERAL 4294967295 AND MUST STAY THE LITERAL. This is the wh
             SRC_IR_VL3,
             "ir_vl3: three-element value list. DerivedProved, zero axiom_deps.",
         )?;
-        self.add_recursive_def(SRC_IR_BR_B0, "ir_br_b0: entry block, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/bvar_in_range.trust-ir.txt). Materialize u32::MAX into %5, compare end against it into %6, and CONDBR -- the first conditional branch any chain in this program has contained. Then-target bb1 (the unbounded case), else-target bb2. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_B1, "ir_br_b1: the unbounded arm. One comparison, `idx >= start`, straight into the outer join at bb3. Note it does NOT go through bb6: the two arms of the source `if` reach the return by different routes, and a transcription that funnelled both through the inner join would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_B2, "ir_br_b2: the bounded arm's FIRST half. It recomputes `idx >= start` into a DIFFERENT SSA id (%8, where bb1 used %7) and branches on it -- this is the short circuit: if the lower bound fails the upper bound is never evaluated. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_B3, "ir_br_b3: the OUTER join, taking a bool block parameter, and the only block that returns. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_B4, "ir_br_b4: the short circuit's taken side -- evaluate `idx < end` and carry it to the inner join. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_B5, "ir_br_b5: the short circuit's untaken side -- materialize `false` WITHOUT evaluating the upper bound. This block is the entire operational content of `&&` and it is the only place a constant appears in this body's answer path. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_B6, "ir_br_b6: the INNER join, taking a bool block parameter and immediately branching to the OUTER join with it. Two join blocks in a chain: a transcription that collapsed them into one would agree on every answer and be a different graph, which is why the branch lane compares bb6 -> bb3 explicitly. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_FUNC, "ir_br_func: expr::bvar_in_range as EvalIR -- THREE parameters (idx, start, end at SSA ids 0,1,2), entry block 0, seven blocks, matching the emitted control-flow graph exactly. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_BR_MODULE, "ir_br_module: the module for expr::bvar_in_range, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/bvar_in_range.trust-ir.txt and checked graph-for-graph and instruction-for-instruction, including the condbr lane, by tests/crystal_a1_lineage/bvar_in_range.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_kind_ord.rs posture.
+        let minted = ir_br_module_defs();
+        if minted.len() != MINTED_IR_BR_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_br script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_BR_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_BR_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_CFG_MACH, "ir_cfg_mach: the machine inside a running configuration, with an explicit default for the halted case. A total projection rather than a partial one, so no premise is needed to use it; the default is never reached in this chain because the two steps it is applied to both bind a value. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_BR_MACH0, "ir_br_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds THREE parameters positionally. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_BR_M1, "ir_br_m1: the machine after ONE step, with the materialized u32::MAX bound at %5. DerivedProved, zero axiom_deps.")?;

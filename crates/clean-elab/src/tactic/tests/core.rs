@@ -4908,10 +4908,17 @@ fn test_merge_meta_state_propagates_level_constraints() {
                 .expect("level constraint should succeed");
         } else {
             // Goal 2: add level constraint u_1 = u_0 (param-to-param union)
-            // After merge from goal 1, u_0 should already be constrained to 1
-            assert!(
-                focused.metas().get_level_constraint(&u0).is_some(),
-                "u_0 constraint from goal 1 must be visible in goal 2 after merge"
+            // After merge from goal 1, u_0 should already be constrained to 1.
+            //
+            // Asserted on the RESOLVED level, not on the presence of an entry
+            // in a map. This used to read the legacy `level_constraints` map
+            // (removed 2026-08-26, U2 stage-3 deferral 2); resolving is the
+            // stronger assertion anyway — a propagated entry that did not
+            // change what `u_0` instantiates to would not be propagation.
+            assert_eq!(
+                focused.metas().instantiate_level(&Level::Param(u0.clone())),
+                level_one,
+                "u_0's solution from goal 1 must be visible in goal 2 after merge"
             );
             focused
                 .metas_mut()
@@ -4922,14 +4929,17 @@ fn test_merge_meta_state_propagates_level_constraints() {
         ps.goals.append(&mut focused.goals);
     }
 
-    // After all_goals, both constraints should be present in the parent state
-    assert!(
-        ps.metas().get_level_constraint(&u0).is_some(),
+    // After all_goals, both constraints must survive in the parent state —
+    // again read through resolution rather than map membership.
+    assert_eq!(
+        ps.metas().instantiate_level(&Level::Param(u0.clone())),
+        level_one,
         "u_0 level constraint must survive merge into parent"
     );
-    assert!(
-        ps.metas().get_level_constraint(&u1).is_some(),
-        "u_1 level constraint must survive merge into parent"
+    assert_eq!(
+        ps.metas().instantiate_level(&Level::Param(u1.clone())),
+        level_one,
+        "u_1 must resolve through its union with u_0 after merge into parent"
     );
 }
 
@@ -5026,43 +5036,24 @@ fn test_case_suffix_matching_component_boundary() {
 #[test]
 fn close_goal_unchecked_site_count_ratchet() {
     use crate::tactic::core::CLOSE_GOAL_UNCHECKED_RATCHET;
-    use std::path::PathBuf;
 
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let tactic_dir = manifest_dir.join("src").join("tactic");
-
-    let output = std::process::Command::new("grep")
-        .args(["-r", "-F", "--include=*.rs", "-n", "close_goal_unchecked("])
-        .arg(&tactic_dir)
-        .output()
-        .expect("grep should be available");
-
+    let all = lexed_production_sites("close_goal_unchecked(");
     assert!(
-        !output.stdout.is_empty(),
-        "grep found 0 matches for close_goal_unchecked in {tactic_dir:?} — \
-         this likely means the path is wrong or grep failed (exit code: {})",
-        output.status.code().unwrap_or(-1)
+        !all.is_empty(),
+        "0 lexed matches for close_goal_unchecked( under src/tactic — the \
+         definition and its delegation are both there, so an empty scan means \
+         the scanner broke, not that the tree is clean"
     );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let production_sites: Vec<&str> = stdout
-        .lines()
-        .filter(|line| {
-            let is_test = line.contains("/tests/") || line.contains("/tests.rs:");
-            let is_definition = line.contains("pub(crate) fn close_goal_unchecked(");
-            let is_delegation = line.contains("self.close_goal_unchecked(proof)");
-            let is_doc = line.contains("//!") || line.contains("///");
-            let is_ratchet_const = line.contains("CLOSE_GOAL_UNCHECKED_RATCHET");
-            // Exclude matches inside inline #[cfg(test)] modules (#2533 regression)
-            let is_inline_test = is_inside_cfg_test_block(line);
-            !is_test
-                && !is_definition
-                && !is_delegation
-                && !is_doc
-                && !is_ratchet_const
-                && !is_inline_test
-        })
-        .collect();
+    let production_sites = without_sanctioned_sites(
+        all,
+        &[
+            // The definition itself, and the one internal delegation from the
+            // checked wrapper. Both are the call this ratchet exists to bound
+            // the CALLERS of, not callers themselves.
+            ("pub(crate) fn close_goal_unchecked(", 1),
+            ("self.close_goal_unchecked(proof)", 1),
+        ],
+    );
 
     assert!(
         production_sites.len() == CLOSE_GOAL_UNCHECKED_RATCHET,
@@ -5076,29 +5067,88 @@ fn close_goal_unchecked_site_count_ratchet() {
     );
 }
 
-/// Check if a grep output line (format: `path:line_num:content`) comes from
-/// inside a `#[cfg(test)] mod` block. Reads the source file and finds the
-/// inline test module range, then checks whether the match line falls
-/// inside it. Distinguishes `#[cfg(test)] mod tests` (test module) from
-/// `#[cfg(test)] use ...` (conditional import). (#2533 regression)
-fn is_inside_cfg_test_block(grep_line: &str) -> bool {
-    // grep -n output format: "path:line_num:content"
-    let parts: Vec<&str> = grep_line.splitn(3, ':').collect();
-    if parts.len() < 2 {
-        return false;
+/// Production call sites of `pattern` under `crates/clean-elab/src/tactic/`,
+/// as `path:line: raw source line`.
+///
+/// LEXED, not grepped (lane LOOSE, 2026-08-25). The two ratchets below used to
+/// shell out to `grep -r -F` and filter the RAW matched lines with
+/// `line.contains("//!") || line.contains("///")`. Both ratchets are pinned at
+/// 0, and a single-`//` line comment is not `///`, so the exact prose
+/// CLAUDE.md's soundness rule asks for — `// SOUNDNESS: this path must never
+/// call metas.assign(...)` — turned them RED with no behaviour changed. Block
+/// comments and string literals naming either call did the same. That is
+/// ANTI-CORRELATION: the cheapest green is to delete the explanation.
+///
+/// Lane ANTICORR fixed the SAME two ratchets in
+/// `crates/clean-elab/src/tactic/tests/bypass_ratchet.rs` on 2026-08-25 and
+/// did not reach these duplicates, so a plant that bypass_ratchet accepted was
+/// still red here. Both now count over the same
+/// [`production_code_lines`] state machine: line/block comments and string,
+/// raw-string and char-literal bodies blanked, inline `#[cfg(test)] mod` bodies
+/// dropped, line numbers preserved so the offender is still located.
+fn lexed_production_sites(pattern: &str) -> Vec<String> {
+    use crate::test_support::source_scan::{
+        collect_rust_source_files, production_code_lines, DEFAULT_PRODUCTION_RULES,
+    };
+    use std::path::PathBuf;
+
+    let tactic_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tactic");
+    let files = collect_rust_source_files(&tactic_dir, &DEFAULT_PRODUCTION_RULES);
+    assert!(
+        !files.is_empty(),
+        "no production .rs files under {tactic_dir:?} — the path is wrong, and an \
+         empty scan is not a clean one"
+    );
+
+    let mut sites = Vec::new();
+    for file in files {
+        let content = match std::fs::read_to_string(&file) {
+            Ok(c) => c,
+            Err(e) => panic!("failed to read {}: {e}", file.display()),
+        };
+        let raw: Vec<&str> = content.lines().collect();
+        for (line_no, code) in production_code_lines(&content) {
+            if !code.contains(pattern) {
+                continue;
+            }
+            let text = raw
+                .get(line_no - 1)
+                .map_or_else(String::new, |l| l.trim().to_string());
+            sites.push(format!("{}:{}: {}", file.display(), line_no, text));
+        }
     }
-    let file_path = parts[0];
-    let match_line_num: usize = match parts[1].parse() {
-        Ok(n) => n,
-        Err(_) => return false,
-    };
-    let content = match std::fs::read_to_string(file_path) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    let test_mod_ranges = crate::test_support::source_scan::cfg_test_mod_line_ranges(&content);
-    let line_idx = match_line_num.saturating_sub(1);
-    crate::test_support::source_scan::line_is_inside_cfg_test_mod(&test_mod_ranges, line_idx)
+    sites
+}
+
+/// Drop the sanctioned sites named by `exclusions`, and REFUSE to be a blanket
+/// suppression while doing it: each exclusion must match EXACTLY the number of
+/// sites declared for it. A hand-maintained skip list that silently covers a
+/// second, new call site is the `extend_constants.test_excluded_sites` defect
+/// (retired 2026-08-25, see `data/unchecked_decl_ratchet.json`), and this is the
+/// same shape at a finer grain.
+fn without_sanctioned_sites(sites: Vec<String>, exclusions: &[(&str, usize)]) -> Vec<String> {
+    let mut kept = Vec::new();
+    let mut hits = vec![0usize; exclusions.len()];
+    for site in sites {
+        match exclusions
+            .iter()
+            .position(|(needle, _)| site.contains(needle))
+        {
+            Some(idx) => hits[idx] += 1,
+            None => kept.push(site),
+        }
+    }
+    for ((needle, expected), found) in exclusions.iter().zip(hits) {
+        assert_eq!(
+            found, *expected,
+            "sanctioned site {needle:?} matched {found} call sites, not the {expected} \
+             it is justified for. A sanctioned exclusion may not quietly grow: \
+             re-justify it or fix the new site."
+        );
+    }
+    kept
 }
 
 /// Ratchet test: count direct `metas.assign(` call sites in production tactic code.
@@ -5113,37 +5163,20 @@ fn is_inside_cfg_test_block(grep_line: &str) -> bool {
 #[test]
 fn metas_assign_bypass_site_count_ratchet() {
     use crate::tactic::core::METAS_ASSIGN_BYPASS_RATCHET;
-    use std::path::PathBuf;
 
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let tactic_dir = manifest_dir.join("src").join("tactic");
-
-    let output = std::process::Command::new("grep")
-        .args(["-r", "-F", "--include=*.rs", "-n", "metas.assign("])
-        .arg(&tactic_dir)
-        .output()
-        .expect("grep should be available");
-
+    let all = lexed_production_sites("metas.assign(");
     assert!(
-        !output.stdout.is_empty(),
-        "grep found 0 matches for metas.assign in {tactic_dir:?} — \
-         this likely means the path is wrong or grep failed (exit code: {})",
-        output.status.code().unwrap_or(-1)
+        !all.is_empty(),
+        "0 lexed matches for metas.assign( under src/tactic — the close_goal \
+         delegation is there, so an empty scan means the scanner broke, not \
+         that the tree is clean"
     );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let production_sites: Vec<&str> = stdout
-        .lines()
-        .filter(|line| {
-            let is_test = line.contains("/tests/") || line.contains("/tests.rs:");
-            let is_close_goal_delegation = line.contains("self.metas.assign(goal_meta_id, proof)");
-            let is_doc = line.contains("//!") || line.contains("///");
-            let is_ratchet_const = line.contains("METAS_ASSIGN_BYPASS_RATCHET");
-            // Exclude matches inside inline #[cfg(test)] modules (#2533 regression)
-            let is_inline_test = is_inside_cfg_test_block(line);
-            !is_test && !is_close_goal_delegation && !is_doc && !is_ratchet_const && !is_inline_test
-        })
-        .collect();
+    let production_sites = without_sanctioned_sites(
+        all,
+        // The single delegation inside the CHECKED close_goal wrapper: the
+        // assignment this ratchet routes every other caller through.
+        &[("self.metas.assign(goal_meta_id, proof)", 1)],
+    );
 
     match METAS_ASSIGN_BYPASS_RATCHET {
         0 => assert_eq!(
@@ -5177,6 +5210,71 @@ fn metas_assign_bypass_site_count_ratchet() {
             }
         }
     }
+}
+
+/// Lane LOOSE two-way proof for the two lexed ratchets above, over SYNTHETIC
+/// source so it cannot drift with the tree.
+///
+/// DIRECTION 1 — the gate must stop false-REDing: a `// SOUNDNESS:` comment, a
+/// doc comment, a block comment and a string literal that merely NAME the
+/// forbidden calls count 0.
+/// DIRECTION 2 — the gate must keep true-REDing: real calls still count, and a
+/// call hiding after a string literal containing `//` on the same line — which
+/// the grep filter never even scanned — now counts too.
+#[test]
+fn lexed_bypass_ratchet_counts_calls_not_prose() {
+    use crate::test_support::source_scan::production_code_lines;
+
+    let prose = r####"
+// SOUNDNESS: this wrapper must never call metas.assign( directly.
+/// Older revisions used close_goal_unchecked( here.
+/* mentions metas.assign( and /* close_goal_unchecked( nested */ */
+fn ok(&mut self) {
+    let hint = "do not call metas.assign( or close_goal_unchecked( here";
+    let _ = hint;
+    self.close_goal(proof)
+}
+"####;
+    for pattern in ["metas.assign(", "close_goal_unchecked("] {
+        let hits: Vec<usize> = production_code_lines(prose)
+            .into_iter()
+            .filter(|(_, code)| code.contains(pattern))
+            .map(|(n, _)| n)
+            .collect();
+        assert!(
+            hits.is_empty(),
+            "prose naming {pattern} must not count as a call site: {hits:?}"
+        );
+    }
+
+    let calls = r####"
+fn offender(&mut self) {
+    self.metas.assign(id, proof);
+    let u = "https://example.invalid"; self.close_goal_unchecked(proof);
+}
+"####;
+    let assigns: Vec<usize> = production_code_lines(calls)
+        .into_iter()
+        .filter(|(_, code)| code.contains("metas.assign("))
+        .map(|(n, _)| n)
+        .collect();
+    let uncheckeds: Vec<usize> = production_code_lines(calls)
+        .into_iter()
+        .filter(|(_, code)| code.contains("close_goal_unchecked("))
+        .map(|(n, _)| n)
+        .collect();
+    assert_eq!(
+        assigns,
+        vec![3],
+        "a real metas.assign( call must still count"
+    );
+    assert_eq!(
+        uncheckeds,
+        vec![4],
+        "a real close_goal_unchecked( call AFTER a string containing `//` must \
+         count — the old grep filter truncated nothing but the raw-line filter \
+         never saw the shape at all"
+    );
 }
 
 // ---------------------------------------------------------------------------

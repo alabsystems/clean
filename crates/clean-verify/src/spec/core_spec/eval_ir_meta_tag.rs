@@ -288,12 +288,48 @@ const SRC_IR_MT_BD9: &str = "def ir_mt_bd9 (a : IRNode) (b : IRNode) (c : IRNode
 const SRC_IR_MT_AMT: &str = "def ir_mt_amt : Nat := 63";
 #[rustfmt::skip]
 const SRC_ENV_META_TAG: &str = "def env_push_low_local_meta_tag : Nat := ir_wrap ir_d64 (ir_nat_mul ir_d1 (ir_nat_pow2 ir_mt_amt))";
-const SRC_IR_MT_B0: &str = "def ir_mt_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_mt_bd9 (ir_nd1 (IRInst.const_ ir_vc_tu64 (IRConst.int_ 1)) ir_d0) (ir_nd1 (IRInst.const_ ir_mt_ti32 (IRConst.int_ 63)) ir_d1) (ir_nd1 (IRInst.cast IRCastOp.bitcast ir_mt_ti32 ir_br_tu32 ir_d1) ir_d2) (ir_nd1 (IRInst.const_ ir_br_tu32 (IRConst.int_ 64)) ir_d3) (ir_nd1 (IRInst.icmp IRICmpOp.ult ir_br_tu32 ir_d2 ir_d3) ir_d4) (ir_nd (IRInst.assert ir_d4)) (ir_nd1 (IRInst.cast IRCastOp.sext ir_mt_ti32 ir_vc_tu64 ir_d1) ir_d5) (ir_nd1 (IRInst.binop IRBinOp.shl ir_vc_tu64 ir_d0 ir_d5) ir_d6) (ir_nd (IRInst.ret (ir_nl1 ir_d6))))";
-#[rustfmt::skip]
-const SRC_IR_MT_FUNC: &str = "def ir_mt_func : IRFunc := IRFunc.mk ir_d0 ir_nl0 ir_d0 (ir_blk ir_mt_b0 ir_blk0)";
-const SRC_IR_MT_MODULE: &str = "def ir_mt_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_mt_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_mt.core.txt` + `generated/ir_mt.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_mt.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — ONE divergent line of the three, THREE notation classes in
+/// it, printed before adoption, all definitionally equal: `ir_mt_b0` spells
+/// its nine-node body as the raw `IRList.cons IRNode` spine where the hand
+/// line named `ir_mt_bd9` (which deltas to exactly that spine), inlines
+/// `(IRTy.uint_ 64)` / `(IRTy.int_ 32)` / `(IRTy.uint_ 32)` where the hand
+/// line named the `ir_vc_tu64` / `ir_mt_ti32` / `ir_br_tu32` aliases, and
+/// spells the 1 constant `(IRConst.int_ ir_d1)` where the hand line wrote the
+/// literal (`ir_d1` deltas to 1). `ir_mt_func` and `ir_mt_module` minted
+/// byte-identical.
+const MINTED_IR_MT: &str = include_str!("generated/ir_mt.defs.txt");
 
-// ── the machine, and the emitted body's own panic condition ───────────
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_MT_DOCS: &[&str] = &[
+    "ir_mt_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_mt.core.txt; reader B's copy of the same body is tests/fixtures/meta_tag_shl.trust-ir.txt). NINE nodes in one block: two constants, a bitcast, a third constant, an icmp, THE ASSERT, a sext, a shl and a ret. The assert is the point -- it is the first panic arm any chain has covered, it binds no result and carries no type or target, and before the assert lane existed a transcription that simply DELETED it agreed with the artifact on every lane the CFG gate had. DerivedProved, zero axiom_deps.",
+    "ir_mt_func: the const-initializer as EvalIR -- ZERO parameters, entry block 0, one block. Every earlier chain's function takes at least one argument; a const item takes none, which is what makes A4 quantify over nothing but the heap and the fuel. DerivedProved, zero axiom_deps.",
+    "ir_mt_module: the module for tc::local_context::LocalContext::push_low_local::META_TAG, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger -- no switch, so the emitted text fully determines the core module; see crate::ir_mint. Checked graph-for-graph, including the assert lane, by tests/crystal_a1_lineage/meta_tag_shl.rs. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order.
+static MINTED_IR_MT_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_MT
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `META_TAG::{const-init}` module definitions, in registration
+/// order.
+#[must_use]
+pub(crate) fn ir_mt_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_MT_LINES
+}
+
 const SRC_IR_MT_MACH0: &str = "def ir_mt_mach0 (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params ir_nl0 ir_vl0 (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
 const SRC_IR_MT_INIT: &str = "def ir_mt_init_is_mach0 (mem : IRList IRMemSlot) (na : Nat) : Eq IRConfig (ir_init ir_mt_module ir_d0 ir_vl0 mem na) (IRConfig.running (ir_mt_mach0 mem na)) := Eq.refl IRConfig (IRConfig.running (ir_mt_mach0 mem na))";
 #[rustfmt::skip]
@@ -373,9 +409,20 @@ impl Specification {
         self.add_recursive_def(SRC_IR_MT_BD9, "ir_mt_bd9: a nine-node block body, built on the existing ir_bd6. The longest block any chain has transcribed; the previous maximum was six. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_MT_AMT, "ir_mt_amt: the shift amount, 63 -- one below the width, so the answer is the SIGN BIT of a u64 and the body sits exactly one step from the panic arm's boundary. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_ENV_META_TAG, "env_push_low_local_meta_tag: the reflected `const META_TAG: u64 = 1u64 << 63` of tc::local_context::LocalContext::push_low_local (local_context.rs:157), whose own printed contract quotes it -- ENSURES: result.as_u64() < (1u64 << 63). It is ir_wrap ir_d64 (ir_nat_mul ir_d1 (ir_nat_pow2 63)) and NOT a proof that Rust's `1u64 << 63` is that expression; that gap is the same shape as env_is_valid_char's and env_get_char_val_closure's. Deliberately left UNREDUCED: ir_nat_mul recurses on its SECOND argument, so normalizing it would cost 2^63 Nat.rec unfoldings, and nothing in this chain needs the digits. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_MT_B0, "ir_mt_b0: THE WHOLE BODY, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/meta_tag_shl.trust-ir.txt). NINE nodes in one block: two constants, a bitcast, a third constant, an icmp, THE ASSERT, a sext, a shl and a ret. The assert is the point -- it is the first panic arm any chain has covered, it binds no result and carries no type or target, and before the assert lane existed a transcription that simply DELETED it agreed with the artifact on every lane the CFG gate had. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_MT_FUNC, "ir_mt_func: the const-initializer as EvalIR -- ZERO parameters, entry block 0, one block. Every earlier chain's function takes at least one argument; a const item takes none, which is what makes A4 quantify over nothing but the heap and the fuel. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_MT_MODULE, "ir_mt_module: the module for tc::local_context::LocalContext::push_low_local::META_TAG, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/meta_tag_shl.trust-ir.txt and checked graph-for-graph and instruction-for-instruction, including the new assert lane, by tests/crystal_a1_lineage/meta_tag_shl.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_kind_ord.rs posture.
+        let minted = ir_mt_module_defs();
+        if minted.len() != MINTED_IR_MT_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_mt script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_MT_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_MT_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_MT_MACH0, "ir_mt_mach0: the machine ir_init produces for this module. No parameters, so ir_bind_params over the empty lists is the empty locals list; the module declares no globals, so ir_mem_concat is the identity on the caller heap. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_MT_INIT, "ir_mt_init_is_mach0: the hand-written initial machine IS the one ir_init builds, for every heap and next-address counter, by computation. Registered rather than assumed so that a change to ir_init stops this reducing instead of silently making A4 a theorem about a different starting state. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_MT_COND, "ir_mt_cond: THE EMITTED BODY'S OWN PANIC CONDITION, spelled exactly as the machine computes it -- ir_int_cmp canonicalizes both operands at the icmp's declared width 32, and the left operand is the bitcast's own width-32 canonicalization of the constant. DerivedProved, zero axiom_deps.")?;

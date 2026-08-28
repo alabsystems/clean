@@ -66,7 +66,9 @@ pub(super) fn elaborate_type_declarations(base: &mut Environment, plan: &mut Pla
             continue;
         }
         options.enter(base, &plan.nodes[index]);
-        let elaboration = elaborate_node(&*base, &plan.nodes[index]);
+        // No sibling list: this is the TYPE phase, before any body looks for
+        // a forward reference, so the question the list answers cannot arise.
+        let elaboration = elaborate_node(&*base, &plan.nodes[index], &[]);
         let Ok(result) = elaboration.result else {
             continue;
         };
@@ -250,7 +252,9 @@ fn elaborate_header(env: &Environment, node: &Node) -> Result<DeclHeader, NoHead
         Err(NoHeaderReason::TypeInferredFromBody) => return header_from_inferred_type(env, node),
         Err(reason) => return Err(reason),
     };
-    let mut ctx = super::exec::elab_ctx_for(env, node);
+    // Header phase: a signature that names an unstaged sibling is reported
+    // by the sibling's own refusal, so no list is threaded here either.
+    let mut ctx = super::exec::elab_ctx_for(env, node, &[]);
     let (name, universe_params, ty) = ctx
         .elab_decl_header_inner(shape.name, shape.universe_params, shape.binders, shape.ty)
         .map_err(classify_header_error)?;
@@ -286,7 +290,7 @@ fn elaborate_header(env: &Environment, node: &Node) -> Result<DeclHeader, NoHead
 /// pure with respect to the environment — `elaborate_node` takes `&Environment`
 /// — so running it once per fixed-point iteration costs time and nothing else.
 fn header_from_inferred_type(env: &Environment, node: &Node) -> Result<DeclHeader, NoHeaderReason> {
-    let elaboration = elaborate_node(env, node);
+    let elaboration = elaborate_node(env, node, &[]);
     let result = elaboration.result.map_err(classify_header_error)?;
     let crate::infer::ElabResult::Definition {
         name,

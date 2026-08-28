@@ -11,7 +11,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 BIN="${CRYSTAL_BIN:?set CRYSTAL_BIN to the compiled crystal_a1_lineage test binary}"
 FILTER="${FILTER:-from_source_system}"
 
-SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_from_source.rs"
+SPEC="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_fs.defs.txt"
 FIX="$REPO/crates/clean-verify/tests/fixtures/from_source_system.trust-ir.txt"
 JSON="$REPO/crates/clean-verify/tests/fixtures/from_source_system.lineage.json"
 
@@ -41,20 +41,37 @@ reason() { awk '/panicked at/{f=1} f{print "     | " $0} /^note: run with/{exit}
 # make a MUTATED run look green - the exact false negative this script exists to
 # rule out - so the helper restricts .rs edits to lines beginning `const SRC_`
 # and fails loudly when an anchor does not match exactly one of them.
-sub() { python3 - "$1" "$2" "$3" <<'PY'
+sub() { python3 - "$1" "$2" "$3" "${4:-1}" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b, want = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 lines = open(p).read().split("\n")
 decl_only = p.endswith(".rs")
 hits = [i for i, l in enumerate(lines)
         if a in l and (not decl_only or l.startswith("const SRC_"))]
-assert len(hits) == 1, "anchor must match exactly one line, matched %d: %s" % (len(hits), a[:80])
-i = hits[0]
-assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
-lines[i] = lines[i].replace(a, b, 1)
+# `want` > 1 exists for ONE measured reason: the 2026-08-21 a152 rebaseline
+# (b03937e74) added a `current_source_bound_pin` stanza that RESTATES the
+# measured row's values, so those anchors now denote TWO lines that must move
+# together.  Still fail-closed: any other count aborts, naming pattern + count.
+assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+for i in hits:
+    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
-} || exit 9
+  rc=$?
+  # A FAILED substitution is the false negative this whole script exists to
+  # rule out: the file stays as it was, the next `expect` would run against an
+  # unchanged (or still-mutated) tree, and every case after it would be
+  # meaningless.  Abort loudly instead — the assertion above already named the
+  # pattern and the match count.  NOTE the binding: writing `|| exit 9` after
+  # the closing brace of the function DEFINITION binds to the (always-zero)
+  # definition itself, never to the calls — that construct let failed
+  # substitutions continue silently, which is why $? is captured HERE.
+  if [[ $rc -ne 0 ]]; then
+    echo "FATAL: substitution failed in $1 (anchor: $2)"
+    exit 9
+  fi
+}
 
 echo "== baseline =="
 expect PASS "baseline: all from_source_system gates green"
@@ -68,9 +85,9 @@ expect PASS "P1 reverted"
 
 echo
 echo "== P2: an aggregate constant answer =="
-sub "$SPEC" "(ir_cvar ir_d5)) ir_d10)" "(ir_cvar ir_d4)) ir_d10)"
+sub "$SPEC" "(IRConst.int_ ir_d5) IRConst.vnil))) ir_d10)" "(IRConst.int_ ir_d4) IRConst.vnil))) ir_d10)"
 expect FAIL "P2 mutated: Mizar answers Classical instead of SetTheoretic"; reason
-sub "$SPEC" "(ir_cvar ir_d4)) ir_d10)" "(ir_cvar ir_d5)) ir_d10)"
+sub "$SPEC" "(IRConst.int_ ir_d4) IRConst.vnil))) ir_d10)" "(IRConst.int_ ir_d5) IRConst.vnil))) ir_d10)"
 expect PASS "P2 reverted"
 
 echo
@@ -89,9 +106,9 @@ expect PASS "P4 reverted"
 
 echo
 echo "== P5: the aggregate lane is not the integer lane =="
-sub "$SPEC" "(IRInst.const_ ir_fs_tmode (ir_cvar ir_d2)) ir_d6)" "(IRInst.const_ ir_fs_tmode (IRConst.int_ ir_d2)) ir_d6)"
+sub "$SPEC" "(IRInst.const_ ir_fs_tmode (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d2) IRConst.vnil))) ir_d6)" "(IRInst.const_ ir_fs_tmode (IRConst.int_ ir_d2)) ir_d6)"
 expect FAIL "P5 mutated: CubicalAgda's arm is a SCALAR constant, same number"; reason
-sub "$SPEC" "(IRInst.const_ ir_fs_tmode (IRConst.int_ ir_d2)) ir_d6)" "(IRInst.const_ ir_fs_tmode (ir_cvar ir_d2)) ir_d6)"
+sub "$SPEC" "(IRInst.const_ ir_fs_tmode (IRConst.int_ ir_d2)) ir_d6)" "(IRInst.const_ ir_fs_tmode (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d2) IRConst.vnil))) ir_d6)"
 expect PASS "P5 reverted"
 
 echo

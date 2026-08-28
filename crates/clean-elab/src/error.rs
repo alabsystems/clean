@@ -42,6 +42,36 @@ pub enum ElabError {
         /// Classified id list: which are unsolved metas vs escaped locals.
         detail: String,
     },
+    /// A finalized declaration left an INSTANCE-SYNTHESIS goal unfilled.
+    ///
+    /// The same failure `ResidualFreeVariables` used to report as
+    /// `unsolved metavariables ?[7]`. The metavariable id names nothing a
+    /// reader can act on — it is an allocation counter, and the SAME id
+    /// appears for unrelated programs — while the goal that failed to
+    /// synthesize is still in hand at the reporting site (`MetaVar.ty`).
+    ///
+    /// Distinct from [`Self::FailedToSynthesizeInstance`], which fires
+    /// EAGERLY inside the argument loop when the goal is already ground.
+    /// This one fires at declaration close, which is where the two measured
+    /// evasions of that eager check land: a goal that is still open when the
+    /// loop settles, and the B104 homogeneous-retry, which deliberately
+    /// un-grounds the goal the eager check requires to be ground. At decl
+    /// close "no later unification will run" is a fact rather than a guess.
+    ///
+    /// The message states only what is derivable: the goal, and the candidate
+    /// list the search actually had. It never claims the goal is
+    /// unsatisfiable in principle.
+    #[error("{decl_kind} {name}: failed to synthesize instance `{goal}`\n{detail}")]
+    UnsynthesizedInstanceGoal {
+        /// Declaration kind ("def", "theorem", "instance").
+        decl_kind: String,
+        /// Declaration name as registered.
+        name: String,
+        /// Rendered instance goal, e.g. `HMod UInt64 UInt64 UInt64`.
+        goal: String,
+        /// Candidate list plus the options a reader can take.
+        detail: String,
+    },
     /// Reference to an identifier that is not in scope.
     #[error("Unknown identifier: {0}")]
     UnknownIdent(String),
@@ -55,6 +85,130 @@ pub enum ElabError {
         name: String,
         /// Nearest theorem names in the current environment.
         suggestions: Vec<String>,
+    },
+    /// Dot notation `recv.field` whose target did not resolve, on a receiver
+    /// whose type has no nameable head after normalisation.
+    ///
+    /// This is the NAMED form of what used to surface as
+    /// `NotImplemented("cannot extract type name from <raw Expr dump>")` at
+    /// the dot-notation site (`infer/elab_proj.rs`) — 44 of the 497 failures
+    /// in the 2026-08-25 five-file Mathlib-source measurement, the second
+    /// largest single-mechanism class on that frontier
+    /// (`docs/analysis/frontier-next-class-2026-08-25.md` §5). The old message
+    /// deleted the identifier that failed to resolve and printed the
+    /// receiver's `whnf`'d type instead, which is why the class could not be
+    /// triaged from the artifact at all.
+    ///
+    /// It is a MISSING NAME, not a missing feature. `get_type_name`
+    /// (`infer/elab_match/helpers.rs`) normalises before reading the head, so
+    /// a `def`-based alias (`Function.Surjective f` → `∀ b, ∃ a, f a = b`) or
+    /// a projection stuck on an opaque instance variable (`a ≤ b` →
+    /// `Proj(LE, 0, Proj(Preorder, 0, …))`) loses its head there. But the
+    /// un-reduced head has ALREADY been tried by the Track-UU pre-whnf lookup
+    /// earlier in the same function, so when this is raised the named
+    /// identifier is known not to resolve — which is what makes naming it
+    /// honest rather than speculative. Measured on this box: four probes whose
+    /// dot target DOES resolve, in exactly these receiver shapes, all pass
+    /// (`tests/fixtures/source_frontier/p01,p04,p07,p13`).
+    ///
+    /// Message shape is load-bearing twice over. `Unknown identifier:` leads
+    /// so the source-elab classifier
+    /// (`scripts/srcelab_classify.py`, first-match-wins) files these under
+    /// `unknown identifier` rather than `not implemented (elaborator NYI)`,
+    /// and so the name survives the 400-char truncation of `per_error_class`.
+    /// `dot notation` then keeps them separable from the pre-existing
+    /// unknown-identifier population in the same report.
+    #[error(
+        "Unknown identifier: {name}; dot notation `.{field}` on a receiver of type \
+         `{receiver}`, whose head does not name a type after reduction ({normalized_head})"
+    )]
+    UnresolvedDotTarget {
+        /// The identifier that failed to resolve: `<Head>.<field>` when the
+        /// receiver type's un-reduced head is a constant, else the bare field.
+        name: String,
+        /// The field written after the dot.
+        field: String,
+        /// The receiver's type as inferred, BEFORE normalisation.
+        receiver: String,
+        /// Compact shape of the receiver type's head after normalisation —
+        /// the discriminator between this class's sub-shapes (`Pi` for the
+        /// unfolded-alias face, `Proj(S, i)` for the stuck-projection face).
+        normalized_head: String,
+    },
+    /// The unresolved identifier IS the name of the declaration being
+    /// elaborated, so this is a RECURSIVE definition whose form no recursion
+    /// lowering accepted — not a missing name and not a typo.
+    ///
+    /// Nothing about what elaborates changes when this fires: it is raised at
+    /// the point where resolution has ALREADY failed, in place of the
+    /// name-distance suggestion list, whose nearest-theorem answer for a
+    /// self-reference (`gcd` → `Quotient.ind`) is actively misleading. Clean
+    /// lowers exactly two recursion shapes today — structural recursion
+    /// through the inductive type's recursor (`infer/structural/`) and
+    /// well-founded recursion with a `termination_by` measure naming ONE
+    /// parameter (`infer/wf_recursion/`, limits in `wf_recursion/mod.rs`;
+    /// the signature may be wider than the measure) — so the refusal states
+    /// that boundary and the ways across it rather than guessing at a
+    /// spelling.
+    #[error(
+        "`{name}` is the name being defined: a self-reference in a def body is \
+         a recursive definition, not a missing name. Recursive definitions are \
+         supported for structural recursion (match/equation form on a \
+         structurally decreasing parameter) and for well-founded recursion \
+         whose `termination_by` measure names ONE parameter; the form of \
+         `{decl}` ({params} parameter(s); neither lowering applied) is outside \
+         today's fragment.\n  \
+         help: ways forward, in order of preference — (1) restate `{decl}` \
+         structurally: match on one parameter and recurse on its immediate \
+         sub-term, which lowers through that type's recursor and needs no \
+         termination argument at all; (2) give `{decl}` a `termination_by \
+         <parameter>` naming the ONE parameter that shrinks — the signature \
+         may stay as wide as it is, the other parameters are threaded through \
+         unchanged, but the measure itself must name a single parameter (a \
+         lexicographic measure is not lowered yet); (3) if `{decl}` is only \
+         needed to STATE something, write it in proof position — a signature \
+         plus the equations you rely on, each disclosed by name — where no \
+         emitted body is required."
+    )]
+    RecursionOutsideFragment {
+        /// The unresolved identifier, exactly as written at the use site.
+        name: String,
+        /// The declaration being elaborated, whose own name this is.
+        decl: String,
+        /// Its explicit parameter count, after equation-form normalization.
+        params: usize,
+    },
+    /// The unresolved identifier matches a declaration in the SAME batch that
+    /// contributed no forward-resolvable header, so header-first checking had
+    /// nothing to resolve the reference against.
+    ///
+    /// This is a report about the SIBLING, not about the use site: the name is
+    /// not a typo, and the nearest-theorem list is noise. See
+    /// [`crate::module_batch`] for why a declaration can be in a batch and
+    /// still stage no signature.
+    #[error(
+        "Unknown identifier: {name} — it matches `{sibling}`, declared in this \
+         same batch, but `{sibling}` has no forward-resolvable header \
+         ({reason}), so a declaration written before it cannot refer to it.\n  \
+         note: header-first checking resolves forward references out of the \
+         signature index; a declaration whose own signature never reached that \
+         index contributes no entry to it. There is nothing to fix at this use \
+         site.\n  \
+         help: ways forward, in order of preference — (1) repair `{sibling}`: \
+         its own refusal in this batch says what its signature needs, and \
+         every reference to it resolves once that signature elaborates; (2) \
+         write `{sibling}`'s result type explicitly if it is being inferred \
+         from its body; (3) move `{sibling}` above this declaration, making \
+         the reference backward — that restores source-order resolution and \
+         needs no header at all."
+    )]
+    SameBatchHeaderUnavailable {
+        /// The unresolved identifier, exactly as written at the use site.
+        name: String,
+        /// The same-batch declaration it names.
+        sibling: String,
+        /// Why that declaration staged no header.
+        reason: &'static str,
     },
     /// A bare identifier matches a `protected` declaration in an opened
     /// namespace: a simple `open` does not shorten protected names (Lean
@@ -185,10 +339,95 @@ pub enum ElabError {
     /// Feature is not supported by the elaborator.
     #[error("Unsupported feature: {feature}")]
     Unsupported { feature: String },
+    /// An `import` named a module that resolves to nothing real: no `.olean`
+    /// was loadable for it, no intra-project `.lean` source was elaborated for
+    /// it this run, and Clean declares no hand-written prelude under that name.
+    ///
+    /// FAIL-CLOSED ON PURPOSE. The elaborator used to fabricate a prelude here
+    /// and return `Ok(())`, so every declaration in such a file was checked
+    /// against something the source never asked for and the run still reported
+    /// `N passed, 0 failed`. A verdict minted that way says nothing, which is
+    /// strictly worse than no verdict — see [`crate::imports::ImportPolicy`].
+    #[error(
+        "unresolved import `{module}`: {reason}\n  \
+         nothing real provides this module, so nothing in this file can be \
+         checked against it.\n  \
+         Pass `--permissive-imports` to substitute a hand-written stand-in and \
+         continue (the resulting verdict is not a verification claim)."
+    )]
+    UnresolvedImport {
+        /// The module name exactly as written in the `import` statement.
+        module: String,
+        /// Why resolution failed: the `.olean` loader's own error, or the
+        /// absence of any search path to look in.
+        reason: String,
+    },
     /// Function applied to more arguments than its type allows.
     #[error("Too many arguments: function type {func_type} is not a function type, but {remaining_args} argument(s) remain")]
     TooManyArguments {
         func_type: String,
+        remaining_args: usize,
+    },
+    /// An identifier that did not resolve in a SIGNATURE position, which
+    /// auto-bound-implicit insertion swallowed into a fresh binder, and which
+    /// then had arguments applied to it.
+    ///
+    /// This is the NAMED form of what used to surface as
+    /// `TooManyArguments { func_type: "Sort(Param(u_0))", … }` — the third
+    /// mask of the 2026-08-25 five-file Mathlib-source measurement, 17 entries
+    /// and the row `Mathlib/Order/Basic.lean` was pinned to expose
+    /// (`docs/analysis/frontier-next-class-2026-08-25.md` §2.6, §7.5). The old
+    /// message printed the arity and the auto-bound head's `Sort` type and
+    /// DELETED the identifier, which is why the class could not be triaged
+    /// from the artifact — the same defect stage 0 repaired for the
+    /// dot-notation face in [`Self::UnresolvedDotTarget`].
+    ///
+    /// It is a MISSING NAME, not an arity error. Auto-implicit binding runs
+    /// only in declaration headers (`infer/auto_implicit.rs`
+    /// `with_term_body_scope`; the same identifier in a VALUE position is
+    /// already a loud `unknown identifier`, pinned by
+    /// `tests/fixtures/source_frontier/p14`), and it fires only where name
+    /// resolution has ALREADY failed — every local, constant, alias, namespace
+    /// and projection lookup is tried first
+    /// (`infer/elab_core.rs`, `elab_ident_or_auto_implicit`). So when this is
+    /// raised the named identifier is known not to resolve, which is what
+    /// makes naming it honest rather than speculative. Lean reports the same
+    /// program the same way (`function expected at nosuchpred`); Clean's
+    /// message names the auto-binding as well, because that — not the arity —
+    /// is what the user has to undo.
+    ///
+    /// Raised ONLY where `TooManyArguments` was already raised and only when
+    /// the application head is a free variable this declaration's auto-implicit
+    /// table introduced, so no declaration's verdict can move: a failure stays
+    /// a failure with the same span, and a genuine over-application of a
+    /// user-written binder keeps the untouched `TooManyArguments` message
+    /// (pinned by `tests/fixtures/source_frontier/p30`).
+    ///
+    /// Message shape is load-bearing twice over, exactly as for
+    /// [`Self::UnresolvedDotTarget`]. `Unknown identifier:` leads so the
+    /// source-elab classifier (`scripts/srcelab_classify.py`, first-match-wins)
+    /// files these under `unknown identifier` instead of the residual `other`
+    /// bucket, and so the name survives `per_error_class`'s 400-char
+    /// truncation. `auto-bound implicit` then keeps them separable from both
+    /// the pre-existing unknown-identifier population and the `dot notation`
+    /// population in the same report.
+    #[error(
+        "Unknown identifier: {name}; auto-bound implicit of type `{func_type}` in a \
+         signature position, then applied to {remaining_args} argument(s) it cannot \
+         take. Define `{name}`, or `set_option autoImplicit false` so an unresolved \
+         name in a signature is a hard error"
+    )]
+    AutoBoundHeadOverApplied {
+        /// The identifier auto-implicit swallowed, as written in the source.
+        name: String,
+        /// The auto-bound head's type, PRETTY-PRINTED (`Sort ?u_0`) rather than
+        /// dumped — unlike [`Self::TooManyArguments`], whose `{func_type:?}`
+        /// spelling is kept byte-stable for every head this variant does not
+        /// claim. The dump of a fresh universe mint is ~70 characters of
+        /// `Name { depth, suffix, lean4_hash }` that would push the actionable
+        /// tail of this message past `per_error_class`'s 400-char truncation.
+        func_type: String,
+        /// Arguments still applied when the head's type ran out of binders.
         remaining_args: usize,
     },
     /// Term-level `▸` (subst) elaboration failed: non-equality equation,
@@ -269,6 +508,56 @@ pub enum ElabError {
         expected: usize,
         actual: usize,
     },
+    /// A declaration wrote an EXPLICIT `.{...}` universe list and elaboration
+    /// still left an undetermined universe level that the list does not name
+    /// (U2 rung-4 explicitness channel, 2026-08-25).
+    ///
+    /// Lean treats an explicit list as EXHAUSTIVE
+    /// (`Lean.sortDeclLevelParams`): when `allUserLevelNames` is non-empty,
+    /// a used level outside it is an error, never an extra parameter. Clean
+    /// used to APPEND the leftovers instead, so `def leak.{u} (A : Type u)
+    /// (a : A) := fun (B : Type _) (b : B) => b` registered with arity TWO
+    /// while its author declared one — the declaration's universe signature
+    /// silently disagreed with its source, and only a use site
+    /// (`@leak.{0}` → `UniverseLevelMismatch { expected: 2, actual: 1 }`)
+    /// ever reported it, at a distance and blaming the caller.
+    ///
+    /// Scoped precisely to declarations that WROTE a list: `universe u` at
+    /// file scope is folded into the same parameter vector by
+    /// [`crate::preprocess_decl_with_context`] and does NOT close anything,
+    /// so the explicit set is derived by subtracting the file-scope names
+    /// (`ElabCtx::set_file_universe_params`). A declaration with no written
+    /// list keeps auto-generalizing exactly as before.
+    #[error("{detail}")]
+    ExplicitUniverseListClosed {
+        /// Which levels leaked, which list they leaked out of, and the two
+        /// ways forward. Keep it SINGLE-LINE. (It used to be single-line
+        /// because `clean check` rendered a top-level declaration's failure
+        /// through `{:?}`, which escapes newlines; since 2026-08-27 that
+        /// reporter renders Display in both of its paths
+        /// — `cmd_core.rs::elaboration_error_diagnostic` — so a newline here
+        /// would now really break the line, and one error would stop being
+        /// one terminal row.)
+        detail: String,
+    },
+    /// A declaration WROTE a universe name inside the reserved metavariable
+    /// namespace (`crate::level_mint::MINT_PREFIX`, 2026-08-26b).
+    ///
+    /// Universe metavariables are spelled `?u_N` precisely so that a level
+    /// the elaborator mints and a level a declaration writes can never be the
+    /// same `Level::Param(Name)`. `?` is not an identifier-start character, so
+    /// the level grammar has no production for such a name — but a guillemet
+    /// identifier (`Sort «?u_0»`) bypasses the lexer's identifier rules and
+    /// would otherwise reach the namespace anyway. This variant is that door,
+    /// shut: it is what makes "the surface cannot produce a mint name" a
+    /// checked property instead of a lexer accident.
+    #[error("{detail}")]
+    ReservedUniverseName {
+        /// The offending name, why the space is reserved, and what to write
+        /// instead. Keep it SINGLE-LINE, for the reason spelled out on
+        /// [`Self::ExplicitUniverseListClosed`]'s `detail`.
+        detail: String,
+    },
     /// Named-argument binding failed (B01, GAP_SWEEP_2026-07-09).
     ///
     /// A named argument `(name := v)` must bind the binder with that exact
@@ -329,99 +618,8 @@ impl From<TacticError> for ElabError {
     }
 }
 
-impl ElabError {
-    /// Return machine-readable diagnostics attached to this elaboration error.
-    #[must_use]
-    pub fn agent_diagnostics(&self) -> Vec<AgentDiagnostic> {
-        match self {
-            Self::UnknownIdentWithSuggestions { name, suggestions } => {
-                let mut diag = AgentDiagnostic::error(
-                    "ident.nearest_theorems",
-                    format!("unknown identifier `{name}`"),
-                )
-                .with_fact("identifier", name.clone());
-                for suggestion in suggestions {
-                    diag = diag.with_suggestion(
-                        format!("nearest theorem `{suggestion}`"),
-                        Some(suggestion.clone()),
-                    );
-                }
-                vec![diag]
-            }
-            Self::UnknownProjectionField {
-                struct_name,
-                field,
-                suggestions,
-            } => {
-                let mut diag = AgentDiagnostic::error(
-                    "structure.unknown_projection_field",
-                    format!("unknown projection field `{field}` in `{struct_name}`"),
-                )
-                .with_facts([
-                    ("structure", struct_name.to_string()),
-                    ("field", field.clone()),
-                    ("context", "projection".to_owned()),
-                ]);
-                for suggestion in suggestions {
-                    diag = diag.with_suggestion(
-                        format!("replace `{field}` with `{suggestion}`"),
-                        Some(suggestion.clone()),
-                    );
-                }
-                vec![diag]
-            }
-            Self::UnknownStructureField {
-                struct_name,
-                field,
-                suggestions,
-            } => {
-                let mut diag = AgentDiagnostic::error(
-                    "structure.unknown_field",
-                    format!("unknown field `{field}` in `{struct_name}`"),
-                )
-                .with_facts([
-                    ("structure", struct_name.to_string()),
-                    ("field", field.clone()),
-                ]);
-                for suggestion in suggestions {
-                    diag = diag.with_suggestion(
-                        format!("replace `{field}` with `{suggestion}`"),
-                        Some(suggestion.clone()),
-                    );
-                }
-                vec![diag]
-            }
-            Self::MissingStructureFields {
-                struct_name,
-                fields,
-            } => vec![AgentDiagnostic::error(
-                "structure.missing_fields",
-                format!("missing required field(s) for `{struct_name}`"),
-            )
-            .with_facts([
-                ("structure", struct_name.to_string()),
-                ("fields", fields.join(",")),
-            ])],
-            Self::StructureFieldTypeMismatch {
-                struct_name,
-                field,
-                expected,
-                actual,
-            } => vec![AgentDiagnostic::error(
-                "structure.field_type_mismatch",
-                format!("field `{struct_name}.{field}` has the wrong type"),
-            )
-            .with_facts([
-                ("structure", struct_name.to_string()),
-                ("field", field.clone()),
-                ("expected", expected.clone()),
-                ("actual", actual.clone()),
-            ])],
-            Self::TacticFailed(err) => err.agent_diagnostics(),
-            _ => Vec::new(),
-        }
-    }
-}
+#[path = "error_diagnostics.rs"]
+mod diagnostics;
 
 impl From<crate::options_registry::OptionError> for ElabError {
     /// Map a command-level `set_option` validation failure onto a loud

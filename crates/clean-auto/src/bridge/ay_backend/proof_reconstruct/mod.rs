@@ -154,7 +154,15 @@ pub(crate) use types::{
 };
 
 /// Minimum stack space to reserve before recursive proof-reconstruction calls.
-const MIN_STACK_RED_ZONE: usize = 32 * 1024;
+///
+/// 256 KiB, not 32 KiB: the red zone must exceed one DEBUG-build
+/// inter-checkpoint stretch, or a checkpoint passes with the zone nearly
+/// spent and the next one faults on the guard page before stacker can
+/// switch segments. Exactly this undersizing was the measured clean-elab
+/// codata stack cliff (2026-08-26; masked wherever cargo's
+/// RUST_MIN_STACK=64MiB reaches the process, fatal on bare 2 MiB libtest
+/// threads). Sized to the kernel's proven pair in clean-kernel/src/expr.
+const MIN_STACK_RED_ZONE: usize = 256 * 1024;
 
 /// Stack size to grow to when ay term recursion runs low on stack.
 const STACK_GROWTH_SIZE: usize = 1024 * 1024;

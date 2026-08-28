@@ -60,7 +60,7 @@ pub(super) fn lower_let(
 
     // Normal let binding
     let var_id = state.bind_var(decl.fvar_id);
-    let (expr, ty) = lower_let_value(&decl.value, state)?;
+    let (expr, ty) = lower_let_value(&decl.value, state, Some(&decl.ty))?;
     // Track variable types for scalar type inference in _sset. Part of #2123.
     state.record_var_type(var_id, ty.clone());
     // Track known compile-time Nat VALUES (R2 width evidence): literals, and

@@ -203,7 +203,52 @@ pub(crate) fn run_tactic_parity(args: TacticParityArgs) -> Result<(), Replacemen
     } else {
         render_tactic_parity_human(&mut out, &report)?;
     }
-    Ok(())
+    out.flush()?;
+
+    // Fail closed, exactly as `run_status` does. This command is the NAMED gate
+    // command for two Green scorecard rows (`tactic-parity` and
+    // `strict-reconstruction`); returning Ok(()) while the report itself said
+    // `launch_ready: false` meant both rows were gated by a command that could
+    // not fail, so `clean replacement tactic-parity --json && echo GREEN`
+    // printed GREEN off a red report.
+    if report.launch_ready {
+        Ok(())
+    } else {
+        Err(ReplacementError::LaunchNotReady {
+            message: tactic_parity_not_ready_message(&report),
+        })
+    }
+}
+
+/// Summarize why the tactic-parity gate is red, for the nonzero-exit error line.
+fn tactic_parity_not_ready_message(report: &TacticParityReport) -> String {
+    let blocking_tactics: Vec<&str> = report
+        .tactics
+        .iter()
+        .filter(|row| row.lean4_parity_status != TacticParityStatus::ProofCarrying)
+        .map(|row| row.tactic)
+        .collect();
+    let blocking_fragments: Vec<&str> = report
+        .strict_reconstruction
+        .iter()
+        .filter(|row| row.status != StrictReconstructionStatus::SupportedZeroTrust)
+        .map(|row| row.fragment)
+        .collect();
+    let counts = &report.lean4_vs_clean_tactic_counts;
+    format!(
+        "launch_ready=false; non-proof-carrying tactics [{}]; \
+         non-zero-trust strict fragments [{}]; full-corpus acceptance: \
+         gate={}, evidence_status={}, artifact_present={}, schema_validated={}, \
+         validator_present={}, fixture_counts_as_evidence={}",
+        blocking_tactics.join(", "),
+        blocking_fragments.join(", "),
+        counts.full_corpus_acceptance_gate,
+        counts.full_corpus_acceptance_evidence_status,
+        counts.full_corpus_acceptance_artifact_present,
+        counts.full_corpus_acceptance_artifact_schema_validated,
+        counts.full_corpus_acceptance_validator_present,
+        counts.full_corpus_fixture_counts_as_acceptance_evidence,
+    )
 }
 
 pub(crate) fn run_tactic_parity_discover_full_corpus_inputs(
@@ -305,7 +350,36 @@ pub(crate) fn run_trust_core_evidence(args: TrustCoreEvidenceArgs) -> Result<(),
     } else {
         render_trust_core_evidence_human(&mut out, &report)?;
     }
-    Ok(())
+    out.flush()?;
+
+    // Fail closed, exactly as `run_status` does. This command is the trailing
+    // `&&` conjunct of three rows' gate commands (`proof-system-certification`,
+    // `fallback-denial`, `kernel-differential`). Returning Ok(()) while the
+    // report said `launch_ready: false` meant the conjunct contributed nothing
+    // to the chain's exit status -- it could only ever be a no-op on the right
+    // of an `&&`.
+    if report.launch_ready {
+        Ok(())
+    } else {
+        Err(ReplacementError::LaunchNotReady {
+            message: trust_core_not_ready_message(&report),
+        })
+    }
+}
+
+/// Summarize why the trust-core gate is red, for the nonzero-exit error line.
+fn trust_core_not_ready_message(report: &TrustCoreEvidenceReport) -> String {
+    let blocking_gates: Vec<String> = report
+        .zero_trust_gates
+        .iter()
+        .filter(|gate| gate.required_for_launch && gate.status != ZeroTrustGateStatus::Passed)
+        .map(|gate| format!("{}={}", gate.id, gate.status.as_str()))
+        .collect();
+    format!(
+        "launch_ready=false, overall_status={}; blocking zero-trust gates [{}]",
+        report.overall_status,
+        blocking_gates.join(", "),
+    )
 }
 
 pub(crate) fn run_trust_boundary_audit(

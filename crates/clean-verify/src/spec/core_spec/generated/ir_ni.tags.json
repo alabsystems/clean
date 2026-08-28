@@ -1,0 +1,56 @@
+{
+ "chain": "ir_ni",
+ "body": "cert::builder::state::NodeId::index",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses — plus, first on this chain, the pinned resolution of `usize`.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. This chain's struct row is INTERFACE-ONLY like ir_fc's: the module's instructions name no aggregate at all (the extractfield reads a u32 out of the by-value receiver), so the struct occurs only in the header the core module cannot hold.",
+ "usize": {
+  "bits": 64,
+  "sites": 1,
+  "target_fact": "A TARGET fact, not an assumption: the recorded producer is trustc on aarch64-apple-darwin (a 64-bit target, the same one tests/fixtures/node_id_index.lineage.json pins), where core::mem::size_of::<usize>() is 8. On a 32-bit target the emitted body would be a different function and this table would be WRONG — which is exactly why the width lives here, in a reviewed pin, rather than as a constant inside a reader. Reader A resolved this chain with --usize-bits 64 and recorded {\"usize_bits\": 64, \"usize_sites_resolved\": 1} in its provenance; reader B resolves through THIS row and project() refuses a body whose usize site count is not exactly `sites`.",
+  "erasure_note": "What the resolution ERASES, said out loud: the resolved core spells the site as the plain (uint 64), so a body differing from this one only by writing `u64` where this one writes `usize` projects to the SAME core module. That swap is caught by the `sites` count above (the u64 spelling drops the observed count to 0), not by the core text — and a body with EQUAL counts but swapped positions between a usize and a real u64 would not be, which no chained body exhibits today."
+ },
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Read ir_h2.tags.json's interface_what. The sharp slots here: the BY-VALUE struct receiver (ptr-vs-by-value is the difference between reading a field out of a register aggregate and dereferencing a heap cell), and the usize return seam pinned above.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 97,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The committed fixture says 97 and reader A's 2026-08-21 laneREG dump ALSO says 97 — the first chain in the tranche whose signature index has not been observed to move. The pin stays fixture-era by policy; reader A's value is RECORDED in ir_ni.mint.json either way.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "struct#0",
+    "observed_ty": "struct.323",
+    "rust_type": "cert::builder::state::NodeId",
+    "note": "`self`, BY VALUE — a Copy newtype over u32. The extractfield reads its one field; nothing else is read."
+   }
+  ],
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY: no memory instruction in the body — the by-value receiver arrives in a register aggregate, which is the semantic payload of the param row above.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 323,
+   "alias": "ir_ni_tself",
+   "rust_type": "cert::builder::state::NodeId",
+   "observed_crate_id_by_producer": {
+    "laneREG-2026-08-21": 323
+   },
+   "note": "INTERFACE-ONLY, the ir_fc posture: reader A's crate_struct_ids_seen is [] — the module genuinely names no struct — and its param_tys_erased carries Struct(StructId(323)), where the COMMITTED fixture also prints struct.323. Like ir_fc's 1017 this id has not been observed to move yet; the pin is canonical (`struct#0`) because the drift class is the same as the one ir_ep's enum exhibits at its most mobile."
+  }
+ ],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission: the emitted body contains no `call`, and reader A's crate_func_ids_seen is the single entry [550] — the body's own id. An empty lane means SelfFunc::Unpinned; mint::check_func_namespace accepts an empty lane ONLY for a module with no call."
+}

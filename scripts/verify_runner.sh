@@ -15,6 +15,18 @@
 #   scripts/verify_runner.sh shards plan         # recompute it (builds; slow)
 #   scripts/verify_runner.sh run                 # detached; survives the reaper
 #   scripts/verify_runner.sh stop
+#   scripts/verify_runner.sh journal             # what has the working tree lost?
+#   scripts/verify_runner.sh journal --apply     # re-project it
+#
+# EVERY VERDICT IS WRITTEN THROUGH AN APPEND-ONLY JOURNAL OUTSIDE THE WORKING
+# TREE, and `data/suite_state/` is a PROJECTION of it. That directory is
+# git-tracked and is also runner output that changes without a commit, so a
+# `git checkout` over it silently reverts records with exit code 0 -- which is
+# how a complete 14.33-hour sweep was destroyed once. A checkout can still
+# revert the projection; it can no longer lose anything, because `status` heals
+# from the journal before it derives, and says so. `docs/SUITE_STATE.md` has the
+# four reconcile verdicts and why a record from another machine is never
+# clobbered.
 #
 # A target too big to finish as one unit is SHARDED: each shard is a target in
 # its own right with its own record, digest and budget, and the parent reports

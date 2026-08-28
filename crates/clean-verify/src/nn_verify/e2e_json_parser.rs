@@ -306,7 +306,7 @@ fn validate_layer(layer: &JsonLayerCert, index: usize) -> Result<(), PipelinePar
 /// Returns [`PipelineParseError`] if the certificate fails validation or if
 /// dimension invariants are violated during conversion.
 #[must_use = "conversion result should be checked for errors"]
-pub fn json_to_farkas_chain(
+pub(crate) fn json_to_farkas_chain(
     cert: &JsonCertificate,
 ) -> Result<Vec<ExternalFarkasCert>, PipelineParseError> {
     validate_certificate(cert)?;

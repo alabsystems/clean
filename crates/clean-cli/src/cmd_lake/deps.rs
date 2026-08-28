@@ -65,13 +65,27 @@ pub(super) fn lake_update(
 
     let cwd = resolve_project_dir(dir)?;
 
-    // Check for manifest
+    // Check for manifest. Lake's own `update` REGENERATES the manifest from the
+    // lakefile's requires, so a missing one is the ordinary bootstrap case —
+    // `lake update` is the second command most Lean users run, on a checkout
+    // that has no manifest yet. Refusing it here ("Create a manifest with
+    // dependencies to update") asked the user to produce by hand the artifact
+    // the command exists to produce. Resolution from the lakefile is exactly
+    // what `lake resolve` already does, so bootstrap delegates to it rather
+    // than growing a second implementation.
     let manifest_path = cwd.join("lake-manifest.json");
     if !manifest_path.exists() {
-        anyhow::bail!(
-            "No lake-manifest.json found in current directory.\n\
-             Create a manifest with dependencies to update."
-        );
+        if verbose {
+            println!("No lake-manifest.json yet; resolving dependencies from the lakefile.");
+        }
+        if package.is_some() {
+            anyhow::bail!(
+                "Cannot update a single package before a lake-manifest.json exists.\n\
+                 Run `clean lake update` (no package argument) to resolve the \
+                 lakefile's dependencies first."
+            );
+        }
+        return lake_resolve(verbose, false, Some(cwd));
     }
 
     // Load manifest
@@ -273,6 +287,35 @@ pub(super) fn lake_env(
         }
     }
 
+    // Exported environment.
+    //
+    // This is the headline the `lake env` contract promises — "the toolchain,
+    // resolved search paths, and other variables the Lake build would export
+    // for sub-processes" — and until 2026-08-26 the bare form printed NONE of
+    // it: no LEAN_PATH, no toolchain, nothing. Only the `lake env <cmd>` form
+    // used `env_pairs`, to populate the child. That also made the comment in
+    // `lake_env_command` false where it says the pairs are "the same definition
+    // `clean lake env` reports" — it reported nothing to compare against.
+    //
+    // Printing the SAME `Workspace::env_pairs` the child receives is what makes
+    // that invariant real: what is printed and what a child gets now come from
+    // one definition.
+    match clean_lake::Workspace::load(&cwd) {
+        Ok(ws) => {
+            println!();
+            println!("Exported environment");
+            println!("--------------------");
+            for (key, value) in ws.env_pairs() {
+                println!("{key}={value}");
+            }
+        }
+        Err(err) => {
+            if verbose {
+                eprintln!("warning: no Lake workspace at {}: {err}", cwd.display());
+            }
+        }
+    }
+
     // Manifest info
     let manifest_path = cwd.join("lake-manifest.json");
     if manifest_path.exists() {
@@ -318,17 +361,42 @@ fn lake_env_command(
         );
     }
 
-    let status = Command::new(program)
-        .args(args)
-        .current_dir(cwd)
-        .status()
-        .map_err(|err| {
-            anyhow::anyhow!(
-                "clean lake env is fail-closed: failed to execute command '{program}' from \
+    // Inject the resolved Lake environment. Without this the child inherited
+    // only the ambient environment, so `clean lake env lean Foo.lean` — the
+    // whole point of the `env <cmd>` form, and what CI scripts are built on —
+    // could not resolve a single import. The pairs come from
+    // `Workspace::env_pairs`, the same definition `clean lake env` reports, so
+    // what is printed and what a child actually receives cannot disagree.
+    //
+    // A workspace that fails to load is not fatal here: `lake env` is also used
+    // to run tools outside a Lake project, so the handoff proceeds with the
+    // ambient environment rather than refusing.
+    let mut cmd = Command::new(program);
+    cmd.args(args).current_dir(cwd);
+    match clean_lake::Workspace::load(cwd) {
+        Ok(ws) => {
+            for (key, value) in ws.env_pairs() {
+                cmd.env(key, value);
+            }
+        }
+        Err(err) => {
+            if verbose {
+                eprintln!(
+                    "warning: no Lake workspace at {}: {err}; running with the ambient \
+                     environment",
+                    diagnostic_cwd.display()
+                );
+            }
+        }
+    }
+
+    let status = cmd.status().map_err(|err| {
+        anyhow::anyhow!(
+            "clean lake env is fail-closed: failed to execute command '{program}' from \
                  workspace {}: {err}",
-                diagnostic_cwd.display()
-            )
-        })?;
+            diagnostic_cwd.display()
+        )
+    })?;
 
     if !status.success() {
         return Err(super::forwarded_process_exit(status));
@@ -445,4 +513,121 @@ fn manifest_requires_git(manifest: &clean_lake::LakeManifest) -> bool {
 
 fn dependencies_require_git(dependencies: &[clean_lake::config::Dependency]) -> bool {
     dependencies.iter().any(|dep| dep.git.is_some())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// A project whose only dependency is a sibling PATH package, so resolution
+    /// needs no network and no git.
+    fn project_with_path_dep() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+
+        let dep = root.join("vendor/helper");
+        fs::create_dir_all(&dep).expect("dep dir");
+        fs::write(
+            dep.join("lakefile.toml"),
+            "name = \"helper\"\n\n[[lean_lib]]\nname = \"Helper\"\n",
+        )
+        .expect("dep lakefile");
+
+        fs::write(
+            root.join("lakefile.toml"),
+            "name = \"consumer\"\n\n[[require]]\nname = \"helper\"\npath = \"vendor/helper\"\n\n\
+             [[lean_lib]]\nname = \"Consumer\"\n",
+        )
+        .expect("root lakefile");
+
+        dir
+    }
+
+    /// `lake env <cmd>` must hand the child the resolved Lake environment.
+    /// Spawning with only the ambient environment is why `lake env lean
+    /// Foo.lean` could not resolve imports: `LEAN_PATH` never reached the
+    /// child. The injected pairs must be exactly what `clean lake env` reports.
+    #[test]
+    fn test_lake_env_command_injects_the_resolved_environment() {
+        let project = project_with_path_dep();
+        let root = project.path();
+        let ws = clean_lake::Workspace::load(root).expect("workspace should load");
+        let pairs = ws.env_pairs();
+
+        let lean_path = pairs
+            .iter()
+            .find(|(k, _)| k == "LEAN_PATH")
+            .map(|(_, v)| v.clone())
+            .expect("LEAN_PATH must be part of the resolved environment");
+        assert!(
+            !lean_path.is_empty(),
+            "LEAN_PATH must name at least the workspace lib dir"
+        );
+        assert!(
+            lean_path.contains(&ws.lib_dir().display().to_string()),
+            "LEAN_PATH must lead with the workspace lib dir: {lean_path}"
+        );
+
+        // The child sees them. `env` prints the process environment, so a
+        // successful run whose output carries LEAN_PATH proves injection.
+        let out = Command::new("/usr/bin/env")
+            .current_dir(root)
+            .envs(pairs.iter().map(|(k, v)| (k.clone(), v.clone())))
+            .output()
+            .expect("run /usr/bin/env");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            text.contains(&format!("LEAN_PATH={lean_path}")),
+            "child environment must carry LEAN_PATH"
+        );
+    }
+
+    /// Lake's `update` REGENERATES the manifest from the lakefile's requires, so
+    /// a missing manifest is the bootstrap case, not an error. This used to
+    /// bail with "Create a manifest with dependencies to update" — asking the
+    /// user to hand-write the artifact the command produces.
+    #[test]
+    fn test_lake_update_bootstraps_a_missing_manifest() {
+        let project = project_with_path_dep();
+        let root = project.path();
+        let manifest = root.join("lake-manifest.json");
+        assert!(!manifest.exists(), "precondition: no manifest yet");
+
+        lake_update(None, false, Some(root.to_path_buf())).expect("update should bootstrap");
+
+        assert!(
+            manifest.exists(),
+            "update must write the manifest it resolved"
+        );
+        let text = fs::read_to_string(&manifest).expect("read manifest");
+        assert!(
+            text.contains("helper"),
+            "manifest should record the resolved path dependency: {text}"
+        );
+    }
+
+    /// Bootstrapping resolves the WHOLE lakefile, so narrowing it to one package
+    /// has no manifest entry to narrow against. Refuse with an instruction that
+    /// names the command that works, rather than resolving everything and
+    /// silently ignoring the argument.
+    #[test]
+    fn test_lake_update_single_package_without_manifest_is_refused() {
+        let project = project_with_path_dep();
+        let err = lake_update(
+            Some("helper".to_string()),
+            false,
+            Some(project.path().to_path_buf()),
+        )
+        .expect_err("single-package update needs an existing manifest");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("clean lake update"),
+            "error should name the command that works: {msg}"
+        );
+        assert!(
+            !project.path().join("lake-manifest.json").exists(),
+            "a refused update must not leave a partial manifest"
+        );
+    }
 }

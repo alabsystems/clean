@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// Array theory solver
 ///
 /// Tracks array operations (select/store) and propagates implied equalities.
-pub struct ArrayTheory {
+pub(crate) struct ArrayTheory {
     /// Mapping from term IDs to their structure (shared via Arc, #2308)
     terms: Arc<[SmtTerm]>,
 
@@ -69,7 +69,7 @@ pub struct ArrayTheory {
 
 impl ArrayTheory {
     /// Create a new array theory solver
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         ArrayTheory {
             terms: Arc::from(Vec::<SmtTerm>::new()),
             selects: BTreeMap::new(),
@@ -92,7 +92,7 @@ impl ArrayTheory {
 
     /// Set the terms (called by SMT solver or tests).
     /// Accepts both `Vec<SmtTerm>` and `Arc<[SmtTerm]>` via `Into`.
-    pub fn set_terms(&mut self, terms: impl Into<Arc<[SmtTerm]>>) {
+    pub(crate) fn set_terms(&mut self, terms: impl Into<Arc<[SmtTerm]>>) {
         self.terms = terms.into();
         self.analyze_terms();
     }

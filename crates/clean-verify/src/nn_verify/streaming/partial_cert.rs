@@ -87,7 +87,7 @@ impl RegionBounds {
 
     /// Number of dimensions.
     #[must_use]
-    pub fn ndim(&self) -> usize {
+    pub(crate) fn ndim(&self) -> usize {
         self.bounds.len()
     }
 

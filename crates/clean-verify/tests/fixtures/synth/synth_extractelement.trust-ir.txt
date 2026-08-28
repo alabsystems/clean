@@ -1,0 +1,13 @@
+fn @synth::extractelement_probe(functy.913) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the W2a semdiff lane
+    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2a).
+    ; #synthetic: No compiler emitted this body; its registered Clean twin is
+    ; #synthetic: ir_w2a_ee_module (eval_ir_w2a_synth.rs). The container is a
+    ; #synthetic: three-u32-field struct: under EvalIR's inline-spine encoding an
+    ; #synthetic: element read IS a field read at the computed index, and the
+    ; #synthetic: interpreter's eval_extract_element accepts an Aggregate container
+    ; #synthetic: the same way. Do not add it to any emitted-fixture census.
+bb0(%0: struct.555, %1: u32):
+    %2 = extractelement u32 %0, %1
+    ret %2
+}

@@ -131,6 +131,7 @@ fn test_simp_turnstile_location_modifies_hypothesis_and_goal() {
         only: false,
         lemmas: vec![],
         location: SurfaceTacticLocation::HypsAndGoal(vec!["h".to_string()]),
+        use_hypotheses: false,
     };
     let mut eval = NoopTacticEval {
         metas: MetaState::new(),

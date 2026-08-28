@@ -18,6 +18,8 @@ mod action_lifting;
 mod aesop_proof_chain;
 #[path = "tests/alias_patterns.rs"]
 mod alias_patterns;
+#[path = "tests/anon_ctor_dependent_exists.rs"]
+mod anon_ctor_dependent_exists;
 #[path = "tests/basic.rs"]
 mod basic;
 #[path = "tests/by_ascription.rs"]
@@ -66,6 +68,8 @@ mod do_try_catch;
 mod elab_rules;
 #[path = "tests/exact_universe_poly.rs"]
 mod exact_universe_poly;
+#[path = "tests/explicit_universe_list.rs"]
+mod explicit_universe_list;
 #[path = "tests/if_expr.rs"]
 mod if_expr;
 #[path = "tests/if_let_complex_patterns.rs"]
@@ -88,6 +92,8 @@ mod inductive_deriving_trk_e;
 mod instance;
 #[path = "tests/instance_elab_regressions.rs"]
 mod instance_elab_regressions;
+#[path = "tests/leading_dot_theorem.rs"]
+mod leading_dot_theorem;
 #[path = "tests/let_binding.rs"]
 mod let_binding;
 #[path = "tests/match_ctor_namespace.rs"]
@@ -96,6 +102,8 @@ mod match_ctor_namespace;
 mod match_expr;
 #[path = "tests/match_expr_nat_rec.rs"]
 mod match_expr_nat_rec;
+#[path = "tests/mint_name_collision.rs"]
+mod mint_name_collision;
 #[path = "tests/modifiers.rs"]
 mod modifiers;
 #[path = "tests/nat_literal_pattern_typecheck.rs"]
@@ -130,8 +138,12 @@ mod structural_recursion;
 mod structure_tests;
 #[path = "tests/suffices_tactic.rs"]
 mod suffices_tactic;
+#[path = "tests/tactic_bridge_levels.rs"]
+mod tactic_bridge_levels;
 #[path = "tests/tactic_error_boundary.rs"]
 mod tactic_error_boundary;
+#[path = "tests/tactic_macro_exec.rs"]
+mod tactic_macro_exec;
 #[path = "tests/trans_class.rs"]
 mod trans_class;
 #[path = "tests/traversal_regressions.rs"]

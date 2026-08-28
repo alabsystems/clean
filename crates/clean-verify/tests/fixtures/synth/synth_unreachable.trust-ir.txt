@@ -1,0 +1,14 @@
+fn @synth::unreachable_probe(functy.912) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the W2a semdiff lane
+    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2a).
+    ; #synthetic: No compiler emitted this body; its registered Clean twin is
+    ; #synthetic: ir_w2a_ur_module (eval_ir_w2a_synth.rs). Do not add it to any
+    ; #synthetic: emitted-fixture census.
+bb0(%0: bool):
+    condbr %0, bb1, bb2
+bb1:
+    %1 = const u32 3
+    ret %1
+bb2:
+    unreachable
+}

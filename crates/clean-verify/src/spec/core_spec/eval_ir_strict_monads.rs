@@ -96,18 +96,76 @@ use crate::spec::Specification;
 // them — see the CoreSpecStage comment in bundles.rs.
 
 // ── the reflected write, its type, its representation premise ─────────
-const SRC_IR_SM_TENV: &str = "def ir_sm_tenv : IRTy := IRTy.struct_ 441";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_sm.core.txt` + `generated/ir_sm.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_sm.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// This chain was one of the three NAMED mint refusals: its insertfield's
+/// FIELD INDEX is 81, and the minter's structural-slot rule refused any
+/// numeral above the `ir_d0..ir_d16` atom pool. The 2026-08-22 reclassification
+/// (`shape.rs`: a field index is a position within a TYPE, `Arg::Data`, the
+/// bare literal the HAND transcription of this very body already proved
+/// against) converted the refusal, and the migration then found NO semantic
+/// divergence — ONE divergent line of the four, ONE notation class, printed
+/// before adoption: `ir_sm_b0`'s four-node list is the raw `IRList.cons
+/// IRNode` spine where the hand line spelled a `cons`+`ir_bd3` hybrid
+/// (definitionally equal — `ir_bd3` deltas to exactly that tail).
+/// `ir_sm_tenv`, `ir_sm_func` and `ir_sm_module` minted byte-identical —
+/// the literal 81 included.
+const MINTED_IR_SM: &str = include_str!("generated/ir_sm.defs.txt");
+
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_SM_DOCS: &[&str] = &[
+    "ir_sm_tenv: struct.441, the whole-crate struct id the emitted body names in all three of its instructions. Minted from the tag table's REAL row (the ir_fw posture) and compared by the load_tys/insertfields/stores type slots; the value-addressed semantics never consults it. DerivedProved, zero axiom_deps.",
+    "ir_sm_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_sm.core.txt; reader B's copy of the same body is tests/fixtures/strict_monads.trust-ir.txt). Load struct.441 through %0 into %2, insertfield at FIELD 81 of %2 with %1 into %3, store %3 back through %0, ret VOID. The 81 is the bare literal -- a position within the TYPE, outside the atom pool, exactly as the hand transcription spelled it. The store's constructor operand order is pointer-then-value (IRInst.store : IRTy -> Nat -> Nat -> Bool) -- the REVERSE of the printed `store {ty} %3, ptr %0` -- and both CFG parsers normalize to (POINTER, TYPE, value) so a single-side swap fails by construction. Both volatile slots are Bool.false; a Bool.true here is REFUSED by the Clean-side parser rather than dropped. DerivedProved, zero axiom_deps.",
+    "ir_sm_func: the setter as EvalIR -- TWO parameters (%0 the &mut Environment receiver, %1 the bool), entry block 0, one block. DerivedProved, zero axiom_deps.",
+    "ir_sm_module: the module for env::Environment::set_lean4_core_strict_monads, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text, whose store arm this chain forced into existence), and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger. Checked lane for lane (including the insertfields and stores lanes that were added for it) by tests/crystal_a1_lineage/strict_monads.rs. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order.
+static MINTED_IR_SM_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_SM
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted strict-monads-setter module definitions, in registration order.
+#[must_use]
+pub fn ir_sm_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_SM_LINES
+}
+
+/// The minted module PLUS the probe/heap value defs the GAP-2 W1 battery's
+/// obligations reference (`ir_sm_probe`, `ir_sm_env0`, `ir_sm_heap0`), in
+/// registration order.
+///
+/// Re-exported rather than re-typed so the differential runs against the SAME
+/// prepared heap the stage's own concrete witnesses pin (`ir_sm_on_true`) —
+/// the battery must read the registered lines, not a copy.
+static IR_SM_SEMDIFF_DEFS: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        let mut defs: Vec<&'static str> = MINTED_IR_SM_LINES.clone();
+        defs.extend([SRC_IR_SM_PROBE, SRC_IR_SM_ENV0, SRC_IR_SM_HEAP0]);
+        defs
+    });
+
+/// [`ir_sm_module_defs`] plus the battery-referenced value defs. See
+/// [`IR_SM_SEMDIFF_DEFS`].
+#[must_use]
+pub fn ir_sm_semdiff_defs() -> &'static [&'static str] {
+    &IR_SM_SEMDIFF_DEFS
+}
 
 const SRC_ENV_SET_STRICT_MONADS: &str = "def env_set_strict_monads (sp : IRScalar) (b : Bool) : IRScalar := IRScalar.aggv (ir_vals_set sp 81 (IRScalar.bool_ b))";
 
 const SRC_ENCODESENVREF: &str = "inductive EncodesEnvRef (mem : IRList IRMemSlot) : IRScalar -> IRScalar -> Type\n| mk : forall (a : Nat) (sp : IRScalar), Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (IRScalar.aggv sp) Bool.true)) -> Eq Bool (ir_nat_ltb 81 (ir_vals_len sp)) Bool.true -> EncodesEnvRef mem (IRScalar.ptr_ a) sp";
 
 // ── the emitted module, transcribed ───────────────────────────────────
-const SRC_IR_SM_B0: &str = "def ir_sm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.load ir_sm_tenv ir_d0 Bool.false) ir_d2) (ir_bd3 (ir_nd1 (IRInst.insertfield ir_sm_tenv ir_d2 81 ir_d1) ir_d3) (ir_nd (IRInst.store ir_sm_tenv ir_d0 ir_d3 Bool.false)) (ir_nd (IRInst.ret ir_nl0))))";
-
-const SRC_IR_SM_FUNC: &str = "def ir_sm_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_sm_b0 ir_blk0)";
-
-const SRC_IR_SM_MODULE: &str = "def ir_sm_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_sm_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
 
 // ── the machine, step by step ─────────────────────────────────────────
 const SRC_IR_SM_MACH0: &str = "def ir_sm_mach0 (mem : IRList IRMemSlot) (a : Nat) (b : Bool) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 (IRScalar.ptr_ a) (IRScalar.bool_ b)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
@@ -221,12 +279,22 @@ impl Specification {
     /// Returns `SpecError` if any declaration fails to elaborate or
     /// kernel-check.
     pub(super) fn add_eval_ir_strict_monads(&mut self) -> Result<(), SpecError> {
-        self.add_recursive_def(SRC_IR_SM_TENV, "ir_sm_tenv: struct.441, the whole-crate struct id the emitted body names in all three of its instructions. Transcribed for fidelity and compared by the load_tys/insertfields/stores type slots; the value-addressed semantics never consults it. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_bvar_range.rs posture.
+        let minted = ir_sm_module_defs();
+        if minted.len() != MINTED_IR_SM_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_sm script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_SM_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_SM_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_ENV_SET_STRICT_MONADS, "env_set_strict_monads: the reflected env::Environment::set_lean4_core_strict_monads, at the level the machine actually works at -- replace slot 81 of the Environment aggregate's spine with the Bool argument, via the machine's own ir_vals_set. This is a SPINE-level specification, not a proof that field 81 of struct.441 IS the strict_monads flag of the Rust Environment: that correspondence is a producer layout fact, stated in the module doc and closed nowhere. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESENVREF, "EncodesEnvRef mem r sp: r is a pointer to a LIVE heap cell holding the Environment aggregate whose payload spine is sp, and sp has at least 82 fields -- the exact bound ir_if_at checks before writing slot 81 (ir_nat_ltb 81 (ir_vals_len sp)). Stated as an EQUATION on ir_mem_lookup, like EncodesCleanMode's, so a shadowed duplicate cell cannot satisfy it while the machine reads a different one. Spine-agnostic in every slot VALUE: nothing pins what any field holds, because the body reads none of them -- it writes exactly one. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_SM_B0, "ir_sm_b0: THE WHOLE BODY, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/strict_monads.trust-ir.txt). Load struct.441 through %0 into %2, insertfield at FIELD 81 of %2 with %1 into %3, store %3 back through %0, ret VOID. The store's constructor operand order is pointer-then-value (IRInst.store : IRTy -> Nat -> Nat -> Bool) -- the REVERSE of the printed `store {ty} %3, ptr %0` -- and both CFG parsers normalize to (POINTER, TYPE, value) so a single-side swap fails by construction. Both volatile slots are Bool.false; a Bool.true here is REFUSED by the Clean-side parser rather than dropped. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_SM_FUNC, "ir_sm_func: the setter as EvalIR -- TWO parameters (%0 the &mut Environment receiver, %1 the bool), entry block 0, one block. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_SM_MODULE, "ir_sm_module: the module for env::Environment::set_lean4_core_strict_monads, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/strict_monads.trust-ir.txt and checked lane for lane (including the insertfields and stores lanes that were added for it) by tests/crystal_a1_lineage/strict_monads.rs. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_SM_MACH0, "ir_sm_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds the receiver pointer and the Bool positionally. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_SM_AFTER_LOAD, "ir_sm_after_load: the configuration one step in, with the heap LOOKUP abstracted to a parameter -- the same device ir_pv_after_load uses, for the same reason: on a symbolic heap ir_mem_lookup is stuck, and the representation premise's equation is what unsticks it. At o := ir_mem_lookup mem a this is DEFINITIONALLY one ir_step of mach0 (ir_sm_step1). DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_SM_LOCALS1, "ir_sm_locals1: the frame locals after the load binds %2 to the loaded aggregate. DerivedProved, zero axiom_deps.")?;

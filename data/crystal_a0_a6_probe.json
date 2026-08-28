@@ -1,11 +1,1062 @@
 {
-  "schema": "clean.crystal.a0a6.probe.v1",
-  "job": "crystal A0 (deployment probe) + A6 (digest-bearing flip) — measured, with per-criterion verdicts",
-  "plan": "designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0 rows A0/A-LIN/A6",
-  "measured_utc_date": "2026-08-11",
-  "target_body": "level::Level::is_zero",
-  "headline": "A0 is 4-of-6 and A6 is 3-of-4 on the DEPLOYED body. The crystal target reaches DerivedAgreed under the stage1 (T2d) trustc and its lineage digest is re-pinned, but it DOES NOT FLIP: two independent fail-closed gates refuse it (the -O lifetime-marker gate, markers_exact=false; and the wave-TR thin-reborrow provenance lane). The A-LIN attestation chain itself is measured working end-to-end on 185 OTHER clean_kernel bodies in the same build.",
-  "compiler": {
+ "schema": "clean.crystal.a0a6.probe.v2",
+ "schema_v1_note": "v1 was a single measured run.  v2 splits the file into a CURRENT section (transcribed from committed records, each verdict naming its record, trust base and clean rev), an explicit list of readings that NO committed record establishes, and a HISTORY section holding the v1 object verbatim.  The A0 and A6 criterion names are unchanged from v1; the census/scorecard spellings are recorded alongside them.",
+ "re_derived_by": {
+  "script": "scripts/check_a0a6_probe_transcription.py",
+  "check": "scripts/check_a0a6_probe_transcription.py            (fail-closed)",
+  "mint": "scripts/check_a0a6_probe_transcription.py --mint",
+  "what_the_check_refuses": "any disagreement between this file and the committed records it cites -- a source record edited without a re-mint, or a verdict hand-typed in here. It re-derives the TRANSCRIPTION; it does not re-measure the crystal, and it never runs trustc.",
+  "wired_by": "the pre-push hook and the local gate, as the `a0a6-probe-transcription` leg. Do NOT read that list back from here: `data/gate_registry.json` owns it and `scripts/check_gate_registry.py` RE-DERIVES it from the runner roots, which is the only version that cannot rot.",
+  "registry_row": "a0a6_probe_transcription (data/gate_registry.json)",
+  "sources_re_read": [
+   "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+   "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+   "data/crystal_a0_census_2026-08-22.json",
+   "data/crystal_marker_ceiling_2026-08-20.json",
+   "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+   "data/crystal_chain_revalidation_2026-08-20_a152ab39e.json",
+   "data/crystal_chain_revalidation_2026-08-19_28fb5dd812.json",
+   "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
+   "data/crystal_walla_instance_seam_2026-08-23.json",
+   "data/crystal_a0_census_2026-08-27.json",
+   "data/crystal_a0_discharge.json"
+  ]
+ },
+ "v1_paths_moved_to": {
+  "why": "Dated documents cite v1 field paths (e.g. designs/2026-07-29-crystal-deployed-kernel-bridge.md 6.0.1 and designs/2026-08-12-levelarc-representation-scope.md cite `A0.criteria.DerivedAgreed.measured` and `A0.criteria.bodyful_reachable_closure.{measured,adjacent_finding}`). Those documents are dated records of the 2026-08-11 run and are left alone; this map makes their citations resolvable.",
+  "A0.*": "history.measured_2026_08_11.A0.* (unchanged, verbatim) -- and current.A0.* for today's verdicts",
+  "A6.*": "history.measured_2026_08_11.A6.* (unchanged, verbatim) -- and current.A6.* for today's verdicts",
+  "compiler / driver / builds / artifact_continuity_with_A1 / why_the_target_body_does_not_flip / remaining_to_close_A0_and_A6 / evidence_paths": "history.measured_2026_08_11.<same key>",
+  "measured_utc_date": "history.measured_2026_08_11.measured_utc_date (2026-08-11). This file has no top-level measurement date because it is not a measurement."
+ },
+ "job": "crystal A0 (deployment probe) + A6 (digest-bearing flip) — measured, with per-criterion verdicts",
+ "plan": "designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0 rows A0/A-LIN/A6",
+ "target_body": "level::Level::is_zero",
+ "this_file_is_a_TRANSCRIPTION_not_a_measurement": {
+  "what": "The verdicts in `current` were NOT measured by the session that wrote this file.  No compiler was run, no driver was sealed, no dump was taken.  Every value is copied out of a committed record named beside it, by scripts/check_a0a6_probe_transcription.py, which re-derives them on every gate run.",
+  "transcribed_utc_date": "2026-08-25",
+  "transcribed_at_clean_HEAD": "3086bbc21093fdc0ea567262377a529461e7a30e",
+  "the_two_stamps_above_are_CARRIED_not_re_derived": "They describe the act of transcription, not a measured value, so the checker reads them back out of this file rather than from `date.today()` / `git rev-parse HEAD` -- otherwise the gate would go red on the next commit for no reason. They are still VALIDATED: the date must be ISO-8601 and the sha must resolve to a commit in this repo.",
+  "rule_followed": "A verdict is written here only if a committed record carries it.  Readings that exist only in docs/CRYSTAL_STATUS.md prose are listed under `not_established_by_any_committed_record` and are NOT scored.  No digest, DefId or sha in this file was composed by hand.",
+  "supersedes_the_disagreement": "docs/CRYSTAL_STATUS.md previously said this probe 'has not been re-minted, so the probe and this page disagree on purpose until it is'.  That sentence is retired by this file."
+ },
+ "headline": "A0 is 5-of-6 and A6 is 4-of-4 for level::Level::is_zero on the DEPLOYED body, transcribed from committed records measured at trust 3495e42c456f489802805cd9f041c71cf38b945a x clean f21d6336bf778eca692b616258d13828b3dec6e7 (2026-08-25) and corroborated at three earlier bases.  Both of the 2026-08-11 FAILs -- A0's flip event and A6's flip-fires -- are now PASS, with the event's lineage equal to its coverage row's at every base.  A0's single remaining FAIL is `bodyful reachable closure`, and it is architecturally blocked: rustc has no cross-crate THIR.  This is a re-mint by transcription, not a fresh measurement.",
+ "current": {
+  "A0_score": "5-of-6",
+  "A6_score": "4-of-4",
+  "as_of_record": {
+   "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+   "record_schema": "clean.crystal.remeasure_tip/1",
+   "measured_utc_date": "2026-08-25",
+   "trust_base": "3495e42c456f489802805cd9f041c71cf38b945a",
+   "clean_corpus_rev": "f21d6336bf778eca692b616258d13828b3dec6e7",
+   "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13)",
+   "driver_seal": "$HOME/trust/scratchpad/laneRMX/seal-RMX",
+   "driver_digest": "868e558de0e7b7438195a24429d128fdc74cf1406e2541dcd4b03e83bfbaa461  $HOME/trust/scratchpad/laneRMX/seal-RMX/librustc_driver_RMX.dylib",
+   "driver_sysroot_compat_head": "OK",
+   "oracle_blob": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "HONEST_SCOPE": "Both repos moved forward WHILE this lane measured — clean +11 (7 of them touching crates/clean-kernel), trust +22. Every number in this record is measured AT trust 3495e42c45 x clean f21d6336b, each of which WAS origin/main when the driver was sealed and the worktree taken, and each of which is an ancestor of the current origin/main. By this programme's own rule a measurement is quoted at its base and never rounded forward: these numbers are the tip AS OF THE RUN, and the 7 moved kernel files mean the corpus-dependent figures (bodies, flip counts, the gap) are already one small step behind. They are NOT UNKNOWN — they were measured — but they are not a claim about ee64a254e."
+  },
+  "criterion_name_map": {
+   "note": "v1's A0 criterion names on the left, the committed instrument's spellings on the right (`scripts/crystal_a0_census.py` CRITERIA, and lane RMX's ten-criteria scorecard).",
+   "A0": {
+    "lowered": "lowered",
+    "spliced": "spliced",
+    "zero_unsupported": "zero_unsupported",
+    "DerivedAgreed": "derived_agreed",
+    "bodyful_reachable_closure": "bodyful_reachable_closure",
+    "flip_event_observed_for_this_body": "flip_event_O3"
+   },
+   "A6": {
+    "flip_fires_for_level_is_zero": "flip_fires",
+    "digest_in_event": "digest_in_event_EQUAL",
+    "fail_closed": "fail_closed_perturbation_reaching",
+    "negative_control": "negative_control"
+   }
+  },
+  "A0": {
+   "acceptance": "the probe passes end-to-end: lowered, spliced, ZERO unsupported, bodyful reachable closure, DerivedAgreed, flip event observed",
+   "score": "5-of-6",
+   "criteria": {
+    "lowered": {
+     "verdict": "PASS",
+     "census_name": "lowered",
+     "measured": true,
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[level::Level::is_zero].A0.lowered",
+       "value": true
+      },
+      {
+       "record": "data/crystal_a0_census_2026-08-22.json",
+       "field": "one_short_missing_closure_bodies contains the target (see census_record.what_membership_means)",
+       "value": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "field": "chains.level_is_zero.links_at_head.lowered",
+       "value": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-20_a152ab39e.json",
+       "field": "chains.level_is_zero.links_at_head.lowered",
+       "value": true
+      }
+     ]
+    },
+    "spliced": {
+     "verdict": "PASS",
+     "census_name": "spliced",
+     "measured": true,
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A0.spliced",
+       "value": true
+      },
+      {
+       "record": "data/crystal_a0_census_2026-08-22.json",
+       "field": "one_short_missing_closure_bodies contains the target",
+       "value": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "field": "chains.level_is_zero.links_at_head.spliced",
+       "value": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-20_a152ab39e.json",
+       "field": "chains.level_is_zero.links_at_head.spliced",
+       "value": true
+      }
+     ]
+    },
+    "zero_unsupported": {
+     "verdict": "PASS",
+     "census_name": "zero_unsupported",
+     "measured": [],
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A0.zero_unsupported",
+       "value": true
+      },
+      {
+       "record": "data/crystal_a0_census_2026-08-22.json",
+       "field": "one_short_missing_closure_bodies contains the target",
+       "value": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "field": "chains.level_is_zero.links_at_head.unsupported",
+       "value": []
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-20_a152ab39e.json",
+       "field": "chains.level_is_zero.links_at_head.unsupported",
+       "value": []
+      }
+     ]
+    },
+    "DerivedAgreed": {
+     "verdict": "PASS",
+     "census_name": "derived_agreed",
+     "measured": "agreed -- 18 canonical line(s) identical",
+     "unchanged_since_2026_08_11": "the verdict and its '18 canonical line(s) identical' detail are the same strings the 2026-08-11 probe recorded; what MOVED since then is markers_exact (false -> true, over 28 non-vacuous marker lines) and the flip.",
+     "markers_exact": true,
+     "markers_detail": "28 marker line(s) identical",
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].derived_mir",
+       "value": {
+        "verdict": "agreed",
+        "detail": "18 canonical line(s) identical",
+        "markers_exact": true,
+        "markers_detail": "28 marker line(s) identical"
+       }
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+       "field": "targets[target].O3 {verdict, detail, markers_exact, markers_detail}",
+       "value": {
+        "verdict": "agreed",
+        "detail": "18 canonical line(s) identical",
+        "markers_exact": true,
+        "markers_detail": "28 marker line(s) identical"
+       }
+      },
+      {
+       "record": "data/crystal_marker_ceiling_2026-08-20.json",
+       "field": "dumps['wc-basev11b'].designated_target_level_is_zero",
+       "value": {
+        "verdict": "agreed",
+        "markers_exact": true,
+        "marker_class": "exact-nonvacuous",
+        "marker_lines": 28,
+        "flips_at_O3": true,
+        "flips_at_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_marker_ceiling_2026-08-20.json",
+       "field": "dumps['wc-head'].designated_target_level_is_zero",
+       "value": {
+        "verdict": "agreed",
+        "markers_exact": true,
+        "marker_class": "exact-nonvacuous",
+        "marker_lines": 28,
+        "flips_at_O3": true,
+        "flips_at_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "field": "chains.level_is_zero.links_at_head.derived_mir",
+       "value": {
+        "verdict": "agreed",
+        "markers_exact": true
+       }
+      }
+     ]
+    },
+    "bodyful_reachable_closure": {
+     "verdict": "FAIL",
+     "census_name": "bodyful_reachable_closure",
+     "measured": "false. The body's own DIRECT calls are all resolved (6 resolved, 0 extern_decls, 0 unresolved; reachable closure size 4), but the TRANSITIVE closure leaves the assembled module's body prefix: `<LevelArc as Deref>::deref` is itself declaration-bearing at the seam -- its own coverage row records 2 extern_decls and a derived_mir verdict of `unsupported`.",
+     "STAYS_FAIL_BY_A_FLOOR": "THREE WALLS, and only the third is a floor (corrected 2026-08-26; every earlier statement here named a build item as the reason). (1) rustc has no cross-crate THIR -- `thir_body` takes a `LocalDefId`, no `thir_of_instance`: BUILD ITEM. (2) every body-producing path keys on `def_id.is_local()` -- `trust-mir-extract` early-returns on `!is_local()`: BUILD ITEM. (3) the closure ends at a declaration with no body ANYWHERE -- `Option::expect -> expect_failed -> panic_display -> panic_fmt -> panic_impl`, and `panic_impl` occurs in all of core/src/ only as doc, comment, lang attr, declaration (`unsafe extern \"Rust\"`, panicking.rs:67-70) and a SAFETY note, NEVER as a definition; its definition is std/src/panicking.rs:611 `#[panic_handler]` (measured 2026-08-27: a real 4-instruction body under -Zbuild-std), and the chain below it terminates at `_Unwind_RaiseException` -- `unsafe extern \"C-unwind\"`, unwind/src/libunwind.rs:290, a C SYMBOL with no Rust body anywhere: FLOOR (workflow wf_1c3df27b, mechanism M2). No lowering fixes (3), and it binds any body whose emitted trust-ir reaches the panic entry. CORRECTED 2026-08-27: this note used to add 'which is why the only bodies whose bodyful cell reads holds have ZERO calls' -- FALSE, and the census re-derives the truth: 1,654 of 6,431 prefix bodies hold, 53 of them with >=1 call edge, and expr::meta::ExprMeta::has_loose_bvars (entry 3658, calling 3657) holds THROUGH its call. The floor binds bodies that REACH THE PANIC ENTRY, not bodies with calls. So the criterion is unsatisfiable AS WRITTEN for panic-reaching bodies, not merely unbuilt. BOTH citations live in the TRUST repo (compiler/ and library/), which is not committed here, so the REASON is still carried by prose in this repo; what changed is that the prose now names the floor instead of a build item. The FAIL VERDICT ITSELF is committed and measured -- see `established_by`.",
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A0.bodyful_reachable_closure",
+       "value": false
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].{calls, reachable_closure_size}",
+       "value": {
+        "calls": {
+         "resolved": 6,
+         "extern_decls": 0,
+         "unresolved": 0
+        },
+        "reachable_closure_size": 4
+       }
+      },
+      {
+       "record": "data/crystal_a0_census_2026-08-22.json",
+       "field": "one_short_missing_closure_bodies contains 'level::Level::is_zero'",
+       "value": true
+      },
+      {
+       "record": "data/crystal_a0_census_2026-08-22.json",
+       "field": "totals.one_short_missing_criterion",
+       "value": {
+        "flip_event_O3": 960,
+        "bodyful_reachable_closure": 339
+       }
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "field": "extra_fixtures.level_is_zero_deref_callee.links_at_head",
+       "value": {
+        "instr_count": 6,
+        "lowered": true,
+        "spliced": true,
+        "unsupported": [],
+        "calls": {
+         "resolved": 0,
+         "extern_decls": 2,
+         "unresolved": 0
+        },
+        "derived_mir": {
+         "verdict": "unsupported",
+         "markers_exact": false
+        },
+        "flip_fired": false
+       }
+      }
+     ]
+    },
+    "bodyful_or_discharged_closure": {
+     "verdict": "PASS",
+     "census_name": "bodyful_or_discharged_closure",
+     "adopted_by": "owner ruling 2026-08-27 (R2+R3 of workflow wf_1c3df27b's verdict): the syntactic criterion demanded a Rust body for a chain terminating at `_Unwind_RaiseException` (unsafe extern \"C-unwind\", unwind/src/libunwind.rs:290), a C symbol with no Rust body anywhere -- ruled a FLOOR. The semantic obligation replaces it as the completion criterion: escaping callees are discharged clause (a) reached-and-modelled with a NAMED residual, or clause (b) unreachable-and-proved by kernel-checked theorem.",
+     "measured": "true. The walk's escaping callees for the target are exactly {6516 Option::<T>::expect, 7211 Option::<T>::as_deref}, both clause (a) (model ir_lzb_deref; residual: Option<Arc<Level>>'s None is the null niche and as_deref().expect() is load+null-check+assert -- NOT total: ir_lzb_deref_refuses_none). The panic tail below expect is clause (b): ir_lzb_panic_path_is_unreachable, DerivedProved, 0 axiom_deps. Fail-closed both directions; zero other bodies discharge.",
+     "established_by": [
+      {
+       "record": "data/crystal_a0_census_2026-08-27.json",
+       "field": "totals.a0_complete_semantic",
+       "value": 190
+      },
+      {
+       "record": "data/crystal_a0_census_2026-08-27.json",
+       "field": "totals.a0_complete_6_of_6 (syntactic, unchanged)",
+       "value": 189
+      },
+      {
+       "record": "data/crystal_a0_discharge.json",
+       "field": "targets[target].escaping_callees (keys)",
+       "value": [
+        "6516",
+        "7211"
+       ]
+      },
+      {
+       "record": "data/crystal_a0_discharge.json",
+       "field": "targets[target].clause_b_theorems",
+       "value": [
+        {
+         "theorem": "ir_lzb_panic_path_is_unreachable",
+         "where": "crates/clean-verify/src/spec/core_spec/eval_ir_lzb_correct.rs",
+         "status": "DerivedProved, 0 axiom_deps, kernel-checked (landed ab098943f)"
+        }
+       ]
+      }
+     ]
+    },
+    "flip_event_observed_for_this_body": {
+     "verdict": "PASS",
+     "census_name": "flip_event_O3",
+     "FLIPPED_SINCE_2026_08_11": "FAIL -> PASS. The 2026-08-11 probe recorded no event and no fallback for this body, refused by a marker gate (markers_exact=false) and by the wave-TR thin-reborrow lane. data/crystal_marker_ceiling_2026-08-20.json carries a four-dump A/B at ONE clean rev that pins the cause without asserting it: wave-DR turns markers_exact false -> true (28 lines) with STILL no flip, and the flip appears only with the W3b unwind fix. See corroborating_records['2026-08-20_marker_ceiling'].",
+     "measured": "codegen flip event at -O3 AND at -O0, def_index 17259, func_id 3929, event lineage sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5",
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A0.flip_event_O3",
+       "value": true
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].{event_O3, event_O0, flip_O0}",
+       "value": {
+        "event_O3": {
+         "kind": "codegen",
+         "lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5"
+        },
+        "event_O0": {
+         "kind": "codegen",
+         "lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5"
+        },
+        "flip_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "tracked_chain_bodies.rows.level_is_zero.{flip_O3, flip_O3_kind, flip_O0}",
+       "value": {
+        "flip_O3": true,
+        "flip_O3_kind": "codegen",
+        "flip_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+       "field": "targets[target].O3.flip_event",
+       "value": true
+      },
+      {
+       "record": "data/crystal_marker_ceiling_2026-08-20.json",
+       "field": "dumps['wc-basev11b'].designated_target_level_is_zero.{flips_at_O3,flips_at_O0}",
+       "value": {
+        "flips_at_O3": true,
+        "flips_at_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_marker_ceiling_2026-08-20.json",
+       "field": "dumps['wc-head'].designated_target_level_is_zero.{flips_at_O3,flips_at_O0}",
+       "value": {
+        "flips_at_O3": true,
+        "flips_at_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "field": "chains.level_is_zero.links_at_head.flip_fired",
+       "value": true
+      },
+      {
+       "record": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
+       "field": "current_source_bound_pin.flip_event (verbatim INFO line; source record data/crystal_fixture_rebaseline_2026-08-21_lane18.json)",
+       "value": {
+        "fired": true,
+        "seam": "codegen",
+        "lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+        "matches_artifact_lineage": true,
+        "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17152 ~ clean_kernel[89dd]::level::{impl#18}::is_zero), asserts=0, lineage=sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60, flipped_so_far=62"
+       }
+      }
+     ]
+    }
+   },
+   "negative_control": {
+    "verdict": "PASS",
+    "measured": "-Ztrust-ir-flip=no -> 0 codegen and 0 CTFE flip events crate-wide (0 fallback events); and for THIS body tracked_chain_bodies.rows.level_is_zero.flip_under_negative_control = False.",
+    "established_by": [
+     {
+      "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+      "field": "census_tip.totals.noflip_control",
+      "value": {
+       "codegen": 0,
+       "ctfe": 0,
+       "fallback_events": 0
+      }
+     },
+     {
+      "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+      "field": "tracked_chain_bodies.rows.level_is_zero.flip_under_negative_control",
+      "value": false
+     },
+     {
+      "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+      "field": "negative_control",
+      "value": {
+       "flip_events": 0,
+       "artifact_identity": {
+        "clean_kernel.trust-ir.bin": true,
+        "clean_kernel.coverage.json": true
+       }
+      }
+     }
+    ],
+    "note": "This is no longer the NON-DISCRIMINATING control the 2026-08-13 fixture warned about (level_is_zero.a0.json.negative_control.HONEST_LIMIT): the body now DOES emit an event in the flip build, so the 0-event no-flip build discriminates for it."
+   }
+  },
+  "A6": {
+   "acceptance": "the flip fires for this body WITH the A-LIN lineage digest in the event, verified fail-closed, plus the negative control",
+   "score": "4-of-4",
+   "criteria": {
+    "flip_fires_for_level_is_zero": {
+     "verdict": "PASS",
+     "scorecard_name": "flip_fires",
+     "FLIPPED_SINCE_2026_08_11": "FAIL -> PASS. The 2026-08-11 probe recorded it blocked by gate:markers and gate:lane:thin_reborrow. The marker gate is OBSERVABLY open: markers_exact is true over 28 non-vacuous marker lines in every record below. The thin-reborrow lane is not read directly by any committed record here; that it admits this body is an INFERENCE from the observable, since record_green is the sole registry writer and an event exists. The event itself fires at BOTH -O3 and -O0.",
+     "measured": {
+      "kind": "codegen",
+      "lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5"
+     },
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A0.flip_event_O3",
+       "value": true
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].{event_O3, event_O0, flip_O0}",
+       "value": {
+        "event_O3": {
+         "kind": "codegen",
+         "lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5"
+        },
+        "event_O0": {
+         "kind": "codegen",
+         "lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5"
+        },
+        "flip_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "tracked_chain_bodies.rows.level_is_zero.{flip_O3, flip_O3_kind, flip_O0}",
+       "value": {
+        "flip_O3": true,
+        "flip_O3_kind": "codegen",
+        "flip_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+       "field": "targets[target].O3.flip_event",
+       "value": true
+      },
+      {
+       "record": "data/crystal_marker_ceiling_2026-08-20.json",
+       "field": "dumps['wc-basev11b'].designated_target_level_is_zero.{flips_at_O3,flips_at_O0}",
+       "value": {
+        "flips_at_O3": true,
+        "flips_at_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_marker_ceiling_2026-08-20.json",
+       "field": "dumps['wc-head'].designated_target_level_is_zero.{flips_at_O3,flips_at_O0}",
+       "value": {
+        "flips_at_O3": true,
+        "flips_at_O0": true
+       }
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "field": "chains.level_is_zero.links_at_head.flip_fired",
+       "value": true
+      },
+      {
+       "record": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
+       "field": "current_source_bound_pin.flip_event (verbatim INFO line; source record data/crystal_fixture_rebaseline_2026-08-21_lane18.json)",
+       "value": {
+        "fired": true,
+        "seam": "codegen",
+        "lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+        "matches_artifact_lineage": true,
+        "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17152 ~ clean_kernel[89dd]::level::{impl#18}::is_zero), asserts=0, lineage=sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60, flipped_so_far=62"
+       }
+      }
+     ]
+    },
+    "digest_in_event": {
+     "verdict": "PASS",
+     "scorecard_name": "digest_in_event_EQUAL",
+     "UPGRADED_SINCE_2026_08_11": "In 2026-08-11 this read 'PASS (mechanism), on 185 other bodies of the same build, NOT on the target body'. It is now PASS ON THE TARGET BODY: the event's lineage equals the coverage row's, at four independent bases with four different digest VALUES -- which is the point, since a lineage digest is a per-BUILD artifact identity and EQUAL(event,row) is what A6 asserts.",
+     "measured": {
+      "row_lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5",
+      "event_O3_lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5",
+      "event_O0_lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5",
+      "EQUAL": true
+     },
+     "the_value_at_each_committed_base": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "trust_base": "3495e42c456f489802805cd9f041c71cf38b945a",
+       "clean_rev": "f21d6336bf778eca692b616258d13828b3dec6e7",
+       "lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5",
+       "event_lineage": "sha256:f6bfa3650d882fc1dd2ed047c9179dfc34f0204db5ff499bcf2f104a4d3ecff5",
+       "EQUAL_event_row": true
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+       "trust_rev": "dc99dbf67e29ffabf41820fd78ea1418397e7f9e",
+       "clean_rev": "746ef6cee9cfae221c8be0495905dbe1eef37a45",
+       "lineage": "sha256:e466b8688a4726edf13c270d9e6abfbaa2e29d85b6cc4b43636df98a95fc21f8",
+       "event_lineage": "sha256:e466b8688a4726edf13c270d9e6abfbaa2e29d85b6cc4b43636df98a95fc21f8",
+       "EQUAL_event_row": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+       "trust_rev": "c4e667ca51a4b6bd0bc3790e540cdabc707c45a1",
+       "clean_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
+       "lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+       "event_lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+       "EQUAL_event_row": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-20_a152ab39e.json",
+       "trust_rev": "8ea68367816ce49a7c3026f1e19c7ee4285e7737",
+       "clean_rev": "a152ab39e42a71da35dfbe3729d5581f0c42300a",
+       "lineage": "sha256:ecc575445ea8ce252e7687b9ba9cf0525a7237473371949220c21d9f718966bb",
+       "event_lineage": "not carried per-body by this record",
+       "crate_wide_invariant": {
+        "flip_lineage_mismatch": 0,
+        "flip_lineage_row_absent": 0
+       }
+      }
+     ],
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A6.digest_in_event_EQUAL",
+       "value": true
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "tracked_chain_bodies.rows.level_is_zero.EQUAL_event_row",
+       "value": true
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+       "field": "targets[target].O3.event_lineage_equals_row",
+       "value": true
+      },
+      {
+       "record": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
+       "field": "current_source_bound_pin.flip_event.matches_artifact_lineage (source record data/crystal_fixture_rebaseline_2026-08-21_lane18.json)",
+       "value": true
+      },
+      {
+       "record": "data/crystal_chain_revalidation_2026-08-20_a152ab39e.json",
+       "field": "fatal_invariants.flip_lineage_mismatch (crate-wide)",
+       "value": 0
+      }
+     ]
+    },
+    "fail_closed": {
+     "verdict": "PASS",
+     "scorecard_name": "fail_closed_perturbation_reaching",
+     "what_this_PASS_covers": "the CONSUMER-perturbation half, measured ON THE TARGET BODY: the switch-map perturbation REACHES it (applications=1) and drives it agreed -> mismatch with the corruption named verbatim, and the flip is withdrawn. The A0 `agreed` verdict is therefore not vacuous.",
+     "measured": {
+      "class": "switch-map",
+      "applications": 1,
+      "reaches_body": true,
+      "verdict_under_perturbation": "mismatch",
+      "markers_exact_under_perturbation": false,
+      "channel": "derived_mir",
+      "flip_withdrawn": true,
+      "named_difference": "line 3: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`",
+      "fails_closed": true
+     },
+     "corroboration": {
+      "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+      "perturb_run": "O3_pswitch",
+      "under_perturbation": {
+       "def_index": 17152,
+       "func_id": 3905,
+       "lineage": "sha256:e466b8688a4726edf13c270d9e6abfbaa2e29d85b6cc4b43636df98a95fc21f8",
+       "instr_count": 28,
+       "verdict": "mismatch",
+       "detail": "line 3: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`",
+       "markers_exact": false,
+       "markers_detail": "",
+       "flip_event": false,
+       "event_lineage": null,
+       "event_lineage_equals_row": null,
+       "perturb_applications": [
+        "SwitchMap",
+        1
+       ]
+      }
+     },
+     "what_this_PASS_does_NOT_cover": "the SOURCE-LEVEL fail-closed path -- flip.rs re-deriving the lineage from the taken registry payload and refusing on inequality, and flip_registry::green_body refusing to mint a green with no digest ('no digest, no green'). On 2026-08-11 that was read in source and confirmed present in the shipped driver but NOT independently triggered, because triggering it needs a modified trustc. NO COMMITTED RECORD EXERCISES IT ON THE BODY SEAM FOR THIS TARGET. The closest committed evidence is a DIFFERENT SEAM on DIFFERENT BODIES -- see `adjacent_committed_evidence_different_seam`.",
+     "adjacent_committed_evidence_different_seam": {
+      "record": "data/crystal_walla_instance_seam_2026-08-23.json",
+      "date": "2026-08-23",
+      "seam": "per-INSTANCE flip seam (trust_instance_flip), not the body seam",
+      "arm": "mutation_matrix.O0mut-lineage (and the body_flip_rows control beside it)",
+      "measured": {
+       "instance_flips": 0,
+       "baseline_instance_flips": 16,
+       "flip_vanished": true
+      },
+      "reading": "a compiler mutated to corrupt the lineage takes the instance flips from 16 to 0 and every refusal names 'lineage digest mismatch'. That demonstrates the mechanism fails closed on the instance seam and on other bodies; it is NOT a measurement of level::Level::is_zero on the body seam."
+     },
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A6.fail_closed_perturbation_reaching",
+       "value": true
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].perturbation",
+       "value": {
+        "class": "switch-map",
+        "applications": 1,
+        "reaches_body": true,
+        "verdict_under_perturbation": "mismatch",
+        "markers_exact_under_perturbation": false,
+        "channel": "derived_mir",
+        "flip_withdrawn": true,
+        "named_difference": "line 3: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`",
+        "fails_closed": true
+       }
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+       "field": "targets[target].under_perturbation",
+       "value": {
+        "def_index": 17152,
+        "func_id": 3905,
+        "lineage": "sha256:e466b8688a4726edf13c270d9e6abfbaa2e29d85b6cc4b43636df98a95fc21f8",
+        "instr_count": 28,
+        "verdict": "mismatch",
+        "detail": "line 3: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`",
+        "markers_exact": false,
+        "markers_detail": "",
+        "flip_event": false,
+        "event_lineage": null,
+        "event_lineage_equals_row": null,
+        "perturb_applications": [
+         "SwitchMap",
+         1
+        ]
+       }
+      }
+     ]
+    },
+    "negative_control": {
+     "verdict": "PASS",
+     "scorecard_name": "negative_control",
+     "measured": "-Ztrust-ir-flip=no -> 0 codegen and 0 CTFE flip events crate-wide (0 fallback events); and for THIS body tracked_chain_bodies.rows.level_is_zero.flip_under_negative_control = False.",
+     "established_by": [
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "ten_criteria_scorecards[target].A6.negative_control",
+       "value": true
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "census_tip.totals.noflip_control",
+       "value": {
+        "codegen": 0,
+        "ctfe": 0,
+        "fallback_events": 0
+       }
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-25_laneRMX.json",
+       "field": "tracked_chain_bodies.rows.level_is_zero.flip_under_negative_control",
+       "value": false
+      },
+      {
+       "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+       "field": "negative_control",
+       "value": {
+        "flip_events": 0,
+        "artifact_identity": {
+         "clean_kernel.trust-ir.bin": true,
+         "clean_kernel.coverage.json": true
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "body_identity_at_the_primary_record": {
+   "def_path": "level::Level::is_zero",
+   "def_index": 17259,
+   "func_id": 3929,
+   "instr_count": 28,
+   "note": "def_index and func_id are per-BUILD ordinals and move with clean-kernel and the producer; they are recorded so a reader can join this record to its dump, never to be compared across builds."
+  },
+  "corroborating_records": {
+   "2026-08-22_laneTU": {
+    "record": "data/crystal_remeasure_tip_2026-08-22_laneTU.json",
+    "measured_utc_date": "2026-08-22",
+    "trust_rev": "dc99dbf67e29ffabf41820fd78ea1418397e7f9e",
+    "clean_rev": "746ef6cee9cfae221c8be0495905dbe1eef37a45",
+    "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13; rlib+rmeta content digest 88d3620493dd56f49b249c74e170191b)",
+    "driver_dylib_sha256": "b6c32185902bab851d3a7ba10b15192acb41221a72f47529aa6d65ff23915c76"
+   },
+   "2026-08-22_a0_census": {
+    "record": "data/crystal_a0_census_2026-08-22.json",
+    "measured_utc": "2026-08-22T00:08:33Z",
+    "trust_rev": "dc99dbf67e29ffabf41820fd78ea1418397e7f9e",
+    "clean_rev": "746ef6cee9cfae221c8be0495905dbe1eef37a45",
+    "driver_dylib_sha256": "b6c32185902bab851d3a7ba10b15192acb41221a72f47529aa6d65ff23915c76",
+    "instrument": "`scripts/crystal_a0_census.py` (committed)",
+    "criteria_as_named_by_the_instrument": [
+     "lowered",
+     "spliced",
+     "zero_unsupported",
+     "derived_agreed",
+     "bodyful_reachable_closure",
+     "flip_event_O3"
+    ],
+    "what_membership_means": "`level::Level::is_zero` appears in this record's `one_short_missing_closure_bodies`. That list is built by `scripts/crystal_a0_census.py` as the score-5 rows whose `bodyful_reachable_closure` is false, so membership establishes A0 = 5-of-6 with `bodyful_reachable_closure` as the single failing criterion -- i.e. the other five are true -- WITHOUT any per-body row having to be quoted.",
+    "whole_crate_context": {
+     "bodies": 13844,
+     "score_distribution": {
+      "0": 4930,
+      "2": 2481,
+      "3": 4340,
+      "4": 605,
+      "5": 1299,
+      "6": 189
+     },
+     "a0_complete_6_of_6": 189,
+     "a0_complete_with_nonvacuous_markers": 36,
+     "ctfe_flip_O3_bodies": 41,
+     "a0_one_short_5_of_6": 1299,
+     "one_short_missing_criterion": {
+      "flip_event_O3": 960,
+      "bodyful_reachable_closure": 339
+     }
+    }
+   },
+   "2026-08-21_lane18_chain_revalidation": {
+    "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+    "measured_utc": "2026-08-21T18:33:26Z",
+    "clean_source_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
+    "trust_worktree_rev": "c4e667ca51a4b6bd0bc3790e540cdabc707c45a1",
+    "trustc_version": "rustc 1.99.0-dev (c4e667ca5 2026-08-21) (trustc 0.1.0)",
+    "librustc_driver_sha256": "4e2a161f6e0d9f6ddf184d5d744c6f46fa9defba52028addfe31b4885fde510c",
+    "level_is_zero": {
+     "def_path": "level::Level::is_zero",
+     "emitted_body_vs_committed_fixture": {
+      "verdict": "IDENTICAL",
+      "drift_classes": [],
+      "instructions_moved": 0
+     },
+     "links_at_head": {
+      "instr_count": 28,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 6,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir": {
+       "verdict": "agreed",
+       "markers_exact": true
+      },
+      "flip_fired": true
+     },
+     "lineage": {
+      "pinned_in_fixture": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+      "pinned_def_index": 17152,
+      "at_head": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+      "def_index_at_head": 17152,
+      "func_id_at_head": 3905,
+      "moved": false
+     }
+    },
+    "level_is_zero_deref_callee": {
+     "def_path": "<level::LevelArc as std::ops::Deref>::deref",
+     "emitted_body_vs_committed_fixture": {
+      "verdict": "IDENTICAL",
+      "drift_classes": [],
+      "instructions_moved": 0
+     },
+     "links_at_head": {
+      "instr_count": 6,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 0,
+       "extern_decls": 2,
+       "unresolved": 0
+      },
+      "derived_mir": {
+       "verdict": "unsupported",
+       "markers_exact": false
+      },
+      "flip_fired": false
+     },
+     "lineage": {
+      "at_head": "sha256:fab248e7be808817be3174bd9bc421d17c410fd9d306c2658050b203b984a019",
+      "def_index_at_head": 17101,
+      "func_id_at_head": 3894
+     }
+    }
+   },
+   "2026-08-20_a152_chain_revalidation": {
+    "record": "data/crystal_chain_revalidation_2026-08-20_a152ab39e.json",
+    "measured_utc": "2026-08-20T21:36:34Z",
+    "clean_source_rev": "a152ab39e42a71da35dfbe3729d5581f0c42300a",
+    "trust_worktree_rev": "8ea68367816ce49a7c3026f1e19c7ee4285e7737",
+    "librustc_driver_sha256": "a2e495e3e4918964c071d18c420d24f69b781f55829ff63c72fdeaa904d9fce5",
+    "level_is_zero": {
+     "def_path": "level::Level::is_zero",
+     "emitted_body_vs_committed_fixture": {
+      "verdict": "IDENTICAL",
+      "drift_classes": [],
+      "instructions_moved": 0
+     },
+     "links_at_head": {
+      "instr_count": 28,
+      "lowered": true,
+      "spliced": true,
+      "unsupported": [],
+      "calls": {
+       "resolved": 6,
+       "extern_decls": 0,
+       "unresolved": 0
+      },
+      "derived_mir": {
+       "verdict": "agreed",
+       "markers_exact": true
+      },
+      "flip_fired": true
+     },
+     "lineage": {
+      "pinned_in_fixture": "sha256:ecc575445ea8ce252e7687b9ba9cf0525a7237473371949220c21d9f718966bb",
+      "pinned_def_index": 17152,
+      "at_head": "sha256:ecc575445ea8ce252e7687b9ba9cf0525a7237473371949220c21d9f718966bb",
+      "def_index_at_head": 17152,
+      "func_id_at_head": 3905,
+      "moved": false
+     }
+    },
+    "fatal_invariants": {
+     "foreign_flip_events": 0,
+     "flip_events_unparsed": 0,
+     "flip_events_unjoinable": 0,
+     "flip_lineage_mismatch": 0,
+     "flip_lineage_row_absent": 0,
+     "flip_lineage_digest_unknown": 0,
+     "flip_events_unspliced": 0,
+     "lineage_digest_collisions": 0,
+     "lineage_rows_malformed": 0
+    }
+   },
+   "2026-08-20_marker_ceiling": {
+    "record": "data/crystal_marker_ceiling_2026-08-20.json",
+    "date": "2026-08-20",
+    "clean_rev_of_every_dump": "7558a86c8b5ba233c08b058f2af3b89d047c0e52",
+    "clean_tracked_dirt": "[] on every dump (recorded by each lane's own run log)",
+    "instrument": "scripts/trust_ir_markers.py (selftest: 0 failures, re-run this lane)",
+    "wc-basev11b": {
+     "note": "laneMV control, sysroot v11b: wave-DR + the W3b unwind fix",
+     "dylib": "58b5fc15b9d20badae53974c6822f4e16595835478f58ba7185e5b227382b228",
+     "trust_rev_AS_RECORDED_BY_THE_SEAL": "4854cf3a9c7da6972aac9a60d5be094ef6b5f4af",
+     "designated_target_level_is_zero": {
+      "verdict": "agreed",
+      "markers_exact": true,
+      "marker_class": "exact-nonvacuous",
+      "marker_lines": 28,
+      "flips_at_O3": true,
+      "flips_at_O0": true
+     }
+    },
+    "wc-head": {
+     "note": "PRODUCER TIP, sysroot v12: wave-DR + wave-W3 + wave-W3b",
+     "dylib": "50879dc8cf7f0e528eb907dd1882e46e7260fd68ec62dc90120a69903832ba98",
+     "trust_rev": "26d0a0e8eefd88505463c63ccaf8db6ba6c7fe02",
+     "designated_target_level_is_zero": {
+      "verdict": "agreed",
+      "markers_exact": true,
+      "marker_class": "exact-nonvacuous",
+      "marker_lines": 28,
+      "flips_at_O3": true,
+      "flips_at_O0": true
+     }
+    },
+    "wc-rctl": {
+     "note": "laneR CONTROL: pre wave-DR, pre wave-W3/W3b",
+     "dylib": "d3a0d01bd20de55773193a4c54960352c6a0f5bc91fb76d070c5ba349940ed9f",
+     "designated_target_level_is_zero": {
+      "verdict": "agreed",
+      "markers_exact": false,
+      "marker_class": "differ-derived-empty",
+      "marker_lines": null,
+      "flips_at_O3": false,
+      "flips_at_O0": false
+     }
+    },
+    "wc-sub2": {
+     "note": "laneR SUBJECT: wave-DR in, wave-W3/W3b OUT",
+     "dylib": "906c0ed378f7785c552fbd06798300da7872e9885d48e1ec00401d9f3a1a583d",
+     "designated_target_level_is_zero": {
+      "verdict": "agreed",
+      "markers_exact": true,
+      "marker_class": "exact-nonvacuous",
+      "marker_lines": 28,
+      "flips_at_O3": false,
+      "flips_at_O0": false
+     }
+    },
+    "the_four_way_A_B_this_record_pins": "All four dumps are at ONE clean rev (7558a86c8b5ba233c08b058f2af3b89d047c0e52, tracked dirt [] on every dump (recorded by each lane's own run log)), so every delta is the PRODUCER. Read in ancestry order for the target body: pre-wave-DR / pre-W3/W3b -> markers_exact False, no flip at either level; wave-DR in, W3/W3b OUT -> markers_exact True over 28 marker lines, STILL no flip; wave-DR + the W3b unwind fix -> flips at O3 and O0; producer tip (DR + W3 + W3b) -> the same. So the committed record attributes the MARKER gate to wave-DR and the FLIP to W3/W3b, rather than asserting it.",
+    "what_it_does_and_does_not_carry": "This is the ONLY committed record that carries a per-criterion reading of the target at the two 2026-08-20 drivers named in docs/CRYSTAL_STATUS.md 0.3a (the wave-W3b base driver 58b5fc15... and the producer-tip driver 50879dc8...). It carries verdict, markers_exact, marker class, marker line count and flips-at-O3/O0. It does NOT carry the lineage digest, the negative control, the perturbation, or the bodyful closure, so it corroborates four of the ten criteria at those drivers and no more."
+   },
+   "2026-08-19_pre_W3_control": {
+    "record": "data/crystal_chain_revalidation_2026-08-19_28fb5dd812.json",
+    "measured_utc_date": "2026-08-19",
+    "clean_worktree_rev": "7558a86c8b5ba233c08b058f2af3b89d047c0e52",
+    "trust_worktree_rev": "28fb5dd81254f9673de139e8a8b676ecfad965d3",
+    "links_at_head": {
+     "instr_count": 28,
+     "lowered": true,
+     "spliced": true,
+     "unsupported": [],
+     "calls": {
+      "resolved": 6,
+      "extern_decls": 0,
+      "unresolved": 0
+     },
+     "derived_mir": {
+      "verdict": "agreed",
+      "markers_exact": false
+     },
+     "flip_fired": false,
+     "flip_event_raw": null
+    },
+    "lineage": {
+     "pinned_in_fixture": "sha256:b378d4d331a545e4e89fa617817725b05ff525a957bc1ba4eed9eb0bfae1f712",
+     "at_head": "sha256:1e9070c2763eab7f6a6fe9deeb8dcb24370c4adf44c3240afbb5b16a2a361d81",
+     "at_prior_revalidation_ccf52b40c3": "sha256:876ccd4b8a77010c4ce9d9291007353050d8eb18269c70270f5ff5d5cb80dda0",
+     "moved_since_prior_revalidation": true,
+     "def_index_at_head": 17092,
+     "def_index_at_prior_revalidation": 17089,
+     "func_id_at_head": 3897,
+     "func_id_at_prior_revalidation": 3896
+    }
+   }
+  },
+  "how_to_re_measure_rather_than_re_read": "seal a driver (trust/scripts/seal_driver.sh, guard PASS), take a whole-crate clean-kernel dump at -O3 and -O0 plus the -Ztrust-ir-flip=no control and a switch-map perturbation, then run `scripts/crystal_a0_census.py` over the dump for A0 and join the flip log to the coverage rows for A6."
+ },
+ "not_established_by_any_committed_record": [
+  {
+   "claim": "docs/CRYSTAL_STATUS.md 0.3a's BASE reading: A0 5-of-6 / A6 4-of-4 at trust base `36cbb1130d`, driver digest `58b5fc15...7382b228`, event lineage `sha256:1e9070c2...a2a361d81`.",
+   "status": "PARTIALLY established by committed records; NOT established as a ten-criteria scorecard.",
+   "what_IS_committed": [
+    "data/crystal_marker_ceiling_2026-08-20.json records the SAME dylib digest 58b5fc15b9d20badae53974c6822f4e16595835478f58ba7185e5b227382b228 under dumps['wc-basev11b'] (its seal's REV file reads 4854cf3a9c7da6972aac9a60d5be094ef6b5f4af -- 0.3a itself explains that seal_driver.sh took REV from the shared checkout, not the build worktree, so the source rev `36cbb1130d` is NOT in any file in this repo), at clean rev 7558a86c8b5ba233c08b058f2af3b89d047c0e52, and gives the target verdict=agreed, markers_exact=True, 28 marker lines, flips at O3 and O0.",
+    "data/crystal_chain_revalidation_2026-08-19_28fb5dd812.json records lineage `sha256:1e9070c2763eab7f6a6fe9deeb8dcb24370c4adf44c3240afbb5b16a2a361d81` for this body at the SAME clean rev 7558a86c8b5ba233c08b058f2af3b89d047c0e52 under the PRE-W3/W3b producer 28fb5dd81254f9673de139e8a8b676ecfad965d3 -- with markers_exact=False and flip_fired=False. So the DIGEST VALUE 0.3a quotes for the base run is committed; the flip and markers verdict at that digest is not, because that record predates the waves."
+   ],
+   "what_is_NOT_committed": [
+    "the trust base string `36cbb1130d` (it appears in no file under data/, reports/ or crates/ in this repo)",
+    "the base run's negative control, its switch-map perturbation, its bodyful-closure reading, and its EQUAL(event,row) join",
+    "therefore: no committed record scores that particular run at 5-of-6 / 4-of-4"
+   ],
+   "consequence_for_this_probe": "the probe's CURRENT verdicts are transcribed from the 2026-08-22 and 2026-08-25 records instead, which do carry all ten criteria. The 2026-08-20 drivers appear only as corroboration on the four criteria the marker-ceiling record actually measures."
+  },
+  {
+   "claim": "docs/CRYSTAL_STATUS.md 0.3a's PRODUCER-TIP reading: event lineage `sha256:8f934136...2f6c0a79`, driver digest `50879dc8...3832ba98`, built from `26d0a0e8ee`.",
+   "status": "PARTIALLY established.",
+   "what_IS_committed": [
+    "data/crystal_marker_ceiling_2026-08-20.json dumps['wc-head'] records driver digest 50879dc8cf7f0e528eb907dd1882e46e7260fd68ec62dc90120a69903832ba98 at trust_rev 26d0a0e8eefd88505463c63ccaf8db6ba6c7fe02, clean rev 7558a86c8b5ba233c08b058f2af3b89d047c0e52, and gives the target verdict=agreed, markers_exact=True, 28 marker lines, flips at O3 and O0."
+   ],
+   "what_is_NOT_committed": [
+    "the lineage value `sha256:8f934136...2f6c0a79` -- it appears in no committed file in this repo",
+    "that run's negative control, perturbation, and EQUAL(event,row) join"
+   ]
+  },
+  {
+   "claim": "docs/CRYSTAL_STATUS.md 0.3a's BOOTSTRAP-v12-SYSROOT reproduction: sealed `seal-bootstrap12`, rev `d28fbe4d0406e4250f10246dc665be3192c2a0ee`, dylib `6dfbd05f...1613cd31`, lineage `sha256:80a9e7ef...2b14a466`, A0 5-of-6 / A6 4-of-4 identical on every axis.",
+   "status": "NOT ESTABLISHED BY ANY COMMITTED RECORD IN THIS REPO.",
+   "what_IS_committed": [],
+   "what_is_NOT_committed": [
+    "every one of those strings appears ONLY in docs/CRYSTAL_STATUS.md prose; `6dfbd05f`, `seal-bootstrap12` and `d28fbe4d04` match nothing under data/, reports/ or crates/"
+   ],
+   "consequence_for_this_probe": "NOT transcribed. The probe does not claim a bootstrap-sysroot reproduction."
+  },
+  {
+   "claim": "A6 fail-closed, SOURCE-LEVEL half: flip.rs's `lineage digest mismatch` refusal and flip_registry::green_body's 'no digest, no green' independently triggered for this target on the BODY seam.",
+   "status": "NOT ESTABLISHED -- and it was never claimed. The 2026-08-11 probe already recorded it as read-in-source but not triggered; nothing since has triggered it here.",
+   "what_IS_committed": [
+    "data/crystal_walla_instance_seam_2026-08-23.json arm O0mut-lineage: a mutated compiler drives the INSTANCE-seam flips 16 -> 0 with every refusal naming 'lineage digest mismatch' -- a different seam and different bodies."
+   ],
+   "what_is_NOT_committed": [
+    "any run in which the body-seam lineage check is made to refuse level::Level::is_zero"
+   ],
+   "consequence_for_this_probe": "A6.fail_closed is scored PASS on the CONSUMER-perturbation criterion the ten-criteria scorecard actually names (`fail_closed_perturbation_reaching`), and the source-level gap is written into that criterion rather than hidden by it."
+  },
+  {
+   "claim": "The reason A0's bodyful reachable closure cannot be closed. CORRECTED 2026-08-26: it is NOT `thir_body` taking a `LocalDefId` -- that is one of two BUILD ITEMS. The FLOOR is that the closure ends at `panic_impl`, which has no body anywhere in core and is supplied at link time by std.",
+   "status": "The FAIL VERDICT is committed and measured (two independent records). The REASON is prose in this repo -- BOTH the rustc query signature and core/std's panicking sources live in the trust repo, which is not committed here. What changed is which wall the prose names, not its evidential status.",
+   "what_IS_committed": [
+    "data/crystal_a0_census_2026-08-22.json: the target is in one_short_missing_closure_bodies",
+    "data/crystal_remeasure_tip_2026-08-25_laneRMX.json: A0.bodyful_reachable_closure = false",
+    "data/crystal_chain_revalidation_2026-08-21_lane18.json: the deref callee carries 2 extern_decls and derived_mir `unsupported`"
+   ],
+   "what_is_NOT_committed": [
+    "the rustc query signature itself (trust repo, compiler/rustc_middle/src/queries.rs)",
+    "core's panic chain and the absence of a panic_impl definition (trust repo, library/core/src/panicking.rs:67-70; grep over library/core/src finds panic_impl only as doc, comment, lang attr, declaration and a SAFETY note)",
+    "std's link-time definition (trust repo, library/std/src/panicking.rs:611, `#[panic_handler]`)"
+   ],
+   "consequence_for_this_probe": "FAIL, as required -- and now recorded as a FLOOR rather than an unbuilt capability. The probe records the reason as carried-by-prose, not as measured here."
+  },
+  {
+   "claim": "The 2026-08-11 A6 evidence item `2_artifact_perturbation_on_the_digest` (the scratchpad/a6/probe.rs wide/untouched digest perturbation).",
+   "status": "Its digests survive only inside this file's own history block; the fixture that produced them was session scratch and is not in the repo. It is kept as history, not re-asserted as current.",
+   "what_IS_committed": [],
+   "what_is_NOT_committed": [
+    "the probe fixture and its build logs"
+   ]
+  }
+ ],
+ "history": {
+  "note": "The 2026-08-11 measurement is kept VERBATIM below.  It is a correct record of the build it was taken at and is not a claim about any later HEAD.  Two of its verdicts have since moved (A0's flip event and A6's flip-fires, both FAIL -> PASS) and one has not (bodyful reachable closure, still FAIL).  Its compiler, driver, lineage values and gate diagnoses all belong to that build and must not be quoted as current.",
+  "measured_2026_08_11": {
+   "job": "crystal A0 (deployment probe) + A6 (digest-bearing flip) — measured, with per-criterion verdicts",
+   "plan": "designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0 rows A0/A-LIN/A6",
+   "measured_utc_date": "2026-08-11",
+   "target_body": "level::Level::is_zero",
+   "headline": "A0 is 4-of-6 and A6 is 3-of-4 on the DEPLOYED body. The crystal target reaches DerivedAgreed under the stage1 (T2d) trustc and its lineage digest is re-pinned, but it DOES NOT FLIP: two independent fail-closed gates refuse it (the -O lifetime-marker gate, markers_exact=false; and the wave-TR thin-reborrow provenance lane). The A-LIN attestation chain itself is measured working end-to-end on 185 OTHER clean_kernel bodies in the same build.",
+   "compiler": {
     "binary": "$TRUST_REPO/build/aarch64-apple-darwin/stage1/bin/trustc",
     "binary_sha256": "5cd23255ddd7b6bb0e3ba01d7cf883d4e87bfd6e232644f65cf676cb6735e711",
     "version_string": "rustc 1.99.0-dev (94147b34f 2026-08-11) (trustc 0.1.0)",
@@ -13,14 +1064,14 @@
     "rustc_driver_sha256": "3f99926bde9172d1f29acb0178956c658242058472232faaac71460632e18c8a",
     "version_stamp_IS_NOT_the_source_identity": "CFG_VER_HASH is git HEAD at build time; this driver was linked 2026-08-11 20:33 from a DIRTY tree that already carried T2d, which was committed 12 minutes later as 34f592159d. Identity is established by measurement, not by the stamp.",
     "contains_T2d_measured": {
-      "how": "same niche-encoded Level fixture, both compilers, -Ztrust-ir-lower=on -Ztrust-dump=ir:",
-      "stage1": "Level::is_zero_shallow -> agreed (10 canonical lines identical) [SUPERSEDED — see CORRECTION_2026-08-12; body misnamed, does not discriminate]",
-      "stage2 (10f221fbe, A1's compiler)": "Level::is_zero_shallow -> unsupported (shim: Load of a whole aggregate) [SUPERSEDED — see CORRECTION_2026-08-12; the shallow twin agrees here too]",
-      "CORRECTION_2026-08-12": "The two lines below name `Level::is_zero_shallow` as the discriminating body. That is WRONG and was independently re-measured: the shallow twin reaches `agreed` under BOTH compilers (10 canonical lines identical), so it discriminates nothing. The actual discriminator is `Level::is_zero` — stage1 `agreed` (18 canonical lines identical), stage2 `unsupported: shim: Load of a whole aggregate (no congruent MIR operand)`. The CONCLUSION of this block is unchanged and was reproduced: stage1 carries T2d, stage2 does not. Only the cited body was misnamed. Re-measured with the 21-line fixture inlined in designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0.1, at -C opt-level=0 and 3, against both drivers."
+     "how": "same niche-encoded Level fixture, both compilers, -Ztrust-ir-lower=on -Ztrust-dump=ir:",
+     "stage1": "Level::is_zero_shallow -> agreed (10 canonical lines identical) [SUPERSEDED — see CORRECTION_2026-08-12; body misnamed, does not discriminate]",
+     "stage2 (10f221fbe, A1's compiler)": "Level::is_zero_shallow -> unsupported (shim: Load of a whole aggregate) [SUPERSEDED — see CORRECTION_2026-08-12; the shallow twin agrees here too]",
+     "CORRECTION_2026-08-12": "The two lines below name `Level::is_zero_shallow` as the discriminating body. That is WRONG and was independently re-measured: the shallow twin reaches `agreed` under BOTH compilers (10 canonical lines identical), so it discriminates nothing. The actual discriminator is `Level::is_zero` — stage1 `agreed` (18 canonical lines identical), stage2 `unsupported: shim: Load of a whole aggregate (no congruent MIR operand)`. The CONCLUSION of this block is unchanged and was reproduced: stage1 carries T2d, stage2 does not. Only the cited body was misnamed. Re-measured with the 21-line fixture inlined in designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0.1, at -C opt-level=0 and 3, against both drivers."
     },
     "contains_A_LIN_v2_measured": "`strings` on the driver: stage1 carries `trust_thir_lower.body_lineage.v2`; stage2 carries `...v1`"
-  },
-  "driver": {
+   },
+   "driver": {
     "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
     "command": "cargo build --locked --offline --release -p clean-kernel",
     "CARGO_INCREMENTAL": "0",
@@ -30,42 +1081,42 @@
     "target_cpu": "PINNED to apple-m4, not the repo config's `native`. stage1 `trustc --print target-cpus` reports `native - Select the CPU of the current host (currently apple-m4)`, so this is the same CPU spelled explicitly.",
     "subject_unit_C_flags": "-C opt-level=3 -C panic=abort -C embed-bitcode=no -C codegen-units=16 -C overflow-checks=on -C strip=debuginfo -C target-cpu=apple-m4  (+ appended: -Ztrust-verify=off -Ztrust-ir-lower=on -Cdebuginfo=0 -Ztrust-dump=ir:<dir> -Ztrust-ir-flip=<yes|no>)",
     "release_shape_proof": "`tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner` is present as a coverage row, so debug_assertions was OFF and the DEPLOYED infer_type body was compiled (A1's criterion, re-verified here)."
-  },
-  "builds": {
+   },
+   "builds": {
     "p1": {
-      "flip": "yes",
-      "extra": "",
-      "exit": 0,
-      "flip_events": 185,
-      "flip_events_all_from_clean_kernel": true,
-      "fallbacks_total": 396,
-      "clean_kernel_fallbacks": 17,
-      "clean_kernel_fallback_reasons": {
-        "gate: shim: abi rederive: generic fn signature": 13,
-        "gate: shim: abi rederive: generic closure": 2,
-        "ctfe-gate: const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2
-      },
-      "target_body_appears_in_neither": "DefId(0:17075) occurs 0 times in the log — no event, no fallback: it was never green-recorded"
+     "flip": "yes",
+     "extra": "",
+     "exit": 0,
+     "flip_events": 185,
+     "flip_events_all_from_clean_kernel": true,
+     "fallbacks_total": 396,
+     "clean_kernel_fallbacks": 17,
+     "clean_kernel_fallback_reasons": {
+      "gate: shim: abi rederive: generic fn signature": 13,
+      "gate: shim: abi rederive: generic closure": 2,
+      "ctfe-gate: const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2
+     },
+     "target_body_appears_in_neither": "DefId(0:17075) occurs 0 times in the log — no event, no fallback: it was never green-recorded"
     },
     "neg": {
-      "flip": "no",
-      "extra": "",
-      "exit": 0,
-      "flip_events": 0,
-      "clean_kernel_fallbacks": 0,
-      "other_crate_fallbacks_unchanged": "zerocopy 156 / object 46 / typenum 36 / rayon 36 / syn 12 — identical to p1, because the wrapper sets -Ztrust-ir-flip only on the subject unit",
-      "role": "NEGATIVE CONTROL"
+     "flip": "no",
+     "extra": "",
+     "exit": 0,
+     "flip_events": 0,
+     "clean_kernel_fallbacks": 0,
+     "other_crate_fallbacks_unchanged": "zerocopy 156 / object 46 / typenum 36 / rayon 36 / syn 12 — identical to p1, because the wrapper sets -Ztrust-ir-flip only on the subject unit",
+     "role": "NEGATIVE CONTROL"
     },
     "perturb": {
-      "flip": "yes",
-      "extra": "-Ztrust-sat-perturb=switch-map",
-      "exit": 0,
-      "flip_events": 175,
-      "role": "PERTURBATION"
+     "flip": "yes",
+     "extra": "-Ztrust-sat-perturb=switch-map",
+     "exit": 0,
+     "flip_events": 175,
+     "role": "PERTURBATION"
     },
     "all_three": "clean, non-incremental, own CARGO_TARGET_DIR, own dump dir"
-  },
-  "artifact_continuity_with_A1": {
+   },
+   "artifact_continuity_with_A1": {
     "claim": "the A0/A6 build assembles the SAME crate artifact A1 pinned, under a DIFFERENT compiler",
     "clean_kernel.trust-ir.bin sha256": "8479ef559b340c23499d3d377c393d50781166baad99979c3ea51c299a287388",
     "identical_to_A1_build_1_and_2": true,
@@ -73,132 +1124,134 @@
     "identical_to_A1_primary_digest": true,
     "why_it_is_unchanged": "T2d edits `to_mir` (the trust-ir -> MIR shim consumed by the derived-MIR differential and by the flip), NOT the THIR -> trust-ir producer. The artifact is therefore bit-identical; only the derived-MIR verdicts moved.",
     "also_identical_under": [
-      "p1 (flip=yes)",
-      "neg (flip=no)",
-      "perturb (-Ztrust-sat-perturb=switch-map)"
+     "p1 (flip=yes)",
+     "neg (flip=no)",
+     "perturb (-Ztrust-sat-perturb=switch-map)"
     ],
     "coverage_json_p1_vs_neg": "BYTE-IDENTICAL (sha256:f1bfd71a5d7798060d9e5ead30cd6aa6010e378d298bbfefb1e8b180937edbff) — two independent clean builds reproduce every lineage digest in this file, and the flip flag perturbs the artifact not at all.",
     "crate_verdict_delta_stage2_to_stage1": {
-      "agreed": "1162 -> 1172",
-      "unsupported": "12600 -> 12590",
-      "mismatch": "5 -> 5",
-      "transitions": "10, all unsupported -> agreed, 0 regressions"
+     "agreed": "1162 -> 1172",
+     "unsupported": "12600 -> 12590",
+     "mismatch": "5 -> 5",
+     "transitions": "10, all unsupported -> agreed, 0 regressions"
     }
-  },
-  "A0": {
+   },
+   "A0": {
     "acceptance": "the probe passes end-to-end: lowered, spliced, ZERO unsupported, bodyful reachable closure, DerivedAgreed, flip event observed",
     "criteria": {
-      "lowered": {
-        "verdict": "PASS",
-        "measured": true
-      },
-      "spliced": {
-        "verdict": "PASS",
-        "measured": true
-      },
-      "zero_unsupported": {
-        "verdict": "PASS",
-        "measured": []
-      },
-      "DerivedAgreed": {
-        "verdict": "PASS",
-        "measured": "agreed — \"18 canonical line(s) identical\" (was `unsupported: shim: Load of a whole aggregate` under A1's stage2)"
-      },
-      "bodyful_reachable_closure": {
-        "verdict": "FAIL",
-        "measured": "seam: \"reachable callee closure includes an extern/declaration-only callee (no local body to link)\"",
-        "which": "is_zero -> `<level::LevelArc as Deref>::deref` (func 4913, bodyful) -> func 8368 and func 7674, BOTH bodyless declaration-only entries (their func_ids exceed 7570, the highest local-body func_id in the assembled module; 1155 of the module's 8726 entries are declaration-only). By source and by the 34-byte panic string in the IR these are `Option::as_deref` and `Option::expect` — exactly plan item A0(iv).",
-        "behaviour_is_correct": "the plan's warning is honoured: the crate-seam differential DECLINES a closure containing a bodyless declaration with an unknown signature. That decline was preserved, not 'fixed'.",
-        "adjacent_finding": "`deref` itself is still DerivedUnsupported: \"shim: Call(callee return outside the fragment: std::option::Option<&'{erased} level::Level>)\" — a named, separate build item."
-      },
-      "flip_event_observed_for_this_body": {
-        "verdict": "FAIL",
-        "measured": "no flip event and no fallback event for DefId(0:17075); the body was never green-recorded"
-      }
+     "lowered": {
+      "verdict": "PASS",
+      "measured": true
+     },
+     "spliced": {
+      "verdict": "PASS",
+      "measured": true
+     },
+     "zero_unsupported": {
+      "verdict": "PASS",
+      "measured": []
+     },
+     "DerivedAgreed": {
+      "verdict": "PASS",
+      "measured": "agreed — \"18 canonical line(s) identical\" (was `unsupported: shim: Load of a whole aggregate` under A1's stage2)"
+     },
+     "bodyful_reachable_closure": {
+      "verdict": "FAIL",
+      "measured": "seam: \"reachable callee closure includes an extern/declaration-only callee (no local body to link)\"",
+      "which": "is_zero -> `<level::LevelArc as Deref>::deref` (func 4913, bodyful) -> func 8368 and func 7674, BOTH bodyless declaration-only entries (their func_ids exceed 7570, the highest local-body func_id in the assembled module; 1155 of the module's 8726 entries are declaration-only). By source and by the 34-byte panic string in the IR these are `Option::as_deref` and `Option::expect` — exactly plan item A0(iv).",
+      "behaviour_is_correct": "the plan's warning is honoured: the crate-seam differential DECLINES a closure containing a bodyless declaration with an unknown signature. That decline was preserved, not 'fixed'.",
+      "adjacent_finding": "`deref` itself is still DerivedUnsupported: \"shim: Call(callee return outside the fragment: std::option::Option<&'{erased} level::Level>)\" — a named, separate build item."
+     },
+     "flip_event_observed_for_this_body": {
+      "verdict": "FAIL",
+      "measured": "no flip event and no fallback event for DefId(0:17075); the body was never green-recorded"
+     }
     },
     "negative_control": {
-      "verdict": "PASS",
-      "measured": "-Ztrust-ir-flip=no -> 0 flip events crate-wide (vs 185 with the flag on), same artifact bytes"
+     "verdict": "PASS",
+     "measured": "-Ztrust-ir-flip=no -> 0 flip events crate-wide (vs 185 with the flag on), same artifact bytes"
     }
-  },
-  "A6": {
+   },
+   "A6": {
     "acceptance": "the flip fires for this body WITH the A-LIN lineage digest in the event, verified fail-closed, plus the negative control",
     "criteria": {
-      "flip_fires_for_level_is_zero": {
-        "verdict": "FAIL",
-        "blocked_by": [
-          "gate:markers",
-          "gate:lane:thin_reborrow"
-        ]
-      },
-      "digest_in_event": {
-        "verdict": "PASS (mechanism), on 185 other bodies of the same build, NOT on the target body",
-        "measured": "185/185 flip events carry `lineage=sha256:...` and every one is EQUAL to the `lineage` field of that body's row in the published coverage artifact. 185 distinct digests, 0 mismatches, 0 rows missing. 153 codegen-seam + 32 CTFE-seam."
-      },
-      "fail_closed": {
-        "verdict": "PASS",
-        "see": "fail_closed_evidence"
-      },
-      "negative_control": {
-        "verdict": "PASS",
-        "measured": "0 events under -Ztrust-ir-flip=no"
-      }
+     "flip_fires_for_level_is_zero": {
+      "verdict": "FAIL",
+      "blocked_by": [
+       "gate:markers",
+       "gate:lane:thin_reborrow"
+      ]
+     },
+     "digest_in_event": {
+      "verdict": "PASS (mechanism), on 185 other bodies of the same build, NOT on the target body",
+      "measured": "185/185 flip events carry `lineage=sha256:...` and every one is EQUAL to the `lineage` field of that body's row in the published coverage artifact. 185 distinct digests, 0 mismatches, 0 rows missing. 153 codegen-seam + 32 CTFE-seam."
+     },
+     "fail_closed": {
+      "verdict": "PASS",
+      "see": "fail_closed_evidence"
+     },
+     "negative_control": {
+      "verdict": "PASS",
+      "measured": "0 events under -Ztrust-ir-flip=no"
+     }
     },
     "lineage_repin": {
-      "why": "A1's pin carries a `trust_thir_lower.body_lineage.v1` digest with no DefId prefix. The compiler actually run here carries v2, which prefixes the body's DefPathHash. Comparing them would be a category error; A1 said so explicitly.",
-      "domain": "trust_thir_lower.body_lineage.v2",
-      "framing": "sha256_domain(domain, u64be(stable_crate_id) || u64be(local_hash) || mini_module.stable_digest().bytes || u64be(n_callees) || callees...)",
-      "value_for_level_Level_is_zero": "sha256:da22664dc52d2b099a53a01aa106485b26d04ea5a46735407eb8b7a1d7adce3a",
-      "superseded_A1_v1_value": "sha256:e27a286b0ad3a116935104ed15ac4f37a8b9fc180107a211e2cab139c3d563a8",
-      "reproduced": "identical in two independent clean non-incremental builds (p1 and neg produced byte-identical coverage.json)",
-      "domain_check": "all 13139 lineage-bearing rows changed value from the stage2 v1 run; 0 coincided. The change is the framing, not the artifact (which is bit-identical).",
-      "value_for_LevelArc_deref": "sha256:172d4e9f1cd07c89b0377f90fe608d29426d715362d50d5c76365991781b2b0f"
+     "why": "A1's pin carries a `trust_thir_lower.body_lineage.v1` digest with no DefId prefix. The compiler actually run here carries v2, which prefixes the body's DefPathHash. Comparing them would be a category error; A1 said so explicitly.",
+     "domain": "trust_thir_lower.body_lineage.v2",
+     "framing": "sha256_domain(domain, u64be(stable_crate_id) || u64be(local_hash) || mini_module.stable_digest().bytes || u64be(n_callees) || callees...)",
+     "value_for_level_Level_is_zero": "sha256:da22664dc52d2b099a53a01aa106485b26d04ea5a46735407eb8b7a1d7adce3a",
+     "superseded_A1_v1_value": "sha256:e27a286b0ad3a116935104ed15ac4f37a8b9fc180107a211e2cab139c3d563a8",
+     "reproduced": "identical in two independent clean non-incremental builds (p1 and neg produced byte-identical coverage.json)",
+     "domain_check": "all 13139 lineage-bearing rows changed value from the stage2 v1 run; 0 coincided. The change is the framing, not the artifact (which is bit-identical).",
+     "value_for_LevelArc_deref": "sha256:172d4e9f1cd07c89b0377f90fe608d29426d715362d50d5c76365991781b2b0f"
     },
     "fail_closed_evidence": {
-      "1_consumer_perturbation_on_the_deployed_crate": {
-        "control": "-Ztrust-sat-perturb=switch-map (the compiler's own burn-in control: rotate the switch value->target map one position AFTER the canonical sort)",
-        "target_body_result": "level::Level::is_zero goes agreed -> MISMATCH, and the comparator names the corruption exactly: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `...[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`. The A0 `agreed` verdict is therefore NOT vacuous.",
-        "crate_result": "185 -> 175 flip events. 22 bodies had the perturbation APPLIED (applications>0); 11 of those flipped unperturbed; 10 of the 11 stop flipping. The 11th (`mode::CleanMode::has_cubical_layer`) still flips and that is CORRECT, not a hole: its switch is `[ 2: bb1  3: bb2 ]` where bb1 and bb2 are both `const bool true; br bb4`, so rotating the target list is the identity. Every lost flip is exactly a body the perturbation reached.",
-        "scope_note": "-Ztrust-sat-perturb perturbs the CONSUMER (the shim), not the artifact, so the lineage digests are unchanged by it (verified: has_cubical_layer's event digest is identical in both builds, sha256:a7acae485be7faba9d538c393e7f5456b2fd3155f76d9f5a5f2c4bd68c40a185). It tests the comparator, not the attestation."
-      },
-      "2_artifact_perturbation_on_the_digest": {
-        "fixture": "scratchpad/a6/probe.rs — two bodies, `wide` (subject) and `untouched` (control); the perturbation is one literal in `wide` (7 -> 8) selected by --cfg perturb; both compilations otherwise byte-identical argv",
-        "wide_control_event": "sha256:4d78a7ecd889cdb452bad176436746a26c53912594e833ea3a5c22a589612cdf",
-        "wide_perturbed_event": "sha256:41e80117900b940d97b415bc03e372144bf839acde20a0bc6d2bfcf9b6e26e1d",
-        "untouched_both_builds": "sha256:2f2dab55bb422baf67690aa6be7617b2a77a0831dbe796ab930ac0a6bb83474a (IDENTICAL)",
-        "cross_check": "the control digest does not appear anywhere in the perturbed build's log, and vice versa; in both builds the event digest equals the coverage row's lineage",
-        "conclusion": "the flip event's digest is bound to the body's own lowered content: a perturbed artifact cannot produce the pinned digest, and a neighbouring untouched body's digest does not move. A flip that fired regardless of the digest is refuted."
-      },
-      "3_source_level_fail_closed_NOT_independently_exercised": {
-        "what": "flip.rs re-derives the lineage from the taken registry payload and refuses on inequality (`lineage digest mismatch: ...`), and flip_registry::green_body refuses to mint a green entry at all when the digest cannot be computed ('no digest, no green')",
-        "status": "read in source and its refusal strings confirmed present in the shipped stage1 driver, but NOT independently triggered — doing so requires tampering inside the compiler process, i.e. a modified trustc, which needs a compiler rebuild this job did not perform."
-      }
+     "1_consumer_perturbation_on_the_deployed_crate": {
+      "control": "-Ztrust-sat-perturb=switch-map (the compiler's own burn-in control: rotate the switch value->target map one position AFTER the canonical sort)",
+      "target_body_result": "level::Level::is_zero goes agreed -> MISMATCH, and the comparator names the corruption exactly: built `b0: switch(disc(isize,deref(a1)))[0->b1,1->b2,2->b3,3->b10,4->b13,else->b14]` vs derived `...[0->b1,1->b2,2->b9,3->b12,4->b13,else->b14]`. The A0 `agreed` verdict is therefore NOT vacuous.",
+      "crate_result": "185 -> 175 flip events. 22 bodies had the perturbation APPLIED (applications>0); 11 of those flipped unperturbed; 10 of the 11 stop flipping. The 11th (`mode::CleanMode::has_cubical_layer`) still flips and that is CORRECT, not a hole: its switch is `[ 2: bb1  3: bb2 ]` where bb1 and bb2 are both `const bool true; br bb4`, so rotating the target list is the identity. Every lost flip is exactly a body the perturbation reached.",
+      "scope_note": "-Ztrust-sat-perturb perturbs the CONSUMER (the shim), not the artifact, so the lineage digests are unchanged by it (verified: has_cubical_layer's event digest is identical in both builds, sha256:a7acae485be7faba9d538c393e7f5456b2fd3155f76d9f5a5f2c4bd68c40a185). It tests the comparator, not the attestation."
+     },
+     "2_artifact_perturbation_on_the_digest": {
+      "fixture": "scratchpad/a6/probe.rs — two bodies, `wide` (subject) and `untouched` (control); the perturbation is one literal in `wide` (7 -> 8) selected by --cfg perturb; both compilations otherwise byte-identical argv",
+      "wide_control_event": "sha256:4d78a7ecd889cdb452bad176436746a26c53912594e833ea3a5c22a589612cdf",
+      "wide_perturbed_event": "sha256:41e80117900b940d97b415bc03e372144bf839acde20a0bc6d2bfcf9b6e26e1d",
+      "untouched_both_builds": "sha256:2f2dab55bb422baf67690aa6be7617b2a77a0831dbe796ab930ac0a6bb83474a (IDENTICAL)",
+      "cross_check": "the control digest does not appear anywhere in the perturbed build's log, and vice versa; in both builds the event digest equals the coverage row's lineage",
+      "conclusion": "the flip event's digest is bound to the body's own lowered content: a perturbed artifact cannot produce the pinned digest, and a neighbouring untouched body's digest does not move. A flip that fired regardless of the digest is refuted."
+     },
+     "3_source_level_fail_closed_NOT_independently_exercised": {
+      "what": "flip.rs re-derives the lineage from the taken registry payload and refuses on inequality (`lineage digest mismatch: ...`), and flip_registry::green_body refuses to mint a green entry at all when the digest cannot be computed ('no digest, no green')",
+      "status": "read in source and its refusal strings confirmed present in the shipped stage1 driver, but NOT independently triggered — doing so requires tampering inside the compiler process, i.e. a modified trustc, which needs a compiler rebuild this job did not perform."
+     }
     }
-  },
-  "why_the_target_body_does_not_flip": {
+   },
+   "why_the_target_body_does_not_flip": {
     "gate_1_markers": {
-      "site": "flip_registry::record_green — `if tcx.sess.emit_lifetime_markers() && !markers_exact { return; }`",
-      "measured": "markers_exact=false for level::Level::is_zero, with the detail `markers differ: line 0: built `mk b8.0:live s0:opaque:Ref{...LevelArc...}` vs derived `<end>``. `emit_lifetime_markers()` is true for any opt-level > 0, so it is active in every release-shaped build."
+     "site": "flip_registry::record_green — `if tcx.sess.emit_lifetime_markers() && !markers_exact { return; }`",
+     "measured": "markers_exact=false for level::Level::is_zero, with the detail `markers differ: line 0: built `mk b8.0:live s0:opaque:Ref{...LevelArc...}` vs derived `<end>``. `emit_lifetime_markers()` is true for any opt-level > 0, so it is active in every release-shaped build."
     },
     "gate_2_thin_reborrow": {
-      "site": "flip_registry::thin_reborrow_allows_flip (wave-TR), reached through body_lane_gates_allow_flip",
-      "measured_by_T2d": "an in-compiler probe reported `gate=\"lane:thin_reborrow\"` for DefId(0:17075)",
-      "corroborated_here_without_a_compiler_rebuild": "a standalone Level/LevelArc-shaped probe (scratchpad/a6/lvl.rs: same niche enum, same LevelArc(Option<Arc<Level>>), same as_deref().expect() Deref, same recursive by-ref is_zero) compiled at -Copt-level=0 -Cdebug-assertions=off, where the marker gate is INACTIVE: the sibling body `control` (also markers_exact=false) FLIPS, while `Level::is_zero` (verdict `agreed`, markers_exact=false) does NOT flip and emits no fallback line — so it was refused inside record_green by a gate that is not the marker gate. That is the shape T2d named.",
-      "opening_it": "producer work — ledger the reborrowed pointer. Defeating the gate would be weakening a provenance gate to manufacture a green; not done."
+     "site": "flip_registry::thin_reborrow_allows_flip (wave-TR), reached through body_lane_gates_allow_flip",
+     "measured_by_T2d": "an in-compiler probe reported `gate=\"lane:thin_reborrow\"` for DefId(0:17075)",
+     "corroborated_here_without_a_compiler_rebuild": "a standalone Level/LevelArc-shaped probe (scratchpad/a6/lvl.rs: same niche enum, same LevelArc(Option<Arc<Level>>), same as_deref().expect() Deref, same recursive by-ref is_zero) compiled at -Copt-level=0 -Cdebug-assertions=off, where the marker gate is INACTIVE: the sibling body `control` (also markers_exact=false) FLIPS, while `Level::is_zero` (verdict `agreed`, markers_exact=false) does NOT flip and emits no fallback line — so it was refused inside record_green by a gate that is not the marker gate. That is the shape T2d named.",
+     "opening_it": "producer work — ledger the reborrowed pointer. Defeating the gate would be weakening a provenance gate to manufacture a green; not done."
     },
     "attempted_and_blocked": "the same isolation directly on the deployed crate (`cargo build --release` with -Copt-level=0 appended to the clean_kernel unit only) could not be run: mid-session another agent's sibling-crate version bump left $USER_HOME inconsistent with its path dependencies, so `--locked` refused, and rewriting a shared lockfile to work around it was declined."
-  },
-  "remaining_to_close_A0_and_A6": [
+   },
+   "remaining_to_close_A0_and_A6": [
     "T2e (producer): ledger the thin shared reborrow so `thin_reborrow_allows_flip` can admit `Level::is_zero` on its own terms.",
     "Marker fidelity for this body: the derived side emits no `mk`/lifetime-marker line for the `&LevelArc` local, so markers_exact=false at every opt-level > 0. Until it is exact, no release-shaped flip is possible for this body.",
     "Bodyful closure: `Option::as_deref` and `Option::expect` are declaration-only in the artifact, and `<LevelArc as Deref>::deref` is itself DerivedUnsupported (`Call(callee return outside the fragment: Option<&Level>)`). Both are named build items; the seam's refusal to link a bodyless callee must be preserved.",
     "Then re-run this exact probe: A0 needs only the closure + the flip event; A6 needs only the flip event (the digest, its reproduction, and its fail-closed binding are already measured here)."
-  ],
-  "evidence_paths": {
+   ],
+   "evidence_paths": {
     "note": "scratchpad is session-local and not part of the repo; the values above are the durable record",
     "build_logs": "<session-scratchpad>",
     "dumps": "<session-scratchpad>",
     "digest_perturbation_probe": "<session-scratchpad>",
     "build_driver": "<session-scratchpad> + trustc-wrap.sh"
+   }
   }
+ }
 }

@@ -1,0 +1,14 @@
+rustcc fn @expr::meta::ExprMeta::loose_bvar_range(functy.433) {
+    ; #producer: trust
+    ; #names: %0="self"
+bb0(%0: struct.29):
+    %1 = extractfield u64 %0, 0  ; #loc: 374 131 9
+    %2 = const u32 44  ; #loc: 374 131 19
+    %3 = const u32 64  ; #loc: 374 131 8
+    %4 = icmp ult u32 %2, %3  ; #loc: 374 131 8
+    assert %4  ; #proof: shift_in_range  ; #loc: 374 131 8
+    %5 = zext u32 %2 to u64
+    %6 = lshr u64 %1, %5  ; #loc: 374 131 8
+    %7 = trunc u64 %6 to u32  ; #loc: 374 131 8
+    ret %7  ; #loc: 374 132 5
+}

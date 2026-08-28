@@ -76,7 +76,12 @@ fn reconstruct_conv_target(conv_ps: &ProofState, body_target: &Expr) -> Expr {
 /// kernel-type-checked by `eval_conv_goal`/`eval_conv_hyps` via
 /// `lift_focus_eq_through_path` + `replace_target_eq`, exactly as for `arg`,
 /// `enter`, and `rw`.
-pub(super) fn run_conv_body(
+///
+/// `pub(crate)`: conv-position user macros (`infer::user_conv`) delegate
+/// their expanded scripts through this SAME sequencer, so an expanded script
+/// and its inline spelling are the same program (including the conv-mode
+/// `congr` interception above).
+pub(crate) fn run_conv_body(
     eval: &mut dyn super::registry::TacticEval,
     conv_ps: &mut ProofState,
     tacs: &[SurfaceTactic],

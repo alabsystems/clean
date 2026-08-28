@@ -26,11 +26,29 @@
 //! custom layers consume an operator only when `precedence >= custom_min_prec`,
 //! and custom operands re-enter the builtin chain at the level dictated by the
 //! operator via [`Parser::expr_at_custom_level`]. The arithmetic band models
-//! levels 60 and tighter. A separate low-infix band models levels 45 through 50
-//! (the standard temporal-relation surface: `⊨`/`~>`-class relations bind
-//! tighter than `∧`, while `=` stays at level 50). The unmodeled 51–59 gap and
-//! levels below [`CUSTOM_PREC_FLOOR`] error loudly instead of silently
-//! mis-grouping.
+//! levels 60 and tighter. Below it sit six infix bands, each owning the window
+//! between two adjacent builtin connective levels and each entered from the
+//! chain position that makes those builtins group correctly around it:
+//!
+//! | band | window | entered from | operands come from |
+//! |---|---|---|---|
+//! | [`Parser::very_low_custom_infix_expr`] | 0–10 | `expr` entry | `⟶` (10) |
+//! | [`Parser::pipe_custom_infix_expr`] | 11–20 | `\|>` (10) | `<\|>`/`↔` (20) |
+//! | [`Parser::iff_custom_infix_expr`] | 21–30 | `↔` (20) | `∨` (30) |
+//! | [`Parser::or_custom_infix_expr`] | 31–35 | `∨` (30) | `∧` (35) |
+//! | [`Parser::low_custom_infix_expr`] | 36–50 | `∧` (35) | `=` (50) |
+//! | [`Parser::mid_custom_infix_expr`] | 51–59 | `=` (50) | `>>=` (55) |
+//!
+//! A band's operands are produced by the layer immediately BELOW it, so it owns
+//! every level up to that layer's own; it is entered from the layer immediately
+//! above it, so it owns nothing at or below that layer's level.
+//!
+//! `→` (25), `⊕` (30) and `×` (35) are reached BELOW all of them in the
+//! hand-written call graph despite being looser than most, so a band rotates a
+//! consumed operator through such a tail exactly when the tail's Lean level is
+//! strictly lower than the operator's — see
+//! [`apply_operator_across_looser_tails`]. Nothing in 0–59 fails closed for
+//! being "unmodeled" any more.
 //!
 //! Scope: fixed-arity infix/prefix/postfix operators plus CLOSED multi-hole
 //! `notation` patterns (leading + trailing literal, every hole delimited by
@@ -46,24 +64,42 @@ use crate::surface::{
 };
 use crate::ParseError;
 
-/// Loosest custom-infix precedence the expression chain models. The ambient
-/// operand level at full-expression positions ([`Parser::expr`] entry) is this
-/// floor. Levels 45–50 are handled by [`Parser::low_custom_infix_expr`], and
-/// levels 60+ by the arithmetic/custom layers. The 51–59 gap remains
-/// deliberately unsupported and fails closed.
-pub(super) const CUSTOM_PREC_FLOOR: u32 = 45;
+/// The ambient custom-operator operand level at full-expression positions
+/// ([`Parser::expr`] entry). Lean's `term` parser is `term:0`, so every
+/// declared precedence is admissible there; the individual bands below narrow
+/// it to the window each one owns.
+pub(super) const CUSTOM_PREC_FLOOR: u32 = 0;
 
 /// Highest precedence owned by the low custom-infix band. Level 50 is the
 /// comparison/relation boundary; the enclosing `and_expr` is level 35.
 const CUSTOM_LOW_INFIX_CEILING: u32 = 50;
 
+/// Lowest precedence owned by the low custom-infix band. Above it sit four
+/// looser bands, one per builtin connective level, so nothing between 0 and 59
+/// has to fail closed.
+const CUSTOM_LOW_INFIX_FLOOR: u32 = 36;
+
 /// Lowest precedence owned by the original arithmetic custom-operator band.
 const CUSTOM_ARITHMETIC_FLOOR: u32 = 60;
 
+/// Lean precedence of `→` (`infixr:25`, `Lean/Parser/Term.lean`). Also the
+/// ambient custom-operator level inside an arrow codomain, which Lean parses as
+/// `term:25`.
+pub(super) const ARROW_LEVEL: u32 = 25;
+
+/// Lean precedence of `⊕` (`Sum`, `infixr:30`).
+const SUM_LEVEL: u32 = 30;
+
+/// Lean precedence of `×` (`Prod`, `infixr:35`).
+const PROD_LEVEL: u32 = 35;
+
 /// Builtin binary forms whose implementation sits below `cmp_expr` in the
 /// hand-written call graph even though their Lean precedences are lower than
-/// the 45–50 custom-relation band. Parentheses produce `SurfaceExpr::Paren` and
-/// therefore intentionally stop this re-association.
+/// it. A custom operator consumed by one of the bands above `cmp_expr` must be
+/// rotated INTO such a tail whenever the tail binds LOOSER than the operator —
+/// and left alone otherwise, which is what [`LooserBuiltin::level`] decides.
+/// Parentheses produce `SurfaceExpr::Paren` and therefore intentionally stop
+/// this re-association.
 #[derive(Clone, Copy)]
 enum LooserBuiltin {
     Arrow,
@@ -71,11 +107,36 @@ enum LooserBuiltin {
     Prod,
 }
 
+impl LooserBuiltin {
+    /// The form's Lean precedence.
+    fn level(self) -> u32 {
+        match self {
+            LooserBuiltin::Arrow => ARROW_LEVEL,
+            LooserBuiltin::Sum => SUM_LEVEL,
+            LooserBuiltin::Prod => PROD_LEVEL,
+        }
+    }
+}
+
+/// Split a parser-generated looser-binding builtin tail off `expr`, but ONLY
+/// when it binds looser than `slot_level` — the Lean level of the OPERAND SLOT
+/// the tail was parsed into, not the operator's own level. Lean declares
+/// `infixl:n` as `term:n op term:(n+1)` and `infixr:n` as
+/// `term:(n+1) op term:n`, and the pinned v4.30 oracle shows the two really do
+/// differ at the boundary: `A ~L~ B → C` is `(A ~L~ B) → C` for an `infixl:25`
+/// but `A ~R~ (B → C)` for an `infixr:25`.
 fn split_looser_builtin(
     expr: SurfaceExpr,
+    slot_level: u32,
 ) -> Result<(LooserBuiltin, SurfaceExpr, SurfaceExpr), SurfaceExpr> {
     match expr {
-        SurfaceExpr::Arrow(_, left, right) => Ok((LooserBuiltin::Arrow, *left, *right)),
+        SurfaceExpr::Arrow(span, left, right) => {
+            if ARROW_LEVEL < slot_level {
+                Ok((LooserBuiltin::Arrow, *left, *right))
+            } else {
+                Err(SurfaceExpr::Arrow(span, left, right))
+            }
+        }
         SurfaceExpr::App(span, head, args) => {
             let kind = match head.as_ref() {
                 // `sum_expr`/`prod_expr` stamp their synthetic head with the
@@ -90,7 +151,7 @@ fn split_looser_builtin(
                 }
                 _ => None,
             };
-            if let Some(kind) = kind {
+            if let Some(kind) = kind.filter(|kind| kind.level() < slot_level) {
                 if args.len() == 2 && args.iter().all(|arg| arg.name.is_none()) {
                     let mut args = args.into_iter();
                     let left = args.next().expect("binary builtin has a left operand").expr;
@@ -157,15 +218,25 @@ fn is_generated_dependent_product(expr: &SurfaceExpr) -> bool {
 
 /// Borrow the operands of a parser-generated lower-precedence binary form.
 /// This mirrors `split_looser_builtin` without consuming the tree and is used
-/// to validate the exact operands a custom relation would join.
-fn looser_builtin_children(expr: &SurfaceExpr) -> Option<(&SurfaceExpr, &SurfaceExpr)> {
+/// to validate the exact operands a custom relation would join. Gated by
+/// `slot_level` for the same reason.
+fn looser_builtin_children(
+    expr: &SurfaceExpr,
+    slot_level: u32,
+) -> Option<(&SurfaceExpr, &SurfaceExpr)> {
     match expr {
-        SurfaceExpr::Arrow(_, left, right) => Some((left, right)),
+        SurfaceExpr::Arrow(_, left, right) if ARROW_LEVEL < slot_level => Some((left, right)),
         SurfaceExpr::App(span, head, args) => {
             let SurfaceExpr::Ident(head_span, name) = head.as_ref() else {
                 return None;
             };
-            if head_span != span || (name != "Sum" && name != "Prod") {
+            let level = match name.as_str() {
+                _ if head_span != span => return None,
+                "Sum" => SUM_LEVEL,
+                "Prod" => PROD_LEVEL,
+                _ => return None,
+            };
+            if level >= slot_level {
                 return None;
             }
             let [left, right] = args.as_slice() else {
@@ -180,15 +251,15 @@ fn looser_builtin_children(expr: &SurfaceExpr) -> Option<(&SurfaceExpr, &Surface
     }
 }
 
-fn rightmost_relation_operand(mut expr: &SurfaceExpr) -> &SurfaceExpr {
-    while let Some((_, right)) = looser_builtin_children(expr) {
+fn rightmost_relation_operand(mut expr: &SurfaceExpr, slot_level: u32) -> &SurfaceExpr {
+    while let Some((_, right)) = looser_builtin_children(expr, slot_level) {
         expr = right;
     }
     expr
 }
 
-fn leftmost_relation_operand(mut expr: &SurfaceExpr) -> &SurfaceExpr {
-    while let Some((left, _)) = looser_builtin_children(expr) {
+fn leftmost_relation_operand(mut expr: &SurfaceExpr, slot_level: u32) -> &SurfaceExpr {
+    while let Some((left, _)) = looser_builtin_children(expr, slot_level) {
         expr = left;
     }
     expr
@@ -199,25 +270,34 @@ fn leftmost_relation_operand(mut expr: &SurfaceExpr) -> &SurfaceExpr {
 /// rotation the structurally non-monotone operator chain otherwise misses:
 /// `A × B ~> C × D` becomes `A × ((B ~> C) × D)`. Parenthesized
 /// subexpressions are opaque and retain their authored grouping.
+///
+/// `lhs_level` / `rhs_level` are the Lean levels of the operator's two operand
+/// SLOTS (`infixl:n` ⇒ `n` / `n+1`, `infixr:n` ⇒ `n+1` / `n`, non-associative
+/// `infix:n` ⇒ `n+1` / `n+1`). A tail binds looser than its slot only if its
+/// level is strictly below it, so an `infixr:25` hom-arrow leaves an `→` (25)
+/// exactly where the descent put it while an `infixl:25` — whose right slot is
+/// `term:26` — rotates through it.
 fn apply_operator_across_looser_tails(
     expansion: &SurfaceExpr,
     left: SurfaceExpr,
     right: SurfaceExpr,
+    lhs_level: u32,
+    rhs_level: u32,
 ) -> SurfaceExpr {
-    let left = match split_looser_builtin(left) {
+    let left = match split_looser_builtin(left, lhs_level) {
         Ok((kind, outer, inner)) => {
             return rebuild_looser_builtin(
                 kind,
                 outer,
-                apply_operator_across_looser_tails(expansion, inner, right),
+                apply_operator_across_looser_tails(expansion, inner, right, lhs_level, rhs_level),
             );
         }
         Err(left) => left,
     };
-    match split_looser_builtin(right) {
+    match split_looser_builtin(right, rhs_level) {
         Ok((kind, inner, outer)) => rebuild_looser_builtin(
             kind,
-            apply_operator_across_looser_tails(expansion, left, inner),
+            apply_operator_across_looser_tails(expansion, left, inner, lhs_level, rhs_level),
             outer,
         ),
         Err(right) => apply_operator(expansion, left.span(), &[left, right]),
@@ -384,9 +464,21 @@ impl Parser {
         });
     }
 
-    /// Register a CLOSED multi-hole `notation` pattern: leading + trailing
-    /// literal, every hole delimited by literals (no adjacent holes). Any other
-    /// interleaving registers nothing and remains parse-only.
+    /// Register a CLOSED `notation` pattern: leading + trailing literal, every
+    /// hole delimited by literals (no adjacent holes). Any other interleaving
+    /// registers nothing and remains parse-only.
+    ///
+    /// The hole count may be **zero**: `notation "⊤" => Top.top` is a constant
+    /// notation, and it is not a corner case — of the **827** single-line
+    /// `notation` declarations in mathlib4 `43ad0e9d2`, **467 (56%) name no
+    /// operand at all** (`⊤`, `⊥`, `ω`, `𝓟`, `σ`, …). Every one of them used to
+    /// be rejected twice over — by a `pattern.len() < 3` floor and by a
+    /// `vars.is_empty()` bail — so the declaration registered nothing and every
+    /// later use died as `unknown operator or character '…'`. A zero-hole
+    /// pattern is exactly the closed shape this function already models with
+    /// the operand list empty; it needs no lambda (there is nothing to
+    /// abstract) and it is atom-like, which the `precedence.unwrap_or(1024)`
+    /// default already gives.
     fn register_custom_mixfix(
         &mut self,
         precedence: Option<u32>,
@@ -394,8 +486,7 @@ impl Parser {
         expansion: &SurfaceExpr,
         scope_ns: Option<String>,
     ) {
-        if pattern.len() < 3
-            || !matches!(pattern.first(), Some(NotationItem::Literal(_)))
+        if !matches!(pattern.first(), Some(NotationItem::Literal(_)))
             || !matches!(pattern.last(), Some(NotationItem::Literal(_)))
         {
             return;
@@ -425,9 +516,6 @@ impl Parser {
                 }
             }
         }
-        if vars.is_empty() {
-            return;
-        }
         // The LEADING literal announces the notation at operand position, so it
         // must be a token the general grammar does not own: the unknown-symbol
         // class (`⌞`, …, lexed as `Error(UnexpectedChar)`) or `⟪` (`LDAngle`,
@@ -444,15 +532,21 @@ impl Parser {
         if !leads_with_free_symbol {
             return;
         }
-        let binders: Vec<SurfaceBinder> = vars
-            .into_iter()
-            .map(|v| SurfaceBinder::new(v, None, SurfaceBinderInfo::Explicit))
-            .collect();
-        let lam = SurfaceExpr::Lambda(expansion.span(), binders, Box::new(expansion.clone()));
+        // A zero-hole notation abstracts nothing, and a zero-binder `Lambda`
+        // is not a term — store the template itself.
+        let template = if vars.is_empty() {
+            expansion.clone()
+        } else {
+            let binders: Vec<SurfaceBinder> = vars
+                .into_iter()
+                .map(|v| SurfaceBinder::new(v, None, SurfaceBinderInfo::Explicit))
+                .collect();
+            SurfaceExpr::Lambda(expansion.span(), binders, Box::new(expansion.clone()))
+        };
         self.custom_mixfixes.push(CustomMixfix {
             items,
             precedence: precedence.unwrap_or(1024),
-            expansion: lam,
+            expansion: template,
             scope_ns,
         });
     }
@@ -490,12 +584,15 @@ impl Parser {
         let saved = self.custom_min_prec;
         self.custom_min_prec = m;
         let result = match m {
-            0..=50 => self.low_custom_infix_expr_at(m.max(CUSTOM_PREC_FLOOR)),
-            // The hand-written chain does not yet expose distinct entry points
-            // for 51–59. A level-50 left-associative operator legitimately asks
-            // for a level-51 RHS; `bind_expr` is the first modeled builtin layer
-            // above comparisons and therefore the exact entry for that case.
-            51..=59 => self.bind_expr(),
+            // Each band narrows itself to `max(custom_min_prec, its floor)`,
+            // which `m` has just set, so entering the band that OWNS `m` is
+            // enough to admit exactly the operators at level `m` and tighter.
+            0..=10 => self.very_low_custom_infix_expr(),
+            11..=20 => self.pipe_custom_infix_expr(),
+            21..=30 => self.iff_custom_infix_expr(),
+            31..=35 => self.or_custom_infix_expr(),
+            36..=50 => self.low_custom_infix_expr(),
+            51..=59 => self.mid_custom_infix_expr(),
             60..=65 => self.add_custom_expr(),
             66..=67 => self.cons_expr(),
             68 => self.sup_expr(),
@@ -563,37 +660,107 @@ impl Parser {
         Ok(left)
     }
 
-    /// Parse the supported low-precedence custom-infix band (45–50).
+    /// Custom-infix band 0–10, immediately outside `hom_expr` (`⟶`, 10).
     ///
-    /// This layer sits immediately outside `cmp_expr` and inside `and_expr`:
-    /// comparisons and arithmetic therefore bind at least as tightly as a
-    /// level-50 custom relation, while `∧`/`&&` (level 35) bind looser. A
-    /// precedence-climbing loop preserves relative precedence and associativity
-    /// between multiple custom operators in the band. Levels 51–59 are rejected
-    /// rather than being consumed at the wrong hand-written chain position.
-    pub(super) fn low_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        self.low_custom_infix_expr_at(CUSTOM_PREC_FLOOR)
+    /// The loosest band: every builtin binary form in the chain binds at least
+    /// as tightly, so nothing here ever needs re-association.
+    pub(super) fn very_low_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.custom_infix_band(0, 10, Self::hom_expr)
     }
 
-    fn low_custom_infix_expr_at(&mut self, min: u32) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.cmp_expr()?;
-        let mut saw_level_50_custom = false;
+    /// Custom-infix band 11–20, between `|>` (10) and `<|>`/`↔` (20).
+    pub(super) fn pipe_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.custom_infix_band(11, 20, Self::orelse_expr)
+    }
+
+    /// Custom-infix band 21–30, between `↔` (20) and `∨` (30).
+    ///
+    /// **The Mathlib hom-arrow band.** `→+`, `→*`, `→+*`, `↪`, `≃`, `≃*` (all
+    /// 25), `⥤` (26) and their 60-odd siblings are declared here. `→` (25)
+    /// sits BELOW this position in the hand-written chain even though it is
+    /// looser than a level-26 operator, so the rotation in
+    /// [`apply_operator_across_looser_tails`] repairs `C ⥤ D → E` to
+    /// `(C ⥤ D) → E` while leaving `A →+ B → C` (`infixr:25`, right slot
+    /// `term:25`) right-nested, exactly as Lean groups them.
+    pub(super) fn iff_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.custom_infix_band(21, 30, Self::or_expr)
+    }
+
+    /// Custom-infix band 31–35, between `∨` (30) and `∧` (35).
+    pub(super) fn or_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.custom_infix_band(31, 35, Self::and_expr)
+    }
+
+    /// Custom-infix band 36–50, between `∧` (35) and the `infix:50` relations.
+    ///
+    /// Comparisons and arithmetic bind at least as tightly as a level-50 custom
+    /// relation, while `∧`/`&&` (35) bind looser. This is the band that owns
+    /// the relation boundary, so it also carries the low-precedence postfix
+    /// rejection and the level-50 non-chaining check.
+    pub(super) fn low_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.custom_infix_band(
+            CUSTOM_LOW_INFIX_FLOOR,
+            CUSTOM_LOW_INFIX_CEILING,
+            Self::cmp_expr,
+        )
+    }
+
+    /// Custom-infix band 51–59, between the `infix:50` relations and `>>=`
+    /// (55).
+    ///
+    /// KNOWN GAP, recorded rather than papered over: `bind_expr` (`>>=`, 55),
+    /// `bitor_expr` (`|||`, 55) and `bitxor_expr` (`^^^`, 59) sit BELOW this
+    /// position in the hand-written chain, so a custom operator at 56–59 beside
+    /// an unparenthesized monadic-bind or bitwise operand groups as if those
+    /// builtins bound tighter than they do. That inversion is pre-existing
+    /// (`seq_expr` at 60 already sits above `bitor_expr` at 55) and its Mathlib
+    /// radius is zero: every out-of-band Mathlib infix in 51–59 is at level 51.
+    pub(super) fn mid_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        self.custom_infix_band(51, 59, Self::bind_core_expr)
+    }
+
+    /// One custom-infix band: parse an operand with `descend` (the builtin
+    /// chain layer immediately below this position), then precedence-climb over
+    /// every registered custom infix operator whose declared level falls in
+    /// `floor..=ceiling` and is at least the ambient operand level
+    /// ([`Parser::custom_min_prec`]).
+    ///
+    /// An operator outside the window is left alone: a looser one for a band
+    /// higher in the chain, a tighter one having already been consumed by a
+    /// band below. Together the six bands own every level from 0 up, so a
+    /// declared precedence never has to fail closed for being "unmodeled".
+    fn custom_infix_band(
+        &mut self,
+        floor: u32,
+        ceiling: u32,
+        descend: fn(&mut Self) -> Result<SurfaceExpr, ParseError>,
+    ) -> Result<SurfaceExpr, ParseError> {
+        let mut left = descend(self)?;
         if !self.has_custom_operators() {
             return Ok(left);
         }
+        // The band that owns the 50 relation boundary is the one that has to
+        // police the postfix floor and comparison non-chaining; it is on the
+        // descent path of every expression, so nothing is skipped by keeping
+        // the checks in one place.
+        let owns_relation_boundary = ceiling == CUSTOM_LOW_INFIX_CEILING;
+        let min = self.custom_min_prec.max(floor);
+        let mut saw_level_50_custom = false;
 
         loop {
-            if let Some(op) = self.match_custom_operator(NotationKind::Postfix) {
-                if op.precedence < CUSTOM_ARITHMETIC_FLOOR {
-                    return Err(ParseError::UnexpectedToken {
-                        line: self.current_line(),
-                        col: self.current().col as usize,
-                        message: format!(
-                            "custom postfix operator precedence {} is outside the modeled \
-                             postfix band (60+); use a supported precedence",
-                            op.precedence
-                        ),
-                    });
+            if owns_relation_boundary {
+                if let Some(op) = self.match_custom_operator(NotationKind::Postfix) {
+                    if op.precedence < CUSTOM_ARITHMETIC_FLOOR {
+                        return Err(ParseError::UnexpectedToken {
+                            line: self.current_line(),
+                            col: self.current().col as usize,
+                            message: format!(
+                                "custom postfix operator precedence {} is outside the modeled \
+                                 postfix band (60+); use a supported precedence",
+                                op.precedence
+                            ),
+                        });
+                    }
                 }
             }
 
@@ -605,36 +772,24 @@ impl Parser {
                 break;
             };
 
-            if op.precedence < CUSTOM_PREC_FLOOR
-                || (op.precedence > CUSTOM_LOW_INFIX_CEILING
-                    && op.precedence < CUSTOM_ARITHMETIC_FLOOR)
-            {
-                return Err(ParseError::UnexpectedToken {
-                    line: self.current_line(),
-                    col: self.current_span().start,
-                    message: format!(
-                        "custom infix operator precedence {} is outside the modeled \
-                         low (45–50) and arithmetic (60+) bands — parenthesizing \
-                         cannot make an unsupported precedence authoritative",
-                        op.precedence
-                    ),
-                });
-            }
-            if op.precedence > CUSTOM_LOW_INFIX_CEILING || op.precedence < min {
+            if op.precedence > ceiling || op.precedence < min {
                 break;
             }
 
             let operator_line = self.current_line();
             let operator_col = self.current().col as usize;
             self.consume_custom_operator(&op);
-            let rhs_level = if matches!(op.kind, NotationKind::Infixr) {
-                op.precedence
-            } else {
-                op.precedence + 1
+            // Lean operand-slot levels: `infixl:n` is `term:n op term:(n+1)`,
+            // `infixr:n` is `term:(n+1) op term:n`, non-associative `infix:n`
+            // is `term:(n+1) op term:(n+1)`.
+            let (lhs_level, rhs_level) = match op.kind {
+                NotationKind::Infixl => (op.precedence, op.precedence + 1),
+                NotationKind::Infixr => (op.precedence + 1, op.precedence),
+                _ => (op.precedence + 1, op.precedence + 1),
             };
             let right = self.expr_at_custom_level(rhs_level)?;
-            let left_endpoint = rightmost_relation_operand(&left);
-            let right_endpoint = leftmost_relation_operand(&right);
+            let left_endpoint = rightmost_relation_operand(&left, lhs_level);
+            let right_endpoint = leftmost_relation_operand(&right, rhs_level);
             if self.is_unparenthesized_binder_arrow(left_endpoint)
                 || self.is_unparenthesized_binder_arrow(right_endpoint)
                 || is_generated_dependent_product(left_endpoint)
@@ -649,7 +804,13 @@ impl Parser {
                         .to_string(),
                 });
             }
-            left = apply_operator_across_looser_tails(&op.expansion, left, right);
+            left = apply_operator_across_looser_tails(
+                &op.expansion,
+                left,
+                right,
+                lhs_level,
+                rhs_level,
+            );
             self.reject_nonassoc_chain(&op)?;
             saw_level_50_custom |= op.precedence == CUSTOM_LOW_INFIX_CEILING;
         }
@@ -728,19 +889,11 @@ impl Parser {
         }
 
         // Closed mixfix notation announced by its leading literal: `⟪a, b, c⟫`.
-        if let Some(mf) = self.match_custom_mixfix() {
-            if mf.precedence < min {
-                return Err(ParseError::UnexpectedToken {
-                    line: self.current_line(),
-                    col: self.current_span().start,
-                    message: format!(
-                        "custom notation of precedence {} cannot start an operand \
-                         at precedence level {min} — parenthesize it",
-                        mf.precedence
-                    ),
-                });
-            }
-            return self.parse_custom_mixfix(&mf);
+        // Several notations may share that literal (`‖e‖` / `‖e‖₊` / `‖e‖ₑ`),
+        // so every match is tried, most specific first, with backtracking.
+        let mixfix_candidates = self.matching_custom_mixfixes();
+        if !mixfix_candidates.is_empty() {
+            return self.parse_custom_mixfix_alternatives(&mixfix_candidates, min);
         }
 
         let mut left = self.app_expr()?;
@@ -880,10 +1033,33 @@ impl Parser {
         self.open_scoped_notation_ns.truncate(mark);
     }
 
-    /// Return the registered mixfix whose LEADING literal matches the tokens at
-    /// the cursor, if any (longest leading literal wins).
-    fn match_custom_mixfix(&self) -> Option<CustomMixfix> {
-        self.custom_mixfixes
+    /// Every registered mixfix whose LEADING literal matches the tokens at the
+    /// cursor, MOST SPECIFIC FIRST.
+    ///
+    /// A leading literal does not identify a notation: mathlib4 declares three
+    /// notations sharing `‖` at
+    /// `Mathlib/Analysis/Normed/Group/Defs.lean:80-82` (`‖e‖`, `‖e‖₊`, `‖e‖ₑ`),
+    /// and this used to `max_by_key` over the LEADING literal alone — a
+    /// three-way tie at one token, resolved to whichever element `max_by_key`
+    /// happened to return, with no way back. Exactly one of the three then
+    /// parsed and the others died on their continuation literal: measured on
+    /// `Mathlib/Analysis/Normed/Group/Basic.lean`, `‖e‖` alone parses
+    /// **167/258** declarations, adding `‖e‖₊` drops it to **100/256**, and all
+    /// three give **81/252** — the ambiguity costs 86 declarations in one file.
+    ///
+    /// The class is not one family: **469 of mathlib4's 827** single-line
+    /// `notation` declarations share their leading literal with at least one
+    /// sibling, across **134 distinct** leading literals (`⟪` alone leads 59).
+    ///
+    /// Specificity is the TOTAL literal-token count of the whole pattern, which
+    /// is what distinguishes the family (`‖e‖` = 2, `‖e‖₊` = `‖e‖ₑ` = 3):
+    /// try the longest spelling first so a shorter prefix cannot claim an input
+    /// the longer one matches exactly. Ties keep registration order, and every
+    /// candidate is tried, so the order only decides which of two equally
+    /// specific notations wins an input both accept.
+    fn matching_custom_mixfixes(&self) -> Vec<CustomMixfix> {
+        let mut matches: Vec<CustomMixfix> = self
+            .custom_mixfixes
             .iter()
             .filter(|mf| {
                 self.custom_scope_active(mf.scope_ns.as_deref())
@@ -892,11 +1068,72 @@ impl Parser {
                         _ => false,
                     }
             })
-            .max_by_key(|mf| match mf.items.first() {
-                Some(MixfixItem::Literal(toks)) => toks.len(),
-                _ => 0,
-            })
             .cloned()
+            .collect();
+        // `sort_by_key` is stable, so equal-specificity candidates keep
+        // registration order.
+        matches.sort_by_key(|mf| std::cmp::Reverse(mixfix_literal_tokens(mf)));
+        matches
+    }
+
+    /// Try each candidate in order, restoring the cursor between attempts, and
+    /// return the first complete parse.
+    ///
+    /// Without this, `parse_custom_mixfix`'s continuation-literal mismatch was
+    /// a hard error that ended the declaration: `‖n‖₊` reported
+    /// `expected Error(UnexpectedChar('₊')) to continue custom notation, got Def`
+    /// even though a registered notation matched it exactly.
+    ///
+    /// On total failure the error reported is the one from the attempt that got
+    /// FURTHEST through the input, and the cursor is left there — a candidate
+    /// that died on its first continuation token says less about what the user
+    /// wrote than one that consumed three holes and then tripped.
+    fn parse_custom_mixfix_alternatives(
+        &mut self,
+        candidates: &[CustomMixfix],
+        min: u32,
+    ) -> Result<SurfaceExpr, ParseError> {
+        let start_pos = self.pos;
+        let mut furthest: Option<(usize, ParseError)> = None;
+        for mf in candidates {
+            self.pos = start_pos;
+            let attempt = if mf.precedence < min {
+                Err(ParseError::UnexpectedToken {
+                    line: self.current_line(),
+                    col: self.current_span().start,
+                    message: format!(
+                        "custom notation of precedence {} cannot start an operand \
+                         at precedence level {min} — parenthesize it",
+                        mf.precedence
+                    ),
+                })
+            } else {
+                self.parse_custom_mixfix(mf)
+            };
+            match attempt {
+                Ok(parsed) => return Ok(parsed),
+                Err(err) => {
+                    if furthest.as_ref().is_none_or(|(pos, _)| self.pos > *pos) {
+                        furthest = Some((self.pos, err));
+                    }
+                }
+            }
+        }
+        match furthest {
+            Some((pos, err)) => {
+                self.pos = pos;
+                Err(err)
+            }
+            // `candidates` is non-empty at every call site.
+            None => {
+                self.pos = start_pos;
+                Err(ParseError::UnexpectedToken {
+                    line: self.current_line(),
+                    col: self.current_span().start,
+                    message: "no custom notation matched at this position".to_string(),
+                })
+            }
+        }
     }
 
     /// Parse a matched closed mixfix from its leading literal: consume each
@@ -1027,6 +1264,18 @@ fn classify_notation_shape(pattern: &[NotationItem]) -> Option<(NotationKind, Ve
     }
 }
 
+/// Total number of literal TOKENS across a mixfix pattern — the specificity
+/// key used to order overlapping candidates (`‖e‖` = 2, `‖e‖₊` = 3).
+fn mixfix_literal_tokens(mf: &CustomMixfix) -> usize {
+    mf.items
+        .iter()
+        .map(|item| match item {
+            MixfixItem::Literal(toks) => toks.len(),
+            MixfixItem::Hole => 0,
+        })
+        .sum()
+}
+
 /// Lex a notation symbol into its token-kind sequence, dropping the trailing
 /// EOF. Returns empty if the symbol does not lex to any real token.
 fn lex_symbol(symbol: &str) -> Vec<TokenKind> {
@@ -1038,7 +1287,15 @@ fn lex_symbol(symbol: &str) -> Vec<TokenKind> {
 }
 
 /// Build `<expansion> arg0 arg1 ...`.
+///
+/// A NULLARY notation (`notation "∞" => Nat`) has no operands and no
+/// abstracting lambda, so its expansion IS the term: applying it to an empty
+/// argument list would mint `App(Nat, [])`, a spine the elaborator has no
+/// reason to expect. Return the template unchanged instead.
 fn apply_operator(expansion: &SurfaceExpr, start: Span, operands: &[SurfaceExpr]) -> SurfaceExpr {
+    if operands.is_empty() {
+        return expansion.clone();
+    }
     let end = operands
         .last()
         .map_or_else(|| expansion.span(), SurfaceExpr::span);

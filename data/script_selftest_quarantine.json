@@ -1,0 +1,23 @@
+{
+  "schema": "clean.script_selftest_quarantine/v1",
+  "purpose": "Suites under scripts/test_* that are KNOWN RED, so scripts/check_script_selftests.sh can be wired without either curating for green or blocking every push. Two rules keep this from becoming an off switch, both fail-closed: an EXPIRED row fails the gate, and a quarantined suite that starts PASSING fails the gate as a stale row. Anything not listed here must pass.",
+  "discovered": "2026-08-22 — the first time anything ran these suites. Twenty self-tests of the repo's own gate and tooling scripts existed with ZERO callers: not scripts/local_gate.sh, not the justfile, not a git hook, not a data/suite_state row. Both rows below were red at 51c893ce5 and nothing reported it.",
+  "quarantined": [
+    {
+      "suite": "scripts/test_prove_theorem.sh",
+      "expires": "2026-10-22",
+      "observed": "8 passed, 6 failed at 51c893ce5 (2026-08-22)",
+      "first_red_seen": "2026-08-22",
+      "reason": "Test 7 'Prompt includes post-run git-status audit' and five siblings assert scripts/prove_theorem.sh emits prompt sections that the current script no longer emits. The self-test is asserting an older contract of a tool it does not own. Whoever owns prove_theorem.sh must decide whether the prompt regressed or the assertion is stale; the auditing lane that wired this gate is not that owner and will not guess.",
+      "owner_action": "Re-derive the six failing assertions against the current scripts/prove_theorem.sh prompt, then either fix the script or update the assertions, and delete this row."
+    },
+    {
+      "suite": "scripts/test_publish_mathverse_mirror.sh",
+      "expires": "2026-10-22",
+      "observed": "16 passed, 4 failed at 51c893ce5 (2026-08-22)",
+      "first_red_seen": "2026-08-22",
+      "reason": "Four assertions about dscan.toml's mirror target fail: the self-test expects a mirror stanza the checked-in dscan.toml does not carry. Same class as the row above — the assertion and the artifact disagree and the auditing lane cannot tell which one moved.",
+      "owner_action": "Reconcile dscan.toml against the four mirror-target assertions, then delete this row."
+    }
+  ]
+}

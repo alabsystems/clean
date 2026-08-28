@@ -8,8 +8,10 @@
 
 pub mod batch;
 mod branch_sharing;
+mod branch_sharing_recursor_app;
 mod cert;
 mod config;
+mod decl_budget;
 mod def_eq;
 pub mod equiv_manager;
 mod eta;
@@ -31,6 +33,11 @@ mod whnf;
 mod whnf_proj;
 pub mod whnf_proof;
 
+pub use decl_budget::{
+    clear_declaration_budget, declaration_budget_exhausted, declaration_budget_limit,
+    declaration_budget_remaining, declaration_budget_used, reset_declaration_budget,
+    set_declaration_budget, with_declaration_budget_suspended,
+};
 pub use expr_location::{ExprLocation, ExprPathStep};
 pub use local_context::{LocalContext, LocalDecl};
 #[cfg(test)]
@@ -59,8 +66,11 @@ pub struct TcCaches {
     /// Next FVarId counter from the source TypeChecker's LocalContext.
     ///
     /// When injected into a new TypeChecker via `with_mode_and_caches` or
-    /// `with_context_and_caches`, the new LocalContext advances its counter
-    /// to at least this value. This prevents FVarId collision: without it,
+    /// `with_context_and_caches`, the new checker allocates every binder
+    /// local at or above this value (`with_mode_and_caches` advances its
+    /// fresh context eagerly; `with_context_and_caches` keeps it as
+    /// `next_fvar_floor` and applies it at the first push, so a shared
+    /// context is not written to). This prevents FVarId collision: without it,
     /// each new TC starts at next_id=0, and cached WHNF/def_eq entries
     /// referencing FVar(0) from TC1 would be misinterpreted in TC2 where
     /// FVar(0) has a different meaning.
@@ -277,9 +287,31 @@ pub struct TypeChecker<'env> {
     /// Local context (interior mutability for push/pop in `&self` methods like `is_def_eq`).
     ///
     /// Borrow safety (#1754): all borrows are single-expression temporaries —
-    /// `borrow()` for read (get+clone, is_empty, len), `borrow_mut()` for
+    /// `borrow()` for read (get+clone, is_empty, len), `ctx_mut()` for
     /// push/pop/truncate. No borrow is held across recursive TC calls.
-    ctx: RefCell<LocalContext>,
+    ///
+    /// SHARED, copy-on-write (measured, not speculative): the elaborator builds
+    /// one `TypeChecker` per `whnf` / `is_def_eq` / `infer_type` call, and on
+    /// `Mathlib/Logic/Basic` 76% of instance-resolution time was the
+    /// elaborator REBUILDING this context for every call and another 22% was
+    /// this struct's drop glue freeing it (`docs/issues/2026-08-21-mathlib-
+    /// source-frontier-logic-basic.md`). The context is therefore held behind
+    /// an `Arc` so a caller can hand the same built context to many checkers:
+    /// construction and drop are O(1), and the first mutation (`ctx_mut`, i.e.
+    /// a binder push) clones it privately via `Arc::make_mut` — the checker
+    /// never writes through a shared context, so a caller's copy is immutable
+    /// from its point of view exactly as before.
+    ctx: RefCell<std::sync::Arc<LocalContext>>,
+    /// Lower bound for every `FVarId` this checker allocates by `ctx_push`.
+    ///
+    /// Inherited from `TcCaches::next_fvar_id` so cached WHNF/def-eq entries
+    /// from an earlier checker can never be re-keyed by a fresh binder local
+    /// (#2382). Applied LAZILY at the first push rather than eagerly at
+    /// construction: advancing the counter would write to the context, which
+    /// is shared (see `ctx`) and must not be cloned by a call that never
+    /// pushes a binder. `take_caches` folds it back in so the chain stays
+    /// monotone even when no push happened.
+    next_fvar_floor: u64,
     /// Current mode for type checking
     mode: CleanMode,
     /// Transparency mode for definition unfolding in def-eq and WHNF.
@@ -732,7 +764,8 @@ impl<'env> TypeChecker<'env> {
     pub fn new(env: &'env Environment) -> Self {
         Self {
             env,
-            ctx: RefCell::new(LocalContext::new()),
+            ctx: RefCell::new(std::sync::Arc::new(LocalContext::new())),
+            next_fvar_floor: 0,
             mode: env.mode(),
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
@@ -782,7 +815,8 @@ impl<'env> TypeChecker<'env> {
     pub fn with_mode(env: &'env Environment, mode: CleanMode) -> Self {
         Self {
             env,
-            ctx: RefCell::new(LocalContext::new()),
+            ctx: RefCell::new(std::sync::Arc::new(LocalContext::new())),
+            next_fvar_floor: 0,
             mode,
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
@@ -832,7 +866,8 @@ impl<'env> TypeChecker<'env> {
     pub fn with_context(env: &'env Environment, ctx: LocalContext) -> Self {
         Self {
             env,
-            ctx: RefCell::new(ctx),
+            ctx: RefCell::new(std::sync::Arc::new(ctx)),
+            next_fvar_floor: 0,
             mode: env.mode(),
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
@@ -887,7 +922,8 @@ impl<'env> TypeChecker<'env> {
     ) -> Self {
         Self {
             env,
-            ctx: RefCell::new(ctx),
+            ctx: RefCell::new(std::sync::Arc::new(ctx)),
+            next_fvar_floor: 0,
             mode,
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),

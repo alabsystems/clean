@@ -215,6 +215,7 @@ pub(crate) mod inductive_ext2;
 pub(crate) mod inductive_ext_elab;
 pub(crate) mod infer;
 pub(crate) mod instance_priority;
+mod state_generation;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -241,7 +242,9 @@ pub(crate) mod io_monad_ext;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod io_monad_ext2;
+pub(crate) mod level_mint;
 pub(crate) mod level_params;
+pub(crate) mod level_role;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -457,6 +460,11 @@ pub(crate) mod error_recovery;
 pub(crate) mod error_recovery_ext;
 #[cfg(test)]
 pub(crate) mod error_recovery_ext2;
+// Value-type half of `error_recovery_ext`, split out for the 500-line rule.
+// Same cfg(test) gate as its parent: the recovery prototypes compile only with
+// their unit tests until the live pipeline owns their trust policy.
+#[cfg(test)]
+pub(crate) mod error_recovery_ext_types;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -516,8 +524,16 @@ mod error_recovery_ext2_tests;
 mod info_tree_tests;
 
 #[cfg(test)]
+#[path = "subobject_projection_tests.rs"]
+mod subobject_projection_tests;
+
+#[cfg(test)]
 #[path = "info_tree_ext_tests.rs"]
 mod info_tree_ext_tests;
+
+#[cfg(test)]
+#[path = "include_omit_semantics_tests.rs"]
+mod include_omit_semantics_tests;
 
 use clean_kernel::Name;
 
@@ -528,7 +544,8 @@ pub use file_context::FileContext;
 pub use header::{elaborate_decl_headers_with_context, DeclHeader};
 pub use imports::{
     lake_import_search_paths_for_file, nearest_lake_root_for_file, olean_available_for_module,
-    process_import_batch_with_search_paths, process_imports, resolve_intra_project_import,
+    process_import_batch_with_search_paths, process_imports, process_imports_with_policy,
+    resolve_intra_project_import, ImportPolicy,
 };
 pub use preprocess::preprocess_decl_with_context;
 #[cfg(not(test))]
@@ -541,10 +558,30 @@ pub use register::{kernel_check_failure_count, register_aesop_rule};
 // Stack overflow protection for deep recursion
 // =============================================================================
 
-/// Minimum stack space to reserve before recursive calls (32 KB).
-const MIN_STACK_RED_ZONE: usize = 32 * 1024;
+/// Minimum stack space to reserve before recursive calls (256 KB).
+///
+/// CONSTRAINT: must exceed the worst-case stack consumed BETWEEN two
+/// consecutive `stack_safe` checkpoints, or the guard itself faults. With
+/// the old 32 KB red zone, ONE debug-build elaborator cycle
+/// (`elaborate` → `elaborate_surface_inner` → `elab_app_inner` →
+/// `elab_universe_inst`'s iterator-adapter chain → `elab_level`) consumed
+/// the whole zone, so a checkpoint could pass with ~32 KB remaining and
+/// the NEXT checkpoint hit the thread's guard page inside
+/// `stacker::__grow` before it could switch segments. Measured 2026-08-26
+/// as a stack overflow on default 2 MB libtest threads (any invocation
+/// where `.cargo/config.toml`'s `RUST_MIN_STACK` does not reach the test
+/// binary): `codata_cmd_tests::test_codata_stream_computes_through_the_encoding`,
+/// also `test_codef_stream_e2e` / `test_codata_mk_branching_e2e` under
+/// other filter groupings. 256 KB mirrors the kernel's red zone
+/// (`clean-kernel/src/expr/mod.rs`), ~8x the measured worst cycle.
+/// Regression pin: `codata_cmd_tests::test_codata_stream_encoding_survives_small_thread_stack`.
+const MIN_STACK_RED_ZONE: usize = 256 * 1024;
 
 /// Stack size to grow to when running low (1 MB).
+///
+/// CONSTRAINT: must comfortably exceed `MIN_STACK_RED_ZONE` — each grown
+/// segment offers `STACK_GROWTH_SIZE - MIN_STACK_RED_ZONE` usable bytes
+/// before the next growth (the kernel ships the same 256 KB / 1 MB pair).
 const STACK_GROWTH_SIZE: usize = 1024 * 1024;
 
 /// Stack-safe recursive call wrapper.
@@ -895,8 +932,21 @@ fn elaborate_decl_and_register_inner_with_aux(
     // declaration, so a file whose imports do not supply the bridge constants
     // still gets them before any term is elaborated. Files with no `import` are
     // unaffected.
+    //
+    // The seed runs with the ambient per-declaration budget SUSPENDED. It is
+    // environment seeding — a fixed set of three repo-authored, kernel-checked
+    // bridge definitions — not the declaration's own proof search, and
+    // `clean check` already excludes the rest of environment construction by
+    // arming the budget only after `Environment::with_prelude()`. Charging it
+    // to whichever declaration happened to run first made the seed's own
+    // `add_decl` fail with `DeclarationBudgetExhausted` under a tight
+    // `--decl-budget`, which trips the seed's `debug_assert!` — an assertion
+    // whose real subject is "did a co-tenant reshape the prelude classes",
+    // not "was there fuel left". Measured 2026-08-27 at `--decl-budget 1`.
     if !matches!(decl, clean_parser::SurfaceDecl::Import { .. }) {
-        hetero_bridge_seed::seed_hetero_bridges(env);
+        clean_kernel::tc::with_declaration_budget_suspended(|| {
+            hetero_bridge_seed::seed_hetero_bridges(env);
+        });
     }
 
     // Handle declare_aesop_rule_sets directly (before creating immutable borrow)
@@ -933,22 +983,18 @@ fn elaborate_decl_and_register_inner_with_aux(
         if !external_enabled {
             // Clean-native authority check: skip Lake/.olean search and
             // initialize only Clean's built-in module preludes.
-            imports::process_imports_clean_native(env, paths)?;
+            let policy = file_ctx
+                .as_ref()
+                .map_or_else(ImportPolicy::default, |fc| fc.import_policy());
+            imports::process_imports_clean_native(env, paths, policy)?;
         } else if let Some(fc) = file_ctx.as_deref_mut() {
-            // Use Lake-discovered search paths if available. Thread the file's
-            // persistent `import_visited` set through every import so a Mathlib
-            // file's large overlapping `.olean` closures are read once, not
-            // re-read per top-level import (O(n²) → O(union)). Clone the search
-            // paths (a file has few — just PathBufs) into a local so the
-            // immutable `import_search_paths()` borrow does not conflict with
-            // the mutable `import_visited_mut()` borrow of the same `fc`.
-            let local_paths = fc.import_search_paths().to_vec();
-            imports::process_imports_with_search_paths_shared(
-                env,
-                paths,
-                &local_paths,
-                fc.import_visited_mut(),
-            )?;
+            // Use Lake-discovered search paths if available, and thread the
+            // file's persistent `import_visited` set, unresolved-import policy
+            // and already-elaborated-from-source record through every import.
+            // The `visited` memo is what keeps a Mathlib file's large
+            // overlapping `.olean` closures read once rather than re-read per
+            // top-level import (O(n²) → O(union)).
+            imports::process_imports_for_file(env, paths, fc)?;
         } else {
             process_imports(env, paths)?;
         }
@@ -1328,6 +1374,12 @@ fn elaborate_decl_and_register_inner_with_aux(
     // Inject persisted namespace state and namespace prefix from FileContext
     if let Some(ref file_ctx) = file_ctx {
         ctx.set_namespace_state(file_ctx.namespace_state().clone());
+        // U2 rung-4 explicitness channel: the file's `universe` names, so the
+        // elaborator can tell a merged file-scope name from one the
+        // declaration itself wrote after its name. `preprocess_decl_with_context`
+        // folds the two into ONE vector; this is the only place both halves
+        // are still separable. See `ElabCtx::set_decl_universe_params`.
+        ctx.set_file_universe_params(file_ctx.current_universe_params().to_vec());
         // Instance scope state (B99): retired `local instance`s, `scoped
         // instance` namespaces, and the `@[default_instance]` table. All
         // empty unless the file actually used those forms.
@@ -1496,6 +1548,9 @@ mod tests_cases_dependent_motive;
 mod tests_result_only_implicit;
 
 #[cfg(test)]
+mod paren_field_group_tests;
+
+#[cfg(test)]
 mod tests_issue_3527;
 
 #[cfg(test)]
@@ -1509,6 +1564,9 @@ mod tests_close_fvars_seq_focus;
 
 #[cfg(test)]
 mod tests_instance_candidate_hygiene;
+
+#[cfg(test)]
+mod tests_instance_open_carrier_postpone;
 
 #[cfg(test)]
 mod tests_lean_fidelity_shapes;

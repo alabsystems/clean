@@ -300,14 +300,16 @@ impl Specification {
 | ule : IRFCmpOp
 | ugt : IRFCmpOp
 | uge : IRFCmpOp",
-            "EvalIR float comparisons — 12/12 of trust_ir::FCmpOp, in declaration order. Present \
-             so the FCmp instruction has a well-typed operator argument; the semantics of every \
-             one of them is still the explicit `unmodelled` outcome. That is now a DELIBERATE \
-             boundary rather than an absence: super::eval_ir_float classifies binary64 patterns \
-             and could decide the ordered comparisons on the classified fragment, but no body in \
-             clean-kernel emits an FCmp that lowers (`reduce_float_beq/blt/ble::{closure#0}` are \
-             all `unsupported: shim: Inst::FCmp` in the coverage row), so an FCmp semantics would \
-             be modelling with no artifact to be about.",
+            "EvalIR float comparisons — 12/12 of trust_ir::FCmpOp, in declaration order. All 12 \
+             have REAL semantics on the classified binary64 fragment since 2026-08-25 \
+             (super::eval_ir_fcmp, plan W4). The refusal that stood here until then — 'no body \
+             in clean-kernel emits an FCmp that lowers (`reduce_float_beq/blt/ble::{closure#0}` \
+             are all `unsupported: shim: Inst::FCmp`), so an FCmp semantics would be modelling \
+             with no artifact to be about' — was true when written and predates B3-SELECT: as \
+             the ratified definitional semantics of the trust-ir waist, EvalIR's subject is \
+             every constructed-Inst module, not only the bodies clean-kernel emits \
+             (docs/analysis/evalir-completion-plan-2026-08-24.md section 0), and the W4 \
+             synthetic lane is the artifact the comparisons are about.",
         )?;
 
         self.add_inductive(

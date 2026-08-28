@@ -1117,9 +1117,10 @@ fn closure_seed_reject_sig(closure: &str, serial: i64) -> String {
     ));
     let _replay_lock = replay_guard();
     let _ = std::fs::remove_file(&dump);
-    std::env::set_var("ISA_DUMP_REJECTS", &dump);
+    let mut dump_env = crate::process_env::ScopedEnv::new();
+    dump_env.set("ISA_DUMP_REJECTS", &dump);
     let (kv, rej) = kv_counts_raw(&thms);
-    std::env::remove_var("ISA_DUMP_REJECTS");
+    drop(dump_env);
     assert_eq!(rej, 1, "s{serial}: exactly the seed rejects on its closure");
     assert_eq!(kv, n - 1, "s{serial}: all {n} lines but the seed KV");
     let dumped = std::fs::read_to_string(&dump).unwrap_or_default();

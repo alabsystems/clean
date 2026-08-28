@@ -184,6 +184,9 @@ lowprec	skip <;> trivial <;> rfl	ERROR	ERROR: tactic seq `<;>` is not a term ope
 lowprec	(skip; skip <;> trivial)	ERROR	ERROR: tactic-paren `( ; )` is not a term	
 lowprec	constructor <;> [skip; rfl]	ERROR	ERROR: tactic seq `<;>` is not a term operator	
 lowprec	by constructor <;> trivial	TREE	#by	success
+lowprec	+3	ERROR	ERROR: unexpected token '+'; expected term (Lean declares no prefix `+`)	
+lowprec	A →+ B	ERROR	ERROR: unexpected token '+'; expected term (`→+` is Mathlib AddMonoidHom, absent from plain toolchain; NOT a function arrow)	
+lowprec	1 + + 2	ERROR	ERROR: unexpected token '+'; expected term (no prefix `+` to absorb the second one)	
 rewrite	h ▸ rfl	TREE	(Eq.rec h rfl)	
 rewrite	a ▸ b ▸ c	TREE	(Eq.rec a (Eq.rec b c))	
 rewrite	fun (a b : Nat) (p : Nat → Prop) (h : a = b) (hp : p a) => h ▸ hp	TREE	(fun (Eq.rec h hp))	

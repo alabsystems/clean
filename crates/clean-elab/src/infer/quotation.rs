@@ -47,8 +47,8 @@ impl<'a> ElabCtx<'a> {
                     let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
                     if let UnifyResult::Failure(msg) = unifier.unify(&ty_of_ty, &annot_expr) {
                         return Err(ElabError::TypeMismatch {
-                            expected: format!("{annot_expr:?}"),
-                            actual: format!("{ty_of_ty:?} ({msg})"),
+                            expected: format!("{annot_expr}"),
+                            actual: format!("{ty_of_ty} ({msg})"),
                         });
                     }
                 }
@@ -76,8 +76,8 @@ impl<'a> ElabCtx<'a> {
                     let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
                     if let UnifyResult::Failure(msg) = unifier.unify(&actual_ty, &expected_ty) {
                         return Err(ElabError::TypeMismatch {
-                            expected: format!("{expected_ty:?}"),
-                            actual: format!("{actual_ty:?} ({msg})"),
+                            expected: format!("{expected_ty}"),
+                            actual: format!("{actual_ty} ({msg})"),
                         });
                     }
                 }

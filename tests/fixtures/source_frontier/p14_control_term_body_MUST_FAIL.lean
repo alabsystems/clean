@@ -1,0 +1,15 @@
+-- p14 — THIRD MASK, the CONTROL that locates the boundary (the recon's p14).
+--
+-- PROVES: an unresolved head applied to arguments in a VALUE position (a
+-- theorem body) reports correctly — `UnknownIdentWithSuggestions { name:
+-- "nosuchfn", … }`. Auto-implicit is disabled inside term bodies on purpose
+-- (`infer/auto_implicit.rs`, `with_term_body_scope`: Lean binds auto-implicits
+-- only while elaborating declaration HEADERS), so nothing swallows the name.
+--
+-- RULES OUT: "an unresolved applied head always reports correctly", which is
+-- what the recon's single naive probe could establish and no more — it is why
+-- `docs/analysis/frontier-next-class-2026-08-25.md` §2.6/§7.5 left the
+-- 17-entry `Sort`-head over-application class UNATTRIBUTED. p15 and p16 are
+-- this same body moved into SIGNATURE positions, where the answer flips.
+-- Read all three together: the difference between them is the whole mechanism.
+theorem probe_autoimplicit_over_application (a : Nat) : True := nosuchfn a a

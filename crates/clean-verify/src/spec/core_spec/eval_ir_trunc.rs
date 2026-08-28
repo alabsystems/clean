@@ -139,9 +139,43 @@ const SRC_ENV_GET_CHAR_VAL_CLOSURE: &str =
     "def env_get_char_val_closure (n : Nat) : Nat := ir_wrap ir_d32 n";
 
 // ── the emitted module, transcribed ───────────────────────────────────
-const SRC_IR_GC_B0: &str = "def ir_gc_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2) (ir_nd (IRInst.ret (ir_nl1 ir_d2))))";
-const SRC_IR_GC_FUNC: &str = "def ir_gc_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_gc_b0 ir_blk0)";
-const SRC_IR_GC_MODULE: &str = "def ir_gc_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_gc_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_gc.core.txt` + `generated/ir_gc.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_gc.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — ONE divergent line of the three, ONE notation class, printed
+/// before adoption: `ir_gc_b0` inlines `(IRTy.uint_ 64)` and `(IRTy.uint_ 32)`
+/// where the hand line reused the `ir_vc_tu64` / `ir_br_tu32` aliases (each
+/// deltas to `IRTy.uint_` of a named width that computes to the same
+/// literal). `ir_gc_func` and `ir_gc_module` minted byte-identical.
+const MINTED_IR_GC: &str = include_str!("generated/ir_gc.defs.txt");
+
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_GC_DOCS: &[&str] = &[
+    "ir_gc_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_gc.core.txt; reader B's copy of the same body is tests/fixtures/get_char_val_trunc.trust-ir.txt). One cast -- opcode trunc, SOURCE u64, DESTINATION u32, operand %1 -- into %2, then `ret %2`. Every one of those four is semantic input and every one of them is a CFG lane: the opcode (zext at these widths is ir_width_fault), the source width (the ir_nat_leb dw sw guard decides fault versus value), the destination width (it is the modulus), and the operand. Before this chain a cast was in NO lane, so this body parsed to an EMPTY Cfg on both sides and two empty CFGs compare equal. DerivedProved, zero axiom_deps.",
+    "ir_gc_func: the closure as EvalIR -- TWO parameters (%0 the closure environment, whose emitted type is the UNIT type `()` because this closure captures nothing, and %1 the u64 operand), entry block 0, one block. %0 is bound and never read, and that is not an assumption: the producer's own interpreter differential records `1 proven-never-read opaque param(s) as placeholders` for this body, and A4 quantifies over it with no premise at all. DerivedProved, zero axiom_deps.",
+    "ir_gc_module: the module for env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger -- no switch, so the emitted text fully determines the core module; see crate::ir_mint. Checked graph-for-graph, including the two cast lanes, by tests/crystal_a1_lineage/get_char_val_trunc.rs. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order.
+static MINTED_IR_GC_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_GC
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `get_char_val::{closure#0}` module definitions, in registration
+/// order.
+#[must_use]
+pub fn ir_gc_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_GC_LINES
+}
 
 // ── the machine ───────────────────────────────────────────────────────
 const SRC_IR_GC_MACH0: &str = "def ir_gc_mach0 (p : IRScalar) (n : Nat) (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 p (IRScalar.int_ n)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
@@ -189,9 +223,20 @@ impl Specification {
     /// kernel-check.
     pub(super) fn add_eval_ir_trunc(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(SRC_ENV_GET_CHAR_VAL_CLOSURE, "env_get_char_val_closure: the reflected env::native_reducers_beq_shortcircuit::get_char_val::{closure#0} (native_reducers_beq_shortcircuit.rs:120), which is `|n| n as u32` on a u64. It is ir_wrap ir_d32 -- the canonical low 32 bits -- and NOT a proof that Rust's `as u32` is that residue; that gap is the same shape as env_is_valid_char's and ir_f64_div's and is the smallest of the three. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_GC_B0, "ir_gc_b0: THE WHOLE BODY, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/get_char_val_trunc.trust-ir.txt). One cast -- opcode trunc, SOURCE u64, DESTINATION u32, operand %1 -- into %2, then `ret %2`. Every one of those four is semantic input and every one of them is a CFG lane: the opcode (zext at these widths is ir_width_fault), the source width (the ir_nat_leb dw sw guard decides fault versus value), the destination width (it is the modulus), and the operand. Before this chain a cast was in NO lane, so this body parsed to an EMPTY Cfg on both sides and two empty CFGs compare equal. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_GC_FUNC, "ir_gc_func: the closure as EvalIR -- TWO parameters (%0 the closure environment, whose emitted type is the UNIT type `()` because this closure captures nothing, and %1 the u64 operand), entry block 0, one block. %0 is bound and never read, and that is not an assumption: the producer's own interpreter differential records `1 proven-never-read opaque param(s) as placeholders` for this body, and A4 quantifies over it with no premise at all. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_GC_MODULE, "ir_gc_module: the module for env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/get_char_val_trunc.trust-ir.txt and checked graph-for-graph and instruction-for-instruction, including the two new cast lanes, by tests/crystal_a1_lineage/get_char_val_trunc.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_kind_ord.rs posture.
+        let minted = ir_gc_module_defs();
+        if minted.len() != MINTED_IR_GC_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_gc script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_GC_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_GC_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_GC_MACH0, "ir_gc_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds TWO parameters positionally. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_GC_EXACT, "ir_gc_exact: the machine agrees with the reflected closure at EXACTLY 2 steps, for every u64 bit pattern, every heap and every next-address counter. One Eq.refl, and it is affordable for a reason worth stating: the cast's result is IRStepResult.value immediately -- nothing in this body is stuck on a symbolic scrutinee, unlike the fifth, sixth and eighth chains, which all needed the answer abstracted to a parameter before the machine would move. The residue ir_wrap ir_d32 n stays an UNREDUCED application on both sides, so the kernel never computes it. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_GC_CORRECT, "ir_gc_correct: *** THE EQUALITY THEOREM, OVER THE EMITTED SHAPE, FOR A CAST. *** For every u64 bit pattern n, every value representing it, every closure environment value, every heap, every next-address counter and every fuel at or above 2, ir_eval on ir_gc_module returns exactly IROutcome.ret [int_ (ir_wrap ir_d32 n)]. \n\nA0 is measured on the SHIPPED kernel: lowered, spliced, unsupported [], derived_mir.verdict agreed (5 canonical lines identical), markers_exact TRUE over TWO REAL MARKER LINES, the producer's own interpreter differential agreed on 5 sampled inputs, zero calls so the reachable closure is bodyful, and a codegen flip event whose A-LIN lineage equals the coverage row's. A1 is gated by tests/crystal_a1_lineage/get_char_val_trunc.rs. DerivedProved, zero axiom_deps.")?;
@@ -223,20 +268,28 @@ impl Specification {
 mod tests {
     use super::*;
 
+    /// The minted `def` line for one name, from the committed script.
+    fn minted_line(name: &str) -> &'static str {
+        let prefix = format!("def {name} ");
+        ir_gc_module_defs()
+            .iter()
+            .find(|l| l.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("the minted script must define {name}"))
+    }
+
     /// The whole body: one `trunc` from u64 to u32 over `%1` into `%2`, then
     /// `ret %2`. Every token in that sentence is a lane the CFG gate compares.
     #[test]
     fn test_the_body_is_one_typed_cast_and_a_ret_of_its_result() {
-        assert!(
-            SRC_IR_GC_B0.contains("IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2")
-        );
-        assert!(SRC_IR_GC_B0.contains("IRInst.ret (ir_nl1 ir_d2)"));
+        assert!(minted_line("ir_gc_b0")
+            .contains("IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d2"));
+        assert!(minted_line("ir_gc_b0").contains("IRInst.ret (ir_nl1 ir_d2)"));
         // …and it returns the TRUNCATED value, not the argument.
-        assert!(!SRC_IR_GC_B0.contains("IRInst.ret (ir_nl1 ir_d1)"));
+        assert!(!minted_line("ir_gc_b0").contains("IRInst.ret (ir_nl1 ir_d1)"));
         assert!(
-            !SRC_IR_GC_B0.contains("condbr")
-                && !SRC_IR_GC_B0.contains("switch")
-                && !SRC_IR_GC_B0.contains("IRInst.br "),
+            !minted_line("ir_gc_b0").contains("condbr")
+                && !minted_line("ir_gc_b0").contains("switch")
+                && !minted_line("ir_gc_b0").contains("IRInst.br "),
             "one block, no control flow at all"
         );
     }
@@ -245,16 +298,16 @@ mod tests {
     /// aliases rather than re-declarations.
     #[test]
     fn test_the_widths_are_u64_to_u32_and_the_aliases_are_reused() {
-        assert!(SRC_IR_GC_B0.contains("ir_vc_tu64 ir_br_tu32"));
+        assert!(minted_line("ir_gc_b0").contains("(IRTy.uint_ 64) (IRTy.uint_ 32)"));
         assert!(
-            !SRC_IR_GC_B0.contains("ir_br_tu32 ir_vc_tu64"),
+            !minted_line("ir_gc_b0").contains("(IRTy.uint_ 32) (IRTy.uint_ 64)"),
             "source then destination — the reverse is a widening, which faults"
         );
         for src in [
             SRC_ENV_GET_CHAR_VAL_CLOSURE,
-            SRC_IR_GC_B0,
-            SRC_IR_GC_FUNC,
-            SRC_IR_GC_MODULE,
+            minted_line("ir_gc_b0"),
+            minted_line("ir_gc_func"),
+            minted_line("ir_gc_module"),
             SRC_IR_GC_MACH0,
         ] {
             assert!(
@@ -270,7 +323,7 @@ mod tests {
     /// Two parameters, and the first is the (empty) closure environment.
     #[test]
     fn test_two_parameters_and_the_environment_is_unconstrained() {
-        assert!(SRC_IR_GC_FUNC.contains("IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0"));
+        assert!(minted_line("ir_gc_func").contains("IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0"));
         assert!(SRC_IR_GC_MACH0.contains("ir_bind_params (ir_nl2 ir_d0 ir_d1)"));
         let statement = SRC_IR_GC_CORRECT.split(":=").next().unwrap_or("");
         assert!(statement.contains("(p : IRScalar)"));
@@ -381,9 +434,9 @@ mod tests {
     fn test_sources_balanced_ascii() {
         for src in [
             SRC_ENV_GET_CHAR_VAL_CLOSURE,
-            SRC_IR_GC_B0,
-            SRC_IR_GC_FUNC,
-            SRC_IR_GC_MODULE,
+            minted_line("ir_gc_b0"),
+            minted_line("ir_gc_func"),
+            minted_line("ir_gc_module"),
             SRC_IR_GC_MACH0,
             SRC_IR_GC_EXACT,
             SRC_IR_GC_CORRECT,

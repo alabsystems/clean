@@ -310,8 +310,8 @@ impl<'a> ElabCtx<'a> {
                     return Ok(());
                 }
                 Err(ElabError::TypeMismatch {
-                    expected: format!("{expected_ty:?}"),
-                    actual: format!("{actual_ty:?} ({msg})"),
+                    expected: format!("{expected_ty}"),
+                    actual: format!("{actual_ty} ({msg})"),
                 })
             }
             UnifyResult::Stuck => Err(ElabError::CannotInfer),
@@ -387,8 +387,8 @@ impl<'a> ElabCtx<'a> {
                     return Ok(coerced);
                 }
                 Err(ElabError::TypeMismatch {
-                    expected: format!("{expected_ty:?}"),
-                    actual: format!("{actual_ty:?} ({msg})"),
+                    expected: format!("{expected_ty}"),
+                    actual: format!("{actual_ty} ({msg})"),
                 })
             }
             UnifyResult::Stuck => Err(ElabError::CannotInfer),

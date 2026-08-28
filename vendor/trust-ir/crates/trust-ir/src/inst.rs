@@ -1142,11 +1142,95 @@ impl Inst {
             // instructions before DCE runs.
             Inst::DialectOp(_) => true,
 
-            // Terminators are side-effecting (control flow)
-            _ if self.is_terminator() => true,
+            // Terminators are side-effecting (control flow). Listed
+            // explicitly rather than via `_ if self.is_terminator()`, because a
+            // guarded arm does not count toward exhaustiveness — with a guard
+            // here the compiler cannot tell that the match below is total.
+            Inst::Br { .. }
+            | Inst::CondBr { .. }
+            | Inst::Switch { .. }
+            | Inst::Return { .. }
+            | Inst::CoroSuspend { .. }
+            | Inst::Invoke { .. }
+            | Inst::Resume { .. }
+            | Inst::Unreachable => true,
 
-            // Everything else is pure
-            _ => false,
+            // ---------------------------------------------------------------
+            // PURE. Everything below produces its SSA result and nothing else.
+            //
+            // These arms are written out one variant at a time ON PURPOSE.
+            // This match is EXHAUSTIVE — there is deliberately no `_` arm — so
+            // that adding a variant to `Inst` is a COMPILE ERROR here until
+            // somebody classifies it.
+            //
+            // The previous `_ => false` made "pure" the silent default, which
+            // is the unsafe direction for BOTH consumers of this predicate:
+            //   - DCE reads `false` as "safe to delete";
+            //   - the THIR/MIR differential reads `false` as "safe to admit
+            //     into the comparison" (a `true` here is what makes it refuse).
+            // A new effectful instruction therefore became deletable AND
+            // comparable at once, with no diagnostic. Do not reintroduce a
+            // catch-all; classify the variant instead.
+            // ---------------------------------------------------------------
+
+            // Arithmetic, comparison, conversion, selection — value -> value.
+            Inst::BinOp { .. }
+            | Inst::UnOp { .. }
+            | Inst::Overflow { .. }
+            | Inst::ICmp { .. }
+            | Inst::FCmp { .. }
+            | Inst::Cast { .. }
+            | Inst::Select { .. }
+            | Inst::Copy { .. } => false,
+
+            // Aggregate field/element access. `Insert*` are functional updates
+            // producing a NEW aggregate value; they do not write memory.
+            Inst::ExtractField { .. }
+            | Inst::InsertField { .. }
+            | Inst::ExtractElement { .. }
+            | Inst::InsertElement { .. } => false,
+
+            // Address computation and fat-pointer (data + metadata) surgery.
+            // These compute pointer VALUES; they do not dereference.
+            Inst::GEP { .. }
+            | Inst::PtrData { .. }
+            | Inst::PtrMetadata { .. }
+            | Inst::PtrFromParts { .. } => false,
+
+            // Allocation. Both merely PRODUCE a fresh address; the observable
+            // effects of using storage are carried by the Load/Store that
+            // dereference it, and `Dealloc` above is separately observable.
+            //
+            // NOTE: this is the inherited classification, preserved verbatim
+            // by the change that made this match exhaustive. It is the one
+            // pair here worth re-examining on its own merits — `Dealloc` is
+            // observable while `HeapAlloc` is not, so an allocation whose
+            // result goes unused is DCE-removable. That is the usual rule for
+            // a pure allocator, but it is a real semantic commitment and it
+            // was never stated anywhere until now.
+            Inst::Alloca { .. } | Inst::HeapAlloc { .. } => false,
+
+            // Constants and address-of-global: pure producers of a value.
+            Inst::Const { .. } | Inst::NullPtr | Inst::GlobalAddr { .. } | Inst::Undef { .. } => {
+                false
+            }
+
+            // An assumption only ADDS information. Dropping it can lose a
+            // proof, never change observable behavior.
+            Inst::Assume { .. } => false,
+
+            // Fixed-semantics sequence maps (contrast `SeqMap` above, which
+            // invokes an arbitrary element function and is a call in disguise).
+            Inst::SeqMapAddK { .. } | Inst::SeqMapNot { .. } => false,
+
+            // A uniqueness READ of the reference count; it does not modify it
+            // (`Retain`/`Release` above do).
+            Inst::IsUnique { .. } => false,
+
+            // Binding-frame producers. See `CloseFrame` above: OpenFrame /
+            // BindSlot / LoadSlot are pure SSA ops, and removing an unused
+            // OpenFrame also removes the matching CloseFrame's referent.
+            Inst::OpenFrame { .. } | Inst::BindSlot { .. } | Inst::LoadSlot { .. } => false,
         }
     }
 
@@ -2627,5 +2711,71 @@ mod tests {
         assert!(!inst.is_terminator());
         // Must not be elided by DCE — dominator-LIFO nesting would break.
         assert!(inst.has_side_effects());
+    }
+
+    /// `has_observable_effects` must stay EXHAUSTIVE over `Inst`.
+    ///
+    /// The match deliberately has no `_` arm, so adding a variant to `Inst` is
+    /// a compile error until somebody classifies it. That property is enforced
+    /// by the compiler — but only for as long as the catch-all stays gone, and
+    /// the tempting way to clear that compile error is to paste `_ => false`
+    /// back in. This test makes doing so a TEST failure with an explanation,
+    /// rather than a silent return to the old fail-open default.
+    ///
+    /// Fail-open in both directions, which is why it is worth a guard:
+    ///   - DCE reads `false` as "safe to delete";
+    ///   - the THIR/MIR differential reads `false` as "safe to admit into the
+    ///     comparison" (only `true` makes it refuse).
+    ///
+    /// A new effectful instruction defaulting to `false` becomes deletable and
+    /// comparable at once, with no diagnostic anywhere.
+    #[test]
+    fn has_observable_effects_has_no_catch_all_arm() {
+        let src = include_str!("inst.rs");
+        let start = src
+            .find("pub fn has_observable_effects")
+            .expect("has_observable_effects not found — did it get renamed?");
+
+        // Walk to the end of the function by brace matching from its body.
+        let body_start = start + src[start..].find('{').expect("no fn body brace");
+        let mut depth = 0usize;
+        let mut end = body_start;
+        for (off, ch) in src[body_start..].char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = body_start + off;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert!(end > body_start, "failed to brace-match the fn body");
+        let body = &src[body_start..end];
+
+        // Strip line comments so the prose above (which quotes `_ => false`)
+        // does not trip the scan; only real code arms count.
+        let code: String = body
+            .lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        for pat in ["_ =>", "_ if"] {
+            assert!(
+                !code.contains(pat),
+                "`has_observable_effects` regained a `{pat}` catch-all arm.\n\
+                 Do not reintroduce one: it silently reclassifies every future \
+                 instruction as PURE, which makes it BOTH DCE-removable AND \
+                 admissible into the THIR/MIR differential comparison.\n\
+                 Classify the new variant with an explicit arm instead."
+            );
+        }
     }
 }

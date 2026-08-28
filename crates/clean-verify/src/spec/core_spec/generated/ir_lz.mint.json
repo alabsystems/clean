@@ -1,0 +1,33 @@
+{
+ "prefix": "ir_lz",
+ "body": "level::Level::is_zero",
+ "role": "THE DESIGNATED WIDTH-ONE TARGET. Minted and REGISTERED as `ir_lz_module` on 2026-08-22 (designs/2026-08-22-is-zero-model-vs-minted-decision.md); the hand semantic model that carried that name until then is `ir_lzm_module`, and the chain's A4/A5 theorems are about THAT module. Over this minted module the A4 sentence is refuted, kernel-checked (`ir_lz_minted_refutes_a4_on_max`): the module calls `<LevelArc as Deref>::deref` (canonical index 1) and does not define it.",
+ "core_digest": "729170999a5d7ad02cd3f341c1455279ef5b0ab4fb357a4233957c30ad500c55",
+ "defs_digest": "b1b5b003982ba94ca67733e28f1615c6dac647fa58d08cdc6fe9397cefdd0b5c",
+ "def_count": 13,
+ "artifact_core_digest": "72f04d73ab7ab7da50d6eef4a56c64c3d668cc71f37381e424dcd5a06e4c5105",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix, as recorded in BOTH committed provenance files (ir_lz.a152.prov.json and ir_lz.b039.prov.json — two dumps, one digest). `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This chain is NOT in the producer A/B record (generated/ir_mint.producer_ab.json): it was a named REFUSAL (SSA position 20 outside the ir_d0..ir_d16 atom pool) until the 2026-08-22 widening to ir_d0..ir_d63, so the cross-producer identity claimed here is the two reader-A dumps the provenance files record, not three.",
+ "reader_a": {
+  "provenance": ["generated/ir_lz.a152.prov.json", "generated/ir_lz.b039.prov.json"],
+  "artifact_func_index": 3905,
+  "artifact_func_id": 3905,
+  "artifact_functy_id": 0,
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [2],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [3905, 3894],
+  "crate_func_names_seen": ["level::Level::is_zero", "<level::LevelArc as std::ops::Deref>::deref"],
+  "aligns_erased": ["load:None"],
+  "param_tys_erased": ["Ptr"],
+  "block_param_tys_erased": ["bb6:Bool", "bb9:Bool"]
+ },
+ "text_unwitnessed": [
+  "bb0#2 switch arg4"
+ ],
+ "text_unwitnessed_note": "ONE slot: the entry block's switch carries exhaustive_enum_unreachable, which trust-ir's Display never prints. Reader A reads it as FALSE; the hand model (`ir_lzm_b0`) carried TRUE with a five-arm table — the flagship's wrong-exhaustive-flag class, on the designated target itself.",
+ "callees_note": "The minted script carries `IRInst.call ir_d1` (the deref, three sites) and `IRInst.call ir_d0` (self, three sites). Index 1 is PINNED by the tag table's funcs lane and is NOT a function of this module; `ir_call_exec` halts `stuck no_func` there (`ir_lz_on_max_stuck`, `ir_lz_on_imax_stuck`). The deref callee itself does not read: reader B and the projection gate refuse tests/fixtures/level_is_zero_deref_callee.trust-ir.txt at its `global_addr @global.4557` (measured 2026-08-22, pinned by crystal_a1_lineage/level_is_zero.rs).",
+ "producer_dumps_observed": 2,
+ "producer_dumps_note": "The a152 (2026-08-20) and b039 (2026-08-21, Clean 0.4.0 source-bound) reader-A projections, recorded verbatim in the two provenance files; both carry core digest 72f04d73…6e4c5105 and the same two crate function ids. Their agreement with the fixture-era text is M2's."
+}

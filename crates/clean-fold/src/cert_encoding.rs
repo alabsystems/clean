@@ -1276,6 +1276,7 @@ mod tests {
     use super::*;
     use clean_kernel::{BigNat, ExprKind};
     use smallvec::smallvec;
+    use std::sync::Arc;
 
     #[test]
     fn test_encode_sort() {
@@ -1317,9 +1318,9 @@ mod tests {
         let arg_cert = ProofCert::Sort { level: Level::Zero };
 
         let cert = ProofCert::App {
-            fn_cert: Box::new(fn_cert),
+            fn_cert: Arc::new(fn_cert),
             fn_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
-            arg_cert: Box::new(arg_cert),
+            arg_cert: Arc::new(arg_cert),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1337,8 +1338,8 @@ mod tests {
 
         let cert = ProofCert::Lam {
             binder_info: BinderInfo::Default,
-            arg_type_cert: Box::new(arg_type_cert),
-            body_cert: Box::new(body_cert),
+            arg_type_cert: Arc::new(arg_type_cert),
+            body_cert: Arc::new(body_cert),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1353,9 +1354,9 @@ mod tests {
 
         let cert = ProofCert::Pi {
             binder_info: BinderInfo::Default,
-            arg_type_cert: Box::new(arg_type_cert),
+            arg_type_cert: Arc::new(arg_type_cert),
             arg_level: Level::Zero,
-            body_type_cert: Box::new(body_type_cert),
+            body_type_cert: Arc::new(body_type_cert),
             body_level: Level::Zero,
         };
 
@@ -1373,9 +1374,9 @@ mod tests {
         };
 
         let cert = ProofCert::Let {
-            type_cert: Box::new(type_cert),
-            value_cert: Box::new(value_cert),
-            body_cert: Box::new(body_cert),
+            type_cert: Arc::new(type_cert),
+            value_cert: Arc::new(value_cert),
+            body_cert: Arc::new(body_cert),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1406,16 +1407,16 @@ mod tests {
         };
 
         let app1 = ProofCert::App {
-            fn_cert: Box::new(inner1),
+            fn_cert: Arc::new(inner1),
             fn_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
-            arg_cert: Box::new(inner2),
+            arg_cert: Arc::new(inner2),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
         let cert = ProofCert::App {
-            fn_cert: Box::new(app1),
+            fn_cert: Arc::new(app1),
             fn_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
-            arg_cert: Box::new(ProofCert::Sort { level: Level::Zero }),
+            arg_cert: Arc::new(ProofCert::Sort { level: Level::Zero }),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1455,10 +1456,10 @@ mod tests {
         let right_cert = ProofCert::CubicalEndpoint { is_one: true };
 
         let cert = ProofCert::CubicalPath {
-            ty_cert: Box::new(ty_cert),
+            ty_cert: Arc::new(ty_cert),
             ty_level: Level::Zero,
-            left_cert: Box::new(left_cert),
-            right_cert: Box::new(right_cert),
+            left_cert: Arc::new(left_cert),
+            right_cert: Arc::new(right_cert),
         };
 
         let encoded = encode_cert_to_r1cs(&cert).expect("encoding should succeed");
@@ -1469,7 +1470,7 @@ mod tests {
     fn test_encode_cubical_path_lam() {
         let body_cert = ProofCert::CubicalInterval;
         let cert = ProofCert::CubicalPathLam {
-            body_cert: Box::new(body_cert),
+            body_cert: Arc::new(body_cert),
             body_type: Box::new(Expr::from_kind(ExprKind::CubicalInterval)),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
@@ -1484,8 +1485,8 @@ mod tests {
         let arg_cert = ProofCert::CubicalEndpoint { is_one: false };
 
         let cert = ProofCert::CubicalPathApp {
-            path_cert: Box::new(path_cert),
-            arg_cert: Box::new(arg_cert),
+            path_cert: Arc::new(path_cert),
+            arg_cert: Arc::new(arg_cert),
             path_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
@@ -1502,10 +1503,10 @@ mod tests {
         let base_cert = ProofCert::Sort { level: Level::Zero };
 
         let cert = ProofCert::CubicalHComp {
-            ty_cert: Box::new(ty_cert),
-            phi_cert: Box::new(phi_cert),
-            u_cert: Box::new(u_cert),
-            base_cert: Box::new(base_cert),
+            ty_cert: Arc::new(ty_cert),
+            phi_cert: Arc::new(phi_cert),
+            u_cert: Arc::new(u_cert),
+            base_cert: Arc::new(base_cert),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1520,9 +1521,9 @@ mod tests {
         let base_cert = ProofCert::Sort { level: Level::Zero };
 
         let cert = ProofCert::CubicalTransp {
-            ty_cert: Box::new(ty_cert),
-            phi_cert: Box::new(phi_cert),
-            base_cert: Box::new(base_cert),
+            ty_cert: Arc::new(ty_cert),
+            phi_cert: Arc::new(phi_cert),
+            base_cert: Arc::new(base_cert),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1545,7 +1546,7 @@ mod tests {
     fn test_encode_zfc_set_singleton() {
         let inner_cert = ProofCert::Sort { level: Level::Zero };
         let cert = ProofCert::ZFCSet {
-            kind: ZFCSetCertKind::Singleton(Box::new(inner_cert)),
+            kind: ZFCSetCertKind::Singleton(Arc::new(inner_cert)),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1558,7 +1559,7 @@ mod tests {
         let cert1 = ProofCert::Sort { level: Level::Zero };
         let cert2 = ProofCert::Sort { level: Level::Zero };
         let cert = ProofCert::ZFCSet {
-            kind: ZFCSetCertKind::Pair(Box::new(cert1), Box::new(cert2)),
+            kind: ZFCSetCertKind::Pair(Arc::new(cert1), Arc::new(cert2)),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1586,8 +1587,8 @@ mod tests {
         };
 
         let cert = ProofCert::ZFCMem {
-            elem_cert: Box::new(elem_cert),
-            set_cert: Box::new(set_cert),
+            elem_cert: Arc::new(elem_cert),
+            set_cert: Arc::new(set_cert),
         };
 
         let encoded = encode_cert_to_r1cs(&cert).expect("encoding should succeed");
@@ -1600,8 +1601,8 @@ mod tests {
         let pred_cert = ProofCert::Sort { level: Level::Zero };
 
         let cert = ProofCert::ZFCComprehension {
-            var_ty_cert: Box::new(var_ty_cert),
-            pred_cert: Box::new(pred_cert),
+            var_ty_cert: Arc::new(var_ty_cert),
+            pred_cert: Arc::new(pred_cert),
             result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::Zero))),
         };
 
@@ -1620,7 +1621,7 @@ mod tests {
     fn test_encode_squash() {
         let inner_cert = ProofCert::Sort { level: Level::Zero };
         let cert = ProofCert::Squash {
-            inner_cert: Box::new(inner_cert),
+            inner_cert: Arc::new(inner_cert),
         };
 
         let encoded = encode_cert_to_r1cs(&cert).expect("encoding should succeed");

@@ -422,14 +422,14 @@ impl CoercionExtSearch {
     ) -> Result<(Expr, CoercionTrace), ElabError> {
         let source = crate::coercion::head_type_name(actual_type).ok_or_else(|| {
             ElabError::TypeMismatch {
-                expected: format!("{expected_type:?}"),
-                actual: format!("{actual_type:?}"),
+                expected: format!("{expected_type}"),
+                actual: format!("{actual_type}"),
             }
         })?;
         let target = crate::coercion::head_type_name(expected_type).ok_or_else(|| {
             ElabError::TypeMismatch {
-                expected: format!("{expected_type:?}"),
-                actual: format!("{actual_type:?}"),
+                expected: format!("{expected_type}"),
+                actual: format!("{actual_type}"),
             }
         })?;
 
@@ -440,8 +440,8 @@ impl CoercionExtSearch {
                 Ok((coerced, trace))
             }
             None => Err(ElabError::TypeMismatch {
-                expected: format!("{expected_type:?}"),
-                actual: format!("{actual_type:?}"),
+                expected: format!("{expected_type}"),
+                actual: format!("{actual_type}"),
             }),
         }
     }

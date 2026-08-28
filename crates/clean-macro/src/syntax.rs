@@ -99,7 +99,7 @@ impl SyntaxKind {
     }
 
     /// Check if this is an antiquotation kind
-    pub fn is_antiquotation(&self) -> bool {
+    pub(crate) fn is_antiquotation(&self) -> bool {
         self.name_str.contains("antiquot")
     }
 
@@ -113,7 +113,7 @@ impl SyntaxKind {
     pub fn tactic() -> Self {
         Self::app("tactic")
     }
-    pub fn ident_kind() -> Self {
+    pub(crate) fn ident_kind() -> Self {
         Self::app("ident")
     }
     pub fn num() -> Self {
@@ -275,7 +275,7 @@ impl Syntax {
     }
 
     /// Check if this is an antiquotation node
-    pub fn is_antiquot(&self) -> bool {
+    pub(crate) fn is_antiquot(&self) -> bool {
         match self {
             Syntax::Node(node) => node.kind.is_antiquotation(),
             _ => false,
@@ -283,7 +283,7 @@ impl Syntax {
     }
 
     /// Check if this is a splice antiquotation node (`$[x]*` or `$[x:cat]*`)
-    pub fn is_antiquot_splice(&self) -> bool {
+    pub(crate) fn is_antiquot_splice(&self) -> bool {
         match self {
             Syntax::Node(node) => {
                 let kind_str = node.kind.name_str();
@@ -294,7 +294,7 @@ impl Syntax {
     }
 
     /// Check if this is a typed antiquotation node (`$x:term` or `$[x:term]*`)
-    pub fn is_antiquot_typed(&self) -> bool {
+    pub(crate) fn is_antiquot_typed(&self) -> bool {
         match self {
             Syntax::Node(node) => {
                 let kind_str = node.kind.name_str();
@@ -305,7 +305,7 @@ impl Syntax {
     }
 
     /// Check if this is a simple (non-splice) antiquotation
-    pub fn is_simple_antiquot(&self) -> bool {
+    pub(crate) fn is_simple_antiquot(&self) -> bool {
         match self {
             Syntax::Node(node) => {
                 let kind_str = node.kind.name_str();
@@ -425,7 +425,7 @@ impl Syntax {
     }
 
     /// Collect all antiquotations in this syntax tree
-    pub fn collect_antiquots(&self) -> Vec<&Syntax> {
+    pub(crate) fn collect_antiquots(&self) -> Vec<&Syntax> {
         let mut result = Vec::new();
         self.collect_antiquots_into(&mut result);
         result
@@ -561,7 +561,7 @@ impl Syntax {
     }
 
     /// Create a typed antiquotation node for `$name:category`
-    pub fn mk_antiquot_typed(name: &str, category: &str) -> Self {
+    pub(crate) fn mk_antiquot_typed(name: &str, category: &str) -> Self {
         Syntax::node(
             SyntaxKind::antiquot_typed(),
             vec![Syntax::ident(name), Syntax::ident(category)],
@@ -569,12 +569,12 @@ impl Syntax {
     }
 
     /// Create a splice antiquotation for `$[items]*`
-    pub fn mk_antiquot_splice(name: &str) -> Self {
+    pub(crate) fn mk_antiquot_splice(name: &str) -> Self {
         Syntax::node(SyntaxKind::antiquot_splice(), vec![Syntax::ident(name)])
     }
 
     /// Create a typed splice antiquotation for `$[items:category]*`
-    pub fn mk_antiquot_splice_typed(name: &str, category: &str) -> Self {
+    pub(crate) fn mk_antiquot_splice_typed(name: &str, category: &str) -> Self {
         Syntax::node(
             SyntaxKind::antiquot_splice_typed(),
             vec![Syntax::ident(name), Syntax::ident(category)],
@@ -596,7 +596,7 @@ impl Syntax {
     }
 
     /// Whether this is a fresh-name marker node (see [`Syntax::mk_fresh_marker`]).
-    pub fn is_fresh_marker(&self) -> bool {
+    pub(crate) fn is_fresh_marker(&self) -> bool {
         match self {
             Syntax::Node(node) => node.kind.name_str() == "fresh_marker",
             _ => false,
@@ -604,7 +604,7 @@ impl Syntax {
     }
 
     /// The prefix carried by a fresh-name marker node, if this is one.
-    pub fn fresh_marker_prefix(&self) -> Option<&str> {
+    pub(crate) fn fresh_marker_prefix(&self) -> Option<&str> {
         if self.is_fresh_marker() {
             self.children().first().and_then(Syntax::as_ident)
         } else {

@@ -3229,8 +3229,9 @@ fn try_add_decl(
 ///    [`Environment::upgrade_axiom_to_checked_decl`] — the value is fully
 ///    kernel-checked (with the stub removed, so it cannot discharge the stub's
 ///    trust with itself) and, on success, REPLACES the unproven stub. That is
-///    the genuine value landing in the trust lane (the checked counterpart of
-///    the olean loader's unchecked `upgrade_axiom_stubs` healing), and it is
+///    the genuine value landing in the trust lane (the full-`add_decl` sibling
+///    of the olean loader's `upgrade_axiom_stubs_checked` healing — since
+///    R1-STUB, 2026-08-24, that loader lane is kernel-checked too), and it is
 ///    the only branch here that installs anything: `KernelVerified`.
 /// 2. **Twin acceptance.** The olean copy denotes the SAME declaration the env
 ///    already holds: level-param arity matches and the type matches after

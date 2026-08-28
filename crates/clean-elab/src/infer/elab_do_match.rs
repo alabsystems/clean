@@ -333,7 +333,7 @@ impl<'a> ElabCtx<'a> {
                 let ExprKind::Pi(_, expected_motive, _) = result_ty.kind() else {
                     return Err(ElabError::TypeMismatch {
                         expected: format!("do-match motive slot {motive_idx}"),
-                        actual: format!("{result_ty:?}"),
+                        actual: format!("{result_ty}"),
                     });
                 };
                 let aux_motive =
@@ -490,7 +490,7 @@ impl<'a> ElabCtx<'a> {
             let ExprKind::Pi(_, expected_minor, _) = result_ty.kind() else {
                 return Err(ElabError::TypeMismatch {
                     expected: format!("do-match minor for {}", rule.constructor_name),
-                    actual: format!("{result_ty:?}"),
+                    actual: format!("{result_ty}"),
                 });
             };
             let Some(alt) = self.constant_over_telescope_prefix(
@@ -503,7 +503,7 @@ impl<'a> ElabCtx<'a> {
                         "{} do-match field binders for {}",
                         rule.num_fields, rule.constructor_name
                     ),
-                    actual: format!("{expected_minor:?}"),
+                    actual: format!("{expected_minor}"),
                 });
             };
             *result = Expr::app(result.clone(), alt);

@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Precise reason why proof-forest explanation failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ExplainFailure {
+pub(crate) enum ExplainFailure {
     /// Recursive congruence explanation exceeded the recursion guard.
     RecursionLimit,
     /// Parent-pointer traversal exceeded the forest-depth guard.
@@ -29,7 +29,7 @@ pub enum ExplainFailure {
 
 /// Union reason in the E-graph (for proof reconstruction)
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnionReason {
+pub(crate) enum UnionReason {
     /// Direct equality assertion with proof
     Asserted {
         /// The hypothesis providing the equality
@@ -60,7 +60,7 @@ pub enum UnionReason {
 /// Lighter-weight than `UnionReason` — only stores what's needed for
 /// explanation extraction (the SAT literal or congruence arg pairs).
 #[derive(Debug, Clone)]
-pub enum ForestReason {
+pub(crate) enum ForestReason {
     /// Direct equality assertion. Carries the SAT literal that caused it.
     Asserted(Lit),
     /// Congruence: the two terms are equal because corresponding arguments are equal.
@@ -83,7 +83,7 @@ const MAX_EXPLAIN_RECURSION: usize = 100;
 /// enabling NCA-based explanation extraction that is immune to
 /// post-merge canonical E-class ID changes.
 #[derive(Debug, Clone)]
-pub struct ProofForest {
+pub(crate) struct ProofForest {
     /// parent[term_id] = (parent_term_id, reason, decision_level)
     /// Root terms have no entry (absence = root).
     parent: HashMap<TermId, (TermId, ForestReason, u32)>,
@@ -94,7 +94,7 @@ pub struct ProofForest {
 
 impl ProofForest {
     /// Create a new empty proof forest.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         ProofForest {
             parent: HashMap::new(),
             trail: vec![Vec::new()], // Level 0 trail
@@ -108,7 +108,13 @@ impl ProofForest {
     /// information so NCA traversal finds all transitive reasoning steps.
     ///
     /// If t1 and t2 are already in the same tree (same root), this is a no-op.
-    pub fn record_merge(&mut self, t1: TermId, t2: TermId, reason: ForestReason, level: u32) {
+    pub(crate) fn record_merge(
+        &mut self,
+        t1: TermId,
+        t2: TermId,
+        reason: ForestReason,
+        level: u32,
+    ) {
         let root1 = self.find_root(t1);
         let root2 = self.find_root(t2);
         if root1 != root2 {
@@ -131,7 +137,7 @@ impl ProofForest {
     ///
     /// Returns a typed failure when the forest cannot produce a complete path
     /// so the caller can fall back to a conservative explanation.
-    pub fn explain(&self, t1: TermId, t2: TermId) -> Result<Vec<Lit>, ExplainFailure> {
+    pub(crate) fn explain(&self, t1: TermId, t2: TermId) -> Result<Vec<Lit>, ExplainFailure> {
         self.explain_depth(t1, t2, 0)
     }
 
@@ -254,7 +260,7 @@ impl ProofForest {
     }
 
     /// Backtrack: undo all parent pointer changes beyond target level.
-    pub fn backtrack(&mut self, target_level: u32) {
+    pub(crate) fn backtrack(&mut self, target_level: u32) {
         while self.trail.len() > target_level as usize + 1 {
             if let Some(entries) = self.trail.pop() {
                 for term in entries {

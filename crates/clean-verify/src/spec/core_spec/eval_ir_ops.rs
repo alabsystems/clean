@@ -34,6 +34,10 @@ impl Specification {
         // registered once the arithmetic stage has declared it.
         self.add_eval_ir_float_witnesses()?;
         self.add_eval_ir_compare()?;
+        // The residue band's witnesses run through the arithmetic dispatchers
+        // AND pin the band's duplicated order decider against the comparison
+        // band's `ir_f64_ltb`, so they register after BOTH stages.
+        self.add_eval_ir_float_res_witnesses()?;
         self.add_eval_ir_cast()
     }
 
@@ -432,8 +436,175 @@ impl Specification {
                 "def ir_width_fault : IRStepResult := ",
                 "IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded)",
             ),
-            "The verdict for remaining representation-dependent operations (Overflow's paired \
-             result, representation casts, and provenance-free integer-to-pointer conversion).",
+            "The verdict for remaining representation-dependent operations (representation \
+             casts and provenance-free integer-to-pointer conversion). This doc previously \
+             also named \"Overflow's paired result\" and was true when written: as of \
+             2026-08-25 (plan W3) Overflow COMPUTES — ir_overflow_value / ir_overflow_flag \
+             below, dispatched through ir_overflow_exec's two-result bind — and no longer \
+             reaches this verdict.",
+        )?;
+
+        // ── Overflow: the checked-arithmetic value domain (plan W3) ──────
+        //
+        // trust-ir ground truth, measured at the pinned rev `a4e81b6`
+        // (`interpret.rs`): `Inst::Overflow` produces TWO results — the
+        // wrapped arithmetic value and a Bool flag — bound positionally to the
+        // node's two declared result ids (`:637-644`,
+        // `bind_results(.., [result, InterpretValue::bool(overflow)])`). The
+        // value is EXACTLY the wrapping BinOp at the same type
+        // (`eval_int_overflow`, `:5850-5879`, delegates to `eval_int_binop`
+        // Add/Sub/Mul and masks to the width); the flag dispatches on the
+        // TYPE's signedness: `unsigned_overflow` (`:6132-6145`) is
+        // sum/product-past-the-mask and lhs<rhs for sub, `signed_overflow`
+        // (`:6147-6157`) is checked signed arithmetic escaping
+        // [-2^(w-1), 2^(w-1)-1]. The defs below phrase the same functions
+        // over canonical width-w residues; every witness vector is checked
+        // against those interpreter functions by hand and by the W3 semdiff
+        // lane's battery rows.
+        self.add_recursive_def(
+            r"def ir_overflow_value (op : IROverflowOp) (w : Nat) (x : Nat) (y : Nat) : Nat := match op with
+| IROverflowOp.addoverflow => ir_wrap w (Nat.add x y)
+| IROverflowOp.suboverflow => ir_sub_wrap w x y
+| IROverflowOp.muloverflow => ir_wrap w (ir_nat_mul x y)",
+            "Overflow's FIRST result: the wrapped value, arm-for-arm the same helpers \
+             ir_binop_eval's add/sub/mul arms use — because that is trust-ir's semantics \
+             (eval_int_overflow delegates to eval_int_binop, a4e81b6 interpret.rs:5862-5871), \
+             not a convenience: the checked and wrapping forms of the same operator agree on \
+             the value and differ only in the flag.",
+        )?;
+
+        self.add_recursive_def(
+            r"def ir_overflow_flag_u (op : IROverflowOp) (w : Nat) (x : Nat) (y : Nat) : Bool := match op with
+| IROverflowOp.addoverflow => ir_nat_leb (ir_nat_pow2 w) (Nat.add x y)
+| IROverflowOp.suboverflow => ir_nat_ltb x y
+| IROverflowOp.muloverflow => ir_nat_leb (ir_nat_pow2 w) (ir_nat_mul x y)",
+            "Overflow's UNSIGNED flag on canonical width-w residues: the exact sum or product \
+             escapes [0, 2^w), or the subtraction borrows (lhs < rhs). trust-ir's \
+             unsigned_overflow (a4e81b6 interpret.rs:6132-6145) states the same three \
+             conditions as `sum > mask` / `lhs.raw < rhs.raw` / `product > mask` — its extra \
+             u128-overflow guards are an artifact of BOUNDED host arithmetic; over Nat the \
+             exact comparison IS the condition.",
+        )?;
+
+        self.add_recursive_def(
+            r"def ir_overflow_flag_s (op : IROverflowOp) (w : Nat) (x : Nat) (y : Nat) : Bool := match op with
+| IROverflowOp.addoverflow => Bool.and (Bool.not (ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y))) (ir_bool_xor (ir_sign_bit w (Nat.add x y)) (ir_sign_bit w x))
+| IROverflowOp.suboverflow => Bool.and (ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y)) (ir_bool_xor (ir_sign_bit w (ir_sub_wrap w x y)) (ir_sign_bit w x))
+| IROverflowOp.muloverflow => Bool.rec (fun (_ : Bool) => Bool) (ir_nat_leb (ir_nat_pow2 (Nat.pred w)) (ir_nat_mul (ir_signed_magnitude w x) (ir_signed_magnitude w y))) (ir_nat_ltb (ir_nat_pow2 (Nat.pred w)) (ir_nat_mul (ir_signed_magnitude w x) (ir_signed_magnitude w y))) (ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y))",
+            "Overflow's SIGNED flag, trust-ir's signed_overflow (a4e81b6 \
+             interpret.rs:6147-6157: checked signed arithmetic escaping \
+             [-2^(w-1), 2^(w-1)-1]) phrased over two's-complement bit patterns. Add/sub use \
+             the classical sign rules — addition overflows iff the operands share a sign the \
+             result does not; subtraction overflows iff the operands differ in sign and the \
+             result leaves the minuend's — which are EQUAL to the bounds check at every \
+             width, not an approximation of it. Mul compares the exact magnitude product \
+             against the signed bound on the result's side of zero: past 2^(w-1)-1 when the \
+             sign bits agree (product non-negative), past 2^(w-1) when they differ — a \
+             magnitude product of zero clears both, so the sign of zero never misfires. \
+             Bool.rec minor order is (false, true): first minor is the non-negative branch.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_overflow_flag (op : IROverflowOp) (sgn : Bool) (w : Nat) ",
+                "(x : Nat) (y : Nat) : Bool := ",
+                "Bool.rec (fun (_ : Bool) => Bool) ",
+                "(ir_overflow_flag_u op w x y) (ir_overflow_flag_s op w x y) sgn",
+            ),
+            "Overflow's flag, selected by the carrier type's signedness — the one place the \
+             int_/uint_ constructor choice is SEMANTIC for arithmetic (contrast ir_uint2's \
+             doc: for wrap/div the opcode selects the interpretation; for the overflow flag \
+             the TYPE does, exactly as trust-ir dispatches on InterpretInt.signed, a4e81b6 \
+             interpret.rs:5872-5876). Bool.rec minor order is (false, true), so false is \
+             unsigned.",
+        )?;
+
+        // Kernel-executed exact vectors for the overflow value domain, width
+        // 4 (the executable ratchet's width — the witnesses are cheap and run
+        // at every registration). Each vector is checked against
+        // unsigned_overflow / signed_overflow / eval_int_binop by hand.
+        self.add_recursive_def(
+            "def ir_exact_ovf_add_wrap : Eq Nat (ir_overflow_value IROverflowOp.addoverflow 4 15 1) 0 := Eq.refl Nat 0",
+            "Differential vector: width-4 checked add's VALUE wraps exactly as the wrapping \
+             add does — 15 + 1 is 0.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_add_flag_u : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.false 4 15 1) Bool.true := Eq.refl Bool Bool.true",
+            "Differential vector: unsigned 15 + 1 escapes width 4, flag true.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_add_flag_u_boundary : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.false 4 8 7) Bool.false := Eq.refl Bool Bool.false",
+            "Boundary from below: unsigned 8 + 7 is exactly the width-4 maximum 15 — no \
+             overflow, so the flag's threshold is 2^w and not 2^w - 1.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_sub_borrow : Eq Nat (ir_overflow_value IROverflowOp.suboverflow 4 0 1) 15 := Eq.refl Nat 15",
+            "Differential vector: width-4 checked sub's VALUE borrows through the wrap — \
+             0 - 1 is 15.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_sub_flag_u : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.false 4 0 1) Bool.true := Eq.refl Bool Bool.true",
+            "Differential vector: unsigned 0 - 1 borrows, flag true (lhs < rhs, trust-ir's \
+             exact condition).",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_sub_flag_u_eq : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.false 4 5 5) Bool.false := Eq.refl Bool Bool.false",
+            "Boundary: equal operands do not borrow — the condition is strictly-less, not \
+             less-or-equal.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_mul_wrap : Eq Nat (ir_overflow_value IROverflowOp.muloverflow 4 4 4) 0 := Eq.refl Nat 0",
+            "Differential vector: width-4 checked mul's VALUE wraps — 4 * 4 is 16, residue 0.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_mul_flag_u : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.false 4 4 4) Bool.true := Eq.refl Bool Bool.true",
+            "Differential vector: unsigned 4 * 4 escapes width 4 at exactly 2^w, flag true.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_mul_flag_u_boundary : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.false 4 3 5) Bool.false := Eq.refl Bool Bool.false",
+            "Boundary from below: unsigned 3 * 5 is exactly the maximum 15 — no overflow.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_add_min : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.true 4 8 15) Bool.true := Eq.refl Bool Bool.true",
+            "Signed MIN edge: i4(-8) + i4(-1) is -9, below the signed minimum — flag true \
+             (both operands negative, wrapped result 7 non-negative: the sign rule fires).",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_add_min_value : Eq Nat (ir_overflow_value IROverflowOp.addoverflow 4 8 15) 7 := Eq.refl Nat 7",
+            "Signed MIN edge, the VALUE half: the same -9 wraps to bit pattern 7 — the pair \
+             (7, true) is exactly what trust-ir binds for this input.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_add_mixed : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.true 4 8 1) Bool.false := Eq.refl Bool Bool.false",
+            "Signed no-overflow: i4(-8) + i4(1) is -7, in range — mixed signs can never \
+             overflow an addition, which is the sign rule's first conjunct.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_sub_min : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.true 4 8 1) Bool.true := Eq.refl Bool Bool.true",
+            "Signed MIN edge: i4(-8) - i4(1) is -9 — flag true (signs differ and the wrapped \
+             result 7 leaves the minuend's sign).",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_sub_min_neg : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.true 4 8 15) Bool.false := Eq.refl Bool Bool.false",
+            "Signed no-overflow at MIN: i4(-8) - i4(-1) is -7, in range — the checked sub's \
+             flag is about the RESULT'S range, not about touching MIN.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_mul_min : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.true 4 8 15) Bool.true := Eq.refl Bool Bool.true",
+            "Signed MIN edge: i4(-8) * i4(-1) is +8, past the signed maximum 7 — the MIN * -1 \
+             asymmetry that makes signed negation partial, caught by the non-negative branch's \
+             2^(w-1) - 1 bound.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_mul_min_value : Eq Nat (ir_overflow_value IROverflowOp.muloverflow 4 8 15) 8 := Eq.refl Nat 8",
+            "Signed MIN edge, the VALUE half: +8 wraps back to bit pattern 8 (which reads as \
+             -8) — the pair (8, true) matching trust-ir's wrapping_mul & mask.",
+        )?;
+        self.add_recursive_def(
+            "def ir_exact_ovf_s_mul_min_ok : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.true 4 8 1) Bool.false := Eq.refl Bool Bool.false",
+            "Signed no-overflow at MIN: i4(-8) * i4(1) is -8, exactly the signed minimum — in \
+             range, flag false: the negative branch's bound is 2^(w-1), one wider than the \
+             non-negative branch's.",
         )?;
 
         self.add_recursive_def(
@@ -621,8 +792,8 @@ impl Specification {
 | IRBinOp.fmul => ir_float_binop ir_f64_mul t a b
 | IRBinOp.fdiv => ir_float_binop ir_f64_div t a b
 | IRBinOp.frem => ir_float_fault
-| IRBinOp.fmin => ir_float_fault
-| IRBinOp.fmax => ir_float_fault
+| IRBinOp.fmin => ir_float_binop ir_f64_fmin t a b
+| IRBinOp.fmax => ir_float_binop ir_f64_fmax t a b
 | IRBinOp.and_ => ir_bitop_typed Bool.and t a b
 | IRBinOp.or_ => ir_bitop_typed Bool.or t a b
 | IRBinOp.xor_ => ir_bitop_typed ir_bool_xor t a b
@@ -636,8 +807,16 @@ impl Specification {
              \n\nfadd/fsub/fmul/fdiv COMPUTE as of 2026-08-15 (super::eval_ir_float): binary64, \
              on the fragment where IEEE 754 fixes the answer from the operands' classification \
              alone, and the tagged unmodelled outcome elsewhere. Contrast udiv, one line above: a \
-             zero divisor there is `ub div_zero` and here it is a signed infinity. frem/fmin/fmax \
-             remain blanket refusals — no body in clean-kernel emits them.",
+             zero divisor there is `ub div_zero` and here it is a signed infinity. \
+             \n\nfmin/fmax COMPUTE as of 2026-08-25 (the residue wave, \
+             super::eval_ir_float_res): the NaN-ignoring minNum/maxNum on the classified \
+             fragment — one NaN operand returns the other operand; only the both-NaN and \
+             opposite-signed-zero cells refuse, because the standard/llvm leave those results \
+             unpinned. This doc said 'frem/fmin/fmax remain blanket refusals — no body in \
+             clean-kernel emits them' until then; under the B3-SELECT definitional mandate the \
+             no-emitter argument no longer licenses a refusal, and frem alone remains — DATED \
+             and kernel-witnessed universally (ir_frem_unmodelled): an exact float remainder \
+             is the fdiv-finite cost class, the named build item.",
         )?;
 
         self.add_recursive_def(
@@ -739,15 +918,22 @@ impl Specification {
         self.add_recursive_def(
             r"def ir_unop_eval (op : IRUnOp) (t : IRTy) (a : IRScalar) : IRStepResult := match op with
 | IRUnOp.neg => ir_int1_wrap (fun (w : Nat) (x : Nat) => ir_sub_wrap w Nat.zero x) t a
-| IRUnOp.fneg => ir_float_fault
-| IRUnOp.fabs => ir_float_fault
+| IRUnOp.fneg => ir_float_unop ir_f64_fneg t a
+| IRUnOp.fabs => ir_float_unop ir_f64_fabs t a
 | IRUnOp.fsqrt => ir_float_fault
-| IRUnOp.ffloor => ir_float_fault
-| IRUnOp.fceil => ir_float_fault
-| IRUnOp.ftrunc => ir_float_fault
+| IRUnOp.ffloor => ir_float_unop ir_f64_ffloor t a
+| IRUnOp.fceil => ir_float_unop ir_f64_fceil t a
+| IRUnOp.ftrunc => ir_float_unop ir_f64_ftrunc t a
 | IRUnOp.not_ => ir_not_eval t a
 | IRUnOp.ctpop => ir_ctpop_eval t a",
-            "UnOp semantics, 9/9 arms.",
+            "UnOp semantics, 9/9 arms. Every float arm was `ir_float_fault` until 2026-08-25 \
+             (the residue wave, super::eval_ir_float_res): fneg/fabs now COMPUTE as sign-bit \
+             operations, total on genuine patterns including NaNs (a bit operation has no \
+             payload freedom); ffloor/fceil/ftrunc compute exponent-guided exact integer \
+             rounding on every non-NaN pattern. fsqrt is the one remaining refusal — DATED, \
+             and kernel-witnessed universally (ir_fsqrt_unmodelled): a correctly-rounded \
+             square root is the fdiv-finite cost class compounded, and no clean-kernel body \
+             emits one.",
         )?;
 
         self.add_recursive_def(
@@ -763,7 +949,9 @@ impl Specification {
         Ok(())
     }
 
-    /// ICmp (10/10) and FCmp (12/12).
+    /// ICmp (10/10) and FCmp (12/12 — real since plan W4, 2026-08-25; the
+    /// float-comparison band itself lives in [`super::eval_ir_fcmp`] and is
+    /// registered at the end of this stage).
     fn add_eval_ir_compare(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             concat!(
@@ -988,25 +1176,14 @@ impl Specification {
             "Differential vector: i4(-1) is signed-greater-than i4(-8).",
         )?;
 
-        self.add_recursive_def(
-            r"def ir_fcmp_eval (op : IRFCmpOp) (a : IRScalar) (b : IRScalar) : IRStepResult := match op with
-| IRFCmpOp.oeq => ir_float_fault
-| IRFCmpOp.one_ => ir_float_fault
-| IRFCmpOp.olt => ir_float_fault
-| IRFCmpOp.ole => ir_float_fault
-| IRFCmpOp.ogt => ir_float_fault
-| IRFCmpOp.oge => ir_float_fault
-| IRFCmpOp.ueq => ir_float_fault
-| IRFCmpOp.une => ir_float_fault
-| IRFCmpOp.ult => ir_float_fault
-| IRFCmpOp.ule => ir_float_fault
-| IRFCmpOp.ugt => ir_float_fault
-| IRFCmpOp.uge => ir_float_fault",
-            "FCmp semantics, 12/12 arms — every one the tagged `unmodelled float_domain` \
-             outcome. The arms are enumerated rather than collapsed so the coverage claim is \
-             checkable constructor-by-constructor and so a future float domain has 12 named \
-             places to land.",
-        )?;
+        // `ir_fcmp_eval` was registered HERE as 12 arms of `ir_float_fault`
+        // ("12 named places to land") until 2026-08-25, when plan W4 landed
+        // the real float-comparison semantics. The band now lives in
+        // `super::eval_ir_fcmp` — the 12-arm operator table over the
+        // classified binary64 substrate, the typed dispatcher, and the
+        // executed witnesses — and is registered from here so the ordering
+        // (after `add_eval_ir_float`) is unchanged.
+        self.add_eval_ir_fcmp()?;
 
         Ok(())
     }
@@ -1401,6 +1578,12 @@ impl Specification {
              module's own comment names -- is a DIFFERENT IRCastOp constructor and is entirely \
              untouched by the bitcast fragment.",
         )?;
+
+        // The eight fp-cast arms above are DATED REFUSALS (2026-08-25); each
+        // has a kernel-witnessed UNIVERSAL statement, registered here at the
+        // end of the stage so every pre-existing def keeps its position
+        // (super::eval_ir_float_res_witnesses).
+        self.add_eval_ir_cast_float_refusals()?;
 
         Ok(())
     }

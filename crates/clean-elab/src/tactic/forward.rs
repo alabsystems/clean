@@ -8,7 +8,7 @@
 //! - `suffices` reduces a goal by providing a sufficient condition
 
 use crate::unify::{MetaState, Unifier, UnifyResult};
-use clean_kernel::{Expr, ExprKind, Name};
+use clean_kernel::{Expr, ExprKind, FVarId, Name};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 
@@ -58,8 +58,18 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
         };
         match unify_result {
             UnifyResult::Success => {
-                // Proof is valid - add to context as a let-binding
-                let fvar = state.fresh_fvar();
+                // Proof is valid - add to context as a let-binding.
+                // GOAL-DERIVED minting (see existential.rs by_cases): this local
+                // reaches the continuation subgoal's context and is bound by the
+                // `let` binder (depth 1) wrapping the continuation meta, so its
+                // id must sit exactly at the destination meta's binder base —
+                // the global cursor drifts past that base whenever anything
+                // minted since the goal's meta was created.
+                let fvar = {
+                    let base = state.goal_binder_base(&goal);
+                    state.next_fvar = state.next_fvar.max(base + 1);
+                    FVarId::new(base)
+                };
 
                 let local_decl = LocalDecl {
                     fvar,
@@ -102,7 +112,7 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
                 Ok(())
             }
             UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-                expected: format!("{ty_inst:?}"),
+                expected: format!("{ty_inst}"),
                 actual: msg,
             }),
             UnifyResult::Stuck => Err(TacticError::UnificationFailed(
@@ -114,7 +124,14 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
         // 1. Prove T (the lemma)
         // 2. Continue original proof with h : T available
 
-        let fvar = state.fresh_fvar();
+        // GOAL-DERIVED minting (see existential.rs by_cases). NOTE: `have_i`
+        // (instance.rs) predicts this id from the same goal before calling in —
+        // keep the two derivations in lockstep.
+        let fvar = {
+            let base = state.goal_binder_base(&goal);
+            state.next_fvar = state.next_fvar.max(base + 1);
+            FVarId::new(base)
+        };
 
         let local_decl = LocalDecl {
             fvar,
@@ -254,7 +271,7 @@ pub fn suffices_(
                 Ok(())
             }
             UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-                expected: format!("{expected_inst:?}"),
+                expected: format!("{expected_inst}"),
                 actual: msg,
             }),
             UnifyResult::Stuck => Err(TacticError::UnificationFailed(

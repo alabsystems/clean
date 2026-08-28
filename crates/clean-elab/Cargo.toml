@@ -68,7 +68,7 @@ name = "soundness_gate"
 path = "src/bin/soundness_gate/main.rs"
 
 [dev-dependencies]
-clean-kernel = { workspace = true, features = ["math-overlays", "test-utils"] }
+clean-kernel = { workspace = true, features = ["math-overlays", "test-utils", "test-fixtures"] }
 proptest.workspace = true
 serial_test.workspace = true
 syn = { workspace = true, features = ["full", "visit"] }

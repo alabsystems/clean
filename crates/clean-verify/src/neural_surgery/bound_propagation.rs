@@ -119,7 +119,7 @@ impl BoundPropagationSpec {
     ///
     /// Returns the new (widened) output bound.
     #[must_use]
-    pub fn propagate_bound(
+    pub(crate) fn propagate_bound(
         &self,
         original_bound: &OutputBound,
         lipschitz: &LipschitzBound,

@@ -668,7 +668,11 @@ impl<'a> ElabCtx<'a> {
             let ind_universe_params_len = self.universe_params.len();
             let filtered_deriving: Vec<String> = deriving
                 .iter()
-                .filter(|c| c.as_str() != "DeepInduction")
+                .filter(|c| {
+                    c.as_str() != "DeepInduction"
+                        && c.as_str() != "ContainerMap"
+                        && c.as_str() != "ContainerRel"
+                })
                 .cloned()
                 .collect();
             let result = self.generate_derived_instances_inductive(
@@ -696,6 +700,8 @@ impl<'a> ElabCtx<'a> {
             constructors,
             derived_instances,
             wants_deep_induction: deriving.iter().any(|c| c.as_str() == "DeepInduction"),
+            wants_container_map: deriving.iter().any(|c| c.as_str() == "ContainerMap"),
+            wants_container_rel: deriving.iter().any(|c| c.as_str() == "ContainerRel"),
             modifiers: *modifiers,
         })
     }

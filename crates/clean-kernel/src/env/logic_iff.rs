@@ -95,6 +95,36 @@ impl Environment {
 
         self.add_inductive(iff_decl)?;
 
+        // `Iff` IS a structure in Lean 4 (`src/Init/Core.lean`):
+        //
+        //     structure Iff (a b : Prop) : Prop where
+        //       intro :: (mp : a → b) (mpr : b → a)
+        //
+        // so `mp`/`mpr` are FIELD NAMES, and Lean's elaborator resolves `h.mp`
+        // to the field, not to a namespace constant that happens to share the
+        // name. Clean built `Iff.mp`/`Iff.mpr` out of `Iff.rec` and never
+        // recorded the field table, which left two holes:
+        //
+        //  * `theorem t : a ↔ b where mp := …; mpr := …` — a structure-instance
+        //    body at an `Iff`-typed goal — died with
+        //    `UnknownStructureField { struct_name: Iff, field: "mp" }`, because
+        //    `struct_field_index`'s imported-structure fallback reads the index
+        //    out of a projection function whose body is `Proj(S, i, _)`, and an
+        //    `Iff.rec` body has no `Proj` to read.
+        //  * `h.mp` elaborated to the constant application `Iff.mp h` rather
+        //    than the kernel projection `Proj(Iff, 0, h)`.
+        //
+        // Registering the fields closes both. `Proj(Iff, i, _)` was already a
+        // term this elaborator emits — the numeric path (`h.1`/`h.2`, and
+        // `try_index_proj_through_implicits` for `not_and_or.1`) has produced
+        // it all along — so the kernel's Prop-structure projection rule
+        // (`tc/infer_proj.rs`, which validates that every field of a Prop-typed
+        // structure is itself in Prop) is not being asked for anything new.
+        self.register_structure_fields(
+            Name::from_string("Iff"),
+            vec![Name::from_string("mp"), Name::from_string("mpr")],
+        )?;
+
         let iff_rec_const = Expr::const_(Name::from_string("Iff.rec"), vec![Level::zero()]);
         let iff_intro_const = Expr::const_(Name::from_string("Iff.intro"), vec![]);
         let iff_mp_const = Expr::const_(Name::from_string("Iff.mp"), vec![]);

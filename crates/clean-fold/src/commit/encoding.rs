@@ -574,6 +574,7 @@ mod tests {
     use clean_kernel::cert::ZFCSetCertKind;
     use clean_kernel::expr::{BinderInfo, FVarId};
     use clean_kernel::{BigNat, Literal};
+    use std::sync::Arc;
 
     /// Helper to create a simple type expression (Sort 0)
     fn type0() -> Box<Expr> {
@@ -646,8 +647,8 @@ mod tests {
 
     #[test]
     fn test_encode_app() {
-        let fn_cert = Box::new(ProofCert::Sort { level: Level::Zero });
-        let arg_cert = Box::new(ProofCert::Sort { level: Level::Zero });
+        let fn_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
+        let arg_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
 
         let cert = ProofCert::App {
             fn_cert,
@@ -664,8 +665,8 @@ mod tests {
 
     #[test]
     fn test_encode_lam() {
-        let arg_type_cert = Box::new(ProofCert::Sort { level: Level::Zero });
-        let body_cert = Box::new(ProofCert::Sort { level: Level::Zero });
+        let arg_type_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
+        let body_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
 
         let cert = ProofCert::Lam {
             binder_info: BinderInfo::Default,
@@ -683,8 +684,8 @@ mod tests {
 
     #[test]
     fn test_encode_pi() {
-        let arg_type_cert = Box::new(ProofCert::Sort { level: Level::Zero });
-        let body_type_cert = Box::new(ProofCert::Sort { level: Level::Zero });
+        let arg_type_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
+        let body_type_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
 
         let cert = ProofCert::Pi {
             binder_info: BinderInfo::Implicit,
@@ -703,9 +704,9 @@ mod tests {
 
     #[test]
     fn test_encode_let() {
-        let type_cert = Box::new(ProofCert::Sort { level: Level::Zero });
-        let value_cert = Box::new(ProofCert::Sort { level: Level::Zero });
-        let body_cert = Box::new(ProofCert::Sort { level: Level::Zero });
+        let type_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
+        let value_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
+        let body_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
 
         let cert = ProofCert::Let {
             type_cert,
@@ -781,7 +782,7 @@ mod tests {
 
     #[test]
     fn test_encode_squash() {
-        let inner_cert = Box::new(ProofCert::Sort { level: Level::Zero });
+        let inner_cert = Arc::new(ProofCert::Sort { level: Level::Zero });
 
         let cert = ProofCert::Squash { inner_cert };
 

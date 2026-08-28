@@ -65,7 +65,6 @@ pub(crate) struct RuntimeAbi {
     // Closures.
     pub(crate) clean_alloc_closure: FuncId, // vararg; fn param typed Ty::Func(clean_fn_ty)
     pub(crate) apply: [FuncId; 33],         // clean_apply_0..=32
-    pub(crate) clean_apply_n: FuncId,
     /// `clean_mk_string(const char*) -> clean_obj*`: builds a managed string
     /// from a NUL-terminated byte global (see the data-global pre-pass).
     pub(crate) clean_mk_string: FuncId,
@@ -237,7 +236,7 @@ impl RuntimeAbi {
             params.extend(std::iter::repeat_n(p.clone(), n));
             *slot = ext(mb, c, &format!("clean_apply_{n}"), params, vec![p.clone()]);
         }
-        let clean_apply_n = ext(
+        let _clean_apply_n = ext(
             mb,
             c,
             "clean_apply_n",
@@ -270,7 +269,6 @@ impl RuntimeAbi {
             scalar_set,
             clean_alloc_closure,
             apply,
-            clean_apply_n,
             clean_mk_string,
             clean_fn_ty,
             n_externs: count,

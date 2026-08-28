@@ -74,6 +74,9 @@ pub(super) fn eval_conv_hyps(
 
         let mut conv_ps =
             crate::tactic::builtins_phase3d_elab::create_sub_proof_state(ps, old_hyp_ty.clone());
+        // Stamp the sub-state as a conv body so conv-position user macros
+        // (`infer::user_conv`) dispatch here and refuse everywhere else.
+        conv_ps.in_conv_body = true;
 
         super::run_conv_body(eval, &mut conv_ps, tacs)?;
 

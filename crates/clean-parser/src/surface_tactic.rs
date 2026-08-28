@@ -97,6 +97,11 @@ pub enum SurfaceTactic {
         only: bool,
         lemmas: Vec<SurfaceExpr>,
         location: SurfaceTacticLocation,
+        /// The lemma list contained Lean's `*` element (`simp [*]`,
+        /// `simp only [*]`, `simp [foo, *]`): every local hypothesis is also
+        /// used as a rewrite rule. `*` is not a term, so it is carried here
+        /// rather than in `lemmas`.
+        use_hypotheses: bool,
     },
 
     /// `have h : T := proof`, `have : T := proof`, or `have h := proof`

@@ -109,7 +109,7 @@ impl ArithmeticTheory {
     /// prepare/drain cycles within one `check_theories_attributed` batch
     /// so the same equality pair is not re-emitted (#2366). Cleared on
     /// backtrack boundaries only.
-    pub fn drain_deduced_equalities(&mut self) -> Vec<(TermId, TermId, Vec<Lit>)> {
+    pub(crate) fn drain_deduced_equalities(&mut self) -> Vec<(TermId, TermId, Vec<Lit>)> {
         std::mem::take(&mut self.pending_deduced)
     }
 }

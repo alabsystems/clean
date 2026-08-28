@@ -201,11 +201,17 @@ Compile a single declaration from a `.lean` file through the clean-compiler \
 pipeline. The MVP accepts a `<FILE>` positional and a `--decl <NAME>` \
 selector plus `--emit <FORMAT>` (one of `l5ir`, `l5cnf`, `c`, `rust`) and \
 an `--opt-level <N>` hint.\n\n\
-Marked `Stability::Experimental` because the command emits source text only: \
-it does not yet link, run, or provide full Lean4 compiler/runtime replacement. \
-The top-level `clean-cli` bridge owns parsing and elaboration, then lowers the \
-selected declaration through the public `clean-compiler` L5CNF/IR emitters. \
-Full file-to-executable closure is tracked by #3708.",
+Marked `Stability::Experimental` because THIS command emits source text only: \
+it does not itself link or run, and it is not a full Lean4 compiler/runtime \
+replacement. The top-level `clean-cli` bridge owns parsing and elaboration, \
+then lowers the selected declaration through the public `clean-compiler` \
+L5CNF/IR emitters. Note `--emit l5ir`/`--emit l5cnf` print a structural dump \
+of the IR, not compilable source; `--emit c`/`--emit rust` print source.\n\n\
+Linking and running are NOT missing from the CLI — they live in `clean run`, \
+which takes the same emit-C closure through `cc` to a native binary and \
+executes it, honoring Lean's `def main : IO UInt32` entry contract (verified \
+2026-08-26). #3708 tracks giving `clean compile` its own link step; read it as \
+a gap in this verb, not in the toolchain.",
     category: Category::Build,
     stability: Stability::Experimental,
     examples: &[
@@ -222,7 +228,7 @@ Full file-to-executable closure is tracked by #3708.",
             what: "emit Rust source for declaration `foo`",
         },
     ],
-    see_also: &["check", "eval"],
+    see_also: &["run", "check", "eval"],
     references: &[
         DESIGN_REF,
         ORPHAN_INVENTORY_REF,

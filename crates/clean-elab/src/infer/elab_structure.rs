@@ -1734,7 +1734,23 @@ impl<'a> ElabCtx<'a> {
                 &parent_subobjects,
                 &mut already,
             )?;
-            projections.extend(inherited_projs);
+            // The projections are BUILT unconditionally — building them is what
+            // performs the diamond / clashing-parent-field check above, and that
+            // check must run in every mode. Only their REGISTRATION is gated.
+            //
+            // Lean 4 declares no constant for an inherited field; it composes
+            // `Parent.f (Child.toParent self)` per use site (`mkBaseProjections`).
+            // Under `CLEAN_LEAN4_STRUCT_PARITY=1` Clean matches that constant set
+            // and the composition is produced on the fly by
+            // `name_resolution::compose_subobject_projection`. Default OFF — see
+            // `designs/2026-08-24-inherited-projection-parity.md` for the measured
+            // dependency census that says why the default has not moved yet.
+            for (name, _, _) in &inherited_projs {
+                crate::name_resolution::note_generated_inherited_projection(name);
+            }
+            if !crate::name_resolution::lean4_struct_parity_enabled() {
+                projections.extend(inherited_projs);
+            }
         }
 
         // Register the dependent-default `_default` functions as reducible

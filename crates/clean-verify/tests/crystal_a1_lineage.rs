@@ -48,16 +48,18 @@
 //! * The lineage digest is RECORDED here, not recomputed from the artifact by
 //!   this test. It pins WHICH emitted body the theorem is about; verifying it
 //!   at flip time is A6's job, in trust.
-//! * `ir_h2_module` remains hand-transcribed. This gate makes an incorrect
-//!   transcription FAIL rather than making a correct one automatic.
-//!   **NO LONGER TRUE FOR `has_cubical_layer` as of 2026-08-20**, and true for
-//!   the other nine. That chain's module is now MINTED from the emitted
-//!   artifact (`src/ir_mint`, `tests/crystal_a2_mint.rs`); this gate keeps
-//!   running over it unchanged, as one of four independent readers. Minting it
-//!   found a wrong `Switch.exhaustive_enum_unreachable` that no lane in this
-//!   file could ever have seen, because trust-ir's `Display` never prints that
-//!   field — which is also the sharpest available statement of what "structural"
-//!   costs here.
+//! * Some chains' modules remain hand-transcribed. This gate makes an
+//!   incorrect transcription FAIL rather than making a correct one automatic.
+//!   The MINTED set — modules GENERATED from the emitted artifact
+//!   (`src/ir_mint`; gates `tests/crystal_a2_mint.rs`, `…_pv.rs`,
+//!   `…_floats.rs`) — is `has_cubical_layer` (2026-08-20),
+//!   `simp_priority_value` (2026-08-20) and the whole float family
+//!   `float_add`/`float_sub`/`float_mul`/`float_div` (2026-08-21); this gate keeps running
+//!   over each unchanged, as one of four independent readers. Minting the
+//!   first found a wrong `Switch.exhaustive_enum_unreachable` that no lane in
+//!   this file could ever have seen, because trust-ir's `Display` never prints
+//!   that field — which is also the sharpest available statement of what
+//!   "structural" costs here.
 //!
 //! So this is the link that was missing, at the strength it can honestly be
 //! claimed: the proved module and the emitted module are checked equal on every
@@ -66,15 +68,15 @@
 //! ## Two bodies, and only one of them has this link
 //!
 //! `has_cubical_layer` is **not** the body the execution plan designates. The
-//! designated target is `level::Level::is_zero`, and for it link 2a is OPEN. The
-//! `level_is_zero` module keeps that measured instead of asserted: the emitted
-//! `is_zero` body is recorded verbatim
-//! (`fixtures/level_is_zero.trust-ir.txt`), the callee that blocks transcription
-//! is recorded with it (`…_deref_callee.trust-ir.txt`), the A0 verdicts are
-//! pinned (`level_is_zero.a0.json` — 4 PASS, 2 FAIL), and the divergence between
-//! the registered `ir_lz_*` module and the emitted CFG is checked. Those tests
-//! FAIL when the wall moves, which is how the transcription work gets triggered
-//! rather than forgotten.
+//! designated target is `level::Level::is_zero`: since 2026-08-22 its link 2a
+//! HOLDS (the emitted body is MINTED and registered as `ir_lz_module`, gated by
+//! `tests/crystal_a2_mint_lz.rs`) and its link 4 is OPEN (the A4/A5 theorems
+//! are about the hand SEMANTIC MODEL `ir_lzm_module`; over the minted module
+//! the A4 sentence is refuted, kernel-checked). The `level_is_zero` module
+//! keeps that measured: the emitted body recorded verbatim, the deref callee
+//! recorded and measured NOT to mint, the A0 verdicts pinned, and the
+//! four-class model-vs-emitted divergence asserted class by class. Those tests
+//! FAIL when any of it moves, so the remaining work is triggered, not forgotten.
 
 // The CFG parser both sides of this gate are read with, and the lane
 // comparator that reads it. Split out on 2026-08-14: with the sixth and
@@ -90,8 +92,8 @@ mod float_evidence;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) use emitted_cfg::{
-    assert_entry_params, assert_lanes, clean_block_sources, clean_named_const_source, fixture,
-    parse_clean, parse_emitted, spec_source, Cfg,
+    assert_entry_params, assert_lanes, clean_block_sources, fixture, parse_clean, parse_emitted,
+    spec_source, Cfg,
 };
 
 /// A0 and A6, asserted for a chain in one place: every criterion of the
@@ -225,9 +227,9 @@ mod has_cubical_layer;
 #[path = "crystal_a1_lineage/level_is_zero.rs"]
 mod level_is_zero;
 
-// Callee identity in a MINTED ir_lz_module: which call resolves, which goes
-// stuck, and what that costs `ir_lz_correct`. Split out because the reasoning
-// and its three pins outgrew the lane file.
+// Callee identity in the MINTED ir_lz_module: which call resolves, which goes
+// stuck, and what that costs the A4 sentence over it (`ir_lzm_correct` is the
+// model's theorem). Split out because the reasoning outgrew the lane file.
 #[path = "crystal_a1_lineage/level_is_zero_callee_identity.rs"]
 mod level_is_zero_callee_identity;
 
@@ -333,7 +335,19 @@ mod node_id_index;
 #[path = "crystal_a1_lineage/strict_monads.rs"]
 mod strict_monads;
 
-// ^ insert into crates/clean-verify/tests/crystal_a1_lineage.rs alongside the other per-chain `#[path]` mod declarations (e.g. after `mod simp_priority_value;` / the float trio)
+// The CALL chain, 2026-08-21 — `expr::meta::ExprMeta::has_loose_bvars` calling
+// `expr::meta::ExprMeta::loose_bvar_range`: the first chain over a body with a
+// `call`. Gates BOTH fixtures (the callee's full lanes incl. lshr and the
+// assert lane), adds the file's own structural call reader (Cfg has no operand
+// lane for a call — measured: a changed argument or a renumbered callee index
+// leaves every lane bit-identical), and pins the cross-fixture callee identity
+// Clean-side (call target == callee IRFunc's own id, the level_is_zero
+// collision refused) and emitted-side (the lane18 freshness record's callee
+// func_id == the index the caller's call names), plus the lineage-fixture and
+// census evidence at recorded strength (deferred_to_seam=true, callee shim-
+// refused).
+#[path = "crystal_a1_lineage/has_loose_bvars.rs"]
+mod has_loose_bvars;
 
 // The NINTH chain, 2026-08-16 —
 // `env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}`, the first

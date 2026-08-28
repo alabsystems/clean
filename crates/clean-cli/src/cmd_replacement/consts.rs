@@ -261,8 +261,20 @@ pub(crate) const DENY_SORRY_EXPECTED_LANES: &[DenySorryLaneExpectation] = &[
         expected_tests: None,
         command: None,
     },
+    // G6 (2026-08-23): was `unchecked_decl_ratchet_zero`, and it recorded
+    // `passed` for the claim "both counts are the literal 0" — a claim about a
+    // JSON field that no gate ever re-derived and that the tree contradicted
+    // (one production `add_decl_unchecked` site, now counted and sanctioned).
+    // The lane asks the honest question instead: is every production bypass
+    // source-measured, sanctioned and capped. G7 (2026-08-27): the RUST
+    // producer of this lane id did not perform the source half — it ran two
+    // JSON-only validators and minted `passed` — so the two producers of one
+    // lane id disagreed about what the lane meant. Closed by
+    // `add_decl_bypass_scan`; see the module docs there. Renaming it means
+    // reports/deny-sorry-launch-evidence.json must be REGENERATED — it is
+    // already stale on its ratchet sha256 and cannot be hand-repaired.
     DenySorryLaneExpectation {
-        id: "unchecked_decl_ratchet_zero",
+        id: "unchecked_decl_ratchet_accounted",
         expected_tests: None,
         command: None,
     },

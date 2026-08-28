@@ -143,8 +143,8 @@ impl<'a> ElabCtx<'a> {
         if let Some(expected) = self.expected_do_result_alpha() {
             if !self.try_unify(&unit_ty, &expected) && !self.is_def_eq(&unit_ty, &expected) {
                 return Err(ElabError::TypeMismatch {
-                    expected: format!("{expected:?}"),
-                    actual: format!("{unit_ty:?}"),
+                    expected: format!("{expected}"),
+                    actual: format!("{unit_ty}"),
                 });
             }
         }

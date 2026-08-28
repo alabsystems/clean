@@ -9,6 +9,7 @@ use crate::env::Environment;
 use crate::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, Literal};
 use crate::level::Level;
 use crate::name::Name;
+use std::sync::Arc;
 
 fn empty_env() -> Environment {
     Environment::new()
@@ -79,11 +80,11 @@ fn test_pi_cert() {
 
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         arg_level: Level::succ(Level::zero()),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -111,10 +112,10 @@ fn test_identity_function_cert() {
     // Certificate for the identity function
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -199,11 +200,11 @@ fn test_nested_bvar_in_context() {
     // Inner lambda: λ (x : A). x : A → A
     let inner_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::BVar {
+        arg_type_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(type0.clone()), // A : Type
         }),
-        body_cert: Box::new(inner_body_cert),
+        body_cert: Arc::new(inner_body_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             Expr::from_kind(ExprKind::BVar(0)), // A
@@ -214,10 +215,10 @@ fn test_nested_bvar_in_context() {
     // Outer lambda cert
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }), // Type : Type1
-        body_cert: Box::new(inner_cert),
+        body_cert: Arc::new(inner_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             type0.clone(),
@@ -411,7 +412,7 @@ fn test_verify_mdata_correct_type() {
 
     let cert = ProofCert::MData {
         metadata,
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         // Correct: Sort(0) has type Sort(1)
@@ -442,7 +443,7 @@ fn test_verify_mdata_type_mismatch() {
 
     let cert = ProofCert::MData {
         metadata,
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         // WRONG: claiming Sort(0) has type Sort(2) instead of Sort(1)
@@ -549,7 +550,7 @@ fn test_verify_def_eq_inner_type_mismatch() {
 
     // DefEq certificate where actual_type doesn't match what verify returns
     let cert = ProofCert::DefEq {
-        inner: Box::new(ProofCert::Sort {
+        inner: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
@@ -575,7 +576,7 @@ fn test_verify_def_eq_expected_type_mismatch() {
 
     // DefEq certificate where expected != actual (and actual is correct)
     let cert = ProofCert::DefEq {
-        inner: Box::new(ProofCert::Sort {
+        inner: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::succ(

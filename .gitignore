@@ -45,6 +45,20 @@ metrics
 .ownership_conflicts.log
 logs/
 
+# ...but NOT the public benchmark publication contract's logs. The bare `logs/`
+# above is a Pulse-runtime rule; it also matches
+# `reports/benchmarks/publication/<run>/logs/`, where
+# scripts/run_public_benchmarks.sh writes the three `*.stderr.log` artifacts
+# that REQUIRED_RUN_ARTIFACTS demands. The 2026-08-10-pristine run recorded all
+# three in current.json with their sha256 and byte counts and committed none of
+# them, because git silently refused: the checker has read
+# "missing required artifact" ever since, for a reason no amount of re-running
+# the suite would have fixed. Both lines are needed -- git will not re-include a
+# file whose parent DIRECTORY is excluded, so the directory must be un-excluded
+# first.
+!reports/benchmarks/publication/**/logs/
+!reports/benchmarks/publication/**/logs/**
+
 # Benchmark outputs
 benchmarks/**/results/
 benchmarks/**/logs/

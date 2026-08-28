@@ -40,19 +40,76 @@
 //!    proof is synthesized per call site (see [`call_sites`]).
 //! 5. **Wrap in WellFounded.fix**: Produce the final definition value.
 //!
+//! # Wider signatures, one recursion parameter (phase 2, 2026-08-22)
+//!
+//! `gcd` is the motivating case:
+//!
+//! ```lean
+//! def gcd (a b : Nat) : Nat := if h : 0 < b then gcd b (a % b) else a
+//! termination_by b
+//! ```
+//!
+//! TWO parameters, but only ONE of them is the recursion parameter: the
+//! measure is `b` and the decrease is `a % b < b`. Both stay single-parameter;
+//! only the SIGNATURE is wider. The lowering therefore fixes on the measure's
+//! parameter and threads the OTHER parameters through the MOTIVE:
+//!
+//! ```text
+//! gcd = fun a b =>
+//!   @WellFounded.fix α (fun x => Nat → Nat) rel hwf
+//!     (fun x rec => fun a => dite (0 < x) (fun h => rec (a % x) prf x) (fun _ => a))
+//!     b a
+//! ```
+//!
+//! `C x = Π (others, with the recursion parameter := x) → ret`, so a
+//! recursive call may change EVERY argument (gcd changes both) while the
+//! obligation `Nat.lt (m arg) (m param)` stays exactly the one-parameter
+//! obligation phase 1 already discharges.
+//!
+//! # A SUM measure over several parameters (phase 3, 2026-08-25)
+//!
+//! Phase 2's boundary was the MEASURE, and a two-branch **subtractive** Euclid
+//! sits just past it:
+//!
+//! ```lean
+//! def gcdSub (a b : Nat) : Nat :=
+//!   if ha : a = 0 then b
+//!   else if hb : b = 0 then a
+//!   else if hge : a ≥ b then gcdSub (a - b) b else gcdSub a (b - a)
+//! termination_by a + b
+//! ```
+//!
+//! Neither parameter decreases — only `a + b` does. Such a measure is now
+//! lowered by [`sum_measure`], on the observation that a multi-parameter
+//! measure STILL induces a one-parameter well-founded relation: `Nat.lt` on
+//! the measure's VALUE, with the parameters riding in the motive and tied to
+//! the recursion variable by a hypothesis. No `PSigma` packing, no
+//! lexicographic order, and the per-call-site obligation is still
+//! `Nat.lt (m args) (m params)`. The shape was kernel-probed first —
+//! `clean-kernel/tests/wf_sum_measure_kernel_probe.rs`.
+//!
+//! The gate is [`measure_shape::is_nat_sum`], a deliberate SCOPE limit rather
+//! than a limit of the encoding (which is uniform in the measure): see that
+//! module for why, and v7/D2 for why a measured boundary is never a design.
+//!
 //! # Limitations
 //!
-//! Current implementation supports (phase 1, 2026-08-10):
-//! - Single non-mutual definitions with exactly ONE parameter
+//! Current implementation supports:
+//! - Single non-mutual definitions with any number of parameters, of which
+//!   the measure names exactly ONE (the recursion parameter)
+//! - A measure that is a SUM (`termination_by a + b`) over SEVERAL parameters
 //! - Explicit `termination_by` with a `Nat`-valued measure expression
 //! - Per-call-site decreasing proofs synthesized by the discharge cascade in
-//!   [`decreasing`] (hypothesis lookup → `Nat.sub_lt` → `omega` →
-//!   `simp_arith`), threaded through the rewrite in [`call_sites`]
+//!   [`decreasing`] (hypothesis lookup → `Nat.sub_lt` → `Nat.mod_lt` →
+//!   `omega` → `simp_arith`), threaded through the rewrite in [`call_sites`]
 //! - Mutual definitions via `PackMutual` encoding (see [`mutual`])
 //!
 //! Not yet supported (all FAIL CLOSED with a diagnostic naming
 //! `termination_by` — never `sorry`, an axiom, or an unchecked declaration):
-//! - Multi-parameter definitions
+//! - A multi-parameter measure that is NOT a sum (lexicographic / packed)
+//! - A recursion parameter whose TYPE depends on another parameter (the
+//!   sole-parameter path only; the sum path does not reorder the telescope)
+//! - Partially-applied recursive calls
 //! - `decreasing_by` user tactic blocks (the default cascade still runs)
 //! - Automatic measure inference (`GuessLex`)
 //! - Non-Nat measures (custom `WellFoundedRelation` instances)
@@ -63,7 +120,12 @@
 pub(super) mod call_sites;
 pub(crate) mod decreasing;
 pub(super) mod encoding;
+pub(crate) mod measure_params;
+pub(crate) mod measure_shape;
 pub(super) mod measure_wf;
+pub(super) mod nat_rewrite;
+pub(super) mod sub_elim;
+pub(super) mod sum_measure;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
 #[cfg(test)]
@@ -100,6 +162,37 @@ fn wf_unsupported(name: &str, reason: &str) -> ElabError {
              or unchecked declaration."
         ),
     }
+}
+
+/// Which of the two well-founded lowerings a definition takes.
+///
+/// Decided in `elab_wf_recursion_core`'s phase 2b from the ELABORATED measure
+/// (real `FVar`s), never from a spelling. The routing hint in
+/// `elab_decl_value` may disagree without consequence: it only chooses which
+/// lowering is ATTEMPTED, and this is what the lowering actually believes.
+enum WfShape {
+    /// The measure names exactly one parameter, which becomes
+    /// `WellFounded.fix`'s major premise (phases 1–2).
+    SoleParameter(usize),
+    /// The measure is a SUM mentioning several parameters; the fix runs on the
+    /// measure's value and every parameter rides in the motive (phase 3, see
+    /// [`sum_measure`]).
+    SumOverParameters,
+}
+
+/// Spell the sum a refused multi-parameter measure could be restated as, e.g.
+/// `a + b`. Used only inside the diagnostic, so a parameter without a source
+/// name degrades to its position rather than failing.
+fn sum_spelling(mentioned: &[usize], binders: &[clean_parser::SurfaceBinder]) -> String {
+    mentioned
+        .iter()
+        .map(|index| {
+            binders
+                .get(*index)
+                .map_or_else(|| format!("<parameter #{index}>"), |b| b.name.clone())
+        })
+        .collect::<Vec<_>>()
+        .join(" + ")
 }
 
 impl<'a> ElabCtx<'a> {
@@ -146,7 +239,7 @@ impl<'a> ElabCtx<'a> {
         // these FVars with the WellFounded.fix recursive argument.
 
         // First, elaborate the full type by processing binders
-        let (func_ty, func_body, func_fvar, binder_fvars) =
+        let (func_ty, ret_ty, func_body, func_fvar, binder_fvars) =
             self.elab_wf_pre_definition(name, binders, ty, val)?;
 
         // Phases 2-3 run with the binder locals still pushed (the measure and
@@ -155,9 +248,11 @@ impl<'a> ElabCtx<'a> {
         let result = self.elab_wf_recursion_core(
             name,
             &func_ty,
+            &ret_ty,
             &func_body,
             func_fvar,
             &binder_fvars,
+            binders,
             measure,
         );
         self.pop_local();
@@ -176,27 +271,18 @@ impl<'a> ElabCtx<'a> {
     /// `termination_by` and the declaration, never an internal constant such
     /// as `invImage`). A `termination_by` whose recursion is STRUCTURAL never
     /// reaches here: `setup_recursion` routes it to the structural path.
+    #[allow(clippy::too_many_arguments)]
     fn elab_wf_recursion_core(
         &mut self,
         name: &str,
         func_ty: &Expr,
+        ret_ty: &Expr,
         func_body: &Expr,
         func_fvar: FVarId,
         binder_fvars: &[(FVarId, Expr)],
+        binders: &[clean_parser::SurfaceBinder],
         measure: &TerminationMeasure,
     ) -> Result<(Expr, Expr), ElabError> {
-        // Phase-1 scope: exactly one parameter. Lean packs multi-parameter
-        // definitions through PSigma before fixing; that packing is not wired
-        // yet, and silently fixing on the first parameter alone would build
-        // wrong obligations.
-        if binder_fvars.len() != 1 {
-            return Err(wf_unsupported(
-                name,
-                "only single-parameter definitions are supported by the \
-                 well-founded lowering so far",
-            ));
-        }
-
         // Feasibility gate: the whole encoding (relation, accessibility
         // transport, fixpoint) references these constants. Refuse up front
         // with the construct-naming diagnostic instead of leaking an
@@ -231,22 +317,133 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
+        // Phase 2b: WHICH shape is this? The measure decides.
+        //
+        //   ONE parameter   → it is the recursion parameter; it moves to the
+        //                     front of the fix telescope and the others thread
+        //                     through the motive (phases 1–2, unchanged).
+        //   SEVERAL, a SUM  → the fix runs on the measure's VALUE and every
+        //                     parameter rides in the motive (phase 3).
+        //   SEVERAL, other  → lexicographic / packed: still refused, with the
+        //                     sum form named as a way forward.
+        //   NONE            → nothing can decrease; refused up front.
+        //
+        // A one-parameter definition keeps the phase-1 answer unconditionally
+        // — including the degenerate `termination_by 5`, whose refusal stays
+        // where it always was (an undischargeable decrease), not here.
+        let shape = if binder_fvars.len() == 1 {
+            WfShape::SoleParameter(0)
+        } else {
+            let mentioned: Vec<usize> = binder_fvars
+                .iter()
+                .enumerate()
+                .filter(|(_, (fvar, _))| encoding::contains_fvar(&measure_expr, *fvar))
+                .map(|(index, _)| index)
+                .collect();
+            let named = |index: usize| {
+                binders
+                    .get(index)
+                    .map_or_else(|| format!("#{index}"), |b| format!("`{}`", b.name))
+            };
+            match mentioned.as_slice() {
+                [only] => WfShape::SoleParameter(*only),
+                [] => {
+                    return Err(wf_unsupported(
+                        name,
+                        "the `termination_by` measure mentions none of the \
+                         parameters, so nothing in it can decrease. Name the \
+                         parameter the recursion shrinks, e.g. \
+                         `termination_by <that parameter>`",
+                    ));
+                }
+                _ if measure_shape::is_nat_sum(&measure_expr) => WfShape::SumOverParameters,
+                many => {
+                    let list: Vec<String> = many.iter().map(|i| named(*i)).collect();
+                    return Err(wf_unsupported(
+                        name,
+                        &format!(
+                            "the `termination_by` measure mentions {} \
+                             parameters ({}) and is not a SUM. A SUM measure \
+                             IS lowered — `termination_by {}` runs the \
+                             recursion on the measure's value and threads \
+                             every parameter through the motive — but a \
+                             general lexicographic or packed measure is not. \
+                             Ways forward: (1) restate the measure as a sum, \
+                             e.g. `termination_by {}`, which is what a \
+                             two-branch subtractive recursion needs; \
+                             (2) restate it so it names ONE parameter — a \
+                             wider SIGNATURE is fine, the other parameters \
+                             are threaded through unchanged; (3) introduce an \
+                             inner helper whose single parameter carries the \
+                             decrease",
+                            many.len(),
+                            list.join(", "),
+                            sum_spelling(many, binders),
+                            sum_spelling(many, binders),
+                        ),
+                    ));
+                }
+            }
+        };
+
         // Phase 3: build the `WellFounded.fix` definition value.
-        let (first_fvar, first_ty) = &binder_fvars[0];
-        self.build_wf_definition(
-            name,
-            func_ty,
-            func_body,
-            func_fvar,
-            (*first_fvar, first_ty),
-            &measure_expr,
-        )
+        match shape {
+            WfShape::SoleParameter(param_index) => {
+                // The recursion parameter moves to the FRONT of the telescope
+                // (it becomes `WellFounded.fix`'s major premise, with every
+                // other parameter re-bound inside the motive). That reordering
+                // is only well-formed when its type does not depend on another
+                // parameter. The sum path does NOT reorder, so this gate is
+                // deliberately scoped to this arm.
+                if binder_fvars.len() > 1 {
+                    let (_, param_ty) = &binder_fvars[param_index];
+                    for (index, (fvar, _)) in binder_fvars.iter().enumerate() {
+                        if index != param_index && encoding::contains_fvar(param_ty, *fvar) {
+                            return Err(wf_unsupported(
+                                name,
+                                "the recursion parameter's TYPE depends on \
+                                 another parameter, so it cannot be moved to \
+                                 the front of the telescope. Ways forward: \
+                                 (1) reorder the parameters so the recursion \
+                                 parameter's type is self-contained; \
+                                 (2) recurse on a parameter whose type is \
+                                 closed",
+                            ));
+                        }
+                    }
+                }
+                self.build_wf_definition(
+                    name,
+                    func_ty,
+                    ret_ty,
+                    func_body,
+                    func_fvar,
+                    binder_fvars,
+                    binders,
+                    param_index,
+                    &measure_expr,
+                )
+            }
+            WfShape::SumOverParameters => self.build_wf_sum_definition(
+                name,
+                func_ty,
+                ret_ty,
+                func_body,
+                func_fvar,
+                binder_fvars,
+                binders,
+                &measure_expr,
+            ),
+        }
     }
 
     /// Elaborate the pre-definition: type, body, and forward declaration.
     ///
-    /// Returns (type, body, func_fvar, binder_fvars) where:
+    /// Returns (type, ret_ty, body, func_fvar, binder_fvars) where:
     /// - type is the full Pi type
+    /// - ret_ty is the return type, still OPEN over `binder_fvars` (the
+    ///   multi-parameter motive is built from it, so it must not be
+    ///   re-abstracted and re-opened)
     /// - body is the Lambda-abstracted value
     /// - func_fvar is the FVar used for recursive references
     /// - binder_fvars are the FVars for each parameter
@@ -256,7 +453,7 @@ impl<'a> ElabCtx<'a> {
         binders: &[clean_parser::SurfaceBinder],
         ty: Option<&SurfaceExpr>,
         val: &SurfaceExpr,
-    ) -> Result<(Expr, Expr, FVarId, Vec<(FVarId, Expr)>), ElabError> {
+    ) -> Result<(Expr, Expr, Expr, FVarId, Vec<(FVarId, Expr)>), ElabError> {
         use super::convert_binder_info;
 
         let mut binder_fvars: Vec<(FVarId, Expr)> = Vec::with_capacity(binders.len());
@@ -306,7 +503,7 @@ impl<'a> ElabCtx<'a> {
 
         // Set expected type for bidirectional type checking
         let prev_expected = self.current_expected_type.clone();
-        self.current_expected_type = Some(ret_ty);
+        self.current_expected_type = Some(ret_ty.clone());
 
         // Elaborate the body. Term-body position: unknown idents are loud,
         // never auto-bound (B03; Lean auto-binds only in decl headers).
@@ -326,7 +523,7 @@ impl<'a> ElabCtx<'a> {
             full_val = Expr::lam(bi, binder_ty.clone(), abstracted);
         }
 
-        Ok((full_ty, full_val, func_fvar, binder_fvars))
+        Ok((full_ty, ret_ty, full_val, func_fvar, binder_fvars))
     }
 
     /// Build the WellFounded.fix-based definition value.
@@ -343,24 +540,56 @@ impl<'a> ElabCtx<'a> {
     ///      body[f arg ↦ rec arg decreasing_proof])   -- call_sites
     /// ```
     ///
+    /// For a WIDER signature `f (p₀ … pₙ₋₁) : β` whose measure names the
+    /// single parameter `pᵢ`, the same term is built with `pᵢ` as the major
+    /// premise and every OTHER parameter re-bound inside the motive:
+    ///
+    /// ```text
+    /// fun p₀ … pₙ₋₁ =>
+    ///   WellFounded.fix.{u, v} α
+    ///     (fun x => Π (others)[pᵢ := x] → β[pᵢ := x])       -- motive C
+    ///     rel hwf
+    ///     (fun x rec => fun (others) => body[f args ↦ rec argᵢ prf args…])
+    ///     pᵢ (others)
+    /// ```
+    ///
+    /// The relation, the well-foundedness witness and every per-call-site
+    /// obligation are unchanged one-parameter objects — only the motive and
+    /// the argument threading widen. A one-parameter definition takes the
+    /// same path and produces the byte-identical phase-1 term (no eta
+    /// wrapper): see the `binder_fvars.len() == 1` early return below.
+    ///
     /// Returns `(type, value)`. The kernel re-checks the value in full at
     /// registration; every decreasing proof was already strictly re-checked
     /// at synthesis time.
+    #[allow(clippy::too_many_arguments)]
     fn build_wf_definition(
         &mut self,
         name: &str,
         func_ty: &Expr,
+        ret_ty: &Expr,
         func_body: &Expr,
         func_fvar: FVarId,
-        first: (FVarId, &Expr),
+        binder_fvars: &[(FVarId, Expr)],
+        binders: &[clean_parser::SurfaceBinder],
+        param_index: usize,
         measure_expr: &Expr,
     ) -> Result<(Expr, Expr), ElabError> {
-        let (first_fvar, first_ty) = first;
+        use super::convert_binder_info;
+
+        let arity = binder_fvars.len();
+        let (param_fvar, param_ty) = &binder_fvars[param_index];
+        let (param_fvar, param_ty) = (*param_fvar, param_ty.clone());
+        let binder_info_at = |index: usize| {
+            binders
+                .get(index)
+                .map_or(BinderInfo::Default, |b| convert_binder_info(b.info))
+        };
 
         // Universe levels. Failing to determine one is a hard refusal:
         // defaulting to a made-up level parameter would produce a term the
         // kernel rejects with a level-mismatch message naming internals.
-        let u_level = self.infer_sort(first_ty).map_err(|_| {
+        let u_level = self.infer_sort(&param_ty).map_err(|_| {
             wf_unsupported(
                 name,
                 "could not determine the universe of the recursion \
@@ -368,55 +597,66 @@ impl<'a> ElabCtx<'a> {
             )
         })?;
 
-        // Open the return type: func_ty = (x : α) → ret.
-        let ret_open = match func_ty.kind() {
-            ExprKind::Pi(_, _, body) => body.instantiate(&Expr::fvar(first_fvar)),
-            _ => {
-                return Err(wf_unsupported(
-                    name,
-                    "the elaborated function type is not a Pi type",
-                ));
+        // The motive's body: `Π (others) → ret`, with the others re-bound in
+        // their ORIGINAL relative order and `ret` still open over `pᵢ`. With
+        // one parameter this is exactly `ret`.
+        let mut motive_body = ret_ty.clone();
+        for index in (0..arity).rev() {
+            if index == param_index {
+                continue;
             }
-        };
-        let v_level = self.infer_sort(&ret_open).map_err(|_| {
+            let (fvar, binder_ty) = &binder_fvars[index];
+            motive_body = Expr::pi(
+                binder_info_at(index),
+                binder_ty.clone(),
+                motive_body.abstract_fvar(*fvar),
+            );
+        }
+        let v_level = self.infer_sort(&motive_body).map_err(|_| {
             wf_unsupported(name, "could not determine the universe of the return type")
         })?;
 
-        // Motive: fun (x : α) => ret.
+        // Motive: fun (x : α) => Π (others)[pᵢ := x] → ret[pᵢ := x].
         let motive = Expr::lam(
             BinderInfo::Default,
-            first_ty.clone(),
-            ret_open.abstract_fvar(first_fvar),
+            param_ty.clone(),
+            motive_body.abstract_fvar(param_fvar),
         );
 
         // Relation and its well-foundedness witness (builtin-prelude
         // constructive foundation; no invImage / WellFoundedRelation).
-        let rel = self.build_measure_rel(first_ty, measure_expr, first_fvar);
+        let rel = self.build_measure_rel(&param_ty, measure_expr, param_fvar);
         let wf_proof =
-            self.build_measure_wf_proof(first_ty, &u_level, &rel, measure_expr, first_fvar);
+            self.build_measure_wf_proof(&param_ty, &u_level, &rel, measure_expr, param_fvar);
 
-        // Open the body: func_body = fun (x : α) => body. (Opening — rather
-        // than stripping the lambda and leaving a loose de Bruijn index —
-        // keeps the parameter as `first_fvar`, which the decreasing
+        // Open the body: func_body = fun p₀ … pₙ₋₁ => body. (Opening — rather
+        // than stripping the lambdas and leaving loose de Bruijn indices —
+        // keeps each parameter as its own fvar, which the decreasing
         // obligations and the final re-abstraction both key on.)
-        let body_open = match func_body.kind() {
-            ExprKind::Lam(_, _, body) => body.instantiate(&Expr::fvar(first_fvar)),
-            _ => {
+        let mut body_open = func_body.clone();
+        for (fvar, _) in binder_fvars {
+            let ExprKind::Lam(_, _, inner) = body_open.kind() else {
                 return Err(wf_unsupported(
                     name,
                     "the elaborated function value is not a lambda",
                 ));
-            }
-        };
+            };
+            body_open = inner.instantiate(&Expr::fvar(*fvar));
+        }
 
-        // Rewrite recursive calls `f arg` to `rec arg proof`, synthesizing a
-        // decreasing proof per call site. FAIL CLOSED on any failure.
+        // Rewrite recursive calls `f args` to `rec argᵢ proof args…`,
+        // synthesizing a decreasing proof per call site. FAIL CLOSED on any
+        // failure.
         let rec_fvar = self.fresh_fvar();
         let cfg = call_sites::RecCallRewrite {
             func_fvar,
             rec_fvar,
-            param_fvar: first_fvar,
+            arity,
             measure_expr,
+            shape: call_sites::RecShape::SoleParameter {
+                param_fvar,
+                param_index,
+            },
         };
         let transformed = self
             .transform_rec_calls_proved(&body_open, &cfg)
@@ -435,35 +675,72 @@ impl<'a> ElabCtx<'a> {
         // rec : (y : α) → rel y x → C y
         let rec_param_ty = {
             let y_fvar = self.fresh_fvar();
-            let rel_y_x = Expr::apps(rel.clone(), [Expr::fvar(y_fvar), Expr::fvar(first_fvar)]);
+            let rel_y_x = Expr::apps(rel.clone(), [Expr::fvar(y_fvar), Expr::fvar(param_fvar)]);
             let c_y = Expr::app(motive.clone(), Expr::fvar(y_fvar));
             let inner = Expr::arrow(rel_y_x, c_y);
             Expr::pi(
                 BinderInfo::Default,
-                first_ty.clone(),
+                param_ty.clone(),
                 inner.abstract_fvar(y_fvar),
             )
         };
 
-        // F := fun (x : α) (rec : …) => transformed
+        // F := fun (x : α) (rec : …) => fun (others) => transformed
         let fix_body = {
+            let mut inner = transformed;
+            for index in (0..arity).rev() {
+                if index == param_index {
+                    continue;
+                }
+                let (fvar, binder_ty) = &binder_fvars[index];
+                inner = Expr::lam(
+                    binder_info_at(index),
+                    binder_ty.clone(),
+                    inner.abstract_fvar(*fvar),
+                );
+            }
             let with_rec = Expr::lam(
                 BinderInfo::Default,
                 rec_param_ty,
-                transformed.abstract_fvar(rec_fvar),
+                inner.abstract_fvar(rec_fvar),
             );
             Expr::lam(
                 BinderInfo::Default,
-                first_ty.clone(),
-                with_rec.abstract_fvar(first_fvar),
+                param_ty.clone(),
+                with_rec.abstract_fvar(param_fvar),
             )
         };
 
         // WellFounded.fix.{u, v} α C rel hwf F
         let wf_fix = Expr::const_(Name::from_string("WellFounded.fix"), vec![u_level, v_level]);
-        let result = Expr::apps(wf_fix, [first_ty.clone(), motive, rel, wf_proof, fix_body]);
+        let fix_app = Expr::apps(wf_fix, [param_ty.clone(), motive, rel, wf_proof, fix_body]);
 
-        Ok((func_ty.clone(), result))
+        // ONE parameter: the fix application IS the definition value, exactly
+        // as phase 1 emitted it. Deliberately not eta-expanded — the term
+        // shape is pinned by the superproject's recursion probes, and an
+        // eta wrapper would be a silent change to a measured artifact.
+        if arity == 1 {
+            return Ok((func_ty.clone(), fix_app));
+        }
+
+        // Wider signature: fun p₀ … pₙ₋₁ => fix … pᵢ (others).
+        let mut applied = Expr::app(fix_app, Expr::fvar(param_fvar));
+        for (index, (fvar, _)) in binder_fvars.iter().enumerate() {
+            if index != param_index {
+                applied = Expr::app(applied, Expr::fvar(*fvar));
+            }
+        }
+        let mut value = applied;
+        for index in (0..arity).rev() {
+            let (fvar, binder_ty) = &binder_fvars[index];
+            value = Expr::lam(
+                binder_info_at(index),
+                binder_ty.clone(),
+                value.abstract_fvar(*fvar),
+            );
+        }
+
+        Ok((func_ty.clone(), value))
     }
 
     /// Extract the return type from a Pi type by stripping `n` binders.

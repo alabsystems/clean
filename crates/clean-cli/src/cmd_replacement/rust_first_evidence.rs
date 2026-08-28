@@ -119,7 +119,25 @@ pub(crate) fn run_rust_first_tooling(
     } else {
         render_rust_first_tooling_human(&mut out, &artifact, args.evidence.as_deref())?;
     }
-    Ok(())
+    out.flush()?;
+
+    // Fail closed on the READ path too, matching `run_status`. Only the WRITE
+    // was guarded, so a non-ready inventory still exited 0 when printed -- the
+    // same "gate that cannot say no" shape as `tactic-parity` and
+    // `trust-core-evidence`. This is currently a LATENT hole rather than a live
+    // one (the inventory reads launch_ready=true today, so the exit code does
+    // not change), but the exit was never *derived* from the verdict, and a
+    // lane regressing to non-Rust-owned would have gone unnoticed by any
+    // `&&`-chained caller.
+    if artifact.rust_first_tooling.launch_ready {
+        Ok(())
+    } else {
+        Err(ReplacementError::LaunchNotReady {
+            message: rust_first_tooling_write_refusal(&artifact.rust_first_tooling)
+                .err()
+                .unwrap_or_else(|| "rust-first tooling inventory is not launch_ready".to_string()),
+        })
+    }
 }
 
 pub(crate) fn render_rust_first_tooling_human(

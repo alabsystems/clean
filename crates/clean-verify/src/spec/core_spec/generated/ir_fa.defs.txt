@@ -1,0 +1,3 @@
+def ir_fa_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.binop IRBinOp.fadd (IRTy.float_ 64) ir_d1 ir_d2) ir_d3) (ir_nd (IRInst.ret (ir_nl1 ir_d3))))
+def ir_fa_func : IRFunc := IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat)))) ir_d0 (ir_blk ir_fa_b0 ir_blk0)
+def ir_fa_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_fa_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)

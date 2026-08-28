@@ -217,6 +217,7 @@ async fn test_load_environment_bincode() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: true,
+        replace_unchecked: true,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -261,6 +262,7 @@ async fn test_load_environment_json() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
         replace: true,
+        replace_unchecked: true,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -285,6 +287,7 @@ async fn test_load_environment_nonexistent_file() {
         path: "/nonexistent/file/that/does/not/exist.bin".to_string(),
         format: None,
         replace: true,
+        replace_unchecked: false,
     };
 
     let response = handle_load_environment(&state, RequestId::Number(1), params).await;
@@ -323,6 +326,7 @@ async fn test_load_environment_replace_flag() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: true,
+        replace_unchecked: true,
     };
     let response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -336,6 +340,7 @@ async fn test_load_environment_replace_flag() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: false,
+        replace_unchecked: false,
     };
     let response2 = handle_load_environment(&state, RequestId::Number(3), load_params2).await;
     assert!(
@@ -649,6 +654,7 @@ async fn test_load_environment_merge_preserves_existing() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: false,
+        replace_unchecked: false,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     assert!(
@@ -716,6 +722,7 @@ async fn test_load_environment_merge_rejects_uncheckable_theorem_or_opaque() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: false,
+        replace_unchecked: false,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     let err = response
@@ -785,6 +792,7 @@ async fn test_load_environment_merge_rejects_value_less_definition() {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
         replace: false,
+        replace_unchecked: false,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     let err = response
@@ -806,4 +814,235 @@ async fn test_load_environment_merge_rejects_value_less_definition() {
     );
 
     let _ = fs::remove_file(&temp_file);
+}
+
+/// Build an environment carrying a checked inductive family (`{family}` with a
+/// single constructor `{family}.mk`) plus a dependent checked definition
+/// `Fixture.point : {family} := {family}.mk`, for the loadEnvironment
+/// merge-replay tests (R1-SRV).
+fn family_fixture_env(family: &str) -> clean_kernel::Environment {
+    use clean_kernel::{Constructor, Declaration, Expr, InductiveDecl, InductiveType, Level, Name};
+
+    let mut env = clean_kernel::Environment::new();
+    let root = Name::from_string(family);
+    let ctor = Name::from_string(&format!("{family}.mk"));
+    env.add_inductive(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: root.clone(),
+            type_: Expr::type_(),
+            constructors: vec![Constructor {
+                name: ctor.clone(),
+                type_: Expr::const_(root.clone(), Vec::<Level>::new()),
+            }],
+        }],
+    })
+    .expect("fixture family should be a valid inductive");
+    env.add_decl(Declaration::Definition {
+        name: Name::from_string("Fixture.point"),
+        level_params: vec![],
+        type_: Expr::const_(root, Vec::<Level>::new()),
+        value: Expr::const_(ctor, Vec::<Level>::new()),
+        is_reducible: true,
+    })
+    .expect("fixture definition should type-check");
+    env
+}
+
+/// R1-SRV: a merge carrying a VALID inductive family must land end-to-end
+/// through the checked `add_inductive` replay — family side tables populated,
+/// dependent constants re-checked — with no unchecked registration.
+#[tokio::test]
+async fn test_load_environment_merge_replays_inductive_family_checked() {
+    use clean_kernel::Name;
+    use std::fs;
+
+    let env2 = family_fixture_env("Valid");
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join(format!(
+        "clean_test_family_merge_{}.bincode",
+        std::process::id()
+    ));
+    env2.save_to_file(&temp_file).expect("save should work");
+
+    let state = ServerState::new();
+    let load_params = LoadEnvironmentParams {
+        path: temp_file.to_string_lossy().to_string(),
+        format: Some("bincode".to_string()),
+        replace: false,
+        replace_unchecked: false,
+    };
+    let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
+    assert!(
+        response.error.is_none(),
+        "merging a valid inductive family should succeed, got: {:?}",
+        response.error
+    );
+
+    let merged = state.env.read().await;
+    assert!(
+        merged.get_inductive(&Name::from_string("Valid")).is_some(),
+        "merged environment should carry the replayed inductive side table entry"
+    );
+    assert!(
+        merged
+            .get_constructor(&Name::from_string("Valid.mk"))
+            .is_some(),
+        "merged environment should carry the replayed constructor side table entry"
+    );
+    assert!(
+        merged
+            .get_recursor(&Name::from_string("Valid.rec"))
+            .is_some(),
+        "merged environment should carry the regenerated recursor"
+    );
+    assert!(
+        merged
+            .get_const(&Name::from_string("Fixture.point"))
+            .is_some(),
+        "the dependent definition should be re-checked and admitted after its family"
+    );
+
+    let _ = fs::remove_file(&temp_file);
+}
+
+/// R1-SRV fail-closed: a merge whose loaded inductive metadata is CORRUPTED
+/// (a tampered constructor type) must be refused by the checked
+/// `add_inductive` replay with a named error — never registered unchecked —
+/// and must leave the live environment untouched.
+#[tokio::test]
+async fn test_load_environment_merge_rejects_tampered_constructor() {
+    use clean_kernel::{Expr, Name};
+    use serde_json::Value;
+    use std::fs;
+
+    let env2 = family_fixture_env("Corrupt");
+    let mut json: Value =
+        serde_json::from_str(&env2.to_json().expect("environment should serialize")).unwrap();
+
+    // Tamper the ConstructorVal's stored type: `Corrupt.mk : Corrupt` becomes
+    // `Corrupt.mk : Type`, which no checked replay can accept (a constructor
+    // must conclude in its own inductive).
+    let constructors = json["constructors"]
+        .as_array_mut()
+        .expect("environment JSON should contain constructors");
+    let tampered = constructors
+        .iter_mut()
+        .find(|ctor| {
+            serde_json::from_value::<Name>(ctor["name"].clone())
+                .is_ok_and(|name| name == Name::from_string("Corrupt.mk"))
+        })
+        .expect("fixture constructor should exist");
+    tampered["type_"] =
+        serde_json::to_value(Expr::type_()).expect("tampered type should serialize");
+
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join(format!(
+        "clean_test_tampered_ctor_{}.json",
+        std::process::id()
+    ));
+    fs::write(&temp_file, serde_json::to_string(&json).unwrap()).expect("write fixture");
+
+    let state = ServerState::new();
+    let load_params = LoadEnvironmentParams {
+        path: temp_file.to_string_lossy().to_string(),
+        format: Some("json".to_string()),
+        replace: false,
+        replace_unchecked: false,
+    };
+    let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
+    let err = response
+        .error
+        .expect("a tampered constructor must refuse the merge");
+    assert!(
+        err.message
+            .contains("Checked inductive replay refused for family Corrupt"),
+        "refusal should name the family and the checked replay, got: {}",
+        err.message
+    );
+
+    let untouched = state.env.read().await;
+    assert!(
+        untouched.get_const(&Name::from_string("Corrupt")).is_none(),
+        "a refused family must not appear in the live environment"
+    );
+    assert!(
+        untouched
+            .get_constructor(&Name::from_string("Corrupt.mk"))
+            .is_none(),
+        "a tampered constructor must never be registered unchecked"
+    );
+    assert!(
+        untouched
+            .get_const(&Name::from_string("Fixture.point"))
+            .is_none(),
+        "a refused merge must leave the live environment untouched (no partial merge)"
+    );
+
+    let _ = fs::remove_file(&temp_file);
+}
+
+/// R1-SRV: replace mode installs a deserialized environment wholesale, so it
+/// is gated behind the explicit `replace_unchecked: true` acknowledgement;
+/// without it the request is refused and the live environment is untouched.
+#[tokio::test]
+async fn test_load_environment_replace_requires_unchecked_flag() {
+    use clean_kernel::Name;
+    use std::fs;
+
+    let env2 = family_fixture_env("Gated");
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join(format!(
+        "clean_test_replace_gate_{}.bincode",
+        std::process::id()
+    ));
+    env2.save_to_file(&temp_file).expect("save should work");
+
+    let state = ServerState::new();
+    let load_params = LoadEnvironmentParams {
+        path: temp_file.to_string_lossy().to_string(),
+        format: Some("bincode".to_string()),
+        replace: true,
+        replace_unchecked: false,
+    };
+    let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
+    let err = response
+        .error
+        .expect("replace without replace_unchecked must be refused");
+    assert!(
+        err.message.contains("replace_unchecked"),
+        "refusal should name the opt-in flag, got: {}",
+        err.message
+    );
+
+    let untouched = state.env.read().await;
+    assert!(
+        untouched.get_const(&Name::from_string("Gated")).is_none(),
+        "a refused replace must leave the live environment untouched"
+    );
+
+    let _ = fs::remove_file(&temp_file);
+}
+
+/// `replace_unchecked` outside replace mode is a request error (the merge
+/// path always re-checks; the flag must never look like it applies there).
+#[tokio::test]
+async fn test_load_environment_replace_unchecked_requires_replace() {
+    let state = ServerState::new();
+    let load_params = LoadEnvironmentParams {
+        path: "/tmp/never_read_because_params_invalid.bincode".to_string(),
+        format: Some("bincode".to_string()),
+        replace: false,
+        replace_unchecked: true,
+    };
+    let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
+    let err = response
+        .error
+        .expect("replace_unchecked without replace must be refused");
+    assert!(
+        err.message.contains("replace_unchecked"),
+        "refusal should name the flag, got: {}",
+        err.message
+    );
 }

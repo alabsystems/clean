@@ -12,6 +12,10 @@ mod constructors;
 mod display;
 mod drop;
 mod kind;
+// Serde adapter for `LevelVec`, standing in for `smallvec`'s optional `serde`
+// feature. Named in `kind.rs` by path (`#[serde(with = ...)]`), so it must stay
+// reachable from there; see the module docs for why the feature came off.
+pub(crate) mod level_vec_serde;
 mod meta;
 mod sorry;
 mod subst;

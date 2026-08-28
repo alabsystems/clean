@@ -127,6 +127,8 @@ impl<'a> ElabCtx<'a> {
                 constructors,
                 derived_instances,
                 wants_deep_induction,
+                wants_container_map,
+                wants_container_rel,
                 modifiers,
             } => ElabResult::Inductive {
                 name,
@@ -139,6 +141,8 @@ impl<'a> ElabCtx<'a> {
                     .collect(),
                 derived_instances: derived_instances.into_iter().map(reconcile).collect(),
                 wants_deep_induction,
+                wants_container_map,
+                wants_container_rel,
                 modifiers,
             },
             ElabResult::MutualInductive {

@@ -244,10 +244,19 @@ impl Parser {
     pub(in crate::grammar) fn universe_decl(
         &mut self,
         start_span: Span,
+        keyword_col: u32,
     ) -> Result<SurfaceDecl, ParseError> {
         let mut names = Vec::new();
 
+        // Same line discipline as `variable` (see `variable_decl`): a
+        // `universe u` line must not absorb the command line that follows it.
         while let TokenKind::Ident(_) = self.current_kind() {
+            if !names.is_empty() && self.current().preceded_by_newline {
+                let col = self.current().col;
+                if col <= keyword_col {
+                    break;
+                }
+            }
             names.push(self.ident()?);
         }
 
@@ -266,16 +275,81 @@ impl Parser {
     }
 
     /// Parse variable declaration: `variable (x : Type)`
+    ///
+    /// `keyword_col` is the column of the `variable` keyword itself. It arms
+    /// [`Parser::binder_run_line_barrier`] so the bare-name binder run cannot
+    /// swallow the next command line — the LANE FAILOPEN defect, where
+    /// `include h` on the line after a `variable` became two untyped section
+    /// variables and the second one shadowed the real `h`.
     pub(in crate::grammar) fn variable_decl(
         &mut self,
         start_span: Span,
+        keyword_col: u32,
     ) -> Result<SurfaceDecl, ParseError> {
+        self.binder_run_line_barrier = Some(keyword_col);
         let binders = self.binders()?;
 
         Ok(SurfaceDecl::Variable {
             span: start_span,
             binders,
         })
+    }
+
+    /// Parse the name list of `include x y …` / `omit x y …`.
+    ///
+    /// Lean 4 includes a section `variable` in a declaration only when the
+    /// declaration mentions it; `include` forces inclusion for every following
+    /// declaration in the scope, and `omit` cancels a preceding `include`.
+    ///
+    /// Only the NAME form is modelled. Lean's `omit` also accepts bracketed
+    /// instance binders (`omit [Foo α]`), which select by TYPE rather than by
+    /// name; that shape never reaches here — the dispatcher requires an
+    /// identifier after the keyword, so `omit [Foo α]` falls through to the
+    /// unknown-command arm and is refused BY NAME. A named refusal is the
+    /// intended outcome for a form this parser cannot model: the alternative
+    /// is guessing, which is the defect this whole change removes.
+    ///
+    /// The empty-list branch is unreachable through the dispatcher (its guard
+    /// already saw an identifier); it is the fail-closed guard for anyone who
+    /// loosens that guard later.
+    pub(in crate::grammar) fn include_omit_names(
+        &mut self,
+        keyword: &str,
+        keyword_col: u32,
+    ) -> Result<Vec<String>, ParseError> {
+        let mut names = Vec::new();
+        while let TokenKind::Ident(_) = self.current_kind() {
+            // SAME LINE DISCIPLINE AS `variable`, AND FOR THE SAME MEASURED
+            // REASON. Without this, `include h` followed by `omit h` on the
+            // next line parsed as ONE command with names `["h", "omit", "h"]`
+            // — the run walked straight through the line break, so the `omit`
+            // was never a command and never cancelled anything (measured
+            // 2026-08-25: shape C of the parser probe yielded
+            // `[Variable, IncludeVars, Theorem]`, three decls where four were
+            // written). In Lean `include`/`omit` are TOKENS, so an ident run
+            // can never absorb one; Clean lexes them as plain identifiers, so
+            // the stop has to be explicit.
+            //
+            // The rule is the column rule, not a newline rule: a name may sit
+            // on a continuation line as long as it starts to the RIGHT of the
+            // keyword. That is strictly more permissive than Lean, so it can
+            // only accept inputs Lean accepts.
+            let token = self.current();
+            if token.preceded_by_newline && token.col <= keyword_col {
+                break;
+            }
+            names.push(self.ident()?);
+        }
+
+        if names.is_empty() {
+            return Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current_span().start,
+                message: format!("expected at least one section-variable name after `{keyword}`"),
+            });
+        }
+
+        Ok(names)
     }
 
     /// Parse open command: `open Nat in ...` or `open Nat (add mul)` or `open scoped X`

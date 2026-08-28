@@ -256,8 +256,8 @@ pub(crate) fn elaborate_placeholder_term(
             let actual_arg_ty = state.whnf(goal, &actual_arg_ty);
             if !state.is_def_eq(goal, &actual_arg_ty, &expected_arg_ty) {
                 return Err(TacticError::TypeMismatch {
-                    expected: format!("{expected_arg_ty:?}"),
-                    actual: format!("{actual_arg_ty:?}"),
+                    expected: format!("{expected_arg_ty}"),
+                    actual: format!("{actual_arg_ty}"),
                 });
             }
 
@@ -267,8 +267,8 @@ pub(crate) fn elaborate_placeholder_term(
                 let expected_ty = state.metas.instantiate(expected_ty);
                 if !state.is_def_eq(goal, &result_ty, &expected_ty) {
                     return Err(TacticError::TypeMismatch {
-                        expected: format!("{expected_ty:?}"),
-                        actual: format!("{result_ty:?}"),
+                        expected: format!("{expected_ty}"),
+                        actual: format!("{result_ty}"),
                     });
                 }
             }
@@ -281,8 +281,8 @@ pub(crate) fn elaborate_placeholder_term(
                 let actual_ty = state.whnf(goal, &inferred_ty);
                 if !state.is_def_eq(goal, &actual_ty, &expected_ty) {
                     return Err(TacticError::TypeMismatch {
-                        expected: format!("{expected_ty:?}"),
-                        actual: format!("{actual_ty:?}"),
+                        expected: format!("{expected_ty}"),
+                        actual: format!("{actual_ty}"),
                     });
                 }
             }

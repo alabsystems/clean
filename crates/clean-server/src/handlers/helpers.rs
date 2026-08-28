@@ -21,7 +21,7 @@ pub fn format_parse_error(e: &ParseError) -> String {
 }
 
 /// Extract line number from parse error.
-pub fn parse_error_line(e: &ParseError) -> Option<usize> {
+pub(crate) fn parse_error_line(e: &ParseError) -> Option<usize> {
     match e {
         ParseError::UnexpectedToken { line, .. } => Some(*line),
         ParseError::UnexpectedEof | ParseError::NumericOverflow { .. } => None,
@@ -30,7 +30,7 @@ pub fn parse_error_line(e: &ParseError) -> Option<usize> {
 }
 
 /// Extract column number from parse error.
-pub fn parse_error_col(e: &ParseError) -> Option<usize> {
+pub(crate) fn parse_error_col(e: &ParseError) -> Option<usize> {
     match e {
         ParseError::UnexpectedToken { col, .. } => Some(*col),
         ParseError::UnexpectedEof | ParseError::NumericOverflow { .. } => None,
@@ -48,7 +48,7 @@ pub fn parse_tactic_script(script: &str) -> Vec<String> {
 /// Generate suggestions for a failed tactic.
 ///
 /// This helps LLMs recover from errors by suggesting related tactics.
-pub fn generate_tactic_suggestions(tactic: &str) -> Vec<String> {
+pub(crate) fn generate_tactic_suggestions(tactic: &str) -> Vec<String> {
     let parts: Vec<&str> = tactic.split_whitespace().collect();
     let tactic_name = parts.first().copied().unwrap_or("");
 

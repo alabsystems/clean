@@ -120,6 +120,14 @@ pub struct ObservedTags {
     pub globals: Vec<u32>,
     /// how the body's own id reached this read
     pub self_func: SelfFunc,
+    /// How many `usize` tokens this read RESOLVED through a pinned target
+    /// width. `0` for every body without the type. The chain's tag table pins
+    /// the same count, and [`project`](super::project) compares the two — that
+    /// comparison, not the core text, is what catches a `u64`-for-`usize`
+    /// swap, because the core module deliberately spells the resolved type as
+    /// the plain fixed-width integer (reader C could never reproduce a
+    /// distinction Clean's `IRTy` does not have).
+    pub usize_seen: u32,
     /// The `functy.N` in the header. RECORDED, never gated: it is a whole-crate
     /// signature-table index, it moves under a producer change with no
     /// instruction changed, and `scripts/crystal_fixture_freshness.py` already
@@ -155,7 +163,60 @@ pub fn read_with_tags(text: &str) -> Result<(Sx, ObservedTags), EmittedError> {
 /// # Errors
 /// Returns [`EmittedError`] exactly as [`read`] does.
 pub fn read_with_self(text: &str, self_func: SelfFunc) -> Result<(Sx, ObservedTags), EmittedError> {
-    let mut r = Reader::with_self(self_func);
+    read_with_pins(text, self_func, None)
+}
+
+/// [`read_with_self`], with the chain's pinned `usize` width supplied.
+///
+/// `usize` is TARGET-DEPENDENT, so this reader refuses the token unless the
+/// width is stated: `None` (what every other entry point passes) keeps the
+/// refusal, `Some(bits)` resolves each site to `(uint bits)` and counts it
+/// into [`ObservedTags::usize_seen`] for the tag table's site-count pin.
+///
+/// # Errors
+/// Returns [`EmittedError`] exactly as [`read`] does, plus the named `usize`
+/// refusal when the width is `None` and the text contains the type.
+pub fn read_with_pins(
+    text: &str,
+    self_func: SelfFunc,
+    usize_bits: Option<u32>,
+) -> Result<(Sx, ObservedTags), EmittedError> {
+    read_body(
+        text,
+        self_func,
+        SELF_FUNC_INDEX,
+        &BTreeMap::new(),
+        usize_bits,
+    )
+}
+
+/// Read ONE body of a chain whose module may contain several, with the chain's
+/// function namespace supplied.
+///
+/// `self_canonical` is the index this body occupies in that namespace — `0` for
+/// every one-body chain, and the reason this parameter exists at all is that a
+/// SIBLING body does not occupy `0`: `loose_bvar_range` is `(func 1 …)` of the
+/// module `has_loose_bvars` is `(func 0 …)` of, and a reader that wrote the
+/// literal `0` for both would produce a module whose two functions share an id.
+///
+/// `namespace` pre-seeds crate-level `@func.N` ids that the chain's tag table
+/// has already accounted for, so a call to a SIBLING body reads as that
+/// sibling's canonical index rather than interning above the chain. It does not
+/// weaken the read: a callee the namespace does not carry still interns, and
+/// still has to be a row of the tag table, and a call to the WRONG sibling is a
+/// different core module.
+///
+/// # Errors
+/// Returns [`EmittedError`] exactly as [`read`] does.
+pub(crate) fn read_body(
+    text: &str,
+    self_func: SelfFunc,
+    self_canonical: u32,
+    namespace: &BTreeMap<u32, u32>,
+    usize_bits: Option<u32>,
+) -> Result<(Sx, ObservedTags), EmittedError> {
+    let mut r = Reader::with_self_at(self_func, self_canonical, namespace);
+    r.usize_bits = usize_bits;
     let sx = r.run(text)?;
     let invert = |m: &BTreeMap<u32, u32>| {
         let mut v: Vec<(u32, u32)> = m.iter().map(|(raw, canon)| (*canon, *raw)).collect();
@@ -171,9 +232,21 @@ pub fn read_with_self(text: &str, self_func: SelfFunc) -> Result<(Sx, ObservedTa
     let tags = ObservedTags {
         enums: invert(&r.enums),
         structs: invert(&r.structs),
-        funcs: r.funcs.iter().map(|(raw, canon)| (*canon, *raw)).collect(),
+        // SELF and the callees the body actually NAMED — never a pre-seeded
+        // sibling the body does not call. That keeps this lane meaning what it
+        // has always meant: the crate ids THIS body witnessed.
+        funcs: r
+            .funcs
+            .iter()
+            .filter(|(raw, _)| {
+                r.func_used.contains(*raw)
+                    || matches!(self_func, SelfFunc::Pinned(id) if id == **raw)
+            })
+            .map(|(raw, canon)| (*canon, *raw))
+            .collect(),
         globals: invert(&r.globals),
         self_func,
+        usize_seen: r.usize_seen,
         functy: r.functy,
         interface: Interface {
             function_name: r.fn_name.clone(),
@@ -190,12 +263,85 @@ pub fn read_with_self(text: &str, self_func: SelfFunc) -> Result<(Sx, ObservedTa
     Ok((sx, tags))
 }
 
+/// Split an emitted trust-ir text into EXACTLY `n` function bodies.
+///
+/// A body ends at the line whose code is `}` — `Display for Function` always
+/// emits one, at column 0, and the reader that consumes each chunk refuses a
+/// text that runs out without it. Anything after the `n`-th body is REFUSED
+/// with the surplus named, which is the same rule the one-body reader has
+/// enforced since 2026-08-20 and for the same reason: a reader that stops early
+/// and ignores the remainder is not total over its own input, and no
+/// enumeration of erasures can cover what it drops.
+///
+/// # Errors
+/// Returns [`EmittedError`] when the text holds fewer or more than `n` bodies.
+pub(crate) fn split_bodies(text: &str, n: usize) -> Result<Vec<String>, EmittedError> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut open = false;
+    for (i, raw) in text.lines().enumerate() {
+        let (code, _) = reader::strip_comment(raw);
+        let code = code.trim();
+        if out.len() == n {
+            if !code.is_empty() {
+                return Err(EmittedError::Syntax {
+                    line: i + 1,
+                    msg: format!(
+                        "`{code}` follows the closing brace of the last of the {n} function \
+                         bod{} this chain's tag table declares. A text carrying an extra \
+                         function, a module table or anything else is not the artifact the table \
+                         describes, and reading it would drop the surplus unread",
+                        if n == 1 { "y" } else { "ies" }
+                    ),
+                });
+            }
+            continue;
+        }
+        cur.push_str(raw);
+        cur.push('\n');
+        if !code.is_empty() {
+            open = true;
+        }
+        if code == "}" {
+            out.push(std::mem::take(&mut cur));
+            open = false;
+        }
+    }
+    if open {
+        return Err(EmittedError::Syntax {
+            line: text.lines().count(),
+            msg: "the last function body has no closing brace. `Display for Function` always \
+                  emits one, so text that runs out without it is a TRUNCATED artifact — and \
+                  reading a truncated body as a complete one is the same erasure as ignoring a \
+                  tail, from the other end"
+                .into(),
+        });
+    }
+    if out.len() != n {
+        return Err(EmittedError::Syntax {
+            line: text.lines().count(),
+            msg: format!(
+                "this chain's tag table declares {n} function bod{}, and the emitted text holds \
+                 {}",
+                if n == 1 { "y" } else { "ies" },
+                out.len()
+            ),
+        });
+    }
+    Ok(out)
+}
+
 pub(super) struct Reader {
     enums: BTreeMap<u32, u32>,
     structs: BTreeMap<u32, u32>,
     funcs: BTreeMap<u32, u32>,
+    /// The crate-level `@func.N` ids a `call` in THIS body actually named.
+    func_used: BTreeSet<u32>,
+    /// The next canonical index a newly-seen callee takes.
+    next_func: u32,
+    /// The canonical index this body's own `(func N …)` carries.
+    self_canonical: u32,
     globals: BTreeMap<u32, u32>,
-    self_func: SelfFunc,
     line: usize,
     fn_name: String,
     /// The header's linkage keyword, PRE-SET to the value the producer
@@ -210,6 +356,8 @@ pub(super) struct Reader {
     param_slots: Vec<ParamSlot>,
     aligns: Vec<String>,
     clauses: BTreeSet<String>,
+    usize_bits: Option<u32>,
+    usize_seen: u32,
 }
 
 impl Default for Reader {
@@ -218,8 +366,10 @@ impl Default for Reader {
             enums: BTreeMap::new(),
             structs: BTreeMap::new(),
             funcs: BTreeMap::new(),
+            func_used: BTreeSet::new(),
+            next_func: 1,
+            self_canonical: SELF_FUNC_INDEX,
             globals: BTreeMap::new(),
-            self_func: SelfFunc::default(),
             line: 0,
             fn_name: String::new(),
             linkage: DEFAULT_LINKAGE.to_string(),
@@ -230,6 +380,8 @@ impl Default for Reader {
             param_slots: Vec::new(),
             aligns: Vec::new(),
             clauses: BTreeSet::new(),
+            usize_bits: None,
+            usize_seen: 0,
         }
     }
 }
@@ -293,14 +445,33 @@ impl Reader {
     ///
     /// The pin is applied by interning the own id FIRST, so it takes
     /// [`SELF_FUNC_INDEX`] and every callee is pushed above it.
-    fn with_self(self_func: SelfFunc) -> Self {
+    fn with_self_at(
+        self_func: SelfFunc,
+        self_canonical: u32,
+        namespace: &BTreeMap<u32, u32>,
+    ) -> Self {
         let mut r = Self {
-            self_func,
+            self_canonical,
             ..Self::default()
         };
         if let SelfFunc::Pinned(id) = self_func {
-            r.funcs.insert(id, SELF_FUNC_INDEX);
+            r.funcs.insert(id, self_canonical);
+            r.next_func = 1;
         }
+        for (id, canonical) in namespace {
+            r.funcs.insert(*id, *canonical);
+        }
+        // A newly-seen callee interns ABOVE everything the chain accounts for.
+        // With no namespace and a pinned self this is `1`, and with no pin it is
+        // `1` as well — index 0 stays reserved and empty. Both are exactly the
+        // pre-2026-08-23 arithmetic; the max is what a multi-body chain needs.
+        r.next_func = r
+            .funcs
+            .values()
+            .copied()
+            .max()
+            .map_or(1, |m| m.saturating_add(1))
+            .max(1);
         r
     }
 
@@ -332,14 +503,12 @@ impl Reader {
     /// empty and callees start at `1`, so no callee can ever be mistaken for
     /// the body.
     fn func_index(&mut self, id: u32) -> u32 {
+        self.func_used.insert(id);
         if let Some(n) = self.funcs.get(&id) {
             return *n;
         }
-        let used = u32::try_from(self.funcs.len()).unwrap_or(u32::MAX);
-        let n = match self.self_func {
-            SelfFunc::Pinned(_) => used,
-            SelfFunc::Unpinned => used.saturating_add(1),
-        };
+        let n = self.next_func;
+        self.next_func = n.saturating_add(1);
         self.funcs.insert(id, n);
         n
     }
@@ -388,6 +557,22 @@ impl Reader {
             "u32" => n("uint", "32"),
             "u64" => n("uint", "64"),
             "u128" => n("uint", "128"),
+            "usize" => match self.usize_bits {
+                // Resolved to the plain fixed-width integer and COUNTED. The
+                // core module does not remember the token was `usize` -- the
+                // registered kernel term has no way to say so -- and the
+                // recorded posture is the site count the tag table pins.
+                Some(bits) => {
+                    self.usize_seen += 1;
+                    n("uint", &bits.to_string())
+                }
+                None => Err(self.core(CoreError::NoImage(format!(
+                    "type `{s}` without a pinned target width: `usize` is TARGET-DEPENDENT, and \
+                     resolving it silently would bake an unstated word-size assumption into the \
+                     core module. Pin the chain's tag-table `usize` lane (a target fact) and \
+                     read through it."
+                )))),
+            },
             "f32" => n("float", "32"),
             "f64" => n("float", "64"),
             _ => {
@@ -479,6 +664,9 @@ impl Reader {
     }
     pub(super) fn r_func(&mut self, id: u32) -> u32 {
         self.func_index(id)
+    }
+    pub(super) fn self_canonical(&self) -> u32 {
+        self.self_canonical
     }
     /// A `global_addr` is REFUSED, and that is the `global-index` blind slot
     /// being closed rather than tolerated.

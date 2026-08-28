@@ -425,6 +425,16 @@ pub struct LoadEnvironmentParams {
     /// Whether to replace or merge with current environment
     #[serde(default)]
     pub replace: bool,
+    /// Replace mode ONLY: explicit acknowledgement that `replace: true`
+    /// installs the deserialized environment WHOLESALE, without kernel
+    /// re-checking of the loaded declarations (serialized environments carry
+    /// no provenance stamps — `declaration_verification` is `#[serde(skip)]`).
+    /// Without this flag a `replace: true` request is refused. Merge mode
+    /// (`replace: false`) never consults it: merged declarations are always
+    /// re-earned through the checked kernel paths. Ledgered in
+    /// `data/env_bypass_census.json` (row `env-serde-load`).
+    #[serde(default)]
+    pub replace_unchecked: bool,
 }
 
 /// Load environment response

@@ -11,13 +11,13 @@
 use crate::handlers::{
     handle_add_decl, handle_apply_tactic, handle_archive_cert, handle_archive_cert_with_dict,
     handle_batch_apply_tactic, handle_batch_check, handle_batch_get_premises,
-    handle_batch_prove_tla, handle_batch_verify_cert, handle_batch_verify_cert_archive,
+    handle_batch_verify_cert, handle_batch_verify_cert_archive,
     handle_check, handle_close_proof_state, handle_compose_proof, handle_compress_cert,
     handle_decompress_cert, handle_explain_failure, handle_extract_proof, handle_fill_sorries,
     handle_get_cache_metrics, handle_get_config, handle_get_environment, handle_get_metrics,
     handle_get_premises, handle_get_proof_state, handle_get_type, handle_get_widget_source,
     handle_get_widgets, handle_import_module, handle_init_proof_state, handle_load_environment,
-    handle_open_obligation, handle_prove, handle_prove_tla, handle_retain_proof_state,
+    handle_open_obligation, handle_prove, handle_retain_proof_state,
     handle_save_environment, handle_search_proof, handle_search_tactics, handle_search_theorems,
     handle_server_info, handle_train_dict, handle_unarchive_cert, handle_unarchive_cert_with_dict,
     handle_verify_alethe_certificate, handle_verify_c, handle_verify_cert,
@@ -52,14 +52,6 @@ pub(crate) async fn dispatch_request(
         },
         "prove" => match parse_params::<crate::handlers::ProveParams>(params) {
             Ok(p) => handle_prove(state, id, p).await,
-            Err(e) => Response::error(id, e),
-        },
-        "proveTLA" => match parse_params::<crate::handlers::ProveTlaParams>(params) {
-            Ok(p) => handle_prove_tla(state, id, p).await,
-            Err(e) => Response::error(id, e),
-        },
-        "batchProveTLA" => match parse_params::<crate::handlers::BatchProveTlaParams>(params) {
-            Ok(p) => handle_batch_prove_tla(state, id, p, progress).await,
             Err(e) => Response::error(id, e),
         },
         "getType" => match parse_params::<crate::handlers::GetTypeParams>(params) {

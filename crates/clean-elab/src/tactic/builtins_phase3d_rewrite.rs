@@ -108,6 +108,7 @@ fn compound_simp() -> CompoundTacticEntry {
                 only,
                 lemmas,
                 location,
+                use_hypotheses,
                 ..
             } = tac
             else {
@@ -116,14 +117,15 @@ fn compound_simp() -> CompoundTacticEntry {
                     detail: "unexpected syntax variant".into(),
                 });
             };
+            let star = *use_hypotheses;
             match location {
-                SurfaceTacticLocation::Hyps(hyps) => simp_hyps(ps, *only, lemmas, hyps),
+                SurfaceTacticLocation::Hyps(hyps) => simp_hyps(ps, *only, lemmas, hyps, star),
                 SurfaceTacticLocation::HypsAndGoal(hyps) => {
-                    simp_hyps(ps, *only, lemmas, hyps)?;
-                    simp_goal_with_lemmas(ps, *only, lemmas)
+                    simp_hyps(ps, *only, lemmas, hyps, star)?;
+                    simp_goal_with_lemmas(ps, *only, lemmas, star)
                 }
                 SurfaceTacticLocation::Wildcard => super::simp_at_all(ps),
-                SurfaceTacticLocation::Goal => simp_goal_with_lemmas(ps, *only, lemmas),
+                SurfaceTacticLocation::Goal => simp_goal_with_lemmas(ps, *only, lemmas, star),
             }
         }),
     }
@@ -140,15 +142,16 @@ fn simp_goal_with_lemmas(
     ps: &mut ProofState,
     only: bool,
     lemmas: &[SurfaceExpr],
+    use_hypotheses: bool,
 ) -> Result<(), TacticError> {
-    let names = simp_names(lemmas);
-    if only {
-        super::simp_only(ps, names)
-    } else {
-        let mut config = SimpConfig::new();
-        config.extra_lemmas = names;
-        super::simp(ps, config)
-    }
+    let mut config = SimpConfig::new();
+    // `only` here reproduces `super::simp_only`, which sets exactly these two
+    // fields; carrying `use_hypotheses` alongside is what makes `simp only [*]`
+    // reachable.
+    config.only = only;
+    config.extra_lemmas = simp_names(lemmas);
+    config.use_hypotheses = use_hypotheses;
+    super::simp(ps, config)
 }
 
 /// `simp_rw [rules] (at loc)?` — simp + rw combined.
@@ -257,23 +260,22 @@ fn rw_hyp_rules(
     Ok(())
 }
 
+/// NOTE: `_only` is deliberately not forwarded to `config.only`. The
+/// pre-existing `at h` path routed both of its branches through configs that
+/// were identical field-for-field (`simp_only_at` never set `config.only`), so
+/// forwarding it now would be a behaviour change outside this brick's scope.
 fn simp_hyps(
     ps: &mut ProofState,
-    only: bool,
+    _only: bool,
     lemmas: &[SurfaceExpr],
     hyps: &[String],
+    use_hypotheses: bool,
 ) -> Result<(), TacticError> {
-    let names = simp_names(lemmas);
-    if only {
-        for hyp in hyps {
-            super::simp_only_at(ps, hyp, names.clone())?;
-        }
-    } else {
-        let mut config = SimpConfig::new();
-        config.extra_lemmas = names;
-        for hyp in hyps {
-            super::simp::simp_at_with_config(ps, hyp, config.clone())?;
-        }
+    let mut config = SimpConfig::new();
+    config.extra_lemmas = simp_names(lemmas);
+    config.use_hypotheses = use_hypotheses;
+    for hyp in hyps {
+        super::simp::simp_at_with_config(ps, hyp, config.clone())?;
     }
     Ok(())
 }
@@ -463,18 +465,22 @@ fn compound_simpa() -> CompoundTacticEntry {
                 });
             };
 
+            // The one simp configuration `simpa` runs, used for BOTH the goal
+            // and the `using` term's type — Lean simplifies them with the same
+            // simp set, and using two would let them normalize apart.
+            //
+            // `only` is honoured only when a lemma list is present, reproducing
+            // the pre-existing `simp_only(names)` / `simp_default()` split
+            // field-for-field.
+            let mut config = SimpConfig::new();
+            if *only && !lemmas.is_empty() {
+                config.only = true;
+                config.extra_lemmas = simp_names(lemmas);
+            }
+
             // Simplify the goal. A `NoProgress` result is tolerated: the closing
             // step below may still discharge the (unchanged) goal.
-            let simp_result = if *only && !lemmas.is_empty() {
-                let names: Vec<String> = lemmas
-                    .iter()
-                    .map(super::builtins::surface_expr_to_name)
-                    .collect();
-                super::simp_only(ps, names)
-            } else {
-                super::simp_default(ps)
-            };
-            match simp_result {
+            match super::simp(ps, config.clone()) {
                 Ok(()) => {}
                 Err(TacticError::NoProgress { .. }) | Err(TacticError::NoGoals) => {}
                 Err(e) => return Err(e),
@@ -488,6 +494,11 @@ fn compound_simpa() -> CompoundTacticEntry {
             match using_term {
                 Some(term) => {
                     let proof = eval.elaborate(term)?;
+                    // Lean's `simpa … using e` simplifies `e`'s TYPE too and
+                    // closes with the transported term. Running `exact` on the
+                    // raw term made `simpa` work only where simp was a no-op on
+                    // `e`. Transport is a no-op when nothing to transport.
+                    let proof = super::simp::simp_proof_type(ps, config, proof);
                     super::exact(ps, proof)
                 }
                 None => super::assumption(ps),

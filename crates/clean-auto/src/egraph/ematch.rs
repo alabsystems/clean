@@ -17,7 +17,7 @@ use std::collections::HashMap;
 ///
 /// Pattern `f(?x, ?y)` matches `f(a, b)` with substitution `{?x → a, ?y → b}`
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Pattern {
+pub(crate) enum Pattern {
     /// Pattern variable `?x` - matches any e-class
     Var(String),
     /// Constant/function symbol with pattern children
@@ -26,22 +26,22 @@ pub enum Pattern {
 
 impl Pattern {
     /// Create a pattern variable
-    pub fn var(name: impl Into<String>) -> Self {
+    pub(crate) fn var(name: impl Into<String>) -> Self {
         Pattern::Var(name.into())
     }
 
     /// Create an application pattern
-    pub fn app(symbol: impl Into<Symbol>, children: Vec<Pattern>) -> Self {
+    pub(crate) fn app(symbol: impl Into<Symbol>, children: Vec<Pattern>) -> Self {
         Pattern::App(symbol.into(), children)
     }
 
     /// Create a constant pattern (0-ary application)
-    pub fn constant(name: impl Into<Symbol>) -> Self {
+    pub(crate) fn constant(name: impl Into<Symbol>) -> Self {
         Pattern::App(name.into(), vec![])
     }
 
     /// Collect all pattern variables in this pattern
-    pub fn variables(&self) -> Vec<String> {
+    pub(crate) fn variables(&self) -> Vec<String> {
         let mut vars = Vec::new();
         self.collect_vars(&mut vars);
         vars
@@ -65,27 +65,27 @@ impl Pattern {
 
 /// A substitution mapping pattern variables to e-class IDs
 #[derive(Clone, Debug, Default)]
-pub struct Substitution {
+pub(crate) struct Substitution {
     /// Mapping from variable name to e-class ID
     bindings: HashMap<String, EClassId>,
 }
 
 impl Substitution {
     /// Create an empty substitution
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Substitution {
             bindings: HashMap::new(),
         }
     }
 
     /// Get the binding for a variable
-    pub fn get(&self, var: &str) -> Option<EClassId> {
+    pub(crate) fn get(&self, var: &str) -> Option<EClassId> {
         self.bindings.get(var).copied()
     }
 
     /// Set the binding for a variable
     /// Returns false if the variable is already bound to a different class
-    pub fn bind(&mut self, var: &str, class: EClassId) -> bool {
+    pub(crate) fn bind(&mut self, var: &str, class: EClassId) -> bool {
         if let Some(&existing) = self.bindings.get(var) {
             existing == class
         } else {
@@ -95,22 +95,22 @@ impl Substitution {
     }
 
     /// Check if a variable is bound
-    pub fn is_bound(&self, var: &str) -> bool {
+    pub(crate) fn is_bound(&self, var: &str) -> bool {
         self.bindings.contains_key(var)
     }
 
     /// Get all bindings
-    pub fn bindings(&self) -> &HashMap<String, EClassId> {
+    pub(crate) fn bindings(&self) -> &HashMap<String, EClassId> {
         &self.bindings
     }
 
     /// Get the number of bindings
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.bindings.len()
     }
 
     /// Check if the substitution is empty
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.bindings.is_empty()
     }
 }
@@ -120,18 +120,18 @@ impl Substitution {
 /// This implements the classic E-matching algorithm from SMT solvers like Z3.
 /// Given a pattern with variables, it finds all substitutions that make the
 /// pattern equal to some e-class in the graph.
-pub struct EMatcher<'a> {
+pub(crate) struct EMatcher<'a> {
     egraph: &'a EGraph,
 }
 
 impl<'a> EMatcher<'a> {
     /// Create a new E-matcher for the given e-graph
-    pub fn new(egraph: &'a EGraph) -> Self {
+    pub(crate) fn new(egraph: &'a EGraph) -> Self {
         EMatcher { egraph }
     }
 
     /// Find all substitutions that make the pattern match some e-class
-    pub fn find_matches(&self, pattern: &Pattern) -> Vec<(EClassId, Substitution)> {
+    pub(crate) fn find_matches(&self, pattern: &Pattern) -> Vec<(EClassId, Substitution)> {
         let mut matches = Vec::new();
 
         // Try matching against every e-class in the graph
@@ -150,7 +150,11 @@ impl<'a> EMatcher<'a> {
     }
 
     /// Try to match a pattern against a specific e-class
-    pub fn match_against(&self, pattern: &Pattern, target: EClassId) -> Option<Substitution> {
+    pub(crate) fn match_against(
+        &self,
+        pattern: &Pattern,
+        target: EClassId,
+    ) -> Option<Substitution> {
         let mut subst = Substitution::new();
         if self.match_pattern(pattern, self.egraph.find_const(target), &mut subst) {
             Some(subst)
@@ -200,7 +204,7 @@ impl<'a> EMatcher<'a> {
     }
 
     /// Find all matches for a multi-pattern (conjunction of patterns)
-    pub fn find_multi_matches(&self, patterns: &[Pattern]) -> Vec<Substitution> {
+    pub(crate) fn find_multi_matches(&self, patterns: &[Pattern]) -> Vec<Substitution> {
         if patterns.is_empty() {
             return vec![Substitution::new()];
         }
@@ -268,26 +272,26 @@ impl<'a> EMatcher<'a> {
 /// Triggers are patterns that, when matched, indicate a useful instantiation
 /// of a quantified formula.
 #[derive(Clone, Debug)]
-pub struct Trigger {
+pub(crate) struct Trigger {
     /// The pattern(s) that must match (multi-trigger if > 1)
     pub patterns: Vec<Pattern>,
 }
 
 impl Trigger {
     /// Create a single-pattern trigger
-    pub fn single(pattern: Pattern) -> Self {
+    pub(crate) fn single(pattern: Pattern) -> Self {
         Trigger {
             patterns: vec![pattern],
         }
     }
 
     /// Create a multi-pattern trigger
-    pub fn multi(patterns: Vec<Pattern>) -> Self {
+    pub(crate) fn multi(patterns: Vec<Pattern>) -> Self {
         Trigger { patterns }
     }
 
     /// Get all variables bound by this trigger
-    pub fn variables(&self) -> Vec<String> {
+    pub(crate) fn variables(&self) -> Vec<String> {
         let mut vars = Vec::new();
         for p in &self.patterns {
             for v in p.variables() {

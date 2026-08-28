@@ -120,6 +120,85 @@ fn test_error_not_a_function() {
     );
 }
 
+/// A STARVED heartbeat must not be reported as an ill-typed term.
+///
+/// Regression for the CERTIFICATE path of #3134. `whnf` bails early once the
+/// heartbeat is spent and returns an UNDER-REDUCED term. The App case then sees a
+/// non-Pi and, before this guard, reported `NotAFunction` — which asserts the term
+/// is ill-typed: a claim about the code, not about the budget. `tc/infer.rs` and
+/// `check_type` already carried the guard; the cert path did not, and it is the
+/// path `check_type` drives under `debug_assertions`.
+///
+/// Found from Trust, where a starved kernel re-check of a reconstructed refutation
+/// returned `NotAFunction` and the caller reported it as "the kernel rejected this
+/// proof".
+///
+/// The construction matters: the applied function's type must be a REDEX, not a
+/// syntactic `Pi`. `h : Π (x : Prop), (λ _. Prop → Prop) x`, so `h p` has type
+/// `(λ _. Prop → Prop) p`, which only becomes a `Pi` by beta. A term whose type is
+/// already a `Pi` never exercises the path (an earlier version of this test used
+/// one, and passed with the guard deleted — i.e. tested nothing).
+#[test]
+fn test_starved_heartbeat_is_not_reported_as_not_a_function() {
+    use crate::env::Declaration;
+    let mut env = Environment::new();
+    // `Arrow := λ (_ : Prop). (Prop → Prop)`, so `Arrow p` is a redex.
+    let arrow_body = Expr::pi(BinderInfo::Default, Expr::prop(), Expr::prop());
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("p"),
+        level_params: vec![],
+        type_: Expr::prop(),
+    })
+    .unwrap();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("h"),
+        level_params: vec![],
+        type_: Expr::pi(
+            BinderInfo::Default,
+            Expr::prop(),
+            Expr::app(
+                Expr::lam(BinderInfo::Default, Expr::prop(), arrow_body),
+                Expr::bvar(0),
+            ),
+        ),
+    })
+    .unwrap();
+
+    let p = || Expr::const_(Name::from_string("p"), vec![]);
+    let h = || Expr::const_(Name::from_string("h"), vec![]);
+    // `(h p) p` — the outer App must beta-reduce `(λ _. Prop → Prop) p` to find a Pi.
+    let term = Expr::app(Expr::app(h(), p()), p());
+
+    // Control: unlimited budget (0 = disabled) — this term type-checks.
+    let tc = TypeChecker::new(&env);
+    assert!(
+        tc.infer_type(&term).is_ok(),
+        "control: the term is well-typed when the budget is unlimited"
+    );
+
+    // Starved: the budget is spent before the beta step, so whnf returns the
+    // un-reduced redex. That must surface as the BUDGET stopping, never as a claim
+    // that the code is ill-typed.
+    let mut starved = TypeChecker::new(&env);
+    starved.set_heartbeat_limit(1);
+    let result = starved.infer_type(&term);
+    assert!(
+        !matches!(result, Err(TypeError::NotAFunction { .. })),
+        "a spent budget must never surface as NotAFunction, got {result:?}"
+    );
+
+    // And a GENUINELY ill-typed application still reports `NotAFunction` while
+    // budget remains — the guard must not swallow real type errors.
+    let tc2 = TypeChecker::new(&env);
+    assert!(
+        matches!(
+            tc2.infer_type(&Expr::app(Expr::prop(), Expr::prop())),
+            Err(TypeError::NotAFunction { .. })
+        ),
+        "a real NotAFunction with budget remaining is still NotAFunction"
+    );
+}
+
 /// Test that expected sort in type position triggers ExpectedSort error
 #[test]
 fn test_error_expected_sort() {
@@ -205,8 +284,7 @@ fn test_error_unknown_inductive() {
 
     // Push an FVar with this fake type into the local context
     let fvar_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push(Name::from_string("x"), fake_type, BinderInfo::Default);
 
     let fvar = Expr::fvar(fvar_id);

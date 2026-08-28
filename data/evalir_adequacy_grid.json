@@ -1,0 +1,1322 @@
+{
+  "schema": "evalir-adequacy-grid/v1",
+  "what": "Per-constructor, per-field adequacy account of EvalIR's encoding of the 28 constructed trust_ir::Inst variants — the B-SEM §4(c) grid. Every syntax field of every IRInst constructor is classified; the erased align slots and the measured W1-W4 and float-residue executor divergences have their permanent rows here.",
+  "constructors": 28,
+  "rows": [
+    {
+      "kind": "field",
+      "constructor": "binop",
+      "index": 0,
+      "var": "op",
+      "ty": "IRBinOp",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "binop",
+      "index": 1,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "binop",
+      "index": 2,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "binop",
+      "index": 3,
+      "var": "b",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "unop",
+      "index": 0,
+      "var": "op",
+      "ty": "IRUnOp",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "unop",
+      "index": 1,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "unop",
+      "index": 2,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "overflow",
+      "index": 0,
+      "var": "op",
+      "ty": "IROverflowOp",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "overflow",
+      "index": 1,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "overflow",
+      "index": 2,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "overflow",
+      "index": 3,
+      "var": "b",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "icmp",
+      "index": 0,
+      "var": "op",
+      "ty": "IRICmpOp",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "icmp",
+      "index": 1,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "icmp",
+      "index": 2,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "icmp",
+      "index": 3,
+      "var": "b",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "fcmp",
+      "index": 0,
+      "var": "op",
+      "ty": "IRFCmpOp",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "fcmp",
+      "index": 1,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "fcmp",
+      "index": 2,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "fcmp",
+      "index": 3,
+      "var": "b",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "cast",
+      "index": 0,
+      "var": "op",
+      "ty": "IRCastOp",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "cast",
+      "index": 1,
+      "var": "sr",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "cast",
+      "index": 2,
+      "var": "ds",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "cast",
+      "index": 3,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "load",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_load_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "load",
+      "index": 1,
+      "var": "p",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "load",
+      "index": 2,
+      "var": "vol",
+      "ty": "Bool",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_load_vol_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "store",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_store_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "store",
+      "index": 1,
+      "var": "p",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "store",
+      "index": 2,
+      "var": "v",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "store",
+      "index": 3,
+      "var": "vol",
+      "ty": "Bool",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_store_vol_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "alloca",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_alloca_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "alloca",
+      "index": 1,
+      "var": "c",
+      "ty": "IROption Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "gep",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_gep_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "gep",
+      "index": 1,
+      "var": "b",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "gep",
+      "index": 2,
+      "var": "idxs",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "gep",
+      "index": 3,
+      "var": "inb",
+      "ty": "Bool",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_gep_inbounds_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrdata",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_ptrdata_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrdata",
+      "index": 1,
+      "var": "p",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrmetadata",
+      "index": 0,
+      "var": "pt",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_ptrmeta_pt_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrmetadata",
+      "index": 1,
+      "var": "mt",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_ptrmeta_mt_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrmetadata",
+      "index": 2,
+      "var": "p",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrfromparts",
+      "index": 0,
+      "var": "pt",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_ptrparts_pt_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrfromparts",
+      "index": 1,
+      "var": "mt",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_ptrparts_mt_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrfromparts",
+      "index": 2,
+      "var": "d",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "ptrfromparts",
+      "index": 3,
+      "var": "md",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "br",
+      "index": 0,
+      "var": "tgt",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "br",
+      "index": 1,
+      "var": "args",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "condbr",
+      "index": 0,
+      "var": "c",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "condbr",
+      "index": 1,
+      "var": "tt",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "condbr",
+      "index": 2,
+      "var": "targs",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "condbr",
+      "index": 3,
+      "var": "et",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "condbr",
+      "index": 4,
+      "var": "eargs",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "switch",
+      "index": 0,
+      "var": "v",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "switch",
+      "index": 1,
+      "var": "dflt",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "switch",
+      "index": 2,
+      "var": "dargs",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "switch",
+      "index": 3,
+      "var": "cases",
+      "ty": "IRList IRSwitchCase",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "switch",
+      "index": 4,
+      "var": "exh",
+      "ty": "Bool",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_switch_exh_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "pre-W5 (operand-audit era; registered beside the dispatch, kernel-run GREEN in prior suite passes)"
+    },
+    {
+      "kind": "field",
+      "constructor": "call",
+      "index": 0,
+      "var": "fid",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "call",
+      "index": 1,
+      "var": "args",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "callindirect",
+      "index": 0,
+      "var": "cid",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "callindirect",
+      "index": 1,
+      "var": "sig",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_callind_sig_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "pre-W5 (operand-audit era; registered beside the dispatch, kernel-run GREEN in prior suite passes)"
+    },
+    {
+      "kind": "field",
+      "constructor": "callindirect",
+      "index": 2,
+      "var": "args",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "callindirect",
+      "index": 3,
+      "var": "cc",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_callind_conv_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "pre-W5 (operand-audit era; registered beside the dispatch, kernel-run GREEN in prior suite passes)"
+    },
+    {
+      "kind": "field",
+      "constructor": "ret",
+      "index": 0,
+      "var": "ids",
+      "ty": "IRList Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "extractfield",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_extractfield_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "extractfield",
+      "index": 1,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "extractfield",
+      "index": 2,
+      "var": "k",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "insertfield",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_insertfield_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "insertfield",
+      "index": 1,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "insertfield",
+      "index": 2,
+      "var": "k",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "insertfield",
+      "index": 3,
+      "var": "v",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "extractelement",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_extractelement_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "extractelement",
+      "index": 1,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "extractelement",
+      "index": 2,
+      "var": "k",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "const_",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "const_",
+      "index": 1,
+      "var": "c",
+      "ty": "IRConst",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "globaladdr",
+      "index": 0,
+      "var": "g",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "undef",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_undef_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "assert",
+      "index": 0,
+      "var": "c",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "select",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_select_ty_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+    },
+    {
+      "kind": "field",
+      "constructor": "select",
+      "index": 1,
+      "var": "c",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "select",
+      "index": 2,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "select",
+      "index": 3,
+      "var": "b",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "erased",
+      "constructor": "load",
+      "name": "align",
+      "state": "audit-pin",
+      "trust_field": "align : Option<u64>",
+      "boundary": "ERASED, not modelled: the cell-addressed machine has no byte offsets, so alignment is not observable in it and `IRInst` has no slot to carry it — that unobservability is itself the adequacy statement (plan §4(c) option (ii), adopted W5 2026-08-25). The mint reads the printed slot fail-closed (an unrecognised trailing operand is refused, killing the silently-dropped class) and records it in the `aligns` lane, so the erasure is a stated, dated model boundary, not silence.",
+      "ledger": "data/crystal_mint_blind_slots.json slot id `align` (kind: compared, HALF-CLOSED 2026-08-20) — the R8 ledger row",
+      "pinned_by": "crystal_a1_lineage::operand_audit::the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
+          "text": "r.r_align(format!(\"load:{align:?}\"));"
+        },
+        {
+          "file": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
+          "text": "is not an operand this reader knows on a `load`"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+          "text": "| load : IRTy → Nat → Bool → IRInst"
+        }
+      ]
+    },
+    {
+      "kind": "erased",
+      "constructor": "store",
+      "name": "align",
+      "state": "audit-pin",
+      "trust_field": "align : Option<u64>",
+      "boundary": "ERASED, not modelled: the cell-addressed machine has no byte offsets, so alignment is not observable in it and `IRInst` has no slot to carry it — that unobservability is itself the adequacy statement (plan §4(c) option (ii), adopted W5 2026-08-25). The mint reads the printed slot fail-closed (an unrecognised trailing operand is refused, killing the silently-dropped class) and records it in the `aligns` lane, so the erasure is a stated, dated model boundary, not silence.",
+      "ledger": "data/crystal_mint_blind_slots.json slot id `align` (kind: compared, HALF-CLOSED 2026-08-20) — the R8 ledger row",
+      "pinned_by": "crystal_a1_lineage::operand_audit::the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
+          "text": "r.r_align(format!(\"store:{align:?}\"));"
+        },
+        {
+          "file": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
+          "text": "is not an operand this reader knows on a `store`"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+          "text": "| store : IRTy → Nat → Nat → Bool → IRInst"
+        }
+      ]
+    },
+    {
+      "kind": "erased",
+      "constructor": "alloca",
+      "name": "align",
+      "state": "audit-pin",
+      "trust_field": "align : Option<u64>",
+      "boundary": "ERASED, not modelled: the cell-addressed machine has no byte offsets, so alignment is not observable in it and `IRInst` has no slot to carry it — that unobservability is itself the adequacy statement (plan §4(c) option (ii), adopted W5 2026-08-25). The mint reads the printed slot fail-closed (an unrecognised trailing operand is refused, killing the silently-dropped class) and records it in the `aligns` lane, so the erasure is a stated, dated model boundary, not silence.",
+      "ledger": "data/crystal_mint_blind_slots.json slot id `align` (kind: compared, HALF-CLOSED 2026-08-20) — the R8 ledger row",
+      "pinned_by": "crystal_a1_lineage::operand_audit::the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
+          "text": "CoreError::NoImage(format!(\"printed instruction"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+          "text": "| alloca : IRTy → IROption Nat → IRInst"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "undef-execution",
+      "constructor": "undef",
+      "state": "declared-delta",
+      "clean": "the dispatch arm binds the one untyped poison value IRScalar.undef_ and the module returns it (kernel witness ir_w2a_ud_on_run)",
+      "e2": "the pinned reference interpreter refuses to EXECUTE Inst::Undef — 'executing undef would read an undefined value' — and faults undefined_behavior",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:619-623; the battery row is a SynthExpect::DeclaredDelta, asserted to reproduce exactly and never counted as agreement",
+      "recorded_in": "data/evalir_w2a.PENDING.md delta 2 (the undef coverage-policy question for the big-box mint session rides there)",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/tests/crystal_a3_semdiff/synth_chains.rs",
+          "text": "interpret.rs:619-623"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_w2a_synth.rs",
+          "text": "ir_w2a_ud_on_run"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "extractelement-oob-class",
+      "constructor": "extractelement",
+      "state": "declared-delta",
+      "clean": "index 3 on a three-element container is type_error bad_field, fail-closed at every triple (kernel witness ir_w2a_ee_oob)",
+      "e2": "the same read is undefined_behavior ('element 3 is out of bounds')",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:4507-4516; the fault CLASSES differ, and the battery carries the row as a declared delta rather than mapping one class onto the other",
+      "recorded_in": "data/evalir_w2a.PENDING.md delta 3",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_w2a_synth.rs",
+          "text": "ir_w2a_ee_oob"
+        },
+        {
+          "file": "crates/clean-verify/tests/crystal_a3_semdiff/synth_chains.rs",
+          "text": "interpret.rs:4507-4516"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "null-callee-code",
+      "constructor": "callindirect",
+      "state": "declared-delta",
+      "clean": "calling through the null function pointer is ub null_deref at every payload (kernel witness ir_w2c_ci_on_null)",
+      "e2": "the interpreter reports its own invalid_function_pointer code ('CallIndirect: null function pointer'), NOT undefined_behavior",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:1415-1421; invalid_function_pointer is outside the two-class outcome map on purpose, so the row is a declared delta, never class agreement",
+      "recorded_in": "data/evalir_w2c.PENDING.md delta 1",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_w2c_synth.rs",
+          "text": "ir_w2c_ci_on_null"
+        },
+        {
+          "file": "crates/clean-verify/tests/crystal_a3_semdiff/w2c_chains.rs",
+          "text": "interpret.rs:1415-1421"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "uninit-fault-site",
+      "constructor": "load",
+      "state": "declared-delta",
+      "clean": "ir_load_value faults ub uninit AT THE LOAD of a fresh cell (kernel witness ir_w2b_al_on_uninit)",
+      "e2": "a plain load of uninitialized bytes yields inert PartialBytes poison; undefined_behavior fires only when the value is INSPECTED — for synth_alloca at the ret signature check (reject_partial)",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:5402-5403; the battery row is UbAgree(Uninit) — class agreement, site divergence — because that module's only path from the poisoned load ends in an inspection",
+      "recorded_in": "data/evalir_w2b.PENDING.md delta 1",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_w2b_synth.rs",
+          "text": "ir_w2b_al_on_uninit"
+        },
+        {
+          "file": "crates/clean-verify/tests/crystal_a3_semdiff/w2b_chains.rs",
+          "text": "reject_partial"
+        }
+      ],
+      "residue": "a program that loads uninitialized memory and only COPIES/STORES it onward is UB under Clean's semantics and defined under the interpreter's copy-propagates-poison discipline — a real divergence class no battery row measures; this grid row is its recorded owner (the W2b handoff assigned it to the adequacy stream)"
+    },
+    {
+      "kind": "delta",
+      "id": "f32-compares",
+      "constructor": "fcmp",
+      "state": "declared-delta",
+      "clean": "the comparison domain decides binary64 only; float_ w with w != 64 is the tagged unmodelled float_domain outcome, kernel-witnessed universally over every operator and operand pair (ir_fcmp_f32_unmodelled)",
+      "e2": "the pinned interpreter ANSWERS binary32 compares (eval_fcmp_f32)",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:6038-6054; a tagged refusal and an answer share no row vocabulary, so the boundary has no battery row by design and can never become a wrong answer",
+      "recorded_in": "data/evalir_w4.PENDING.md delta 2",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_fcmp.rs",
+          "text": "ir_fcmp_f32_unmodelled"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_fcmp.rs",
+          "text": "eval_fcmp_f32"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "junk-bit-nan",
+      "constructor": "fcmp",
+      "state": "declared-delta",
+      "clean": "any float_ bit pattern n >= 2^64 classifies nan_, and a comparison on it ANSWERS with the NaN verdicts (ordered false / unordered true) — kernel witnesses ir_exact_fcmp_junk_oeq / ir_exact_fcmp_junk_ueq",
+      "e2": "no E2 leg exists BY CONSTRUCTION: trust-ir's FloatBits(u64) cannot carry 2^64, so the junk fragment is a Clean-only inhabitant",
+      "measured": "2026-08-25; kernel-witnessed and stated rather than battery-measured — unlike the arithmetic lane, where every junk operation is unmodelled, comparisons return the NaN answer",
+      "recorded_in": "data/evalir_w4.PENDING.md delta 3",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_fcmp.rs",
+          "text": "ir_exact_fcmp_junk_oeq"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_fcmp.rs",
+          "text": "ir_exact_fcmp_junk_ueq"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "frem-answers-in-e2",
+      "constructor": "binop",
+      "state": "declared-delta",
+      "clean": "frem is the tagged unmodelled float_domain outcome at every type and operand pair — a DATED refusal, kernel-witnessed universally (ir_frem_unmodelled)",
+      "e2": "the pinned interpreter ANSWERS f64 frem (eval_float_binop, `lhs % rhs`)",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:5946; an exact float remainder needs the quotient's significand at guard precision — the measured fdiv-finite cost class (eval_ir_float_fin's named build item) — so the refusal stands, tagged, until that build item lands; a refusal and an answer share no row vocabulary, so no battery row exists by design",
+      "recorded_in": "data/evalir_float_residue.PENDING.md",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "ir_frem_unmodelled"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "eval_float_binop"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "fsqrt-answers-in-e2",
+      "constructor": "unop",
+      "state": "declared-delta",
+      "clean": "fsqrt is the tagged unmodelled float_domain outcome at every type and operand — a DATED refusal, kernel-witnessed universally (ir_fsqrt_unmodelled)",
+      "e2": "the pinned interpreter ANSWERS f64 fsqrt (eval_float_unop, `operand.sqrt()`)",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:5994; a correctly-rounded square root is an iterated guard-precision division on this substrate — the fdiv-finite cost class compounded — the refusal the plan itself reserved ('fsqrt is the hard one and can carry a dated refusal')",
+      "recorded_in": "data/evalir_float_residue.PENDING.md",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "ir_fsqrt_unmodelled"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "operand.sqrt()"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "round-nan-payload",
+      "constructor": "unop",
+      "state": "declared-delta",
+      "clean": "ffloor/fceil/ftrunc REFUSE a NaN operand (the rounded result is *a* NaN whose payload the host libm chooses) — kernel witness ir_exact_ffloor_nan_refused; every non-NaN pattern answers exactly",
+      "e2": "the interpreter answers a NaN through host floor/ceil/trunc, with whatever payload the host returns",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:5995-5997; the same implementation-defined-payload boundary the arithmetic lane carries, at the rounding family — the battery's rounding chain carries NO NaN row by design (wfr_chains.rs module doc)",
+      "recorded_in": "data/evalir_float_residue.PENDING.md",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "ir_exact_ffloor_nan_refused"
+        },
+        {
+          "file": "crates/clean-verify/tests/crystal_a3_semdiff/wfr_chains.rs",
+          "text": "the rounding family on a NaN"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "minmax-ambiguous-cells",
+      "constructor": "binop",
+      "state": "declared-delta",
+      "clean": "fmin/fmax REFUSE exactly two cells: BOTH operands NaN (result payload implementation-defined) and the OPPOSITE-signed zero pair (llvm.minnum/maxnum 'returns either one of the operands' when they compare equal) — kernel witnesses ir_exact_fmin_nan_both_refused, ir_exact_fmin_zero_pair_refused, ir_exact_fmax_zero_pair_refused; every other classified cell answers, one-NaN cells included (the other operand is returned)",
+      "e2": "the interpreter answers both cells with whatever host f64::min/max return there — a value a conforming host is free to vary",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:5947-5948; an answer here could be refuted by a conforming host and a tagged refusal cannot, so the cells are refused and carry NO battery row (wfr_chains.rs module doc)",
+      "recorded_in": "data/evalir_float_residue.PENDING.md",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "ir_exact_fmin_nan_both_refused"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "ir_exact_fmin_zero_pair_refused"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "fp-casts-answer-in-e2",
+      "constructor": "cast",
+      "state": "declared-delta",
+      "clean": "all eight fp casts (fptrunc/fpext/fptoui/fptosi/uitofp/sitofp/fptosisat/fptouisat) are the tagged unmodelled float_domain outcome at every source type, destination type and operand — DATED refusals, kernel-witnessed universally (ir_cast_fptrunc_unmodelled and its seven siblings)",
+      "e2": "the pinned interpreter ANSWERS all eight (FPTrunc/FPExt through host formats, FPToUI/FPToSI with range UB, the saturating pair, UIToFP/SIToFP rounding)",
+      "measured": "2026-08-25 at trust-ir a4e81b6, interpret.rs:4005-4143; fp<->int conversion needs significand scaling plus rounding (the fdiv-finite cost class) and fptrunc/fpext need the binary32 format this domain does not model — each refusal is a fragment boundary of THIS model, never silence",
+      "recorded_in": "data/evalir_float_residue.PENDING.md",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "ir_cast_fptrunc_unmodelled"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+          "text": "interpret.rs:4005-4143"
+        }
+      ]
+    }
+  ],
+  "dispatch": {
+    "binop": {
+      "vars": [
+        "op",
+        "t",
+        "a",
+        "b"
+      ],
+      "rhs": "ir_bind_result s rs (ir_binop_eval op t (ir_getd s a) (ir_getd s b))"
+    },
+    "unop": {
+      "vars": [
+        "op",
+        "t",
+        "a"
+      ],
+      "rhs": "ir_bind_result s rs (ir_unop_eval op t (ir_getd s a))"
+    },
+    "overflow": {
+      "vars": [
+        "op",
+        "t",
+        "a",
+        "b"
+      ],
+      "rhs": "ir_overflow_exec s rs op t (ir_getd s a) (ir_getd s b)"
+    },
+    "icmp": {
+      "vars": [
+        "op",
+        "t",
+        "a",
+        "b"
+      ],
+      "rhs": "ir_bind_result s rs (ir_icmp_eval op t (ir_getd s a) (ir_getd s b))"
+    },
+    "fcmp": {
+      "vars": [
+        "op",
+        "t",
+        "a",
+        "b"
+      ],
+      "rhs": "ir_bind_result s rs (ir_fcmp_eval op t (ir_getd s a) (ir_getd s b))"
+    },
+    "cast": {
+      "vars": [
+        "op",
+        "sr",
+        "ds",
+        "a"
+      ],
+      "rhs": "ir_bind_result s rs (ir_cast_eval op sr ds (ir_getd s a))"
+    },
+    "load": {
+      "vars": [
+        "t",
+        "p",
+        "vol"
+      ],
+      "rhs": "ir_bind_result s rs (ir_load_eval s (ir_getd s p))"
+    },
+    "store": {
+      "vars": [
+        "t",
+        "p",
+        "v",
+        "vol"
+      ],
+      "rhs": "ir_store_exec s (ir_getd s p) (ir_getd s v)"
+    },
+    "alloca": {
+      "vars": [
+        "t",
+        "c"
+      ],
+      "rhs": "ir_alloca_exec s rs c"
+    },
+    "gep": {
+      "vars": [
+        "t",
+        "b",
+        "idxs",
+        "inb"
+      ],
+      "rhs": "ir_bind_result s rs (ir_gep_eval (ir_getd s b) (ir_resolve s idxs))"
+    },
+    "ptrdata": {
+      "vars": [
+        "t",
+        "p"
+      ],
+      "rhs": "ir_bind_result s rs (ir_ptrdata_eval (ir_getd s p))"
+    },
+    "ptrmetadata": {
+      "vars": [
+        "pt",
+        "mt",
+        "p"
+      ],
+      "rhs": "ir_bind_result s rs (ir_ptrmeta_eval (ir_getd s p))"
+    },
+    "ptrfromparts": {
+      "vars": [
+        "pt",
+        "mt",
+        "d",
+        "md"
+      ],
+      "rhs": "ir_bind_result s rs (ir_ptrparts_eval (ir_getd s d) (ir_getd s md))"
+    },
+    "br": {
+      "vars": [
+        "tgt",
+        "args"
+      ],
+      "rhs": "ir_jump m s tgt args"
+    },
+    "condbr": {
+      "vars": [
+        "c",
+        "tt",
+        "targs",
+        "et",
+        "eargs"
+      ],
+      "rhs": "ir_condbr_exec m s (ir_getd s c) tt targs et eargs"
+    },
+    "switch": {
+      "vars": [
+        "v",
+        "dflt",
+        "dargs",
+        "cases",
+        "exh"
+      ],
+      "rhs": "ir_switch_exec m s (ir_getd s v) dflt dargs cases"
+    },
+    "call": {
+      "vars": [
+        "fid",
+        "args"
+      ],
+      "rhs": "ir_call_exec m s rs fid args"
+    },
+    "callindirect": {
+      "vars": [
+        "cid",
+        "sig",
+        "args",
+        "cc"
+      ],
+      "rhs": "ir_callind_exec m s rs (ir_getd s cid) args"
+    },
+    "ret": {
+      "vars": [
+        "ids"
+      ],
+      "rhs": "ir_return_exec s ids"
+    },
+    "extractfield": {
+      "vars": [
+        "t",
+        "a",
+        "k"
+      ],
+      "rhs": "ir_bind_result s rs (ir_ef_at (ir_getd s a) k)"
+    },
+    "insertfield": {
+      "vars": [
+        "t",
+        "a",
+        "k",
+        "v"
+      ],
+      "rhs": "ir_bind_result s rs (ir_insert_field (ir_getd s a) k (ir_getd s v))"
+    },
+    "extractelement": {
+      "vars": [
+        "t",
+        "a",
+        "k"
+      ],
+      "rhs": "ir_bind_result s rs (ir_extract_elem (ir_getd s a) (ir_getd s k))"
+    },
+    "const_": {
+      "vars": [
+        "t",
+        "c"
+      ],
+      "rhs": "ir_bind_result s rs (ir_const_eval t c)"
+    },
+    "globaladdr": {
+      "vars": [
+        "g"
+      ],
+      "rhs": "ir_bind_result s rs (ir_globaladdr_eval m g)"
+    },
+    "undef": {
+      "vars": [
+        "t"
+      ],
+      "rhs": "ir_bind s rs IRScalar.undef_"
+    },
+    "assert": {
+      "vars": [
+        "c"
+      ],
+      "rhs": "ir_assert_exec s (ir_getd s c)"
+    },
+    "unreachable": {
+      "vars": [],
+      "rhs": "IRConfig.halted (IROutcome.ub IRFault.unreachable)"
+    },
+    "select": {
+      "vars": [
+        "t",
+        "c",
+        "a",
+        "b"
+      ],
+      "rhs": "ir_bind_result s rs (ir_select_eval (ir_getd s c) (ir_getd s a) (ir_getd s b))"
+    }
+  },
+  "totals": {
+    "rows": 97,
+    "field_rows": 83,
+    "relevant-by-design": 63,
+    "irrelevance-proved-await-mint": 20,
+    "audit-pin": 3,
+    "declared-delta": 11
+  },
+  "provenance": {
+    "derived_by": "scripts/evalir_adequacy_grid.py",
+    "rule": "field surface = IRInst telescopes (eval_ir_syntax.rs); read/drop verdict = word-boundary use of the arm's pattern variable in the ir_exec arm RHS (eval_ir_machine.rs); dropped fields must name a registered theorem; erased and delta rows must anchor to live source. Fail-closed on any mismatch. Gate: tests/eval_ir/adequacy_grid.rs re-derives the surface independently.",
+    "inputs": [
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+        "sha256": "7bda24690daaa3cbc95bfff894f22b03567f43b9a81b5932092eb2eda2c3afd6"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+        "sha256": "0576fbcf4ce542da4aa433e951777791f9fe8fca6020cbf75e6b94c943cb8b12"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+        "sha256": "733dfdaf09f9b66ba70aba5fe440700c9684374a07308f9d372ab2bcab6b499f"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2a_synth.rs",
+        "sha256": "161f3fd567502fd0da52789b614b074cb181c2ceeb5f19d8561f549c146ae039"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2b_synth.rs",
+        "sha256": "79cf713e0ba0985ce21e6cc715138b314add1b7a95076581f9f7a5ff43d9395b"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2c_synth.rs",
+        "sha256": "852343610bff3512fd69841a5f017cbb73fb572dc79aede448905520d67e7399"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_fcmp.rs",
+        "sha256": "a960f4d34b29613c2080172da9eb67b09c05772ef5ee799b467c8e34cbac85d8"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res.rs",
+        "sha256": "6f19ccca893278bb0d2308da4d157bbb6d11c7cf8c46d935a263c1837e2f61f2"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
+        "sha256": "56d3b0127be853faeb05bdbff34fcc000024cf87d5b95b9df54d847024e8ce62"
+      },
+      {
+        "path": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
+        "sha256": "539d5c990f8399dc5c9222576e1578ed70468bf35f2e5a773fbb60ae60bbb184"
+      },
+      {
+        "path": "data/crystal_mint_blind_slots.json",
+        "sha256": "c590e140e5c7803f5b3019c84e46d8cd31c62a8166411fb06ff7c2c38184e27d"
+      },
+      {
+        "path": "crates/clean-verify/tests/crystal_a1_lineage/operand_audit.rs",
+        "sha256": "ebf79f73d374537276327401ad70b385477aab510e4e5089ddcfeb811bc9e912"
+      },
+      {
+        "path": "crates/clean-verify/tests/crystal_a3_semdiff/synth_chains.rs",
+        "sha256": "4e3e2e9b6c38fa27c4a91d67b75a8462c9aa29ec106cdf8ba4c03997ba7bbbb0"
+      },
+      {
+        "path": "crates/clean-verify/tests/crystal_a3_semdiff/w2b_chains.rs",
+        "sha256": "9a58f0b8bf06a4ce77b11ccba0faabd6538b2278c4c5dd1020c80fbaea7860cc"
+      },
+      {
+        "path": "crates/clean-verify/tests/crystal_a3_semdiff/w2c_chains.rs",
+        "sha256": "b26925d1a047b02d5011224d2ebfee1bb44dd5493ccc3ac73eb05545813eb574"
+      },
+      {
+        "path": "crates/clean-verify/tests/crystal_a3_semdiff/wfr_chains.rs",
+        "sha256": "954e23cfd8b39052dc9c23b3f2fab10e1a4e65acc1fcb634c53fe439f00aba1e"
+      }
+    ]
+  }
+}

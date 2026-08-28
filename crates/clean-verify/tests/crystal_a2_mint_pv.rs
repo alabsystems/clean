@@ -179,10 +179,16 @@ fn m3_data_render_as_literals_and_positions_still_refuse() {
          C would refuse the very module it is meant to read back.\n{script}"
     );
 
-    // The refusal half, on a real body: `level_is_zero`'s SSA ids run to 20.
-    let lz = ir_mint::parse(ir_mint::IR_LZ_CORE).expect("the lz core parses");
-    let lz_tags = ir_mint::tags::parse(ir_mint::IR_LZ_TAGS).expect("the lz tag table parses");
-    let e = ir_mint::mint(&lz, "ir_lz", &lz_tags)
+    // The refusal half. Until 2026-08-22 this used `level_is_zero` as the live
+    // specimen (its SSA ids run to 20, above the then ir_d0..ir_d16 pool); the
+    // pool is ir_d0..ir_d63 now and that body MINTS (`crystal_a2_mint_lz.rs`),
+    // so the specimen is a FORGED position above the widened pool instead —
+    // the same numeral, in a structural slot, must still refuse by name.
+    let forged = ir_mint::IR_PV_CORE.replace("(results 2)", "(results 99)");
+    assert_ne!(forged, ir_mint::IR_PV_CORE, "the forgery must bite");
+    let sx = ir_mint::parse(&forged).expect("the forged core still parses");
+    let e = ir_mint::mint(&sx, PREFIX, &tags())
+        .map(|_| ())
         .expect_err("a POSITION above the pool must still refuse");
     assert!(
         format!("{e}").contains("atom pool"),

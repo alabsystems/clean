@@ -233,6 +233,7 @@ pub(crate) mod ring_literals;
 pub(crate) mod ring_proof;
 pub(crate) mod ring_proof_carry;
 pub(crate) mod ring_proof_fuse;
+pub(crate) mod ring_proof_rewrite;
 pub(crate) mod ring_proof_sort;
 pub(crate) mod ring_proof_surface;
 pub mod script_runner;
@@ -558,6 +559,8 @@ pub use simp::{
     squeeze_simp_with_config, SimpConfig, SimpIndexMode, SimpLemma, SqueezeSimpConfig,
     SqueezeSimpResult,
 };
+#[cfg(test)]
+pub(crate) use simp::{simp_with_budget, SimpBudget};
 
 // Re-export specialize_generalize tactics (multi-arg, at-hypothesis, dependency-aware)
 

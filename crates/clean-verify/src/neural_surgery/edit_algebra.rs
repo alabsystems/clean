@@ -62,7 +62,7 @@ impl RankOneUpdate {
     /// For rank-1 matrices, the Frobenius norm factors as the product of
     /// the vector 2-norms.
     #[must_use]
-    pub fn frobenius_norm(&self) -> f64 {
+    pub(crate) fn frobenius_norm(&self) -> f64 {
         let u_norm: f64 = self.u.iter().map(|x| x * x).sum::<f64>().sqrt();
         let v_norm: f64 = self.v.iter().map(|x| x * x).sum::<f64>().sqrt();
         u_norm * v_norm

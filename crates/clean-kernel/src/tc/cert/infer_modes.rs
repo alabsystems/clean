@@ -121,10 +121,10 @@ impl<'env> TypeChecker<'env> {
                 // Path types live at the same universe level as their type family codomain.
                 let result_ty = Expr::from_kind(ExprKind::Sort(level.clone()));
                 let cert = ProofCert::CubicalPath {
-                    ty_cert: Box::new(ty_cert),
+                    ty_cert: Arc::new(ty_cert),
                     ty_level: level,
-                    left_cert: Box::new(left_cert),
-                    right_cert: Box::new(right_cert),
+                    left_cert: Arc::new(left_cert),
+                    right_cert: Arc::new(right_cert),
                 };
                 Ok((result_ty, cert))
             }
@@ -166,7 +166,7 @@ impl<'env> TypeChecker<'env> {
                     right: Arc::new(right),
                 });
                 let cert = ProofCert::CubicalPathLam {
-                    body_cert: Box::new(body_cert),
+                    body_cert: Arc::new(body_cert),
                     body_type: Box::new(body_type_abstract),
                     result_type: Box::new(result_ty.clone()),
                 };
@@ -202,8 +202,8 @@ impl<'env> TypeChecker<'env> {
                 // Result is the path's type family applied to the interval point
                 let result_ty = Expr::from_kind(ExprKind::App(ty.clone(), arg.clone()));
                 let cert = ProofCert::CubicalPathApp {
-                    path_cert: Box::new(path_cert),
-                    arg_cert: Box::new(arg_cert),
+                    path_cert: Arc::new(path_cert),
+                    arg_cert: Arc::new(arg_cert),
                     path_type: Box::new(path_type_whnf.clone()),
                     result_type: Box::new(result_ty.clone()),
                 };
@@ -291,10 +291,10 @@ impl<'env> TypeChecker<'env> {
                 self.validate_hcomp_cap(phi, u, base)?;
                 let result_ty = ty.as_ref().clone();
                 let cert = ProofCert::CubicalHComp {
-                    ty_cert: Box::new(ty_cert),
-                    phi_cert: Box::new(phi_cert),
-                    u_cert: Box::new(u_cert),
-                    base_cert: Box::new(base_cert),
+                    ty_cert: Arc::new(ty_cert),
+                    phi_cert: Arc::new(phi_cert),
+                    u_cert: Arc::new(u_cert),
+                    base_cert: Arc::new(base_cert),
                     result_type: Box::new(result_ty.clone()),
                 };
                 Ok((result_ty, cert))
@@ -361,9 +361,9 @@ impl<'env> TypeChecker<'env> {
                 // Result type is ty applied to i1
                 let result_ty = Expr::from_kind(ExprKind::App(ty.clone(), i1));
                 let cert = ProofCert::CubicalTransp {
-                    ty_cert: Box::new(ty_cert),
-                    phi_cert: Box::new(phi_cert),
-                    base_cert: Box::new(base_cert),
+                    ty_cert: Arc::new(ty_cert),
+                    phi_cert: Arc::new(phi_cert),
+                    base_cert: Arc::new(base_cert),
                     result_type: Box::new(result_ty.clone()),
                 };
                 Ok((result_ty, cert))
@@ -437,10 +437,10 @@ impl<'env> TypeChecker<'env> {
                 // Result type is ty applied to s
                 let result_ty = Expr::from_kind(ExprKind::App(ty.clone(), s.clone()));
                 let cert = ProofCert::CubicalCoe {
-                    ty_cert: Box::new(ty_cert),
-                    r_cert: Box::new(r_cert),
-                    s_cert: Box::new(s_cert),
-                    base_cert: Box::new(base_cert),
+                    ty_cert: Arc::new(ty_cert),
+                    r_cert: Arc::new(r_cert),
+                    s_cert: Arc::new(s_cert),
+                    base_cert: Arc::new(base_cert),
                     result_type: Box::new(result_ty.clone()),
                 };
                 Ok((result_ty, cert))
@@ -493,8 +493,8 @@ impl<'env> TypeChecker<'env> {
                 // Membership is a proposition
                 let result_ty = Expr::from_kind(ExprKind::Sort(Level::zero()));
                 let cert = ProofCert::ZFCMem {
-                    elem_cert: Box::new(elem_cert),
-                    set_cert: Box::new(set_cert),
+                    elem_cert: Arc::new(elem_cert),
+                    set_cert: Arc::new(set_cert),
                 };
                 Ok((result_ty, cert))
             }
@@ -532,8 +532,8 @@ impl<'env> TypeChecker<'env> {
                 // Result is a set
                 let result_ty = Expr::const_(super::NAME_ZFC_SET.clone(), vec![]);
                 let cert = ProofCert::ZFCComprehension {
-                    var_ty_cert: Box::new(var_ty_cert),
-                    pred_cert: Box::new(pred_cert),
+                    var_ty_cert: Arc::new(var_ty_cert),
+                    pred_cert: Arc::new(pred_cert),
                     result_type: Box::new(result_ty.clone()),
                 };
                 Ok((result_ty, cert))
@@ -579,7 +579,7 @@ impl<'env> TypeChecker<'env> {
                 // Squash A : SProp
                 let result_ty = Expr::from_kind(ExprKind::SProp);
                 let cert = ProofCert::Squash {
-                    inner_cert: Box::new(inner_cert),
+                    inner_cert: Arc::new(inner_cert),
                 };
                 Ok((result_ty, cert))
             }

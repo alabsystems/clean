@@ -12,6 +12,7 @@ use crate::cert::ZFCSetCertKind;
 use crate::expr::{Expr, ZFCSetExpr};
 use crate::tc::TypeChecker;
 use crate::TypeError;
+use std::sync::Arc;
 
 impl<'env> TypeChecker<'env> {
     /// Generate a certificate for a ZFC set expression.
@@ -24,20 +25,20 @@ impl<'env> TypeChecker<'env> {
             ZFCSetExpr::Infinity => Ok(ZFCSetCertKind::Infinity),
             ZFCSetExpr::Singleton(e) => {
                 let (_, cert) = self.infer_type_with_cert_impl(e)?;
-                Ok(ZFCSetCertKind::Singleton(Box::new(cert)))
+                Ok(ZFCSetCertKind::Singleton(Arc::new(cert)))
             }
             ZFCSetExpr::Pair(a, b) => {
                 let (_, a_cert) = self.infer_type_with_cert_impl(a)?;
                 let (_, b_cert) = self.infer_type_with_cert_impl(b)?;
-                Ok(ZFCSetCertKind::Pair(Box::new(a_cert), Box::new(b_cert)))
+                Ok(ZFCSetCertKind::Pair(Arc::new(a_cert), Arc::new(b_cert)))
             }
             ZFCSetExpr::Union(e) => {
                 let (_, cert) = self.infer_type_with_cert_impl(e)?;
-                Ok(ZFCSetCertKind::Union(Box::new(cert)))
+                Ok(ZFCSetCertKind::Union(Arc::new(cert)))
             }
             ZFCSetExpr::PowerSet(e) => {
                 let (_, cert) = self.infer_type_with_cert_impl(e)?;
-                Ok(ZFCSetCertKind::PowerSet(Box::new(cert)))
+                Ok(ZFCSetCertKind::PowerSet(Arc::new(cert)))
             }
             ZFCSetExpr::Separation { set, pred } => {
                 let (set_ty, set_cert) = self.infer_type_with_cert_impl(set)?;
@@ -62,8 +63,8 @@ impl<'env> TypeChecker<'env> {
                     });
                 }
                 Ok(ZFCSetCertKind::Separation {
-                    set_cert: Box::new(set_cert),
-                    pred_cert: Box::new(pred_cert),
+                    set_cert: Arc::new(set_cert),
+                    pred_cert: Arc::new(pred_cert),
                 })
             }
             ZFCSetExpr::Replacement { set, func } => {
@@ -89,13 +90,13 @@ impl<'env> TypeChecker<'env> {
                     });
                 }
                 Ok(ZFCSetCertKind::Replacement {
-                    set_cert: Box::new(set_cert),
-                    func_cert: Box::new(func_cert),
+                    set_cert: Arc::new(set_cert),
+                    func_cert: Arc::new(func_cert),
                 })
             }
             ZFCSetExpr::Choice(e) => {
                 let (_, cert) = self.infer_type_with_cert_impl(e)?;
-                Ok(ZFCSetCertKind::Choice(Box::new(cert)))
+                Ok(ZFCSetCertKind::Choice(Arc::new(cert)))
             }
         }
     }

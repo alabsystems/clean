@@ -17,11 +17,21 @@
 //! the driver (`scripts/mm_two_pass.sh`) can UNION the verified labels across
 //! workers. `max_provables` is `end` — passes outside the range are still
 //! traversed to build their axiom types, but only `[start, end)` is proof-checked.
+//!
+//! R1-MM: the stream is stamped `VERIFIED_FORMAT 2` and carries an ADDITIONAL
+//! `G <label>` line for every label that verified only on the GROUND
+//! (non-reusable) fallback. `mm_gate` needs that to drop the dependents the
+//! sequential verifier refuses to build; without the stamp it fails closed. The
+//! `V ` lines are byte-identical to the previous format, so a v1 reader
+//! (`awk '/^V /{print $2}'`) is unaffected. See
+//! `clean_olean::metamath::render_verified_labels`.
 
 use std::process::ExitCode;
 use std::time::Instant;
 
-use clean_olean::metamath::{kernel_verify_two_pass_range, parse_database_file};
+use clean_olean::metamath::{
+    kernel_verify_two_pass_range, parse_database_file, render_verified_labels,
+};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -77,8 +87,9 @@ fn main() -> ExitCode {
     let elapsed = tv.elapsed().as_secs_f64();
 
     eprintln!(
-        "=== two-pass range [{start},{end}) of {path}: VERIFIED={} failed={} skipped={} time={elapsed:.2}s ===",
+        "=== two-pass range [{start},{end}) of {path}: VERIFIED={} (ground-only={}) failed={} skipped={} time={elapsed:.2}s ===",
         report.verified.len(),
+        report.ground_only.len(),
         report.failed.len(),
         report.skipped.len()
     );
@@ -87,10 +98,8 @@ fn main() -> ExitCode {
         eprintln!("    FAIL {label}: {reason}");
     }
 
-    // Machine-readable output for the driver: a count line then one label/line.
-    println!("VERIFIED_COUNT {}", report.verified.len());
-    for label in &report.verified {
-        println!("V {label}");
-    }
+    // Machine-readable output for the driver: format stamp, count line, one `V `
+    // line per verified label, and one ADDITIONAL `G ` line per ground-only label.
+    print!("{}", render_verified_labels(&report));
     ExitCode::SUCCESS
 }

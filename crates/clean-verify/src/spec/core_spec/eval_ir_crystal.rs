@@ -33,64 +33,60 @@
 //!
 //! ## What this module is NOT, stated plainly
 //!
-//! `M_level_is_zero` here is **hand-authored**, not emitted, and it is
-//! **structurally different from what the compiler emits**. A theorem about
-//! this module is therefore not yet a theorem about the shipped body — the same
-//! gap [`super::eval_ir_mode`] closed for `has_cubical_layer` by transcribing.
+//! `ir_lzm_module` here — the `m` is for MODEL — is **hand-authored**, not
+//! emitted, and it is **structurally different from what the compiler
+//! emits**. Until 2026-08-22 it was registered as `ir_lz_module`, the chain's
+//! name, and the A4/A5 theorems over it were quoted on the status page as the
+//! designated target's link 4. The mint (`src/ir_mint`, `tests/crystal_a2_mint_lz.rs`)
+//! then derived the emitted body mechanically and diffed it against this one,
+//! and the two differ in FOUR classes — measured, printed verbatim by the gate,
+//! and pinned in `tests/crystal_a1_lineage/level_is_zero.rs`:
 //!
-//! ### CORRECTED 2026-08-12 — the old reason given here was false
+//! 1. **The switch.** This module: five arms `{0→b1, 1→b2, 2→b3, 3→b5, 4→b2}`,
+//!    default `unreachable`, `exhaustive_enum_unreachable` TRUE. Emitted: four
+//!    arms `{0→bb1, 1→bb2, 4→bb3, 2→bb4}`, `IMax` (tag 3) on the DEFAULT edge,
+//!    no `unreachable` anywhere, flag FALSE. The flagship's wrong-exhaustive-flag
+//!    class, on the designated target itself.
+//! 2. **Per-arm `ret`** here vs `br` to a join block with a `bool` parameter
+//!    (`bb6(%1)`, plus an inner join `bb9(%2)`) there.
+//! 3. **The deref.** Here: `extractfield` the `LevelArc` pointer out of the
+//!    loaded enum, `icmp ne null`, `assert`, one self-call — the deref INLINED
+//!    as a null check. Emitted: `gep` the receiver to byte offset 8 / 16 and
+//!    `call <LevelArc as Deref>::deref` before each self-call; no assert, no
+//!    null constant.
+//! 4. **Three emitted-only blocks** (right-Max recursion, short-circuit false
+//!    arm, inner join): 10 blocks against 7.
 //!
-//! Until this commit these paragraphs said the body "does not lower at all",
-//! because `register_enum`'s scalar-only field wall rejects `Ty(enum-def)` on
-//! `Level`. That was true when written and has been false since 2026-08-10. The
-//! measured release row (`data/crystal_a0_a6_probe.json`, clean `bba1239ea`,
-//! stage1 trustc `94147b34f`, `-C opt-level=3`) is:
+//! So this module is the SEMANTIC MODEL of `Level::is_zero`, and
+//! `ir_lzm_correct` / `ir_lzm_machine_sound` are theorems about the model. The
+//! emitted module is registered separately, under the chain's name
+//! `ir_lz_module`, by [`super::eval_ir_level_minted`] — replayed from the
+//! minted script, checked by three readers — and over THAT module the A4
+//! sentence is REFUTED, kernel-checked (`ir_lz_minted_refutes_a4_on_max`): the
+//! emitted body calls a function the module does not define, so the `Max` and
+//! `IMax` arms go `stuck no_func` where A4 says they return. Link 4 of the
+//! designated target is OPEN; the decision and the scoped route to close it
+//! are in `designs/2026-08-22-is-zero-model-vs-minted-decision.md`.
 //!
-//! ```text
-//! def_path                   level::Level::is_zero
-//! def_index / func_id        17075 / 4924
-//! lowered / spliced          true / true
-//! instr_count                28
-//! unsupported                []
-//! derived_mir.verdict        agreed  ("18 canonical line(s) identical")
-//! derived_mir.markers_exact  FALSE
-//! lineage                    sha256:da22664d…ce3a
-//! flip event                 NONE (DefId(0:17075) occurs 0 times in the log)
-//! ```
+//! ### The history, kept because the page cites it
 //!
-//! So an A0 artifact *does* exist to transcribe. The reason this module is
-//! still hand-authored is a different, measured one, recorded verbatim in
-//! `tests/fixtures/level_is_zero.trust-ir.txt` and pinned by
-//! `tests/crystal_a1_lineage.rs`:
+//! Until 2026-08-12 these paragraphs said the body "does not lower at all".
+//! That was true when written and false since 2026-08-10; the measured release
+//! row (`data/crystal_a0_a6_probe.json`) is `lowered / spliced`, 28 instrs,
+//! `unsupported: []`, `agreed`. The emitted body calls out of the fragment
+//! through `<LevelArc as Deref>::deref`, whose own callees — `Option::as_deref`
+//! and `Option::expect` — are declaration-only in the assembled module (rustc
+//! has no cross-crate THIR), which is the A0 criterion *bodyful reachable
+//! closure*, recorded FAIL and architectural. That is what blocks a theorem
+//! about the EMITTED body from reaching the kernel function through the
+//! artifact alone; it never blocked the IDENTITY of the module, which is why
+//! the minted one now exists beside this one.
 //!
-//! 1. **The emitted body calls out of the fragment.** Both recursive arms go
-//!    through `call @func.4913` = `<LevelArc as Deref>::deref`, which is itself
-//!    `derived_mir: unsupported` ("shim: `Call` (callee return outside the
-//!    fragment: `Option<&Level>`)") and whose own callees — `Option::as_deref`
-//!    and `Option::expect`, func ids 8368 / 7674 — are **declaration-only** in
-//!    the assembled module, with no body to transcribe at all. That is exactly
-//!    the A0 criterion *bodyful reachable closure*, and it is recorded FAIL.
-//!    A transcription is therefore blocked on a T-track build item (widen the
-//!    fragment so the `Option`-returning deref closure lowers with a body), not
-//!    on anything authorable here.
-//! 2. **The emitted control flow is not this one.** Measured: 10 blocks;
-//!    `switch %4 [0: bb1  1: bb2  4: bb3  2: bb4  default: bb5]` — four explicit
-//!    cases plus a **default edge that carries the `IMax` arm**, not an
-//!    `unreachable` trap; `gep inbounds i8, ptr %0, 8/16` for the two `LevelArc`
-//!    fields rather than `ExtractField`; and two join blocks taking `bool`
-//!    block parameters (`bb6(%1: bool)`, `bb9(%2: bool)`) instead of a `ret` in
-//!    each arm. This module has 7 blocks, five explicit switch cases, an
-//!    `unreachable` default, `ExtractField` payload reads, an inline
-//!    `ICmp ne` + `Assert` standing in for the deref, and per-arm `ret`s.
-//!
-//! What that leaves standing, unchanged: this module supplies the **semantics**
-//! link (A3) and demonstrates the semantics is adequate for the target's shape,
-//! and `ir_lz_correct`/`ir_lz_machine_sound` are real theorems *about this
-//! module*. It does **not** supply the artifact link (A1) for `Level::is_zero`.
-//! When the deref closure becomes bodyful, this literal is replaced by the
-//! transcribed artifact, the cost/activation lemmas are re-derived over the
-//! emitted CFG, and these seven witnesses become the differential that says the
-//! transcription is faithful.
+//! What this module still supplies, unchanged: the **semantics** link (A3) —
+//! seven executions that exercise recursion, the short-circuit, the `IMax`
+//! asymmetry and the panic arm — and the proof ARCHITECTURE (representation
+//! relation, cost function, activation induction, A4, A5 composed with
+//! `level_is_zero_sound`) that a re-derivation over the emitted CFG will reuse.
 
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
@@ -115,7 +111,15 @@ impl Specification {
         self.add_eval_ir_numerals()?;
         self.add_eval_ir_builders()?;
         self.add_eval_ir_level_module()?;
-        self.add_eval_ir_witnesses()
+        self.add_eval_ir_witnesses()?;
+        // The MINTED module for the same body, under the chain's name, with
+        // its own computed witnesses -- including the two that go STUCK.
+        self.add_eval_ir_level_minted_module()?;
+        // Option B step one: the same minted body with a deref MODEL beside
+        // it, under its OWN module name. Must follow the minted module --
+        // `ir_lzb_module` names `ir_lz_func` rather than transcribing it, which
+        // is the whole point and also a hard ordering dependency.
+        self.add_eval_ir_lzb_module()
     }
 
     /// Small unary numerals, named once so the module literal reads as a
@@ -138,6 +142,66 @@ impl Specification {
         self.add_recursive_def("def ir_d14 : Nat := Nat.succ ir_d13", "EvalIR numeral 14.")?;
         self.add_recursive_def("def ir_d15 : Nat := Nat.succ ir_d14", "EvalIR numeral 15.")?;
         self.add_recursive_def("def ir_d16 : Nat := Nat.succ ir_d15", "EvalIR numeral 16.")?;
+        // ── the 2026-08-22 widening: ir_d17..ir_d63 ──────────────────────
+        // The designated target's mint refusal was "SSA positions reach 20,
+        // above the ir_d0..ir_d16 atom pool". Structural slots (SSA ids, block
+        // ids, function ids) stay ATOMS by design — a garbage numeral must
+        // keep refusing loudly — so the pool grows to 63 instead of the rule
+        // dissolving into literals. TWO gaps, deliberate: ir_d32 and ir_d64
+        // are ALREADY registered by the chains that own them (Nat.add forms in
+        // eval_ir_bvar_range.rs / eval_ir_valid_char.rs, registered after this
+        // section — a second definition here would be a duplicate, and the
+        // lineage suite's numeral_names_carry_their_values proved exactly that
+        // the first time this widening was built). ir_d33 therefore takes the
+        // Nat.add form, since ir_d32 does not exist yet at this point in the
+        // registration order. Cost, measured before adoption: see the lz
+        // migration commit.
+        self.add_recursive_def("def ir_d17 : Nat := Nat.succ ir_d16", "EvalIR numeral 17.")?;
+        self.add_recursive_def("def ir_d18 : Nat := Nat.succ ir_d17", "EvalIR numeral 18.")?;
+        self.add_recursive_def("def ir_d19 : Nat := Nat.succ ir_d18", "EvalIR numeral 19.")?;
+        self.add_recursive_def("def ir_d20 : Nat := Nat.succ ir_d19", "EvalIR numeral 20.")?;
+        self.add_recursive_def("def ir_d21 : Nat := Nat.succ ir_d20", "EvalIR numeral 21.")?;
+        self.add_recursive_def("def ir_d22 : Nat := Nat.succ ir_d21", "EvalIR numeral 22.")?;
+        self.add_recursive_def("def ir_d23 : Nat := Nat.succ ir_d22", "EvalIR numeral 23.")?;
+        self.add_recursive_def("def ir_d24 : Nat := Nat.succ ir_d23", "EvalIR numeral 24.")?;
+        self.add_recursive_def("def ir_d25 : Nat := Nat.succ ir_d24", "EvalIR numeral 25.")?;
+        self.add_recursive_def("def ir_d26 : Nat := Nat.succ ir_d25", "EvalIR numeral 26.")?;
+        self.add_recursive_def("def ir_d27 : Nat := Nat.succ ir_d26", "EvalIR numeral 27.")?;
+        self.add_recursive_def("def ir_d28 : Nat := Nat.succ ir_d27", "EvalIR numeral 28.")?;
+        self.add_recursive_def("def ir_d29 : Nat := Nat.succ ir_d28", "EvalIR numeral 29.")?;
+        self.add_recursive_def("def ir_d30 : Nat := Nat.succ ir_d29", "EvalIR numeral 30.")?;
+        self.add_recursive_def("def ir_d31 : Nat := Nat.succ ir_d30", "EvalIR numeral 31.")?;
+        self.add_recursive_def("def ir_d33 : Nat := Nat.add ir_d16 ir_d17", "EvalIR numeral 33 (ir_d32 is chain-owned and not yet registered here; the sum form keeps this section self-contained).")?;
+        self.add_recursive_def("def ir_d34 : Nat := Nat.succ ir_d33", "EvalIR numeral 34.")?;
+        self.add_recursive_def("def ir_d35 : Nat := Nat.succ ir_d34", "EvalIR numeral 35.")?;
+        self.add_recursive_def("def ir_d36 : Nat := Nat.succ ir_d35", "EvalIR numeral 36.")?;
+        self.add_recursive_def("def ir_d37 : Nat := Nat.succ ir_d36", "EvalIR numeral 37.")?;
+        self.add_recursive_def("def ir_d38 : Nat := Nat.succ ir_d37", "EvalIR numeral 38.")?;
+        self.add_recursive_def("def ir_d39 : Nat := Nat.succ ir_d38", "EvalIR numeral 39.")?;
+        self.add_recursive_def("def ir_d40 : Nat := Nat.succ ir_d39", "EvalIR numeral 40.")?;
+        self.add_recursive_def("def ir_d41 : Nat := Nat.succ ir_d40", "EvalIR numeral 41.")?;
+        self.add_recursive_def("def ir_d42 : Nat := Nat.succ ir_d41", "EvalIR numeral 42.")?;
+        self.add_recursive_def("def ir_d43 : Nat := Nat.succ ir_d42", "EvalIR numeral 43.")?;
+        self.add_recursive_def("def ir_d44 : Nat := Nat.succ ir_d43", "EvalIR numeral 44.")?;
+        self.add_recursive_def("def ir_d45 : Nat := Nat.succ ir_d44", "EvalIR numeral 45.")?;
+        self.add_recursive_def("def ir_d46 : Nat := Nat.succ ir_d45", "EvalIR numeral 46.")?;
+        self.add_recursive_def("def ir_d47 : Nat := Nat.succ ir_d46", "EvalIR numeral 47.")?;
+        self.add_recursive_def("def ir_d48 : Nat := Nat.succ ir_d47", "EvalIR numeral 48.")?;
+        self.add_recursive_def("def ir_d49 : Nat := Nat.succ ir_d48", "EvalIR numeral 49.")?;
+        self.add_recursive_def("def ir_d50 : Nat := Nat.succ ir_d49", "EvalIR numeral 50.")?;
+        self.add_recursive_def("def ir_d51 : Nat := Nat.succ ir_d50", "EvalIR numeral 51.")?;
+        self.add_recursive_def("def ir_d52 : Nat := Nat.succ ir_d51", "EvalIR numeral 52.")?;
+        self.add_recursive_def("def ir_d53 : Nat := Nat.succ ir_d52", "EvalIR numeral 53.")?;
+        self.add_recursive_def("def ir_d54 : Nat := Nat.succ ir_d53", "EvalIR numeral 54.")?;
+        self.add_recursive_def("def ir_d55 : Nat := Nat.succ ir_d54", "EvalIR numeral 55.")?;
+        self.add_recursive_def("def ir_d56 : Nat := Nat.succ ir_d55", "EvalIR numeral 56.")?;
+        self.add_recursive_def("def ir_d57 : Nat := Nat.succ ir_d56", "EvalIR numeral 57.")?;
+        self.add_recursive_def("def ir_d58 : Nat := Nat.succ ir_d57", "EvalIR numeral 58.")?;
+        self.add_recursive_def("def ir_d59 : Nat := Nat.succ ir_d58", "EvalIR numeral 59.")?;
+        self.add_recursive_def("def ir_d60 : Nat := Nat.succ ir_d59", "EvalIR numeral 60.")?;
+        self.add_recursive_def("def ir_d61 : Nat := Nat.succ ir_d60", "EvalIR numeral 61.")?;
+        self.add_recursive_def("def ir_d62 : Nat := Nat.succ ir_d61", "EvalIR numeral 62.")?;
+        self.add_recursive_def("def ir_d63 : Nat := Nat.succ ir_d62", "EvalIR numeral 63.")?;
 
         // Fuel. `ir_run`'s Nat.rec only unfolds one level per machine step and
         // the `halted` minor ignores its induction hypothesis, so surplus fuel
@@ -334,7 +398,7 @@ impl Specification {
         // (`level/mod.rs:527`).
         self.add_recursive_def(
             concat!(
-                "def ir_lz_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 ",
+                "def ir_lzm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 ",
                 "(ir_nd1 (IRInst.load ir_tLevel ir_d0 Bool.false) ir_d1) ",
                 "(ir_nd1 (IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d2) ",
                 "(ir_nd (IRInst.switch ir_d2 ir_d6 ir_nl0 ",
@@ -346,12 +410,15 @@ impl Specification {
              (false) — succ and param share the false block exactly as the Rust body shares that \
              match arm. exhaustive_enum_unreachable is TRUE because the five arms are the enum's \
              full tag set and the default is Unreachable; the flag licenses nothing in the \
-             semantics, it is a claim to be proved against it.",
+             semantics, it is a claim to be proved against it. MEASURED 2026-08-22 against the \
+             emitted body (ir_lz_b0, minted): the compiler emits FOUR arms with IMax on the \
+             default edge and the flag FALSE -- this block is the MODEL's dispatch, not the \
+             artifact's.",
         )?;
 
         self.add_recursive_def(
             concat!(
-                "def ir_lz_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 ",
+                "def ir_lzm_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 ",
                 "(ir_nd1 (IRInst.const_ ir_tBool (IRConst.bool_ Bool.true)) ir_d3) ",
                 "(ir_nd (IRInst.ret (ir_nl1 ir_d3))))",
             ),
@@ -360,7 +427,7 @@ impl Specification {
 
         self.add_recursive_def(
             concat!(
-                "def ir_lz_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 ",
+                "def ir_lzm_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 ",
                 "(ir_nd1 (IRInst.const_ ir_tBool (IRConst.bool_ Bool.false)) ir_d4) ",
                 "(ir_nd (IRInst.ret (ir_nl1 ir_d4))))",
             ),
@@ -375,7 +442,7 @@ impl Specification {
         // where the null check and the panic live.
         self.add_recursive_def(
             concat!(
-                "def ir_lz_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd6 ",
+                "def ir_lzm_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd6 ",
                 "(ir_nd1 (IRInst.extractfield ir_tPtr ir_d1 ir_d1) ir_d5) ",
                 "(ir_nd1 (IRInst.const_ ir_tPtr IRConst.null_) ir_d6) ",
                 "(ir_nd1 (IRInst.icmp IRICmpOp.ne_ ir_tPtr ir_d5 ir_d6) ir_d7) ",
@@ -391,7 +458,7 @@ impl Specification {
 
         self.add_recursive_def(
             concat!(
-                "def ir_lz_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd6 ",
+                "def ir_lzm_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd6 ",
                 "(ir_nd1 (IRInst.extractfield ir_tPtr ir_d1 ir_d2) ir_d9) ",
                 "(ir_nd1 (IRInst.const_ ir_tPtr IRConst.null_) ir_d10) ",
                 "(ir_nd1 (IRInst.icmp IRICmpOp.ne_ ir_tPtr ir_d9 ir_d10) ir_d11) ",
@@ -406,7 +473,7 @@ impl Specification {
         // ── b5: IMax(_, l2) => l2.is_zero() ─────────────────────────
         self.add_recursive_def(
             concat!(
-                "def ir_lz_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd6 ",
+                "def ir_lzm_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd6 ",
                 "(ir_nd1 (IRInst.extractfield ir_tPtr ir_d1 ir_d2) ir_d13) ",
                 "(ir_nd1 (IRInst.const_ ir_tPtr IRConst.null_) ir_d14) ",
                 "(ir_nd1 (IRInst.icmp IRICmpOp.ne_ ir_tPtr ir_d13 ir_d14) ir_d15) ",
@@ -421,7 +488,7 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def ir_lz_b6 : IRBlock := IRBlock.mk ir_d6 ir_nl0 (ir_bd1 (ir_nd IRInst.unreachable))",
+            "def ir_lzm_b6 : IRBlock := IRBlock.mk ir_d6 ir_nl0 (ir_bd1 (ir_nd IRInst.unreachable))",
             "The Switch default: unreachable, because the five arms are the enum's full tag set. \
              In the semantics reaching it is UB, so a proof that it is unreachable is a real \
              obligation and not a definition.",
@@ -429,19 +496,22 @@ impl Specification {
 
         self.add_recursive_def(
             concat!(
-                "def ir_lz_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 ",
-                "(ir_blk ir_lz_b0 (ir_blk ir_lz_b1 (ir_blk ir_lz_b2 (ir_blk ir_lz_b3 ",
-                "(ir_blk ir_lz_b4 (ir_blk ir_lz_b5 (ir_blk ir_lz_b6 ir_blk0)))))))",
+                "def ir_lzm_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 ",
+                "(ir_blk ir_lzm_b0 (ir_blk ir_lzm_b1 (ir_blk ir_lzm_b2 (ir_blk ir_lzm_b3 ",
+                "(ir_blk ir_lzm_b4 (ir_blk ir_lzm_b5 (ir_blk ir_lzm_b6 ir_blk0)))))))",
             ),
             "Level::is_zero as an EvalIR function: id 0, one parameter (the &Level receiver, SSA \
              id 0), entry block 0, seven blocks.",
         )?;
 
         self.add_recursive_def(
-            "def ir_lz_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_lz_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)",
-            "M_level_is_zero: the single-function module the crystal's equality theorem quantifies \
-             over. HAND-AUTHORED, not emitted — see this module's docs for exactly why, and for \
-             what that does and does not license.",
+            "def ir_lzm_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_lzm_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)",
+            "ir_lzm_module -- the m is for MODEL: the hand-authored single-function SEMANTIC MODEL \
+             of Level::is_zero with the deref inlined, which ir_lzm_correct (A4) and \
+             ir_lzm_machine_sound (A5) quantify over. NOT the emitted body: measured 2026-08-22 \
+             to differ from the minted ir_lz_module in four classes (see this module's docs). \
+             Renamed out of the chain's namespace the same day so the minted module could take \
+             it; the theorems over this module are theorems about the model.",
         )?;
 
         Ok(())
@@ -449,7 +519,7 @@ impl Specification {
 
     /// The seven kernel-checked executions.
     fn add_eval_ir_witnesses(&mut self) -> Result<(), SpecError> {
-        // Every witness runs `ir_eval ir_fuel ir_lz_module 0 [ptr 0] heap
+        // Every witness runs `ir_eval ir_fuel ir_lzm_module 0 [ptr 0] heap
         // next_addr` and is proved by Eq.refl — the kernel executes the machine
         // and compares the outcome. Aggregates are inline values, so a heap cell
         // holds the enum value itself; there is no arena argument and no handle
@@ -458,7 +528,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_is_zero_on_zero : Eq IROutcome ",
-                "(ir_eval ir_fuel ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
+                "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 (ir_var ir_d0 ir_sp0) ir_mem0) ir_d1) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := ",
                 "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
@@ -471,7 +541,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_is_zero_on_param (n : Nat) : Eq IROutcome ",
-                "(ir_eval ir_fuel ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
+                "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) ir_mem0) ir_d1) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := ",
                 "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
@@ -485,7 +555,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_is_zero_on_succ : Eq IROutcome ",
-                "(ir_eval ir_fuel ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
+                "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 (ir_var ir_d1 (ir_sp1 (IRScalar.ptr_ ir_d1))) ",
                 "(ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ir_mem0)) ir_d2) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := ",
@@ -499,7 +569,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_is_zero_on_max_zero_zero : Eq IROutcome ",
-                "(ir_eval ir_fuel ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
+                "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 ",
                 "(ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) ",
                 "(ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ",
@@ -515,7 +585,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_is_zero_on_max_zero_param (n : Nat) : Eq IROutcome ",
-                "(ir_eval ir_fuel ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
+                "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 ",
                 "(ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) ",
                 "(ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ",
@@ -531,7 +601,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_is_zero_on_imax_param_zero (n : Nat) : Eq IROutcome ",
-                "(ir_eval ir_fuel ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
+                "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 ",
                 "(ir_var ir_d3 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) ",
                 "(ir_cell ir_d1 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) ",
@@ -547,7 +617,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_is_zero_dead_arc_panics : Eq IROutcome ",
-                "(ir_eval ir_fuel ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
+                "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 ",
                 "(ir_var ir_d2 (ir_sp2 IRScalar.nullptr_ IRScalar.nullptr_)) ir_mem0) ir_d1) ",
                 "(IROutcome.ub IRFault.assert_failed) := ",

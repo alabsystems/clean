@@ -410,11 +410,7 @@ fn rewrite_body(ctx: &mut ExtLowerCtx, body: &IRBody) -> Result<IRBody, Compiler
                 .as_ref()
                 .map(|body| rewrite_body(ctx, body).map(Box::new))
                 .transpose()?;
-            let tag_range = alts
-                .iter()
-                .map(|alt| alt.ctor.tag)
-                .max()
-                .map_or(0, |tag| tag);
+            let tag_range = alts.iter().map(|alt| alt.ctor.tag).max().unwrap_or(0);
             lower_case_jump_table(ctx, *scrutinee, alts, default, tag_range)?
         }
         IRBody::Jmp { jp, args } => IRBody::Jmp {

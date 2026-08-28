@@ -25,7 +25,6 @@ members = [
     "crates/clean-rust-sem",
     "crates/clean-server",
     "crates/clean-sys",
-    "crates/clean-tla",
     "crates/clean-verify",
 ]
 # Keep default `cargo check/build/test` focused on the publish smoke surface.
@@ -41,15 +40,10 @@ default-members = [
     "crates/clean-parser",
     "crates/clean-runtime",
     "crates/clean-sys",
-    # clean-tla consumes tla-core through an exact Git authority (redirected
-    # to the sibling Ty checkout below during internal development), so it
-    # remains part of the publish smoke surface. The tlaps-bench runner was
-    # absorbed as its `bench` module in rearch stage 9.
-    "crates/clean-tla",
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -142,7 +136,15 @@ libc = "0.2"
 ahash = "0.8"
 hashbrown = { version = "0.17.1", features = ["serde"] }
 indexmap = "2.0"
-smallvec = { version = "1.15.1", features = ["serde"] }
+# NO `features = ["serde"]`. That feature is a `smallvec -> serde` NORMAL
+# dependency edge, and `smallvec` was one of the third-party packages holding
+# `serde` in Trust's shipping closure. The single serde-derived `SmallVec` in
+# this workspace is `ExprKind::Const`'s `LevelVec`, which now encodes through
+# `clean_kernel::expr::level_vec_serde` — a verbatim transcription of
+# smallvec's impl, gated on byte-identity against it. `smallvec` itself stays
+# in the graph (parking_lot_core and tracing-subscriber need it); what is
+# removed is the serde edge, not the package.
+smallvec = { version = "1.15.1" }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -181,8 +183,6 @@ tempfile = "3.14"
 walkdir = "2.5"
 serial_test = "3.2"
 ntest = "0.9"
-# Directory scanning for clean-tla's absorbed TLAPS bench runner.
-glob = "0.3"
 
 # Parallelism
 rayon = "1.10"
@@ -240,7 +240,6 @@ clean-runtime = { path = "crates/clean-runtime" }
 clean-rust-sem = { path = "crates/clean-rust-sem" }
 clean-server = { path = "crates/clean-server" }
 clean-sys = { path = "crates/clean-sys" }
-clean-tla = { path = "crates/clean-tla" }
 clean-verify = { path = "crates/clean-verify" }
 
 # Arkworks cryptography (for polynomial commitments and folding)
@@ -274,14 +273,6 @@ memmap2 = "0.9"
 # Stack management
 stacker = "0.1"
 
-# TLA+ shared AST. Keep the dependency on an immutable internal Ty authority.
-# This deliberately pins the already-published Ty authority immediately before
-# this Clean change. Clean(new) -> Ty(old), then Ty(new) may advance to
-# Clean(new), keeping the authority history acyclic. Local cross-repository
-# development can provide an uncommitted Cargo override, but this publishable
-# manifest must resolve exactly the same graph under `--locked` in every clone.
-tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "c919efc9976f998f5fe9624416d487529d1436cc" }
-
 # The SMT solver sibling repo was renamed z4 -> ay (alabsystems/ay). Keep
 # every AY crate on one immutable Git revision so Clean remains consumable as a
 # plain Cargo Git dependency: a `../ay` path escapes Cargo's Git checkout and
@@ -299,13 +290,13 @@ tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "c919efc9976f9
 # pure-Rust num_rational overflow fallback is functionally identical and adds no
 # native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
 # through trust-certify) has no undefined `___gmpq_*` symbols.
-ay = { package = "ay", version = "0.15.0", git = "https://github.com/alabsystems/ay.git", rev = "2df1293ceba3b3c03d93e50ae0efa3720be56a43", default-features = false }
-ay-dpll = { package = "ay-dpll", version = "0.15.0", git = "https://github.com/alabsystems/ay.git", rev = "2df1293ceba3b3c03d93e50ae0efa3720be56a43" }
-ay-core = { package = "ay-core", version = "0.15.0", git = "https://github.com/alabsystems/ay.git", rev = "2df1293ceba3b3c03d93e50ae0efa3720be56a43" }
-ay-lean-bridge = { package = "ay-lean-bridge", version = "0.15.0", git = "https://github.com/alabsystems/ay.git", rev = "2df1293ceba3b3c03d93e50ae0efa3720be56a43" }
-ay-proof = { package = "ay-proof", version = "0.15.0", git = "https://github.com/alabsystems/ay.git", rev = "2df1293ceba3b3c03d93e50ae0efa3720be56a43" }
-ay-frontend = { package = "ay-frontend", version = "0.15.0", git = "https://github.com/alabsystems/ay.git", rev = "2df1293ceba3b3c03d93e50ae0efa3720be56a43" }
-ay-translate = { package = "ay-translate", version = "0.15.0", git = "https://github.com/alabsystems/ay.git", rev = "2df1293ceba3b3c03d93e50ae0efa3720be56a43" }
+ay = { package = "ay", version = "0.17.0", git = "https://github.com/alabsystems/ay.git", rev = "cda2dbe83f8b9eea68cffd4b3b3681f764d4645f", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.17.0", git = "https://github.com/alabsystems/ay.git", rev = "cda2dbe83f8b9eea68cffd4b3b3681f764d4645f" }
+ay-core = { package = "ay-core", version = "0.17.0", git = "https://github.com/alabsystems/ay.git", rev = "cda2dbe83f8b9eea68cffd4b3b3681f764d4645f" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.17.0", git = "https://github.com/alabsystems/ay.git", rev = "cda2dbe83f8b9eea68cffd4b3b3681f764d4645f" }
+ay-proof = { package = "ay-proof", version = "0.17.0", git = "https://github.com/alabsystems/ay.git", rev = "cda2dbe83f8b9eea68cffd4b3b3681f764d4645f" }
+ay-frontend = { package = "ay-frontend", version = "0.17.0", git = "https://github.com/alabsystems/ay.git", rev = "cda2dbe83f8b9eea68cffd4b3b3681f764d4645f" }
+ay-translate = { package = "ay-translate", version = "0.17.0", git = "https://github.com/alabsystems/ay.git", rev = "cda2dbe83f8b9eea68cffd4b3b3681f764d4645f" }
 
 [profile.dev]
 # Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).

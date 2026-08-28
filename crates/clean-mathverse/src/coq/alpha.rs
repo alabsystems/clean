@@ -181,6 +181,22 @@ pub fn parse_sexp(input: &str) -> Result<Sexp, SexpError> {
 }
 
 /// Parse multiple top-level s-expressions from `input`.
+/// Parse an import-session module stream ([`parse_sexps`]) and apply the
+/// session-wide pre-normalization EVERY consumer must see identically: under
+/// `CLEAN_COQ_VAR_RELEVEL` (default ON), bound polymorphic `(Var k)` sort levels are
+/// re-keyed to declaration-owned named levels
+/// ([`super::universe_releveling::rekey_var_levels`]), so the constraint
+/// miner, the session registries and the importer all render one
+/// declaration's levels from ONE key set. Flag off (`=0`): exactly
+/// [`parse_sexps`], byte-identical.
+pub(crate) fn parse_session_sexps(input: &str) -> Result<Vec<Sexp>, SexpError> {
+    let mut forms = parse_sexps(input)?;
+    if super::universe_releveling::var_relevel_enabled() {
+        super::universe_releveling::rekey_var_levels(&mut forms);
+    }
+    Ok(forms)
+}
+
 pub(crate) fn parse_sexps(input: &str) -> Result<Vec<Sexp>, SexpError> {
     let tokens = tokenize(input)?;
     let (mut pos, mut out) = (0, Vec::new());
@@ -9473,7 +9489,7 @@ impl CoqImporter {
         data: &str,
         registry: &mut CoqSessionRegistry,
     ) -> MathverseResult<u32> {
-        let sexps = parse_sexps(data).map_err(|e| coq_err(&e.to_string()))?;
+        let sexps = parse_session_sexps(data).map_err(|e| coq_err(&e.to_string()))?;
         let mut registered = 0u32;
         for sexp in &sexps {
             let Sexp::List(items) = sexp else { continue };
@@ -9518,7 +9534,7 @@ impl CoqImporter {
         data: &str,
         registry: &mut CoqSessionRegistry,
     ) -> MathverseResult<u32> {
-        let sexps = parse_sexps(data).map_err(|e| coq_err(&e.to_string()))?;
+        let sexps = parse_session_sexps(data).map_err(|e| coq_err(&e.to_string()))?;
         let mut registered = 0u32;
         for sexp in &sexps {
             let Sexp::List(items) = sexp else { continue };
@@ -9645,7 +9661,7 @@ impl CoqImporter {
         salvaged_standins: &std::collections::HashSet<String>,
         writer: &mut ShardWriter,
     ) -> MathverseResult<CoqImportStats> {
-        let sexps = parse_sexps(data).map_err(|e| coq_err(&e.to_string()))?;
+        let sexps = parse_session_sexps(data).map_err(|e| coq_err(&e.to_string()))?;
         // Reconstruct any dumper-OMITTED constants this module references but
         // that the SerAPI dumper never emitted (e.g. ssrnat's `NatTrec.add`,
         // dropped because of its in-line `where` recursive notation). Emitted

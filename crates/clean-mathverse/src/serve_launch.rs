@@ -77,7 +77,7 @@ pub fn is_core_dir(dir: &Path) -> bool {
 /// # Errors
 /// Returns a [`MathverseError`] naming every searched location and pointing at
 /// `clean mathverse download` when no candidate holds a manifest.
-pub fn resolve_core_dir(explicit: Option<&Path>) -> MathverseResult<PathBuf> {
+pub(crate) fn resolve_core_dir(explicit: Option<&Path>) -> MathverseResult<PathBuf> {
     let mut searched: Vec<String> = Vec::new();
     for candidate in core_candidates(explicit) {
         searched.push(candidate.display().to_string());
@@ -126,7 +126,7 @@ fn non_empty_env(key: &str) -> Option<String> {
 ///
 /// # Errors
 /// Propagates a manifest read/parse failure.
-pub fn core_summary(core_dir: &Path) -> MathverseResult<CoreSummary> {
+pub(crate) fn core_summary(core_dir: &Path) -> MathverseResult<CoreSummary> {
     let manifest = crate::manifest::LibraryLoader::new(core_dir.to_path_buf()).load_manifest()?;
     Ok(CoreSummary {
         shard_count: manifest.all_shards().len(),
@@ -142,7 +142,7 @@ pub fn core_summary(core_dir: &Path) -> MathverseResult<CoreSummary> {
 /// Propagates a baseline-index build failure. The command layer treats this as
 /// non-fatal (the server loads and serves fine without the novelty index), so
 /// it logs a warning rather than aborting.
-pub fn ensure_baseline_index(core_dir: &Path) -> MathverseResult<bool> {
+pub(crate) fn ensure_baseline_index(core_dir: &Path) -> MathverseResult<bool> {
     let index_path = core_dir.join(BASELINE_INDEX_FILENAME);
     if index_path.is_file() {
         return Ok(false);
@@ -161,7 +161,7 @@ pub fn ensure_baseline_index(core_dir: &Path) -> MathverseResult<bool> {
 /// of the current executable (the installed-side-by-side case). Returns `None`
 /// when neither resolves so the caller can print a build/install hint.
 #[must_use]
-pub fn locate_serve_bin() -> Option<PathBuf> {
+pub(crate) fn locate_serve_bin() -> Option<PathBuf> {
     if let Some(v) = non_empty_env(SERVE_BIN_ENV) {
         let p = PathBuf::from(v);
         if p.is_file() {
@@ -177,7 +177,7 @@ pub fn locate_serve_bin() -> Option<PathBuf> {
 /// server reads (`$MATHVERSE_CORE_DIR`, `$PORT`, optional
 /// `$MATHVERSE_DOWNLOAD_BASE`). Spawning + waiting is the caller's job.
 #[must_use]
-pub fn serve_command(
+pub(crate) fn serve_command(
     serve_bin: &Path,
     core_dir: &Path,
     port: u16,
@@ -194,13 +194,13 @@ pub fn serve_command(
 
 /// The local URL a freshly-started server is reachable at.
 #[must_use]
-pub fn local_url(port: u16) -> String {
+pub(crate) fn local_url(port: u16) -> String {
     format!("http://127.0.0.1:{port}")
 }
 
 /// Hint shown when the server binary cannot be located.
 #[must_use]
-pub fn serve_bin_missing_hint() -> String {
+pub(crate) fn serve_bin_missing_hint() -> String {
     format!(
         "could not locate the `mathverse_serve` binary. Build it with \
          `cargo build --locked -p clean-mathverse --bin mathverse_serve` and either put it \

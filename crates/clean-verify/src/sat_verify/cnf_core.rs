@@ -220,7 +220,7 @@ impl ClauseDb {
 
     /// The number of currently active (non-deleted) clauses.
     #[must_use]
-    pub fn active_clauses(&self) -> usize {
+    pub(crate) fn active_clauses(&self) -> usize {
         self.index.iter().filter(|e| e.is_some()).count()
     }
 

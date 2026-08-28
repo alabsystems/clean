@@ -397,6 +397,22 @@ impl<'a> ElabCtx<'a> {
             return Some(coercion);
         }
 
+        // Step 1b4: Built-in `α → Option α` lift via `Option.some`. Lean coerces
+        // a value into an `Option` position through `instCoeSome`/`CoeTail`
+        // (`↑a = some a`); Clean's prelude registers no such `Coe` instance, so
+        // — mirroring the built-in `Nat → Int` step above — the elaborator emits
+        // `@Option.some α expr` directly, the exact value Lean's coercion
+        // reduces to. Placed AFTER the `Coe`-instance/subtype/numeric steps so a
+        // genuine imported instance (or a subtype whose base is `Option α`)
+        // still wins; ungated on the `Coe` class like its siblings. Sound:
+        // `Option.some : {α} → α → Option α` is total and the emitted term is
+        // kernel-re-checked; the elem-type unification is scoped, so a
+        // non-matching payload (e.g. `Bool` against `Option Nat`) declines and
+        // the honest mismatch is reported.
+        if let Some(coercion) = self.try_coerce_option_some(expr, &from_whnf, &to_whnf) {
+            return Some(coercion);
+        }
+
         // Step 1c: Structural coercion of a container value (e.g. a list
         // literal `[a, b]`, which the parser desugars to a `List.cons`/
         // `List.nil` chain) into the auxiliary nested-inductive type the kernel
@@ -684,6 +700,65 @@ impl<'a> ElabCtx<'a> {
             let ctx = self.build_local_ctx();
             let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
             matches!(unifier.unify(&alpha_inst, &to_inst), UnifyResult::Success)
+        };
+        if matched {
+            self.metas.commit();
+            Some(term)
+        } else {
+            self.metas.pop_scope();
+            None
+        }
+    }
+
+    /// Built-in `α → Option α` lift via `@Option.some.{u} α expr` (Lean's
+    /// `instCoeSome` — `↑a = some a`).
+    ///
+    /// The expected type `to_whnf` is matched against a saturated
+    /// `@Option.{u} α` application; the universe level `u` is taken from the
+    /// target's own `Option.{u}` head — NOT a fresh metavar — so the emitted
+    /// coercion is level-closed against the very type the caller demanded
+    /// (mirroring `try_coerce_subtype_val`'s level handling).
+    ///
+    /// Accepts only when the source type `from_whnf` unifies with the element
+    /// type `α` (scoped via `push_scope`/`commit`, so a non-matching source —
+    /// `Bool` against `Option Nat` — leaves no partial metavar state and
+    /// returns `None`, preserving the honest `TypeMismatch`).
+    ///
+    /// SOUNDNESS: the emitted `@Option.some α expr` is kernel-re-checked like
+    /// any elaborated term — a wrong element type or level fails to type-check
+    /// rather than passing silently. No kernel/TCB code is touched.
+    fn try_coerce_option_some(
+        &mut self,
+        expr: &Expr,
+        from_whnf: &Expr,
+        to_whnf: &Expr,
+    ) -> Option<Expr> {
+        // Match `@Option.{u} α` (head `Const("Option")` applied to the element).
+        let head = to_whnf.get_app_fn();
+        let ExprKind::Const(name, levels) = head.kind() else {
+            return None;
+        };
+        if name.to_string() != "Option" {
+            return None;
+        }
+        let args = to_whnf.get_app_args();
+        if args.len() != 1 {
+            return None;
+        }
+        let elem = args[0].clone();
+        // `Option.some` must be available (it is, once `Option` is registered).
+        self.env.get_const(&Name::from_string("Option.some"))?;
+        // `@Option.some.{u} α expr` — same `u` the target's `Option` carries.
+        let some_c = Expr::const_(Name::from_string("Option.some"), levels.clone());
+        let term = Expr::app(Expr::app(some_c, elem.clone()), expr.clone());
+        // Accept iff the source type unifies with the element type.
+        self.metas.push_scope();
+        let matched = {
+            let elem_inst = self.metas.instantiate(&elem);
+            let from_inst = self.metas.instantiate(from_whnf);
+            let ctx = self.build_local_ctx();
+            let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
+            matches!(unifier.unify(&from_inst, &elem_inst), UnifyResult::Success)
         };
         if matched {
             self.metas.commit();

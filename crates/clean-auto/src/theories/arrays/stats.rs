@@ -6,7 +6,7 @@ use super::theory::ArrayTheory;
 
 impl ArrayTheory {
     /// Get statistics about the array theory state.
-    pub fn stats(&self) -> ArrayStats {
+    pub(crate) fn stats(&self) -> ArrayStats {
         ArrayStats {
             num_selects: self.selects.len(),
             num_stores: self.stores.len(),
@@ -18,7 +18,7 @@ impl ArrayTheory {
 
 /// Statistics for array theory.
 #[derive(Clone, Debug, Default)]
-pub struct ArrayStats {
+pub(crate) struct ArrayStats {
     pub num_selects: usize,
     pub num_stores: usize,
     pub num_equalities: usize,

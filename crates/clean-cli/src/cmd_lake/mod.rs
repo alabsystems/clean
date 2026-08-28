@@ -89,10 +89,15 @@ pub(super) fn try_load_project_config(cwd: &Path) -> anyhow::Result<Option<LakeC
 /// strict mode (`CLEAN_LAKE_STRICT_LAKEFILE=1`) parsing already failed inside
 /// `clean-lake` before this point, so a loaded config only ever carries
 /// lenient-mode diagnostics.
+///
+/// Diagnostics cover unmodelled `where`-block FIELDS as well as top-level
+/// declarations, so the wording stays neutral: a skipped `testDriver` is not a
+/// "top-level construct", and calling it one sent readers looking at the wrong
+/// line.
 fn warn_skipped_constructs(config: &LakeConfig) {
     for skipped in &config.diagnostics {
         eprintln!(
-            "warning: lakefile.lean:{}: skipped unrecognized top-level construct `{}` \
+            "warning: lakefile.lean:{}: skipped unrecognized `{}` \
              (set CLEAN_LAKE_STRICT_LAKEFILE=1 to make this an error)",
             skipped.line, skipped.token
         );

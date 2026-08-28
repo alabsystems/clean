@@ -19,6 +19,7 @@ use super::{
     LocalContext, TcCaches, TypeChecker, DEFAULT_HEARTBEAT_LIMIT, DEFAULT_MAX_CACHE_ENTRIES,
 };
 use std::cell::{Cell, RefCell};
+use std::sync::Arc;
 
 impl<'env> TypeChecker<'env> {
     /// Push a local declaration onto the context.
@@ -39,14 +40,28 @@ impl<'env> TypeChecker<'env> {
     /// This matches Lean 4's strategy (type_checker.cpp never clears caches
     /// on push/pop). See #1411 F2, #1325.
     pub(super) fn ctx_push(&self, name: Name, ty: Expr, bi: impl Into<BinderData>) -> FVarId {
-        self.ctx.borrow_mut().push(name, ty, bi)
+        let mut ctx = self.ctx_mut();
+        ctx.advance_next_id(self.next_fvar_floor);
+        ctx.push(name, ty, bi)
+    }
+
+    /// Mutable access to the local context, cloning it first if it is shared.
+    ///
+    /// The context is an `Arc` (see the field doc): when the elaborator handed
+    /// this checker a context it still holds, the first write detaches a
+    /// private copy (`Arc::make_mut`), so the caller's copy is never modified.
+    /// A uniquely owned context is written in place at no extra cost.
+    pub(crate) fn ctx_mut(&self) -> std::cell::RefMut<'_, LocalContext> {
+        std::cell::RefMut::map(self.ctx.borrow_mut(), |ctx| Arc::make_mut(ctx))
     }
 
     /// Push a let-binding onto the context.
     ///
     /// No cache invalidation needed — see `ctx_push` rationale.
     pub(super) fn ctx_push_let(&self, name: Name, ty: Expr, val: Expr) -> FVarId {
-        self.ctx.borrow_mut().push_let(name, ty, val)
+        let mut ctx = self.ctx_mut();
+        ctx.advance_next_id(self.next_fvar_floor);
+        ctx.push_let(name, ty, val)
     }
 
     /// Pop a local declaration from the context.
@@ -56,7 +71,7 @@ impl<'env> TypeChecker<'env> {
     /// entries involving the popped FVar are unreachable: no future expression
     /// will contain the popped FVarId as a subterm.
     pub(super) fn ctx_pop(&self) {
-        self.ctx.borrow_mut().pop();
+        self.ctx_mut().pop();
     }
 
     /// Batch-restore context to a previous length.
@@ -65,7 +80,12 @@ impl<'env> TypeChecker<'env> {
     /// iterating through a chain of consecutive same-kind binders.
     /// Same cache-safety rationale as `ctx_pop` — FVarId monotonicity (#1773).
     pub(super) fn ctx_truncate_to(&self, target_len: usize) {
-        self.ctx.borrow_mut().truncate_to(target_len);
+        if self.ctx.borrow().len() == target_len {
+            // Nothing to drop: do not detach a private copy of a shared
+            // context for a no-op (the common `is_def_eq` exit path).
+            return;
+        }
+        self.ctx_mut().truncate_to(target_len);
     }
 
     /// Current context length.
@@ -89,7 +109,9 @@ impl<'env> TypeChecker<'env> {
         // carry the `1<<63` tag bit, and registering them here can push the
         // ordinary `next_id` counter past that boundary. See
         // `LocalContext::push_low_local`.
-        self.ctx.borrow_mut().push_low_local(name, ty, bi)
+        let mut ctx = self.ctx_mut();
+        ctx.advance_next_id(self.next_fvar_floor);
+        ctx.push_low_local(name, ty, bi)
     }
 
     /// Pop the most recently pushed local declaration. Pairs with
@@ -304,7 +326,8 @@ impl<'env> TypeChecker<'env> {
     ) -> Self {
         Self {
             env,
-            ctx: RefCell::new(LocalContext::new()),
+            ctx: RefCell::new(Arc::new(LocalContext::new())),
+            next_fvar_floor: 0,
             mode: env.mode(),
             transparency,
             honor_reducibility: Cell::new(false),
@@ -389,15 +412,21 @@ impl<'env> TypeChecker<'env> {
     /// (same local declarations and same environment).
     ///
     /// Part of #1671.
+    ///
+    /// `ctx` may be an owned `LocalContext` or a shared `Arc<LocalContext>`: the
+    /// elaborator passes the same built context to every checker it creates
+    /// for one local state, and this constructor does NOT write to it (the
+    /// inherited `next_fvar_id` floor is applied lazily by `ctx_push`), so a
+    /// shared context is neither cloned nor mutated by a call that only reads.
     pub fn with_context_and_caches(
         env: &'env crate::env::Environment,
-        mut ctx: LocalContext,
+        ctx: impl Into<Arc<LocalContext>>,
         caches: TcCaches,
     ) -> Self {
-        ctx.advance_next_id(caches.next_fvar_id);
         Self {
             env,
-            ctx: RefCell::new(ctx),
+            ctx: RefCell::new(ctx.into()),
+            next_fvar_floor: caches.next_fvar_id,
             mode: env.mode(),
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
@@ -452,7 +481,8 @@ impl<'env> TypeChecker<'env> {
         ctx.advance_next_id(caches.next_fvar_id);
         Self {
             env,
-            ctx: RefCell::new(ctx),
+            ctx: RefCell::new(Arc::new(ctx)),
+            next_fvar_floor: caches.next_fvar_id,
             mode,
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
@@ -503,7 +533,9 @@ impl<'env> TypeChecker<'env> {
             proj_type: self.proj_type_cache.take(),
             unfold: self.unfold_cache.take(),
             equiv: self.equiv_manager.take(),
-            next_fvar_id: self.ctx.borrow().next_id(),
+            // The floor is applied lazily (see `next_fvar_floor`): a checker
+            // that never pushed a binder still has to hand the chain on.
+            next_fvar_id: self.ctx.borrow().next_id().max(self.next_fvar_floor),
         }
     }
 }
@@ -614,14 +646,14 @@ impl<'env> TypeChecker<'env> {
         // Track WW: Arc-identity infer memo is FVar/context-sensitive; drop it on
         // wholesale context replacement alongside the other FVar-sensitive caches.
         self.infer_arc_memo.borrow_mut().clear();
-        let ctx = self.ctx.get_mut();
+        let ctx = Arc::make_mut(self.ctx.get_mut());
         ctx.clear_reuse_history();
         ctx
     }
 
     /// Get reference to the local context
     pub(crate) fn local_context(&self) -> std::cell::Ref<'_, LocalContext> {
-        self.ctx.borrow()
+        std::cell::Ref::map(self.ctx.borrow(), |ctx| &**ctx)
     }
 
     /// Enable type checking cache.

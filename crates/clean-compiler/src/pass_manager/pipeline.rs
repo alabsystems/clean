@@ -289,7 +289,25 @@ pub fn compile_lcnf_to_trust_ir(
     pipeline_config: &PipelineConfig,
     emit_config: &crate::emit_trust_ir::TrustIrConfig,
 ) -> Result<trust_ir::Module, PipelineError> {
+    compile_lcnf_to_trust_ir_with_report(decls, env, pipeline_config, emit_config)
+        .map(|(module, _)| module)
+}
+
+/// [`compile_lcnf_to_trust_ir`], additionally returning the per-decl TV mint
+/// report (certified / skipped names) so a caller — `clean extract`'s TV
+/// manifest leg — can say WHICH decls carry a kernel-decided certificate and
+/// which were out-of-fragment skips. The fail-closed contract is identical:
+/// a kernel REFUSAL (a detected miscompile) is an `Err`, never a report row.
+/// With `certify_translation` off, the report is empty.
+#[cfg(feature = "trust-ir-backend")]
+pub fn compile_lcnf_to_trust_ir_with_report(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+) -> Result<(trust_ir::Module, crate::emit_trust_ir_tv::TvMintReport), PipelineError> {
     let mut module = compile_lcnf_decls(decls, env, pipeline_config)?.emit_trust_ir(emit_config)?;
+    let mut report = crate::emit_trust_ir_tv::TvMintReport::default();
     if emit_config.certify_translation {
         // The comparand source of truth: each compiled decl's ORIGINAL kernel
         // definition Expr, straight from the environment (never re-derived
@@ -303,12 +321,15 @@ pub fn compile_lcnf_to_trust_ir(
                     .map(|v| (d.name.to_string(), v))
             })
             .collect();
-        let report = crate::emit_trust_ir_tv::certify_backend_translation(&mut module, &originals);
+        report = crate::emit_trust_ir_tv::certify_backend_translation(&mut module, &originals);
         if !report.refused.is_empty() {
             return Err(
-                crate::emit_trust_ir::TrustIrError::TranslationRefused(report.refused).into(),
+                crate::emit_trust_ir::TrustIrError::TranslationRefused(std::mem::take(
+                    &mut report.refused,
+                ))
+                .into(),
             );
         }
     }
-    Ok(module)
+    Ok((module, report))
 }

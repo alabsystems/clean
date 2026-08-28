@@ -70,7 +70,7 @@ impl ResolutionProof {
 
     /// Get the derived clause at a step index.
     #[must_use]
-    pub fn clause_at(&self, idx: usize) -> Option<&Clause> {
+    pub(crate) fn clause_at(&self, idx: usize) -> Option<&Clause> {
         self.derived.get(idx)
     }
 
@@ -224,7 +224,11 @@ impl Default for ResolutionProof {
 ///
 /// The pivot literal must appear positive in one clause and negative in the
 /// other. The resolvent is the union of both clauses with the pivot removed.
-pub fn resolve_clauses(c1: &[Literal], c2: &[Literal], pivot: Literal) -> Result<Clause, String> {
+pub(crate) fn resolve_clauses(
+    c1: &[Literal],
+    c2: &[Literal],
+    pivot: Literal,
+) -> Result<Clause, String> {
     let pvar = var_of(pivot);
     let has_pos_in_c1 = c1.contains(&pivot);
     let has_neg_in_c2 = c2.iter().any(|&l| l == -pivot);

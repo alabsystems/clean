@@ -184,7 +184,7 @@ pub struct EnvAdmittedAxiom {
 /// `prepare_definition_decl`. A value-less def that lowered to a kernel axiom is
 /// the C1 hole regardless of its `is_axiom` flag.
 #[must_use]
-pub fn classify_env_axiom(backing: Option<(bool, bool)>) -> AxiomOrigin {
+pub(crate) fn classify_env_axiom(backing: Option<(bool, bool)>) -> AxiomOrigin {
     match backing {
         None => AxiomOrigin::EnvInjected,
         Some((is_axiom, _)) if is_axiom => AxiomOrigin::FlagAxiom,

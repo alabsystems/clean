@@ -88,7 +88,7 @@ impl KernelShardBuilder {
     /// Downstream kernel-flattening logic is identical — only the header
     /// `source_system` byte changes. Used by derived library builders such
     /// as `gamma_crown_shard` that reuse the native export pipeline.
-    pub fn with_source_system(mut self, source_system: SourceSystem) -> Self {
+    pub(crate) fn with_source_system(mut self, source_system: SourceSystem) -> Self {
         self.source_system = source_system;
         self
     }
@@ -440,7 +440,7 @@ impl KernelShardBuilder {
     }
 
     /// Write the shard to a byte buffer (useful for tests).
-    pub fn write_to_bytes(&self) -> MathverseResult<Vec<u8>> {
+    pub(crate) fn write_to_bytes(&self) -> MathverseResult<Vec<u8>> {
         let mut buf = Vec::new();
         self.writer.write(&mut buf)?;
         Ok(buf)
@@ -458,7 +458,7 @@ impl KernelShardBuilder {
     /// provenance (`ShardWriter::set_constant_provenance` /
     /// `ShardWriter::set_provenance`) before the shard is written — the
     /// graduation intake gate uses all three.
-    pub fn shard_writer_mut(&mut self) -> &mut ShardWriter {
+    pub(crate) fn shard_writer_mut(&mut self) -> &mut ShardWriter {
         &mut self.writer
     }
 }

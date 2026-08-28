@@ -146,6 +146,17 @@ pub fn dsimp_with_config(state: &mut ProofState, config: DsimpConfig) -> TacticR
         state.rewrite_local_decl_types_def_eq(|ty| dsimp_expr(ty, &env, &config, 0))?;
     }
 
+    // Lean's `dsimp` CLOSES the goal when its definitional normal form is
+    // self-evidently true (`True`, or a reflexive `Eq` at reducible
+    // transparency). Clean reduced the target correctly and then abandoned it,
+    // so every `dsimp`-as-finisher proof reported unsolved goals — the fixture
+    // scored 0/10 including `((fun x : Nat => x) 5) = 5`, whose target is
+    // already SYNTACTICALLY reflexive by the time this line is reached.
+    //
+    // Not closing is not a failure: `dsimp` is a simplifier first, so the
+    // tactic still succeeds with the goal open when no closer fires.
+    super::super::simp::try_definitional_closers(state);
+
     Ok(())
 }
 

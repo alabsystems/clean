@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "expr_bincode_hex": "030100034e617400",
+      "expr_json": "{\"Const\":[{\"Str\":[\"Anon\",\"Nat\"]},[]]}",
+      "kind_bincode_hex": "030100034e617400",
+      "kind_debug": "Const(Name { depth: 1, suffix: [\"Nat\"], lean4_hash: 9ecc0d3a68dfdd9b }, [])",
+      "kind_json": "{\"Const\":[{\"Str\":[\"Anon\",\"Nat\"]},[]]}",
+      "label": "len0_empty"
+    },
+    {
+      "expr_bincode_hex": "03010100034e617404737563630100",
+      "expr_json": "{\"Const\":[{\"Str\":[{\"Str\":[\"Anon\",\"Nat\"]},\"succ\"]},[\"Zero\"]]}",
+      "kind_bincode_hex": "03010100034e617404737563630100",
+      "kind_debug": "Const(Name { depth: 2, suffix: [\"Nat\", \"succ\"], lean4_hash: df9c287df649a55d }, [Zero])",
+      "kind_json": "{\"Const\":[{\"Str\":[{\"Str\":[\"Anon\",\"Nat\"]},\"succ\"]},[\"Zero\"]]}",
+      "label": "len1_zero"
+    },
+    {
+      "expr_bincode_hex": "0301000450726f6402000100",
+      "expr_json": "{\"Const\":[{\"Str\":[\"Anon\",\"Prod\"]},[\"Zero\",{\"Succ\":\"Zero\"}]]}",
+      "kind_bincode_hex": "0301000450726f6402000100",
+      "kind_debug": "Const(Name { depth: 1, suffix: [\"Prod\"], lean4_hash: d43076ddcea47779 }, [Zero, Succ(Zero)])",
+      "kind_json": "{\"Const\":[{\"Str\":[\"Anon\",\"Prod\"]},[\"Zero\",{\"Succ\":\"Zero\"}]]}",
+      "label": "len2_at_inline_cap"
+    },
+    {
+      "expr_bincode_hex": "030100055369676d61030401000175040100017600",
+      "expr_json": "{\"Const\":[{\"Str\":[\"Anon\",\"Sigma\"]},[{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}},\"Zero\"]]}",
+      "kind_bincode_hex": "030100055369676d61030401000175040100017600",
+      "kind_debug": "Const(Name { depth: 1, suffix: [\"Sigma\"], lean4_hash: eda2186d3890fa46 }, [Param(Name { depth: 1, suffix: [\"u\"], lean4_hash: ae572a66f1f7b2e8 }), Param(Name { depth: 1, suffix: [\"v\"], lean4_hash: 486e7075aebc6ca6 }), Zero])",
+      "kind_json": "{\"Const\":[{\"Str\":[\"Anon\",\"Sigma\"]},[{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}},\"Zero\"]]}",
+      "label": "len3_spilled"
+    },
+    {
+      "expr_bincode_hex": "030101010003466f6f036261720362617a040001000101000401000177",
+      "expr_json": "{\"Const\":[{\"Str\":[{\"Str\":[{\"Str\":[\"Anon\",\"Foo\"]},\"bar\"]},\"baz\"]},[\"Zero\",{\"Succ\":\"Zero\"},{\"Succ\":{\"Succ\":\"Zero\"}},{\"Param\":{\"Str\":[\"Anon\",\"w\"]}}]]}",
+      "kind_bincode_hex": "030101010003466f6f036261720362617a040001000101000401000177",
+      "kind_debug": "Const(Name { depth: 3, suffix: [\"Foo\", \"bar\", \"baz\"], lean4_hash: a847a34f0a181463 }, [Zero, Succ(Zero), Succ(Succ(..)), Param(Name { depth: 1, suffix: [\"w\"], lean4_hash: 81dacfafb69580ee })])",
+      "kind_json": "{\"Const\":[{\"Str\":[{\"Str\":[{\"Str\":[\"Anon\",\"Foo\"]},\"bar\"]},\"baz\"]},[\"Zero\",{\"Succ\":\"Zero\"},{\"Succ\":{\"Succ\":\"Zero\"}},{\"Param\":{\"Str\":[\"Anon\",\"w\"]}}]]}",
+      "label": "len4_spilled"
+    },
+    {
+      "expr_bincode_hex": "030101000457696465066c6576656c730800010001010004010001750401000176040100017702040100017504010001760401000177",
+      "expr_json": "{\"Const\":[{\"Str\":[{\"Str\":[\"Anon\",\"Wide\"]},\"levels\"]},[\"Zero\",{\"Succ\":\"Zero\"},{\"Succ\":{\"Succ\":\"Zero\"}},{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}},{\"Param\":{\"Str\":[\"Anon\",\"w\"]}},{\"Max\":[{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}}]},{\"Param\":{\"Str\":[\"Anon\",\"w\"]}}]]}",
+      "kind_bincode_hex": "030101000457696465066c6576656c730800010001010004010001750401000176040100017702040100017504010001760401000177",
+      "kind_debug": "Const(Name { depth: 2, suffix: [\"Wide\", \"levels\"], lean4_hash: f6739e5886144b99 }, [Zero, Succ(Zero), Succ(Succ(..)), Param(Name { depth: 1, suffix: [\"u\"], lean4_hash: ae572a66f1f7b2e8 }), Param(Name { depth: 1, suffix: [\"v\"], lean4_hash: 486e7075aebc6ca6 }), Param(Name { depth: 1, suffix: [\"w\"], lean4_hash: 81dacfafb69580ee }), Max(Param(Name { depth: 1, suffix: [\"u\"], lean4_hash: ae572a66f1f7b2e8 }), Param(Name { depth: 1, suffix: [\"v\"], lean4_hash: 486e7075aebc6ca6 })), Param(Name { depth: 1, suffix: [\"w\"], lean4_hash: 81dacfafb69580ee })])",
+      "kind_json": "{\"Const\":[{\"Str\":[{\"Str\":[\"Anon\",\"Wide\"]},\"levels\"]},[\"Zero\",{\"Succ\":\"Zero\"},{\"Succ\":{\"Succ\":\"Zero\"}},{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}},{\"Param\":{\"Str\":[\"Anon\",\"w\"]}},{\"Max\":[{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}}]},{\"Param\":{\"Str\":[\"Anon\",\"w\"]}}]]}",
+      "label": "len8_spilled"
+    },
+    {
+      "expr_bincode_hex": "030101000444656570046e657374010204010001750401000176",
+      "expr_json": "{\"Const\":[{\"Str\":[{\"Str\":[\"Anon\",\"Deep\"]},\"nest\"]},[{\"Max\":[{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}}]}]]}",
+      "kind_bincode_hex": "030101000444656570046e657374010204010001750401000176",
+      "kind_debug": "Const(Name { depth: 2, suffix: [\"Deep\", \"nest\"], lean4_hash: 18d93bb18fa4653f }, [Max(Param(Name { depth: 1, suffix: [\"u\"], lean4_hash: ae572a66f1f7b2e8 }), Param(Name { depth: 1, suffix: [\"v\"], lean4_hash: 486e7075aebc6ca6 }))])",
+      "kind_json": "{\"Const\":[{\"Str\":[{\"Str\":[\"Anon\",\"Deep\"]},\"nest\"]},[{\"Max\":[{\"Param\":{\"Str\":[\"Anon\",\"u\"]}},{\"Param\":{\"Str\":[\"Anon\",\"v\"]}}]}]]}",
+      "label": "nested_max_imax"
+    },
+    {
+      "expr_bincode_hex": "030101010002ce9b02cf8306e697a5e69cac02000401000175",
+      "expr_json": "{\"Const\":[{\"Str\":[{\"Str\":[{\"Str\":[\"Anon\",\"Λ\"]},\"σ\"]},\"日本\"]},[\"Zero\",{\"Param\":{\"Str\":[\"Anon\",\"u\"]}}]]}",
+      "kind_bincode_hex": "030101010002ce9b02cf8306e697a5e69cac02000401000175",
+      "kind_debug": "Const(Name { depth: 3, suffix: [\"Λ\", \"σ\", \"日本\"], lean4_hash: d9067390e603b0d1 }, [Zero, Param(Name { depth: 1, suffix: [\"u\"], lean4_hash: ae572a66f1f7b2e8 })])",
+      "kind_json": "{\"Const\":[{\"Str\":[{\"Str\":[{\"Str\":[\"Anon\",\"Λ\"]},\"σ\"]},\"日本\"]},[\"Zero\",{\"Param\":{\"Str\":[\"Anon\",\"u\"]}}]]}",
+      "label": "non_ascii_name"
+    }
+  ],
+  "note": "Minted by probe-golden/src/bin/mint.rs against clean-kernel BEFORE the level_vec_serde shim landed, i.e. with smallvec's own `impl Serialize for SmallVec` supplying the LevelVec encoding. bincode config: bincode::config::standard().",
+  "smallvec": "1.15.2"
+}

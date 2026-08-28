@@ -1,0 +1,394 @@
+{
+ "schema": "clean.crystal.f8b_discriminant_match/1",
+ "date": "2026-08-23",
+ "lane": "LANE F8B \u2014 lane F8's sub-shapes B and C, both BUILT: the or-pattern trampoline table and the RETURN SPLIT, +3 at -O3 with 0 lost",
+ "question": "Lane F8 left B (switch + or-pattern, 2 bodies) and C (or-pattern binding a payload, 1 body) as build items with the arithmetic measured. Do they convert, and does D's non-wall status make `combine`/`clamp_u32` marker-only?",
+ "answer": "B and C BOTH convert \u2014 all three bodies, +3 at -O3, 0 lost at either level, gap 28 -> 25. D does NOT: neither `combine` nor `clamp_u32` is marker-only; each needs an EMITTED statement the derived body does not carry, measured here.",
+ "provenance": {
+  "method": "three sealed drivers from ONE detached trust worktree at ONE rev, each whole-crate clean-kernel at -O3 / -O0 / -O3+noflip against one PINNED clean corpus; probes dumped through the sealed CONTROL (built MIR via -Zdump-mir=built, derived verdicts via -Ztrust-dump=ir coverage rows)",
+  "trust_base": "52e0a70314 + the flip path of trust origin/main (the four files lane F8 landed), so the CONTROL to_mir.rs blob is 85901e58b1e6031d0c3c5287c8aee7b42fafbae0 \u2014 byte-identical to the tip's",
+  "trust_base_choice": "trust origin/main still does not build, for the two causes lane F8 measured and this lane re-hit: `--locked` refuses the tip's ay/trust-vc lock-vs-pin disagreement, and first-party/trust-mc@5255ae902 does not compile against first-party/ay@c306c4cd54 (FOURTEEN errors in trust-mc-driver/src/native.rs \u2014 E0616 private fields on ChcProofRunArtifact/ProofRun/Certificate, E0061 arity on ProofRun::certificate, E0609 Certificate::accepted). Reproduced HERE by building with that cohort by mistake and failing identically; the recorded cohort at 52e0a70314 (ay@efdf4c83ed, trust-vc@ec956f9964) builds.",
+  "clean_corpus_rev": "51c893ce5e6f79fe1f08fe8db828da14b0dd71d6",
+  "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13)",
+  "trust_commit": "a7459f92b4f0abfc7f9a69b00ef8c4238ea95430 (pushed to trust main on top of 18a0083876)",
+  "drivers": {
+   "control": {
+    "sha256": "517a7773d1848e7de6330bf49147a933a5cd71f90ea8145b1bb77881e37b952c",
+    "to_mir_blob": "85901e58b1e6031d0c3c5287c8aee7b42fafbae0",
+    "sysrootcheck": "OK"
+   },
+   "subject": {
+    "sha256": "6deef642f08bedecc96311109398bdc91a2cb8fb4ae950a02a2a3d463db682cb",
+    "to_mir_blob": "593e595c3e6109a6032897c642dfe637e60a5fe0",
+    "sysrootcheck": "OK"
+   },
+   "mcor": {
+    "sha256": "fdf479b42f8943ddccee6aa3e2d27779be8d736481a6990263164795a803ce92",
+    "to_mir_blob": "5b95d109053a1950f417c073a66a73d61aff5f9c",
+    "sysrootcheck": "OK"
+   }
+  },
+  "only_file_that_differs": "crates/trust-thir-lower/src/to_mir.rs \u2014 every other flip-path blob, the FROZEN mir_differential.rs (the ORACLE, 13cd4f258683fdede1877d194d674910fb6366a9) included, is byte-identical across all three drivers.",
+  "coverage_sha256_O3": {
+   "ctl": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910",
+   "subj": "c679413074a21fd777b90eacb3c88fa396bfb5d0efb333d0a04087a9ecc57bc7",
+   "mcor": "c679413074a21fd777b90eacb3c88fa396bfb5d0efb333d0a04087a9ecc57bc7"
+  },
+  "a_discarded_first_pair": "`cargo fmt -p trust-thir-lower` REFORMATS the three rustfmt-IGNORED files \u2014 mir_differential.rs (the frozen ORACLE), crate_module.rs and differential.rs \u2014 because the repo's `ignore` list is a nightly-only rustfmt option that the stage0 rustfmt silently drops (it prints the warning and continues). A first subject/M-COR pair was built that way, measured, and DISCARDED rather than published on a tree whose oracle blob had moved; the drivers were rebuilt from the restored tree and every number here is from that pass, which reproduced the discarded one row for row (coverage sha256 c679413074a2\u2026 both times).",
+  "instruments": {
+   "census": "laneF8B/analyze.py (laneGAP2's analyze3.py via laneF8, unchanged)",
+   "ab": "laneF8B/compare.py (laneGAP/laneS3's, unchanged)",
+   "perturb": "laneF8B/pert_check.py (laneR53's via laneF8, unchanged); the applications counts here are read from the flip log itself, since the shipped regex looks for `sat_perturb=N` and the driver prints `class=\u2026 applications=N`",
+   "markers": "laneF8B/markers.py, graph.py (lane R53's canon_markers re-implementation and lane F8's fine-order renderer, unchanged)"
+  },
+  "probes": "$HOME/trust/scratchpad/laneF8B/probes/f8b.rs (p1/p2/p3 reproduce the three corpus bodies' trust-ir node for node; p4/p5 reproduce the two D bodies), f8bq.rs"
+ },
+ "the_control_reproduces_lane_F8_INDEPENDENTLY": {
+  "claim": "this lane's CONTROL is an independently built driver from the committed flip path of trust origin/main, and its whole-crate numbers are lane F8's landed SUBJECT numbers exactly",
+  "measured": {
+   "bodies": 13879,
+   "agreed": 1592,
+   "markers_exact": 1564,
+   "codegen_O3": 590,
+   "codegen_O0": 617,
+   "ctfe_O3": 42,
+   "ctfe_O0": 43,
+   "gap": 28,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "coverage_sha256_O3": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910",
+  "reading": "the -O3 coverage JSON is BYTE-IDENTICAL to the one lane F8 recorded (28432e8a39\u2026), from a driver built in a different lane on a different day \u2014 so `reproduces` is a digest, not a comparator opinion."
+ },
+ "sub_shape_B_switch_with_an_or_pattern_candidate": {
+  "corpus": [
+   "cert::types::proof_cert_has_recursive_children",
+   "mode::CleanMode::allows_large_elimination"
+  ],
+  "verdict": "CONVERTED. Both, +1 each at -O3, 0 lost.",
+  "what_it_took": [
+   "wave-DR's or-pattern trampoline table, RE-MEASURED at HEAD on this lane's own probes and now read by a THIRD class",
+   "a SECOND grouping signal, because the first one is erased by a macro (below)",
+   "two marker models, not one: the match VALUE hoisted to the head (the `!` at the join) and the `!param` arm's own operand temp (the `!` in an arm)",
+   "a plan-gated direct write of the `!`-join into `_0`, without which the shim spells built's one assign in two"
+  ],
+  "the_macro_correction": "lane F8 measured that the producer stamps each source arm's OWN location on the arm's first instruction. TRUE, and INSUFFICIENT here: `proof_cert_has_recursive_children` is `!matches!(..)`, and all NINE of its arm blocks carry `14 1943 5` \u2014 the macro call's own span \u2014 so the location alone cannot separate the eight or-pattern alternatives from the wildcard. The arm's OWN folded instruction does, and it is read off the producer exactly as the location is. The grouping key is therefore (location, first instruction).",
+  "arithmetic": {
+   "proof_cert_has_recursive_children": "built 13 reachable fine blocks vs derived 11. ONE non-last or-pattern candidate of eight alternatives (2 on the lowest-valued alternative, 0 on the other seven) plus the wildcard last (0) = +2. Built's markers: `mk b0.0:live s0:bool` (the match value, at the head, before the discriminant read) and `mk b4.1:dead s0:bool` (at the join, after its own `Not`).",
+   "allows_large_elimination": "built 14 reachable fine blocks vs derived 9. Four non-last candidates \u2014 single 1, or-pattern 2 on its lowest alternative and 0 on the other, single 1, single 1 \u2014 plus the folded last (0) = +5. Built's markers: `mk b6.0:live s0:bool` and `mk b6.2:dead s0:bool`, the `!from_prop` arm's own operand temp, in the ONE alternative that stands where built's real arm body stands."
+  }
+ },
+ "sub_shape_C_switch_or_pattern_BINDING_a_payload": {
+  "corpus": [
+   "tc::reduction::cofib::CofibAtom::var"
+  ],
+  "verdict": "CONVERTED, +1 at -O3, 0 lost \u2014 the SECOND structural addition lane F8 named and did not attempt is built.",
+  "the_return_split": "built exits the payload binding's scope in the match join and RETURNS from a block of its own (`bb7: _0 = copy _3; StorageDead(_3); goto -> bb8` / `bb8: return`); this shim emitted ONE block. `canon_markers` walks the RAW CFG with no goto threading, so without the split every fine index after the join is one early. The join's `Return` becomes `Goto R` plus a bare `R: return`.",
+  "arithmetic": "built 7 reachable fine blocks vs derived 5. Delta 2: ONE trampoline on the non-default alternative's edge (the SOLE candidate is an or-pattern that BINDS, so built duplicates the arm body rather than sharing it and there is no `goto`-per-alternative layer at all) AND the return split. Built's markers: `mk b2.0:live s0:u32`, `mk b3.1:dead s0:u32`, `mk b5.0:live s0:u32` \u2014 the binding minted TWICE, once per alternative.",
+  "note": "admitted at the arity this lane MEASURED and no wider: the sole candidate must have exactly two alternatives, both binding, one of them on the default edge."
+ },
+ "sub_shape_D_condbr_headed_ANSWERED": {
+  "question": "lane F8 measured that the block-interposition wall does not refuse `combine` or `clamp_u32`. Does that make them marker-only \u2014 a plan and nothing else?",
+  "answer": "NO, for both, and each for its own reason. Measured on probes/f8b.rs::p4/p5 through this lane's sealed CONTROL.",
+  "combine": {
+   "measured": "built's head is `bb0: StorageLive(_4); _4 = copy _2; switchInt(move _4)` \u2014 ONE assign and one marked CONDITION temp. The derived head carries ZERO assigns and switches on the bare parameter. The slot the marker would name DOES NOT EXIST in the derived body.",
+   "cost": "a plan-gated condition temp \u2014 an EMITTED assign \u2014 in the CondBr emitter, the matching live+assign in the predicted side, and lane K's `every CondBr condition is a MARKED RESULT of its own block` clause narrowed on the `||`/`&&` sugar signal lane F8 measured. Not a marker plan.",
+   "block_side": "confirmed not the wall: built 5 reachable fine blocks vs derived 4, and the delta is lane K's empty false-edge trampoline, which the shim already mints when the branch plan engages."
+  },
+  "clamp_u32": {
+   "measured": "built's head is `StorageLive(_2)[result]; StorageLive(_3)[operand0]; _3 = copy _1; StorageLive(_4)[operand1]; _4 = const MAX as u64; _2 = Gt(move _3, move _4)` \u2014 THREE assigns and THREE marked temps. The derived head carries TWO assigns (`_3 = MAX as u64`, `_4 = Gt(copy _1, copy _3)`) and NO temps, and the producer defines the CAST before the comparison while built's first operand temp is the PARAMETER copy.",
+   "cost": "one missing emitted assign AND an operand-ORDER inversion: the operand-temp discipline would have to delay a marked result's defining statement to its USE site and mint operand temps left to right. That is a widening of machinery the 590 existing flips already ride on, not a marker plan.",
+   "block_side": "confirmed not the wall: built 5 reachable fine blocks vs derived 4, the same single false-edge trampoline."
+  }
+ },
+ "census_control": {
+  "totals": {
+   "bodies": 13879,
+   "agreed": 1592,
+   "agreed_markers_exact": 1564,
+   "codegen_flips_O3": 590,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910",
+   "coverage_O0_sha256": "28432e8a391001fe1e303ee85dec891eda0d0f48e1ea5bd1f7c05f3d1e9df910",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": 28
+ },
+ "census_subject": {
+  "totals": {
+   "bodies": 13879,
+   "agreed": 1592,
+   "agreed_markers_exact": 1567,
+   "codegen_flips_O3": 593,
+   "codegen_flips_O0": 617,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47,
+   "noflip_control": {
+    "codegen": 0,
+    "ctfe": 0,
+    "fallback_events": 0
+   }
+  },
+  "invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "c679413074a21fd777b90eacb3c88fa396bfb5d0efb333d0a04087a9ecc57bc7",
+   "coverage_O0_sha256": "c679413074a21fd777b90eacb3c88fa396bfb5d0efb333d0a04087a9ecc57bc7",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  },
+  "gap": 25,
+  "gap_shape_overlay": {
+   "other": 19,
+   "WB8-named-chain": 3,
+   "chain-forward (all-calls, unnamed)": 2,
+   "NO-TRUST-IR-BODY": 1
+  }
+ },
+ "whole_crate_subject_vs_control": {
+  "base": "$HOME/trust/scratchpad/laneF8B/wc-ctl",
+  "subject": "$HOME/trust/scratchpad/laneF8B/wc-subj",
+  "O3": {
+   "codegen_base": 590,
+   "codegen_subject": 593,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 3,
+   "lost": 0,
+   "gained_names": [
+    "cert::types::proof_cert_has_recursive_children",
+    "mode::CleanMode::allows_large_elimination",
+    "tc::reduction::cofib::CofibAtom::var"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 617,
+   "codegen_subject": 617,
+   "ctfe_base": 43,
+   "ctfe_subject": 43,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 3
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "cert::types::proof_cert_has_recursive_children",
+   "mode::CleanMode::allows_large_elimination",
+   "tc::reduction::cofib::CofibAtom::var"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1592,
+   "subject_agreed": 1592,
+   "base_markers_exact": 1564,
+   "subject_markers_exact": 1567
+  }
+ },
+ "per_body_marker_line_counts": {
+  "cert::types::proof_cert_has_recursive_children": {
+   "control": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:bool` vs derived `<end>`",
+    "semantic": "13 canonical line(s) identical"
+   },
+   "subject": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical",
+    "semantic": "13 canonical line(s) identical"
+   }
+  },
+  "mode::CleanMode::allows_large_elimination": {
+   "control": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b6.0:live s0:bool` vs derived `<end>`",
+    "semantic": "12 canonical line(s) identical"
+   },
+   "subject": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical",
+    "semantic": "12 canonical line(s) identical"
+   }
+  },
+  "tc::reduction::cofib::CofibAtom::var": {
+   "control": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b2.0:live s0:u32` vs derived `<end>`",
+    "semantic": "7 canonical line(s) identical"
+   },
+   "subject": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "3 marker line(s) identical",
+    "semantic": "7 canonical line(s) identical"
+   }
+  }
+ },
+ "never_0_vs_0": "the CONTROL side has no marker line at all on any of the three (`derived <end>` at line 0); the SUBJECT's are 2, 2 and 3 lines, each IDENTICAL to built's.",
+ "the_semantic_channel_is_UNTOUCHED_measured": {
+  "claim": "the added empty `Goto` blocks AND the return split cost 0 `agreed`. LEDGER L3 says so; this lane MEASURED it rather than citing it.",
+  "crate_wide": "agreed 1592 -> 1592 across 13,879 bodies. ZERO verdict regressions, zero verdict moves of any kind \u2014 `channel_moves` carries exactly one entry, `markers_exact False -> True: 3`.",
+  "per_body": "each converted body's derived-MIR SEMANTIC detail is identical on both sides of the A/B \u2014 13, 12 and 7 canonical lines \u2014 including the one that gained a whole extra BLOCK from the return split.",
+  "attribution": "markers cannot move the semantic channel at all (LEDGER L2 drops them from it), so every `agreed` movement in this A/B would have been attributable to the structural additions alone. There is none."
+ },
+ "the_join_assign_count_is_RE_COUNTED_and_it_caught_a_real_error": {
+  "design": "the plan states how many assigns the retiring block performs BEFORE the retirement, and the emitter re-counts the assigns it actually pushed, failing CLOSED on a disagreement \u2014 so a wrong derivation costs a flip the class never had rather than shipping a marker at a position the shim did not emit.",
+  "what_it_caught": "the FIRST subject driver refused `proof_cert_has_recursive_children` BY NAME \u2014 `lane F8B: the join emitted 2 assign(s), the plan predicts 1` \u2014 because the shim spelled `!<match value>` as `_t = Not(copy _2); _0 = copy _t` where built spells it `_0 = Not(move _2)`. The body shipped marker-free, not with a displaced marker.",
+  "the_repair": "a plan-gated direct write of the `!`-join into `_0`, on wave-J's own `the very next node is the Return` predicate and lane R53's precedent, after which the join really does carry one assign.",
+  "why_the_dump_did_not_show_it": "`-Ztrust-dump=mir:` serializes the VerifiableFunction extracted from the FINAL body, which at -O0 is already the flipped derived one for an `agreed` body \u2014 a good instrument for block graphs and a treacherous one for assign counts inside a body whose tail rvalue rustc itself routes to `_0`. The emitter-side re-count is what settled it."
+ },
+ "perturbation_swr_tramp": {
+  "what_it_does": "-Ztrust-sat-perturb=swr-tramp MOVES one match-candidate trampoline off the plan's first entry and onto the DEFAULT edge's arm block, which the plan never puts one on. The TOTAL is unchanged, so every later `new_block` index is unchanged and the marker law \u2014 which models the allocation, not the placement \u2014 stays green; an empty `Goto` on either edge is the same program, so the derived-MIR channel cannot refuse it either. Only the frozen ORACLE can.",
+  "codegen_base": 590,
+  "codegen_subject": 593,
+  "codegen_perturbed": 590,
+  "ctfe_base": 42,
+  "ctfe_subject": 42,
+  "ctfe_perturbed": 42,
+  "lost_vs_subject": [
+   "cert::types::proof_cert_has_recursive_children",
+   "mode::CleanMode::allows_large_elimination",
+   "tc::reduction::cofib::CofibAtom::var"
+  ],
+  "gained_vs_subject": [],
+  "regressed_vs_base": [],
+  "reach": {
+   "rows_with_a_sat_perturb_line": 2228,
+   "applications_1": 3,
+   "applications_0": 2225,
+   "lines": [
+    "trust-sat-perturb: def=DefId(0:1283 ~ clean_kernel[79c7]::cert::types::proof_cert_has_recursive_children) class=SwrTramp applications=1",
+    "trust-sat-perturb: def=DefId(0:18090 ~ clean_kernel[79c7]::mode::{impl#0}::allows_large_elimination) class=SwrTramp applications=1",
+    "trust-sat-perturb: def=DefId(0:19845 ~ clean_kernel[79c7]::tc::reduction::cofib::{impl#0}::var) class=SwrTramp applications=1"
+   ]
+  }
+ },
+ "mutation_mcor": {
+  "wall_deleted": "the refusal that keeps a COMPUTING arm out of the `!`-JOIN shape \u2014 the clause that makes `built materialises exactly ONE temp for this body, and hoists it to the head` a checked fact rather than a hope.",
+  "live_unit_kill": "`switch_ref_marker_plan_tests::a_computing_arm_beside_a_not_join_is_refused` \u2014 785 passed, 1 failed.",
+  "the_fixture_is_load_bearing": "a FIRST M-COR did not kill anything: the test's fixture was refused by the ARM grammar (it negated a value the head does not bind) rather than by the wall, so deleting the wall changed nothing. The fixture was repaired to bind the value and to sit at its own source position, and it now asserts BOTH directions \u2014 refused with the arm computing, ADMITTED with the same arm folded to a constant at the same position \u2014 so the wall is the only thing standing between the fixture and admission.",
+  "whole_crate": {
+   "base": "$HOME/trust/scratchpad/laneF8B/wc-subj",
+   "subject": "$HOME/trust/scratchpad/laneF8B/wc-mcor",
+   "O3": {
+    "codegen_base": 593,
+    "codegen_subject": 593,
+    "ctfe_base": 42,
+    "ctfe_subject": 42,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "O0": {
+    "codegen_base": 617,
+    "codegen_subject": 617,
+    "ctfe_base": 43,
+    "ctfe_subject": 43,
+    "gained": 0,
+    "lost": 0,
+    "gained_names": [],
+    "lost_names": []
+   },
+   "channel_moves": {},
+   "verdict_regressions": [],
+   "markers_gained": [],
+   "markers_lost": [],
+   "totals": {
+    "base_agreed": 1592,
+    "subject_agreed": 1592,
+    "base_markers_exact": 1567,
+    "subject_markers_exact": 1567
+   }
+  },
+  "coverage_json_byte_identity": "the M-COR's whole-crate -O3 coverage JSON is BYTE-IDENTICAL to the subject's (sha256 c679413074a21fd777b90eacb3c88fa396bfb5d0efb333d0a04087a9ecc57bc7), so `row-exact identical` is a digest, not a comparator opinion.",
+  "reading": "defense in depth confirmed: no body in this corpus rides on that wall, and the live kill is the test."
+ },
+ "unit_tests": {
+  "control": "776 passed, 0 failed",
+  "subject": "786 passed, 0 failed (the control's 776 plus this lane's ten)",
+  "mcor": "785 passed, 1 failed \u2014 the live kill"
+ },
+ "conversions": {
+  "gained_O3": [
+   "cert::types::proof_cert_has_recursive_children",
+   "mode::CleanMode::allows_large_elimination",
+   "tc::reduction::cofib::CofibAtom::var"
+  ],
+  "lost_O3": [],
+  "gained_O0": [],
+  "lost_O0": [],
+  "gap_before": 28,
+  "gap_after": 25,
+  "headline": "-O3 codegen 590 -> 593 (+3, 0 LOST), ctfe 42 -> 42; -O0 617 -> 617 and ctfe 43 -> 43 (0 gained, 0 lost). Exactly three `markers_exact False -> True`. agreed 1592 -> 1592. markers_exact 1564 -> 1567. Every invariant holds at both levels; the `-Ztrust-ir-flip=no` control is 0/0/0."
+ },
+ "what_refuses_the_remaining_25": {
+  "names": [
+   "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq",
+   "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+   "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+   "env::origin::ConstantOrigin::is_unpinned_olean_import",
+   "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+   "env::ext_instance::PRIORITY_BYTES",
+   "env::native_reducers_bitvec::to_signed",
+   "env::native_reducers_bitvec::<impl env::Environment>::init_bitvec_native_reducers",
+   "env::native_reducers_sint::to_signed",
+   "env::Environment::ensure_native_reducers",
+   "expr::kind::arc_eq",
+   "expr::sorry::<impl expr::Expr>::sorry_scan",
+   "expr::subst::<impl expr::Expr>::has_loose_bvar",
+   "expr::types::BigNat::is_zero::{closure#0}",
+   "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+   "<level::LevelArc as std::fmt::Debug>::fmt",
+   "memory_model::MemoryRegion::new",
+   "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion",
+   "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion",
+   "tc::equiv_manager::EquivManager::add_equiv",
+   "tc::heartbeat_profiler::types::SourcePos::coalesced",
+   "tc::heartbeat_profiler::types::round_up_to_next",
+   "tc::heartbeat_profiler::types::clamp_u32",
+   "<env::ai_proof_search::AiSearchStats as std::default::Default>::default"
+  ],
+  "F8_residual_now_4": "2 scoped (`env::native_reducers_bitvec::to_signed`, `env::native_reducers_sint::to_signed` \u2014 the `func.scopes.is_some()` firewall, CORRECT and REDUNDANT: each also carries an early return, refused on its own line) and 2 condbr (`combine`, `clamp_u32` \u2014 ANSWERED above, and neither is marker-only).",
+  "F7_7": "4 short-circuit-over-calls (no new block needed; needs a Call-admitting multi-block plan) and 3 early-return (needs a statement-bearing interposed block plus a shared-return join).",
+  "F3_WB8_named_3_plus_chain_forward_2": "lane WB8's own measured refusals; not re-measured this lane.",
+  "F2_residual_1": "<AiSearchStats as Default>::default \u2014 lane S3's struct-typed field refusal.",
+  "F0_1": "env::ext_instance::PRIORITY_BYTES has no trust-ir body at all.",
+  "others_7": "F5/F6/F9 single-block leftovers outside every current grammar; not re-measured this lane."
+ }
+}

@@ -1,0 +1,107 @@
+{
+ "chain": "ir_hlb",
+ "body": "expr::meta::ExprMeta::has_loose_bvars",
+ "what": "The CRATE-LEVEL interning ids this chain's aggregate types and FUNCTIONS carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses -- and, new in kind with this chain, WHICH of those functions the module DEFINES.",
+ "why": "Read ir_h2.tags.json's `why` first. This is the FIRST chain whose module holds TWO functions: `has_loose_bvars` is `(func 0 ...)` and the callee `loose_bvar_range` is `(func 1 ...)`, and `ir_call_exec` resolves the call site through `ir_func_find` because the callee is DEFINED rather than merely named. That makes this table load-bearing in a way no earlier one is: the emitted text of the caller names its callee by whole-crate INDEX (`call @func.3657`) and its own id NOT AT ALL, and the callee's text names its own id not at all either. Nothing in either text says that the two indices are the two functions of one module, or which is which. Reader A, which reads the artifact binary, can see it; reader B cannot. This table is how reader B is told.",
+ "how_it_is_used": "`ir_mint::project` splits the emitted text into exactly the bodies `extra_bodies` declares (plus the root), reads each with its own canonical index PINNED and the chain's whole function namespace pre-seeded, checks each against its own `interface` object, and splices the results into one core module. `ir_mint::mint` reads the aggregate lanes for the alias line, `extra_bodies` for the second body's Clean name prefix, and refuses a module whose function list is not exactly the declared bodies in declared order.",
+ "producer_pin": "This chain POSTDATES generated/ir_mint.producer_ab.json, so unlike the eleven original rows it has no THREE-producer invariance record. It has TWO reader-A dumps, and they are enough to measure the drift class on this chain rather than inherit it: laneREG wc-REG/dump_O3 2026-08-21 (sha256 af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc) has the caller at @func.3650 (functy.432) and the callee at @func.3649 (functy.430); laneF8 wc-ctl/dump_O3 2026-08-23 (sha256 84b723b8bcf40c02427b13c007d530f28d23b2f504db168f1c7584472077db6e) has them at @func.3665 (functy.438) and @func.3664 (functy.436). ALL FOUR indices moved and the projected core module is BYTE-IDENTICAL. The COMMITTED FIXTURES are a THIRD era (caller @func.3658 functy.435, callee @func.3657 functy.433) with the instruction text byte-identical to both. The pins below are the FIXTURE-ERA ids, because reader B reads the fixture; reader A's are RECORDED in ir_hlb.mint.json and NEVER COMPARED, like observed_ty. The NAMES did not move.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print, PER BODY. Read `ir_h2.tags.json`'s `interface_what` for why they are pinned here rather than in the module. The `interface` object below is the ROOT body's; each row of `extra_bodies` carries its own. The sharp slot on both bodies is the same one: the by-value receiver `bb0(%0: struct.29)`. `ExprMeta` is a u64 NEWTYPE passed by value, which is why no heap premise appears anywhere in this chain -- and the core module keeps only the SSA id, so this row is the only witness that the receiver is an aggregate rather than a bare u64.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. `struct.29` resolves through the `structs` lane to `struct#0`. Reader A's own record on the laneREG wc-REG dump_O3 2026-08-21 dump, over BOTH bodies: `param_tys_erased: [\"Struct(StructId(29))\", \"Struct(StructId(29))\"]`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 435,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. Reader A says 432 on the 2026-08-21 laneREG dump and 438 on the 2026-08-23 laneF8 dump where the fixture says 435 -- the recorded whole-crate drift class, instruction text byte-identical on all three. The pin compares reader B's header against the FIXTURE-ERA 435.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "struct#0",
+    "observed_ty": "struct.29",
+    "rust_type": "self: ExprMeta",
+    "note": "The receiver, BY VALUE. A u64 newtype arriving as a one-field aggregate -- which is why this chain performs no load and carries no heap premise. The core module holds only the SSA id, so this row is the only witness that the argument is the aggregate `EncodesExprMeta` destructures."
+   }
+  ],
+  "block_params": [],
+  "block_params_note": "EMPTY, and that is a measurement: the caller is one block with no join.",
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement: this body contains no memory instruction of any kind.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "extra_bodies": [
+  {
+   "canonical": 1,
+   "prefix": "ir_lbr",
+   "body": "expr::meta::ExprMeta::loose_bvar_range",
+   "role": "THE CALLEE, DEFINED IN THIS MODULE. It is what separates this chain from `ir_lz`, whose `funcs` lane also has two rows: there the second function is called and NOT defined, so `ir_call_exec` goes `stuck no_func`; here it is defined, so the call RESOLVES and the composition theorems have something to compose with.",
+   "interface": {
+    "linkage": "external",
+    "calling_conv": "rustcc",
+    "functy": 433,
+    "functy_note": "Fixture-era. Reader A says 430 on the laneREG dump and 436 on the laneF8 dump -- the same drift class as the caller's 435 -> 432 -> 438, instruction text byte-identical on all three.",
+    "producer": "trust",
+    "params": [
+     {
+      "block": 0,
+      "index": 0,
+      "ssa": 0,
+      "ty": "struct#0",
+      "observed_ty": "struct.29",
+      "rust_type": "self: ExprMeta",
+      "note": "The SAME canonical struct the caller takes, and the sameness is the payload: the caller passes its own %0 straight through, so a callee whose receiver were a different type would be a different program through an identical CFG."
+     }
+    ],
+    "block_params": [],
+    "aligns": [],
+    "aligns_note": "EMPTY: the callee reads field 0 of the by-value aggregate with `extractfield`, which is not a memory instruction.",
+    "clauses": [
+     "loc",
+     "names",
+     "producer",
+     "proof"
+    ],
+    "clauses_note": "The `#proof: shift_in_range` on the assert makes this the SECOND chained body carrying a proof clause (after `meta_tag_shl`) and the FIRST carrying `proof` AND `names` together. The KINDS are compared as a set; the proof clause's CONTENT is a producer claim about the body and is deliberately not compared, exactly like `loc` content."
+   }
+  }
+ ],
+ "enums": [],
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 29,
+   "alias": "ir_hlb_tself",
+   "rust_type": "expr::meta::ExprMeta",
+   "role": "INTERFACE-ONLY, like ir_fc_tflags and ir_fs_tsrc: the struct occurs in BOTH headers and in NO instruction of either body (the callee's extractfield names the u64 it reads, not the aggregate it reads from). The alias is minted so the pin is a registered term rather than a comment, and the value-addressed semantics never consults it."
+  }
+ ],
+ "funcs": [
+  {
+   "canonical": 0,
+   "crate_id": 3658,
+   "name": "expr::meta::ExprMeta::has_loose_bvars",
+   "role": "SELF -- the root body, `(func 0 ...)` of the module. Its emitted text names its own id NOWHERE, so without this row a text reader cannot tell its own index from its callee's.",
+   "observed_crate_id_by_producer": {
+    "fixture-c4e667ca51": 3658,
+    "laneREG-2026-08-21": 3650
+   }
+  },
+  {
+   "canonical": 1,
+   "crate_id": 3657,
+   "name": "expr::meta::ExprMeta::loose_bvar_range",
+   "role": "The one callee -- and, uniquely so far, ALSO a body of this module. `call @func.3657` in the caller's text is the only place either id appears at all.",
+   "observed_crate_id_by_producer": {
+    "fixture-c4e667ca51": 3657,
+    "laneREG-2026-08-21": 3649
+   }
+  }
+ ]
+}

@@ -9,6 +9,7 @@
 use super::*;
 
 use crate::cert::ProofCert;
+use std::sync::Arc;
 
 #[test]
 fn test_local_context_len_and_empty() {
@@ -664,8 +665,8 @@ fn test_convert_fvar_cert_depth_arithmetic() {
 
     let lam_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(arg_type_cert),
-        body_cert: Box::new(body_cert),
+        arg_type_cert: Arc::new(arg_type_cert),
+        body_cert: Arc::new(body_cert),
         result_type: Box::new(result_type),
     };
 
@@ -704,9 +705,9 @@ fn test_convert_fvar_cert_let_depth_arithmetic() {
     let result_type = Expr::prop();
 
     let let_cert = ProofCert::Let {
-        type_cert: Box::new(type_cert),
-        value_cert: Box::new(value_cert),
-        body_cert: Box::new(body_cert),
+        type_cert: Arc::new(type_cert),
+        value_cert: Arc::new(value_cert),
+        body_cert: Arc::new(body_cert),
         result_type: Box::new(result_type),
     };
 

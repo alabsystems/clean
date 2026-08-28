@@ -217,6 +217,14 @@ fn try_elab_per_decl_inner(decls: &[SurfaceDecl]) -> Vec<DeclElabOutcome> {
     // transitive closure can consume the entire per-file timeout before the
     // declarations under test are reached.
     file_ctx.disable_external_import_search();
+    // ...and, having declared that, do not then measure the lane against import
+    // RESOLUTION. With external search off, an `import Std.Data.HashSet` is
+    // unresolvable by construction, and the 2026-08-26 fail-closed default would
+    // score that refusal as a failed declaration — turning a deliberate lane
+    // policy into a corpus regression the corpus cannot act on. This lane
+    // measures Clean's frontend on the DECLARATIONS; the silence is declared
+    // here, at the call site, instead of being built into the elaborator.
+    file_ctx.set_import_policy(clean_elab::ImportPolicy::Permissive);
     let mut outcomes = Vec::with_capacity(decls.len());
 
     for (index, decl) in decls.iter().enumerate() {

@@ -97,8 +97,15 @@ pub struct ProofState {
     pub(crate) instances: Option<InstanceTable>,
     /// Universe parameter names from `fresh_universe_param` (#1828).
     pub(crate) universe_params: Vec<String>,
-    /// Counter for fresh universe parameter generation (#1828).
-    pub(crate) next_universe: u64,
+    /// Fresh universe-parameter id source (#1828; U2 stage 3,
+    /// `crate::level_mint`).
+    ///
+    /// SHARED BY HANDLE with the enclosing `ElabCtx` when this state was
+    /// opened by the tactic bridge ([`Self::seed_universe_world`]), and with
+    /// the parent state when this one is a clone or a sub-proof-state. One
+    /// monotone counter is what makes two mints unable to produce the same
+    /// `u_N` name — see [`crate::level_mint`] for the measured collision.
+    pub(crate) level_mint: crate::level_mint::LevelMint,
     /// Cached TypeChecker state; invalidated when goal changes (#1671).
     tc_cache: std::sync::Mutex<Option<(MetaId, TcCaches)>>,
     /// Elaborator-scope FVars visible to tactics but not tactic-created (#2212).
@@ -124,6 +131,15 @@ pub struct ProofState {
     /// `0` = head, `i` (1..=n) = `args[i-1]` (SOURCE order). A multi-component
     /// path descends through nested `congr`s. `None` when no focus is selected.
     pub(crate) conv_congr_cursor: Option<Vec<usize>>,
+    /// True exactly on the focused sub-proof-state a `conv` body runs in,
+    /// stamped by the conv boundaries (`eval_conv_goal` / `eval_conv_hyps` /
+    /// `eval_conv`) right after `create_sub_proof_state`. Conv-position user
+    /// macros (`infer::user_conv`) fail closed on this flag: their scripts
+    /// navigate/rewrite a conv FOCUS, and running them against a real goal
+    /// would overwrite the target with a (possibly non-Prop) focus with no
+    /// reconstruction boundary. Constructors never set it; `clone` preserves
+    /// it (a clone of a conv-body state is still inside the conv body).
+    pub(crate) in_conv_body: bool,
     /// Local proof options set via `set_option` tactic (#1881).
     pub(crate) options: ProofOptions,
     /// Opened-namespace context inherited from the elaborator at the tactic
@@ -145,7 +161,7 @@ impl Clone for ProofState {
             next_fvar: self.next_fvar,
             instances: self.instances.clone(),
             universe_params: self.universe_params.clone(),
-            next_universe: self.next_universe,
+            level_mint: self.level_mint.clone(),
             tc_cache: std::sync::Mutex::new(None),
             elab_locals: self.elab_locals.clone(),
             fvar_base: self.fvar_base,
@@ -154,6 +170,7 @@ impl Clone for ProofState {
             conv_focus_witness: self.conv_focus_witness.clone(),
             conv_focus_tree: self.conv_focus_tree.clone(),
             conv_congr_cursor: self.conv_congr_cursor.clone(),
+            in_conv_body: self.in_conv_body,
             options: self.options.clone(),
             namespace_state: self.namespace_state.clone(),
         }
@@ -196,7 +213,7 @@ impl ProofState {
             next_fvar: 0,
             instances: None,
             universe_params: Vec::new(),
-            next_universe: 0,
+            level_mint: crate::level_mint::LevelMint::new(),
             tc_cache: std::sync::Mutex::new(None),
             elab_locals: Vec::new(),
             fvar_base: 0,
@@ -205,6 +222,7 @@ impl ProofState {
             conv_focus_witness: None,
             conv_focus_tree: None,
             conv_congr_cursor: None,
+            in_conv_body: false,
             options: ProofOptions::default(),
             namespace_state: None,
         }
@@ -238,7 +256,7 @@ impl ProofState {
             next_fvar: 0,
             instances: Some(instances),
             universe_params: Vec::new(),
-            next_universe: 0,
+            level_mint: crate::level_mint::LevelMint::new(),
             tc_cache: std::sync::Mutex::new(None),
             elab_locals: Vec::new(),
             fvar_base: 0,
@@ -247,6 +265,7 @@ impl ProofState {
             conv_focus_witness: None,
             conv_focus_tree: None,
             conv_congr_cursor: None,
+            in_conv_body: false,
             options: ProofOptions::default(),
             namespace_state: None,
         }
@@ -290,7 +309,7 @@ impl ProofState {
             next_fvar,
             instances: None,
             universe_params: Vec::new(),
-            next_universe: 0,
+            level_mint: crate::level_mint::LevelMint::new(),
             tc_cache: std::sync::Mutex::new(None),
             elab_locals: Vec::new(),
             fvar_base: 0,
@@ -299,6 +318,7 @@ impl ProofState {
             conv_focus_witness: None,
             conv_focus_tree: None,
             conv_congr_cursor: None,
+            in_conv_body: false,
             options: ProofOptions::default(),
             namespace_state: None,
         }
@@ -333,6 +353,53 @@ impl ProofState {
         let mut state = Self::with_elab_context(env, target, ctx);
         state.instances = Some(instances);
         state
+    }
+
+    /// U2 stage 1a + stage 3 — seed this proof state's universe-level world
+    /// from the enclosing declaration
+    /// (docs/analysis/u2-implementation-plan-2026-08-24.md §3, stages 1a/3).
+    ///
+    /// Without this, a fresh `ProofState` starts with `universe_params` empty
+    /// and its own counter at 0, so [`ProofState::fresh_universe_param`]
+    /// re-mints `u_0, u_1, …` — names the declaration's `ElabCtx` may already
+    /// be using for its own binder levels. Since level identity is the `u_N`
+    /// STRING (there is no `LevelMVarId`), the tactic layer's `u_0` silently
+    /// aliases the declaration's `u_0`, and the union-find can rename a
+    /// declaration-level param onto a tactic-minted one (the measured
+    /// sub-class A tell: `inferred: Sort(Param(u_0))` against a mid-numbered
+    /// declaration param). Seeding the name list makes the two disjoint on
+    /// user-declared names; seeding the rigid set makes a declared `.{u}` as
+    /// unassignable inside a tactic block as outside it (previously any
+    /// protection came only from the downstream kernel re-checks).
+    ///
+    /// STAGE 3: the counter is not COPIED, it is SHARED. Stage 1a passed a
+    /// `u64` snapshot, which left both authorities starting from the same
+    /// value `N` for the duration of the block — and a tactic step mints on
+    /// both (its term arguments through the ElabCtx's `elab_app`, its lemma
+    /// instances through `mk_const`/`resolve_env_rewrite_equation`), so the
+    /// first mid-block mint on each side was the same string `u_N`. Measured,
+    /// not inferred: `infer::tests::tactic_bridge_levels` carries the probe.
+    /// Handing over the mint HANDLE removes the window entirely — one
+    /// monotone counter can never issue an id twice.
+    ///
+    /// The caller passes rigid = the declaration's OWN rigid set plus every
+    /// name in `universe_params` (see `elab_by_tactic`): an
+    /// enclosing-declaration level solved inside the tactic cannot be handed
+    /// back soundly while lemma-side constraints are recorded under the
+    /// lemmas' own declared param names, so the bridge refuses such solves
+    /// loudly instead of dropping them silently.
+    ///
+    /// Pure hygiene: this changes which NAMES get minted and which
+    /// assignments are refused loudly, never what solves.
+    pub(crate) fn seed_universe_world(
+        &mut self,
+        universe_params: Vec<String>,
+        level_mint: crate::level_mint::LevelMint,
+        rigid_level_params: std::collections::HashSet<clean_kernel::name::Name>,
+    ) {
+        self.universe_params = universe_params;
+        self.level_mint = level_mint;
+        self.metas.set_rigid_level_params(rigid_level_params);
     }
 
     /// Get the instance table if available

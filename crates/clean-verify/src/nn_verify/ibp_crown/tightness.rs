@@ -293,7 +293,7 @@ pub fn best_possible_bounds(
 /// Each layer applies y = Wx + b. Hidden layers (all except the last) apply
 /// element-wise ReLU after the affine transform.
 #[must_use]
-pub fn eval_network(layers: &[(Vec<Vec<f64>>, Vec<f64>)], input: &[f64]) -> Vec<f64> {
+pub(crate) fn eval_network(layers: &[(Vec<Vec<f64>>, Vec<f64>)], input: &[f64]) -> Vec<f64> {
     let mut current = input.to_vec();
     for (i, (weights, bias)) in layers.iter().enumerate() {
         let mut next = Vec::with_capacity(weights.len());

@@ -95,22 +95,61 @@ const SRC_EXPR_PATH_STEP_OF_TAG: &str = "def expr_path_step_of_tag (n : Nat) : E
 const SRC_EXPR_PATH_STEP_CLONE_ID: &str = "def expr_path_step_clone_id (s : ExprPathStepR) : Eq ExprPathStepR (expr_path_step_clone s) s := ExprPathStepR.rec (fun (s0 : ExprPathStepR) => Eq ExprPathStepR (expr_path_step_clone s0) s0) (Eq.refl ExprPathStepR ExprPathStepR.appfn) (Eq.refl ExprPathStepR ExprPathStepR.apparg) (Eq.refl ExprPathStepR ExprPathStepR.lambody) (Eq.refl ExprPathStepR ExprPathStepR.lamtype) (Eq.refl ExprPathStepR ExprPathStepR.pidom) (Eq.refl ExprPathStepR ExprPathStepR.pibody) (Eq.refl ExprPathStepR ExprPathStepR.lettype) (Eq.refl ExprPathStepR ExprPathStepR.letval) (Eq.refl ExprPathStepR ExprPathStepR.letbody) (Eq.refl ExprPathStepR ExprPathStepR.mdataexpr) (Eq.refl ExprPathStepR ExprPathStepR.projexpr) s";
 const SRC_EXPR_PATH_STEP_OF_TAG_TAG: &str = "def expr_path_step_of_tag_tag (s : ExprPathStepR) : Eq ExprPathStepR (expr_path_step_of_tag (expr_path_step_tag s)) s := ExprPathStepR.rec (fun (s0 : ExprPathStepR) => Eq ExprPathStepR (expr_path_step_of_tag (expr_path_step_tag s0)) s0) (Eq.refl ExprPathStepR ExprPathStepR.appfn) (Eq.refl ExprPathStepR ExprPathStepR.apparg) (Eq.refl ExprPathStepR ExprPathStepR.lambody) (Eq.refl ExprPathStepR ExprPathStepR.lamtype) (Eq.refl ExprPathStepR ExprPathStepR.pidom) (Eq.refl ExprPathStepR ExprPathStepR.pibody) (Eq.refl ExprPathStepR ExprPathStepR.lettype) (Eq.refl ExprPathStepR ExprPathStepR.letval) (Eq.refl ExprPathStepR ExprPathStepR.letbody) (Eq.refl ExprPathStepR ExprPathStepR.mdataexpr) (Eq.refl ExprPathStepR ExprPathStepR.projexpr) s";
 const SRC_ENCODESEXPRPATHSTEP: &str = "inductive EncodesExprPathStep (mem : IRList IRMemSlot) : IRScalar -> ExprPathStepR -> Type\n| mk : forall (a : Nat) (s : ExprPathStepR) (fs : IRScalar), Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a (ir_var (expr_path_step_tag s) fs) Bool.true)) -> EncodesExprPathStep mem (IRScalar.ptr_ a) s";
-const SRC_IR_EP_TSTEP: &str = "def ir_ep_tstep : IRTy := IRTy.enum_ 184";
-const SRC_IR_EP_B0: &str = "def ir_ep_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_ep_tstep ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d11 ir_nl0 (ir_sc ir_d0 ir_d1 (ir_sc ir_d1 ir_d2 (ir_sc ir_d2 ir_d3 (ir_sc ir_d3 ir_d4 (ir_sc ir_d4 ir_d5 (ir_sc ir_d5 ir_d6 (ir_sc ir_d6 ir_d7 (ir_sc ir_d7 ir_d8 (ir_sc ir_d8 ir_d9 (ir_sc ir_d9 ir_d10 ir_sc0)))))))))) Bool.false)))";
-const SRC_IR_EP_B1: &str = "def ir_ep_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d0)) ir_d4) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d4))))";
-const SRC_IR_EP_B2: &str = "def ir_ep_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d1)) ir_d5) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d5))))";
-const SRC_IR_EP_B3: &str = "def ir_ep_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d2)) ir_d6) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d6))))";
-const SRC_IR_EP_B4: &str = "def ir_ep_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d3)) ir_d7) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d7))))";
-const SRC_IR_EP_B5: &str = "def ir_ep_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d4)) ir_d8) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d8))))";
-const SRC_IR_EP_B6: &str = "def ir_ep_b6 : IRBlock := IRBlock.mk ir_d6 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d5)) ir_d9) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d9))))";
-const SRC_IR_EP_B7: &str = "def ir_ep_b7 : IRBlock := IRBlock.mk ir_d7 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d6)) ir_d10) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d10))))";
-const SRC_IR_EP_B8: &str = "def ir_ep_b8 : IRBlock := IRBlock.mk ir_d8 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d7)) ir_d11) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d11))))";
-const SRC_IR_EP_B9: &str = "def ir_ep_b9 : IRBlock := IRBlock.mk ir_d9 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d8)) ir_d12) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d12))))";
-const SRC_IR_EP_B10: &str = "def ir_ep_b10 : IRBlock := IRBlock.mk ir_d10 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d9)) ir_d13) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d13))))";
-const SRC_IR_EP_B11: &str = "def ir_ep_b11 : IRBlock := IRBlock.mk ir_d11 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_ep_tstep (ir_cvar ir_d10)) ir_d14) (ir_nd (IRInst.br ir_d12 (ir_nl1 ir_d14))))";
-const SRC_IR_EP_B12: &str = "def ir_ep_b12 : IRBlock := IRBlock.mk ir_d12 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))";
-const SRC_IR_EP_FUNC: &str = "def ir_ep_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_ep_b0 (ir_blk ir_ep_b1 (ir_blk ir_ep_b2 (ir_blk ir_ep_b3 (ir_blk ir_ep_b4 (ir_blk ir_ep_b5 (ir_blk ir_ep_b6 (ir_blk ir_ep_b7 (ir_blk ir_ep_b8 (ir_blk ir_ep_b9 (ir_blk ir_ep_b10 (ir_blk ir_ep_b11 (ir_blk ir_ep_b12 ir_blk0)))))))))))))";
-const SRC_IR_EP_MODULE: &str = "def ir_ep_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_ep_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_ep.core.txt` + `generated/ir_ep.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_ep.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — TWELVE divergent lines of the sixteen, TWO notation classes,
+/// printed before adoption, both definitionally equal: `ir_ep_b0` inlines
+/// `(IRTy.uint_ ir_d8)` where the hand line named `ir_tU8`, and
+/// `ir_ep_b1`..`b11` spell each arm constant as the raw
+/// `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_dK) IRConst.vnil))` spine
+/// where the hand lines named `ir_cvar ir_dK` (which deltas to exactly that
+/// spine). `ir_ep_tstep` — with the fixture-era `IRTy.enum_ 184` pin now
+/// owned by the tag table — `ir_ep_b12`, `ir_ep_func` and `ir_ep_module`
+/// minted byte-identical.
+const MINTED_IR_EP: &str = include_str!("generated/ir_ep.defs.txt");
+
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_EP_DOCS: &[&str] = &[
+    "ir_ep_tstep: enum.184, the ExprPathStep enum id the emitted body names in both `load enum.184, ptr %0` and `const enum.184 { k }` -- minted from the chain's tag table (generated/ir_ep.tags.json), where the crate-level id lives so the module's identity does not carry it. SEMANTIC INPUT, not decoration: ir_const_agg_eval consults ir_ty_is_agg on it, so an aggregate constant at a scalar type is type_error not_agg. The particular id 184 is not consulted -- and it is the ORIGINAL specimen of the whole-crate drift class, observed at 181/181/176/182 across the four artifact dumps this chain's mint record lists, with 184 the fixture-era pin. DerivedProved, zero axiom_deps.",
+    "ir_ep_b0: entry block, MINTED FROM THE EMITTED ARTIFACT (generated/ir_ep.core.txt; reader B's copy of the same body is tests/fixtures/expr_path_step_clone.trust-ir.txt). LOAD through the &self pointer into %2, read the discriminant with extractfield u8 %2, 0 into %3, then switch. TEN explicit cases (0..9) and a reachable DEFAULT to bb11; exhaustive_enum_unreachable is Bool.false and that is the honest value, since the default is taken on every ProjExpr. DerivedProved, zero axiom_deps.",
+    "ir_ep_b1: AppFn => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 0 }` into %4. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d0) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d0` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b2: AppArg => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 1 }` into %5. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d1) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d1` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b3: LamBody => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 2 }` into %6. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d2) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d2` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b4: LamType => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 3 }` into %7. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d3) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d3` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b5: PiDom => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 4 }` into %8. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d4) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d4` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b6: PiBody => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 5 }` into %9. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d5) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d5` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b7: LetType => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 6 }` into %10. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d6) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d6` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b8: LetVal => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 7 }` into %11. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d7) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d7` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b9: LetBody => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 8 }` into %12. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d8) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d8` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b10: MDataExpr => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 9 }` into %13. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. The minted spelling is the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d9) IRConst.vnil))` spine, which is what the hand line's `ir_cvar ir_d9` deltas to. DerivedProved, zero axiom_deps.",
+    "ir_ep_b11: ProjExpr => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 10 }` into %14. Reached by the DEFAULT edge, not by an explicit case -- the emitted switch lists 0..9 and routes tag 10 here, so the default is neither a trap nor unreachable but one specific real variant. DerivedProved, zero axiom_deps.",
+    "ir_ep_b12: the JOIN block, taking an AGGREGATE block parameter (bb12(%1: enum.184)) and returning it. Like the third chain's join and unlike the first two, the answer travels through the machine as an IRScalar aggregate rather than as a scalar. DerivedProved, zero axiom_deps.",
+    "ir_ep_func: <ExprPathStep as Clone>::clone as EvalIR -- one parameter (&self, SSA id 0), entry block 0, THIRTEEN blocks, matching the emitted control-flow graph exactly. DerivedProved, zero axiom_deps.",
+    "ir_ep_module: the module for <ExprPathStep as Clone>::clone, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it -- modulo the one-entry unwitnessed ledger, the switch's unprinted exhaustive flag; see crate::ir_mint for what that establishes and what it does not. Checked graph-for-graph, including the load, extractfield and aggregate-constant lanes, by tests/crystal_a1_lineage/expr_path_step_clone.rs. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order.
+static MINTED_IR_EP_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_EP
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `ExprPathStep::clone` module definitions, in registration
+/// order.
+#[must_use]
+pub(crate) fn ir_ep_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_EP_LINES
+}
+
 const SRC_IR_EP_ON_APPFN: &str = "def ir_ep_on_appfn : Eq IROutcome (ir_eval ir_d6 ir_ep_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d0 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (ir_var ir_d0 ir_sp0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d0 ir_sp0)))";
 const SRC_IR_EP_ON_APPARG: &str = "def ir_ep_on_apparg : Eq IROutcome (ir_eval ir_d6 ir_ep_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d1 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (ir_var ir_d1 ir_sp0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d1 ir_sp0)))";
 const SRC_IR_EP_ON_LAMBODY: &str = "def ir_ep_on_lambody : Eq IROutcome (ir_eval ir_d6 ir_ep_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d2 ir_sp0) ir_mem0) ir_d1) (IROutcome.ret (ir_vl1 (ir_var ir_d2 ir_sp0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d2 ir_sp0)))";
@@ -151,22 +190,20 @@ impl Specification {
         self.add_recursive_def(SRC_EXPR_PATH_STEP_CLONE_ID, "expr_path_step_clone_id: *** THE EMITTED ELEVEN-ARM DISPATCH IS THE IDENTITY. *** Eleven Eq.refl arms; the kernel selects each variant's constant and compares it with the variant. This is the fact that turns a transcription of a derive into the clone contract, and it is proved rather than assumed precisely because the module above transcribes the eleven arms instead of collapsing them. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_EXPR_PATH_STEP_OF_TAG_TAG, "expr_path_step_of_tag_tag: expr_path_step_of_tag inverts expr_path_step_tag on every ExprPathStepR, by ExprPathStepR.rec with eleven Eq.refl arms -- the kernel computes each tag and re-selects the variant. This is what upgrades the A5 below from a statement about a NUMBER to a statement about a VARIANT. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESEXPRPATHSTEP, "EncodesExprPathStep mem v s: the IRScalar v is the BY-REFERENCE representation of path step s. \n\nA heap premise, unlike the third chain's: this body's argument is `&self` (`bb0(%0: ptr)`) and the emitted body LOADS through it, so there is a cell to pin and it is pinned. Stated as an EQUATION ON ir_mem_lookup, never as list membership -- ir_mem_lookup is head-first first-match, so a membership premise would be satisfied by a SHADOWED DUPLICATE while the machine reads a different cell. \n\nPayload-agnostic on purpose: the element spine fs is universally quantified, because the body reads field 0 and nothing else -- measured, in the emitted body: one load, one extractfield at index 0, then a switch. ExprPathStep is fieldless so a real value's spine is ir_sp0, but quantifying makes the 'reads only the tag' claim checked rather than asserted, and ir_ep_machine_sound_junk_witness runs it on a junk spine. \n\nSAME OPEN LAYOUT OBLIGATION as eval_ir_repr's, carried forward rather than laundered: these are trust-ir DECLARATION-INDEX tags, which is what the emitted body switches on; the Rust enum is niche-encoded downstream of trust-ir. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_TSTEP, "ir_ep_tstep: enum.184, the ExprPathStep enum id the emitted body names in both `load enum.184, ptr %0` and `const enum.184 { k }`. SEMANTIC INPUT, not decoration: ir_const_agg_eval consults ir_ty_is_agg on it, so an aggregate constant at a scalar type is type_error not_agg. The particular id 184 is not consulted. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B0, "ir_ep_b0: entry block, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/expr_path_step_clone.trust-ir.txt). LOAD through the &self pointer into %2, read the discriminant with extractfield u8 %2, 0 into %3, then switch. TEN explicit cases (0..9) and a reachable DEFAULT to bb11; exhaustive_enum_unreachable is Bool.false and that is the honest value, since the default is taken on every ProjExpr. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B1, "ir_ep_b1: AppFn => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 0 }` into %4. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B2, "ir_ep_b2: AppArg => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 1 }` into %5. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B3, "ir_ep_b3: LamBody => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 2 }` into %6. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B4, "ir_ep_b4: LamType => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 3 }` into %7. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B5, "ir_ep_b5: PiDom => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 4 }` into %8. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B6, "ir_ep_b6: PiBody => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 5 }` into %9. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B7, "ir_ep_b7: LetType => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 6 }` into %10. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B8, "ir_ep_b8: LetVal => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 7 }` into %11. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B9, "ir_ep_b9: LetBody => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 8 }` into %12. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B10, "ir_ep_b10: MDataExpr => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 9 }` into %13. Its own block: the compiler shares no arms even though every arm has the same shape, and a module that collapsed them would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B11, "ir_ep_b11: ProjExpr => itself, materialized as the AGGREGATE CONSTANT `const enum.184 { 10 }` into %14. Reached by the DEFAULT edge, not by an explicit case -- the emitted switch lists 0..9 and routes tag 10 here, so the default is neither a trap nor unreachable but one specific real variant. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_B12, "ir_ep_b12: the JOIN block, taking an AGGREGATE block parameter (bb12(%1: enum.184)) and returning it. Like the third chain's join and unlike the first two, the answer travels through the machine as an IRScalar aggregate rather than as a scalar. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_FUNC, "ir_ep_func: <ExprPathStep as Clone>::clone as EvalIR -- one parameter (&self, SSA id 0), entry block 0, THIRTEEN blocks, matching the emitted control-flow graph exactly. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_EP_MODULE, "ir_ep_module: the module for <ExprPathStep as Clone>::clone, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/expr_path_step_clone.trust-ir.txt and checked graph-for-graph and instruction-for-instruction, including the load, extractfield and aggregate-constant lanes, by tests/crystal_a1_lineage/expr_path_step_clone.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_kind_ord.rs posture.
+        let minted = ir_ep_module_defs();
+        if minted.len() != MINTED_IR_EP_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_ep script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_EP_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_EP_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_EP_ON_APPFN, "GATE WITNESS: AppFn, explicit switch case 0. Eq.refl -- the kernel runs the machine for 6 steps (3 in the entry block, 2 in an arm, 1 in the join) over a one-cell heap and compares. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_EP_ON_APPARG, "GATE WITNESS: AppArg, explicit switch case 1. Eq.refl -- the kernel runs the machine for 6 steps (3 in the entry block, 2 in an arm, 1 in the join) over a one-cell heap and compares. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_EP_ON_LAMBODY, "GATE WITNESS: LamBody, explicit switch case 2. Eq.refl -- the kernel runs the machine for 6 steps (3 in the entry block, 2 in an arm, 1 in the join) over a one-cell heap and compares. DerivedProved, zero axiom_deps.")?;
@@ -198,6 +235,15 @@ impl Specification {
 mod tests {
     use super::*;
 
+    /// The minted `def` line for one name, from the committed script.
+    fn minted_line(name: &str) -> &'static str {
+        let prefix = format!("def {name} ");
+        ir_ep_module_defs()
+            .iter()
+            .find(|l| l.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("the minted script must define {name}"))
+    }
+
     /// The switch lists TEN cases and routes the eleventh variant through the
     /// default. A case table transcribed as 0..10 would misroute nothing and
     /// still be a different graph; one transcribed as 0..9 with an unreachable
@@ -205,17 +251,17 @@ mod tests {
     #[test]
     fn test_ten_explicit_cases_and_a_reachable_default() {
         assert_eq!(
-            SRC_IR_EP_B0.matches("ir_sc ").count(),
+            minted_line("ir_ep_b0").matches("ir_sc ").count(),
             10,
             "ten explicit switch cases, 0..9"
         );
-        assert!(SRC_IR_EP_B0.contains("IRInst.switch ir_d3 ir_d11 ir_nl0"));
+        assert!(minted_line("ir_ep_b0").contains("IRInst.switch ir_d3 ir_d11 ir_nl0"));
         assert!(
-            SRC_IR_EP_B0.contains("ir_sc ir_d9 ir_d10 ir_sc0"),
+            minted_line("ir_ep_b0").contains("ir_sc ir_d9 ir_d10 ir_sc0"),
             "the last explicit case is 9 -> bb10; tag 10 has none"
         );
         assert!(
-            SRC_IR_EP_B0.ends_with("Bool.false)))"),
+            minted_line("ir_ep_b0").ends_with("Bool.false)))"),
             "exhaustive_enum_unreachable is FALSE: the default is taken on every ProjExpr"
         );
     }
@@ -224,8 +270,9 @@ mod tests {
     /// This is the shape the first chain has and the third does not.
     #[test]
     fn test_the_argument_is_loaded_then_its_tag_read() {
-        assert!(SRC_IR_EP_B0.contains("IRInst.load ir_ep_tstep ir_d0 Bool.false) ir_d2"));
-        assert!(SRC_IR_EP_B0.contains("IRInst.extractfield ir_tU8 ir_d2 ir_d0) ir_d3"));
+        assert!(minted_line("ir_ep_b0").contains("IRInst.load ir_ep_tstep ir_d0 Bool.false) ir_d2"));
+        assert!(minted_line("ir_ep_b0")
+            .contains("IRInst.extractfield (IRTy.uint_ ir_d8) ir_d2 ir_d0) ir_d3"));
         // …and the premise pins the cell that load reads, by an equation on
         // ir_mem_lookup rather than by membership.
         assert!(SRC_ENCODESEXPRPATHSTEP.contains("ir_mem_lookup mem a"));
@@ -239,22 +286,15 @@ mod tests {
     /// ids, and every one of them branches to the same join block.
     #[test]
     fn test_eleven_distinct_aggregate_arms() {
-        let arms = [
-            SRC_IR_EP_B1,
-            SRC_IR_EP_B2,
-            SRC_IR_EP_B3,
-            SRC_IR_EP_B4,
-            SRC_IR_EP_B5,
-            SRC_IR_EP_B6,
-            SRC_IR_EP_B7,
-            SRC_IR_EP_B8,
-            SRC_IR_EP_B9,
-            SRC_IR_EP_B10,
-            SRC_IR_EP_B11,
-        ];
+        let arms: Vec<&str> = (1..=11)
+            .map(|n| minted_line(&format!("ir_ep_b{n}")))
+            .collect();
         for (k, arm) in arms.iter().enumerate() {
             assert!(
-                arm.contains(&format!("IRInst.const_ ir_ep_tstep (ir_cvar ir_d{k})")),
+                arm.contains(&format!(
+                    "IRInst.const_ ir_ep_tstep (IRConst.aggv (IRConst.vcons (IRConst.int_ \
+                     ir_d{k}) IRConst.vnil))"
+                )),
                 "arm {k} must materialize the aggregate constant for tag {k}"
             );
             assert!(
@@ -263,8 +303,8 @@ mod tests {
                 k + 4
             );
         }
-        assert!(SRC_IR_EP_B12.contains("IRBlock.mk ir_d12 (ir_nl1 ir_d1)"));
-        assert!(SRC_IR_EP_B12.contains("IRInst.ret (ir_nl1 ir_d1)"));
+        assert!(minted_line("ir_ep_b12").contains("IRBlock.mk ir_d12 (ir_nl1 ir_d1)"));
+        assert!(minted_line("ir_ep_b12").contains("IRInst.ret (ir_nl1 ir_d1)"));
     }
 
     /// The reflected clone is the ELEVEN-ARM dispatch the derive emitted, and

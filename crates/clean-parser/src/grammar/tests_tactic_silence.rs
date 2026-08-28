@@ -58,7 +58,10 @@ fn test_tactic_recovery_names_the_failing_tactic() {
             "theorem p (a b : Nat) : a + b = b + a := by\n  module\n",
             "module",
         ),
-        ("theorem p (a : Nat) : a = a := by\n  simp [*]\n", "simp"),
+        // `simp [*]` used to sit here; it parses since the star element landed,
+        // so the `simp` attribution row now uses a lemma list that is still
+        // genuinely malformed (a `←` modifier with no lemma after it).
+        ("theorem p (a : Nat) : a = a := by\n  simp [←]\n", "simp"),
         (
             "theorem p (a b : Nat) (h : a = b) : a = b := by\n  rcases h with -\n",
             "rcases",

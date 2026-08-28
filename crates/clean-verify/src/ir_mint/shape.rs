@@ -22,15 +22,15 @@ pub(crate) enum Arg {
     Val,
     /// A block id.
     Blk,
-    /// A bare natural (a field index, a callee id, a calling convention).
+    /// A bare natural (a callee id, a calling convention).
     Nat,
     /// A machine DATUM rather than a structural index: a type's bit WIDTH, or
     /// an integer/float constant's VALUE.
     ///
     /// The distinction is the numeral policy, and it is not cosmetic. Every
     /// `Arg::Nat` slot names a position in this module -- an SSA id, a block
-    /// id, a field index, a function id -- and those are small by construction,
-    /// so they render through the registered `ir_d0..ir_d16` atom pool and a
+    /// id, a function id -- and those are small by construction,
+    /// so they render through the registered `ir_d0..ir_d63` atom pool and a
     /// numeral outside it is a REFUSAL: a `(func 20 ...)` that minted as a bare
     /// `20` would be a module nothing in the spec had named. A datum is not a
     /// position: `u32`'s width is 32 and `SimpPriority::Default`'s value is
@@ -152,12 +152,23 @@ pub(crate) const INSTS: &[InstShape] = &[
     shape!(
         "extractfield",
         "IRInst.extractfield",
-        [Arg::Ty, Arg::Val, Arg::Nat]
+        // The FIELD INDEX is `Arg::Data`, not `Arg::Nat`, since 2026-08-22: it
+        // names a position within a TYPE, not within this module — the same
+        // side of the structural/datum line as the type's own width — and the
+        // artifact carries a real field index of 81
+        // (`env::Environment::set_lean4_core_strict_monads`, struct.441),
+        // which the HAND transcription of that body already spells as the
+        // bare literal its downstream theorems prove against. Every field
+        // index in every minted artifact before this change is at most 2, so
+        // the pool rendering below 17 keeps all of them byte-identical —
+        // asserted by every chain's M3.
+        [Arg::Ty, Arg::Val, Arg::Data]
     ),
     shape!(
         "insertfield",
         "IRInst.insertfield",
-        [Arg::Ty, Arg::Val, Arg::Nat, Arg::Val]
+        // Same reclassification as `extractfield` — the write dual.
+        [Arg::Ty, Arg::Val, Arg::Data, Arg::Val]
     ),
     shape!(
         "extractelement",

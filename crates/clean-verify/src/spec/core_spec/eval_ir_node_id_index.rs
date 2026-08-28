@@ -105,15 +105,45 @@ const SRC_ENCODES_NODE_ID_INHABITED: &str = "def encodes_node_id_inhabited : Enc
 // ── the usize decision ────────────────────────────────────────────────
 const SRC_IR_NI_TUSIZE: &str = "def ir_ni_tusize : IRTy := IRTy.uint_ ir_d64";
 
-// ── the emitted module, transcribed ───────────────────────────────────
-const SRC_IR_NI_TSELF: &str = "def ir_ni_tself : IRTy := IRTy.struct_ 323";
-const SRC_IR_NI_B0: &str = "def ir_ni_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.extractfield ir_br_tu32 ir_d0 ir_d0) ir_d1) (ir_nd1 (IRInst.cast IRCastOp.zext ir_br_tu32 ir_ni_tusize ir_d1) ir_d2) (ir_nd (IRInst.ret (ir_nl1 ir_d2))))";
-// `#[rustfmt::skip]`: the gate reads this declaration back with
-// `clean_block_sources("…", "const SRC_IR_NI_FUNC")`, which collects LINES
-// starting with that prefix — the tenth chain's `SRC_IR_MT_FUNC` precedent.
-#[rustfmt::skip]
-const SRC_IR_NI_FUNC: &str = "def ir_ni_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_ni_b0 ir_blk0)";
-const SRC_IR_NI_MODULE: &str = "def ir_ni_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_ni_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_ni.core.txt` + `generated/ir_ni.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_ni.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-22 migration off the hand transcription found NO semantic
+/// divergence — ONE divergent line of the four, TWO notation classes, printed
+/// before adoption, both definitionally equal: `ir_ni_b0` inlines
+/// `(IRTy.uint_ 32)` where the hand line BORROWED the sibling `ir_br_tu32`,
+/// and `(IRTy.uint_ 64)` where the hand line named `ir_ni_tusize` — the
+/// resolved `usize`, whose 64 now ALSO lives in the tag table's pinned
+/// `usize` lane rather than only in this file's alias. `ir_ni_tself`,
+/// `ir_ni_func` and `ir_ni_module` minted byte-identical.
+const MINTED_IR_NI: &str = include_str!("generated/ir_ni.defs.txt");
+
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_NI_DOCS: &[&str] = &[
+    "ir_ni_tself: struct.323, the struct id the emitted body names in `bb0(%0: struct.323)`. Minted from the tag table's INTERFACE-ONLY row (the ir_fc posture: the module's instructions name no aggregate); the value-addressed semantics never consults it. It is ALSO what distinguishes this body from its unchained twin ExtensionIdx::index (struct.848). DerivedProved, zero axiom_deps.",
+    "ir_ni_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_ni.core.txt; reader B's copy of the same body is tests/fixtures/node_id_index.trust-ir.txt). Read self.0 (field 0, at u32) into %1, zero-extend %1 from u32 to `usize` into %2, return %2. Every token is a CFG lane: the field index, the extractfield type, the cast opcode (sext at the top half of the range is a DIFFERENT function -- executed below), both cast widths (the emitted destination is `usize`, resolved to the minted literal 64 through the tag table's pinned usize lane), the operand, and the returned id. DerivedProved, zero axiom_deps.",
+    "ir_ni_func: NodeId::index as EvalIR -- ONE parameter (%0, self by value), entry block 0, one block. No closure environment: unlike the eighth and ninth chains this is a plain method, not a closure. DerivedProved, zero axiom_deps.",
+    "ir_ni_module: the module for cert::builder::state::NodeId::index, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text, reading `usize` through the tag table's pinned width), and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger. Checked lane for lane by tests/crystal_a1_lineage/node_id_index.rs. DerivedProved, zero axiom_deps.",
+];
+
+/// The minted script's lines, in registration order.
+static MINTED_IR_NI_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_NI
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+
+/// The minted `NodeId::index` module definitions, in registration order.
+#[must_use]
+pub fn ir_ni_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_NI_LINES
+}
 const SRC_IR_NI_VAL: &str =
     "def ir_ni_val (n : Nat) : IRScalar := IRScalar.aggv (ir_sp1 (IRScalar.int_ n))";
 
@@ -173,11 +203,21 @@ impl Specification {
         self.add_recursive_def(SRC_CERT_NODE_ID_INDEX, "cert_node_id_index: the reflected NodeId::index (cert/builder/state.rs:26), which is `self.0 as usize`. It is ir_wrap ir_d64 (ir_wrap ir_d32 n) -- the machine's exact zext arithmetic, canonicalize at the source width then embed at the 64-bit `usize` width -- and NOT a proof that Rust's `as usize` is that function; that gap is the same shape as every chain's. The outer wrap is kept because dropping it needs a wrap-idempotence lemma nobody has earned; on a canonical u32 it is the identity, EXECUTED at 0, 1, 2^31 and 2^32-1 rather than proved in general. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESNODEID, "EncodesNodeId v i: the runtime VALUE v represents the NodeId i. By value, not through the heap -- the emitted body takes `self` by value and performs NO load, so this premise mentions no memory. Spine-agnostic past slot 0, deliberately: the body reads field 0 and nothing else, so `rest` is universally quantified and ir_ni_w_junk_tail runs the machine with IRScalar.undef_ in slot 1 to show the weakness is real. SAME OPEN LAYOUT OBLIGATION as every chain: `NodeId(u32)` being an aggregate with the integer at slot 0 is a producer layout fact, not proved here. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_ENCODES_NODE_ID_INHABITED, "encodes_node_id_inhabited: the premise-satisfiability witness, registered BESIDE the relation -- a definition that CONCLUDES EncodesNodeId, so the premise-witness ratchet sees the premise is inhabited without a baseline change. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_NI_TUSIZE, "ir_ni_tusize: *** THE usize DECISION -- A TARGET ASSUMPTION, MADE ONCE AND LOUDLY. *** `usize` resolved to IRTy.uint_ ir_d64. The ninth chain left `?usize` refused in the CFG type lane precisely so this chain would have to decide; the recorded producer is the aarch64-apple-darwin stage1 trustc (64-bit, pinned in the lineage fixture and asserted by the gate). On a 32-bit target the emitted body would be a different function and this module would NOT be its transcription. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_NI_TSELF, "ir_ni_tself: struct.323, the struct id the emitted body names in `bb0(%0: struct.323)`. Transcribed for fidelity; the value-addressed semantics never consults it. It is ALSO what distinguishes this body from its unchained twin ExtensionIdx::index (struct.848). DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_NI_B0, "ir_ni_b0: THE WHOLE BODY, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/node_id_index.trust-ir.txt). Read self.0 (field 0, at u32) into %1, zero-extend %1 from u32 to `usize` into %2, return %2. Every token is a CFG lane: the field index, the extractfield type, the cast opcode (sext at the top half of the range is a DIFFERENT function -- executed below), both cast widths (the emitted destination is `usize`, resolved by ir_ni_tusize), the operand, and the returned id. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_NI_FUNC, "ir_ni_func: NodeId::index as EvalIR -- ONE parameter (%0, self by value), entry block 0, one block. No closure environment: unlike the eighth and ninth chains this is a plain method, not a closure. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_NI_MODULE, "ir_ni_module: the module for cert::builder::state::NodeId::index, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/node_id_index.trust-ir.txt and checked lane for lane by tests/crystal_a1_lineage/node_id_index.rs. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_IR_NI_TUSIZE, "ir_ni_tusize: *** THE usize DECISION -- A TARGET ASSUMPTION, MADE ONCE AND LOUDLY. *** `usize` resolved to IRTy.uint_ ir_d64. The ninth chain left `?usize` refused in the CFG type lane precisely so this chain would have to decide; the recorded producer is the aarch64-apple-darwin stage1 trustc (64-bit, pinned in the lineage fixture and asserted by the gate). On a 32-bit target the emitted body would be a different function and this module would NOT be its transcription. Since the 2026-08-22 mint migration the same 64 is ALSO pinned in generated/ir_ni.tags.json's `usize` lane (which is what the mint machinery reads); this alias is now the THEOREM-side spelling -- the minted module inlines (IRTy.uint_ 64), definitionally equal -- and the cast-semantics theorems below keep stating the decision at it. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_bvar_range.rs posture.
+        let minted = ir_ni_module_defs();
+        if minted.len() != MINTED_IR_NI_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_ni script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_NI_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_NI_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_NI_VAL, "ir_ni_val: the runtime value of a NodeId -- a one-field aggregate carrying the u32. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_NI_MACH0, "ir_ni_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds ONE parameter positionally. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_NI_EXACT, "ir_ni_exact: the machine agrees with the reflected function at EXACTLY 3 steps, for every bit pattern x, every payload tail, every heap and every next-address counter. One Eq.refl, and affordable for the same measured reason as the fourth chain's: ir_ef_at destructures the SCALAR CONSTRUCTORS, not the Nat payload, and the zext result is IRStepResult.value immediately, so the whole body computes symbolically -- the residue ir_wrap ir_d64 (ir_wrap ir_d32 x) stays an UNREDUCED application on both sides and the kernel never computes it. DerivedProved, zero axiom_deps.")?;
@@ -216,24 +256,34 @@ impl Specification {
 mod tests {
     use super::*;
 
+    /// The minted `def` line for one name, from the committed script.
+    fn minted_line(name: &str) -> &'static str {
+        let prefix = format!("def {name} ");
+        ir_ni_module_defs()
+            .iter()
+            .find(|l| l.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("the minted script must define {name}"))
+    }
+
     /// The whole body: one typed field read, one `zext` of its result at the
     /// resolved `usize` type, and a `ret` of the extension — not the argument.
     #[test]
     fn test_the_body_is_a_field_read_a_zext_and_a_ret_of_its_result() {
-        assert!(SRC_IR_NI_B0.contains("IRInst.extractfield ir_br_tu32 ir_d0 ir_d0) ir_d1"));
+        let b0 = minted_line("ir_ni_b0");
+        assert!(b0.contains("IRInst.extractfield (IRTy.uint_ 32) ir_d0 ir_d0) ir_d1"));
         assert!(
-            SRC_IR_NI_B0.contains("IRInst.cast IRCastOp.zext ir_br_tu32 ir_ni_tusize ir_d1) ir_d2")
+            b0.contains("IRInst.cast IRCastOp.zext (IRTy.uint_ 32) (IRTy.uint_ 64) ir_d1) ir_d2")
         );
-        assert!(SRC_IR_NI_B0.contains("IRInst.ret (ir_nl1 ir_d2)"));
+        assert!(b0.contains("IRInst.ret (ir_nl1 ir_d2)"));
         assert!(
-            !SRC_IR_NI_B0.contains("IRInst.ret (ir_nl1 ir_d1)"),
+            !b0.contains("IRInst.ret (ir_nl1 ir_d1)"),
             "it returns the EXTENDED value, not the raw field"
         );
         assert!(
-            !SRC_IR_NI_B0.contains("condbr")
-                && !SRC_IR_NI_B0.contains("switch")
-                && !SRC_IR_NI_B0.contains("IRInst.br ")
-                && !SRC_IR_NI_B0.contains("IRConst"),
+            !b0.contains("condbr")
+                && !b0.contains("switch")
+                && !b0.contains("IRInst.br ")
+                && !b0.contains("IRConst"),
             "one block, no control flow, no constant"
         );
     }
@@ -246,15 +296,15 @@ mod tests {
             SRC_IR_NI_TUSIZE,
             "def ir_ni_tusize : IRTy := IRTy.uint_ ir_d64"
         );
-        assert!(SRC_IR_NI_B0.contains("ir_br_tu32 ir_ni_tusize"));
+        assert!(minted_line("ir_ni_b0").contains("(IRTy.uint_ 32) (IRTy.uint_ 64)"));
         assert!(
-            !SRC_IR_NI_B0.contains("ir_ni_tusize ir_br_tu32"),
+            !minted_line("ir_ni_b0").contains("(IRTy.uint_ 64) (IRTy.uint_ 32)"),
             "source then destination — the reverse is a narrowing, which faults"
         );
         for src in [
-            SRC_IR_NI_B0,
-            SRC_IR_NI_FUNC,
-            SRC_IR_NI_MODULE,
+            minted_line("ir_ni_b0"),
+            minted_line("ir_ni_func"),
+            minted_line("ir_ni_module"),
             SRC_IR_NI_MACH0,
         ] {
             assert!(
@@ -343,10 +393,10 @@ mod tests {
             SRC_ENCODESNODEID,
             SRC_ENCODES_NODE_ID_INHABITED,
             SRC_IR_NI_TUSIZE,
-            SRC_IR_NI_TSELF,
-            SRC_IR_NI_B0,
-            SRC_IR_NI_FUNC,
-            SRC_IR_NI_MODULE,
+            minted_line("ir_ni_tself"),
+            minted_line("ir_ni_b0"),
+            minted_line("ir_ni_func"),
+            minted_line("ir_ni_module"),
             SRC_IR_NI_VAL,
             SRC_IR_NI_MACH0,
             SRC_IR_NI_EXACT,

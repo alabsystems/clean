@@ -1110,6 +1110,41 @@ pub fn reconstruct_bv_compute_blast(
     operand_b: &Expr,
     negated_goal_fvar: FVarId,
 ) -> Result<BvComputeBlastReconstruction, BvComputeBlastError> {
+    reconstruct_bv_compute_blast_with_context(
+        env,
+        &clean_kernel::LocalContext::new(),
+        proof,
+        lhs,
+        rhs,
+        operand_a,
+        operand_b,
+        negated_goal_fvar,
+    )
+}
+
+/// Context-aware form of [`reconstruct_bv_compute_blast`].
+///
+/// `base_ctx` must bind every free variable in `lhs`, `rhs`, `operand_a`, and
+/// `operand_b`. Gate-clause proofs are checked in that context; the
+/// disequality-clause proof is checked in the same context extended with
+/// `negated_goal_fvar : Not (bvEq lhs rhs)`. Keeping symbolic operands as local
+/// parameters makes the eventual certified judgment closed without granting
+/// authority to environment axioms.
+///
+/// # Errors
+/// See [`BvComputeBlastError`]. Every gate clause is kernel-justified; a corrupt
+/// gate clause (non-tautology) or broken resolution chain is rejected, never
+/// papered over.
+pub fn reconstruct_bv_compute_blast_with_context(
+    env: &clean_kernel::Environment,
+    base_ctx: &clean_kernel::LocalContext,
+    proof: &BvBlastProof,
+    lhs: &Expr,
+    rhs: &Expr,
+    operand_a: &Expr,
+    operand_b: &Expr,
+    negated_goal_fvar: FVarId,
+) -> Result<BvComputeBlastReconstruction, BvComputeBlastError> {
     // Re-run the producer's own validator first (every step + leaf re-checked).
     proof
         .validate()
@@ -1136,7 +1171,7 @@ pub fn reconstruct_bv_compute_blast(
     // PROVED kernel theorem, not assumed (a non-tautology / tampered clause fails
     // here). The proof Expr is RETAINED: it is the clause-hypothesis argument the
     // final resolution term consumes (step C), so the gate proofs are load-bearing.
-    let tc = clean_kernel::TypeChecker::with_mode(env, env.mode());
+    let tc = clean_kernel::TypeChecker::with_context(env, base_ctx.clone());
     let mut gate_clauses_proved = 0usize;
     // Per input clause id → its proof Expr (gate proof, or the disequality proof).
     let mut clause_proofs: Vec<Option<Expr>> = vec![None; proof.clauses.len()];
@@ -1173,7 +1208,7 @@ pub fn reconstruct_bv_compute_blast(
                     let props = clause_props(&refl, &cl.lits);
                     disjunction::or_chain_type(&props)
                 };
-                let mut ctx = clean_kernel::LocalContext::new();
+                let mut ctx = base_ctx.clone();
                 ctx.push_with_id(
                     negated_goal_fvar,
                     Name::from_string("h_neg"),

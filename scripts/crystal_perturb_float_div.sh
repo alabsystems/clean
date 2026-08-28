@@ -23,6 +23,11 @@ REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 BIN="${CRYSTAL_BIN:?set CRYSTAL_BIN to the compiled crystal_a1_lineage test binary}"
 
 FD_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_float_div.rs"
+# The registered module is MINTED as of 2026-08-21 (crystal A2): the spec-side
+# module lines live in the generated script the spec stage replays, and the
+# CFG gate reads THAT file at runtime — so the spec-side perturbations mutate
+# it, not the .rs constants (which no longer carry the module).
+FD_DEFS="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_fd.defs.txt"
 FD_FIX="$REPO/crates/clean-verify/tests/fixtures/float_div.trust-ir.txt"
 FD_JSON="$REPO/crates/clean-verify/tests/fixtures/float_div.lineage.json"
 
@@ -50,17 +55,21 @@ reason() { awk '/panicked at/{f=1} f{print "     | " $0} /^note: run with/{exit}
 # make a MUTATED run look green — the exact false negative this script exists to
 # rule out — so the helper restricts .rs edits to lines beginning `const SRC_`
 # and fails loudly when an anchor does not match exactly one of them.
-sub() { python3 - "$1" "$2" "$3" <<'PY'
+sub() { python3 - "$1" "$2" "$3" "${4:-1}" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b, want = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 lines = open(p).read().split("\n")
 decl_only = p.endswith(".rs")
 hits = [i for i, l in enumerate(lines)
         if a in l and (not decl_only or l.startswith("const SRC_"))]
-assert len(hits) == 1, "anchor must match exactly one line, matched %d: %s" % (len(hits), a[:80])
-i = hits[0]
-assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
-lines[i] = lines[i].replace(a, b, 1)
+# `want` > 1 exists for ONE measured reason: the 2026-08-21 fixture rebaseline
+# (b03937e74/c6388730e) added a reproduction stanza that restates
+# `markers_detail` and `markers_exact`, so those anchors now denote TWO lines
+# that must move together. Still fail-closed: any other count aborts.
+assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+for i in hits:
+    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
   rc=$?
@@ -81,77 +90,75 @@ expect PASS "baseline: all float_div gates green"
 
 echo
 echo "== P1: THE FLOAT OPERATION — fdiv becomes fmul =="
-sub "$FD_SPEC" "IRInst.binop IRBinOp.fdiv ir_fd_tf64" "IRInst.binop IRBinOp.fmul ir_fd_tf64"
+sub "$FD_DEFS" "IRInst.binop IRBinOp.fdiv (IRTy.float_ 64)" "IRInst.binop IRBinOp.fmul (IRTy.float_ 64)"
 expect FAIL "P1 mutated: the proved module multiplies where the artifact divides"; reason
-sub "$FD_SPEC" "IRInst.binop IRBinOp.fmul ir_fd_tf64" "IRInst.binop IRBinOp.fdiv ir_fd_tf64"
+sub "$FD_DEFS" "IRInst.binop IRBinOp.fmul (IRTy.float_ 64)" "IRInst.binop IRBinOp.fdiv (IRTy.float_ 64)"
 expect PASS "P1 reverted"
 
 echo
 echo "== P2: THE FLOAT OPERATION — fdiv becomes fadd =="
-sub "$FD_SPEC" "IRInst.binop IRBinOp.fdiv ir_fd_tf64" "IRInst.binop IRBinOp.fadd ir_fd_tf64"
+sub "$FD_DEFS" "IRInst.binop IRBinOp.fdiv (IRTy.float_ 64)" "IRInst.binop IRBinOp.fadd (IRTy.float_ 64)"
 expect FAIL "P2 mutated: the proved module adds where the artifact divides"; reason
-sub "$FD_SPEC" "IRInst.binop IRBinOp.fadd ir_fd_tf64" "IRInst.binop IRBinOp.fdiv ir_fd_tf64"
+sub "$FD_DEFS" "IRInst.binop IRBinOp.fadd (IRTy.float_ 64)" "IRInst.binop IRBinOp.fdiv (IRTy.float_ 64)"
 expect PASS "P2 reverted"
 
 echo
 echo "== P3: THE NEW TYPE LANE — binary64 becomes binary32 =="
-# The anchors carry `def ir_fd_tf64` on purpose: SRC_W_F32 also contains
-# `IRTy.float_ 32`, so a bare revert anchor would match two declaration lines,
-# the substitution would abort, and every case after this one would run against
-# a still-mutated tree. Measured, not hypothetical: it happened on this script's
-# first run, and the `sub` guard above is the fix.
-sub "$FD_SPEC" "def ir_fd_tf64 : IRTy := IRTy.float_ 64" "def ir_fd_tf64 : IRTy := IRTy.float_ 32"
+# Since the 2026-08-21 mint migration the type sits INLINE in the minted
+# script (the `ir_fd_tf64` alias no longer feeds the module), so the anchors
+# carry the fdiv context to stay unique within the one-line defs file.
+sub "$FD_DEFS" "IRBinOp.fdiv (IRTy.float_ 64) ir_d1" "IRBinOp.fdiv (IRTy.float_ 32) ir_d1"
 expect FAIL "P3 mutated: the module is transcribed at binary32, which classifies the same bit patterns differently and which ir_float_binop refuses"; reason
-sub "$FD_SPEC" "def ir_fd_tf64 : IRTy := IRTy.float_ 32" "def ir_fd_tf64 : IRTy := IRTy.float_ 64"
+sub "$FD_DEFS" "IRBinOp.fdiv (IRTy.float_ 32) ir_d1" "IRBinOp.fdiv (IRTy.float_ 64) ir_d1"
 expect PASS "P3 reverted"
 
 echo
 echo "== P4: THE NEW TYPE LANE — float becomes unsigned integer =="
-sub "$FD_SPEC" "def ir_fd_tf64 : IRTy := IRTy.float_ 64" "def ir_fd_tf64 : IRTy := IRTy.uint_ 64"
+sub "$FD_DEFS" "IRBinOp.fdiv (IRTy.float_ 64) ir_d1" "IRBinOp.fdiv (IRTy.uint_ 64) ir_d1"
 expect FAIL "P4 mutated: same width, integer type — the operands would be read by ir_as_int"; reason
-sub "$FD_SPEC" "def ir_fd_tf64 : IRTy := IRTy.uint_ 64" "def ir_fd_tf64 : IRTy := IRTy.float_ 64"
+sub "$FD_DEFS" "IRBinOp.fdiv (IRTy.uint_ 64) ir_d1" "IRBinOp.fdiv (IRTy.float_ 64) ir_d1"
 expect PASS "P4 reverted"
 
 echo
 echo "== P5: THE NEW RET LANE — return the DIVIDEND instead of the quotient =="
-sub "$FD_SPEC" "(ir_nd (IRInst.ret (ir_nl1 ir_d3)))" "(ir_nd (IRInst.ret (ir_nl1 ir_d1)))"
+sub "$FD_DEFS" "(ir_nd (IRInst.ret (ir_nl1 ir_d3)))" "(ir_nd (IRInst.ret (ir_nl1 ir_d1)))"
 expect FAIL "P5 mutated: the body returns %1, its first f64 argument, instead of %3"; reason
-sub "$FD_SPEC" "(ir_nd (IRInst.ret (ir_nl1 ir_d1)))" "(ir_nd (IRInst.ret (ir_nl1 ir_d3)))"
+sub "$FD_DEFS" "(ir_nd (IRInst.ret (ir_nl1 ir_d1)))" "(ir_nd (IRInst.ret (ir_nl1 ir_d3)))"
 expect PASS "P5 reverted"
 
 echo
 echo "== P6: OPERAND ORDER — division is not commutative =="
-sub "$FD_SPEC" "IRBinOp.fdiv ir_fd_tf64 ir_d1 ir_d2" "IRBinOp.fdiv ir_fd_tf64 ir_d2 ir_d1"
+sub "$FD_DEFS" "IRBinOp.fdiv (IRTy.float_ 64) ir_d1 ir_d2" "IRBinOp.fdiv (IRTy.float_ 64) ir_d2 ir_d1"
 expect FAIL "P6 mutated: b / a instead of a / b"; reason
-sub "$FD_SPEC" "IRBinOp.fdiv ir_fd_tf64 ir_d2 ir_d1" "IRBinOp.fdiv ir_fd_tf64 ir_d1 ir_d2"
+sub "$FD_DEFS" "IRBinOp.fdiv (IRTy.float_ 64) ir_d2 ir_d1" "IRBinOp.fdiv (IRTy.float_ 64) ir_d1 ir_d2"
 expect PASS "P6 reverted"
 
 echo
 echo "== P7: THE RESULT ID the binop binds =="
-sub "$FD_SPEC" "ir_fd_tf64 ir_d1 ir_d2) ir_d3)" "ir_fd_tf64 ir_d1 ir_d2) ir_d4)"
+sub "$FD_DEFS" "(IRTy.float_ 64) ir_d1 ir_d2) ir_d3)" "(IRTy.float_ 64) ir_d1 ir_d2) ir_d4)"
 expect FAIL "P7 mutated: the quotient is bound at %4 while the ret still reads %3"; reason
-sub "$FD_SPEC" "ir_fd_tf64 ir_d1 ir_d2) ir_d4)" "ir_fd_tf64 ir_d1 ir_d2) ir_d3)"
+sub "$FD_DEFS" "(IRTy.float_ 64) ir_d1 ir_d2) ir_d4)" "(IRTy.float_ 64) ir_d1 ir_d2) ir_d3)"
 expect PASS "P7 reverted"
 
 echo
 echo "== P8: THE BLOCK ID =="
-sub "$FD_SPEC" "IRBlock.mk ir_d0 ir_nl0" "IRBlock.mk ir_d1 ir_nl0"
+sub "$FD_DEFS" "IRBlock.mk ir_d0 ir_nl0" "IRBlock.mk ir_d1 ir_nl0"
 expect FAIL "P8 mutated: the only block is bb1, and the function still enters at bb0"; reason
-sub "$FD_SPEC" "IRBlock.mk ir_d1 ir_nl0" "IRBlock.mk ir_d0 ir_nl0"
+sub "$FD_DEFS" "IRBlock.mk ir_d1 ir_nl0" "IRBlock.mk ir_d0 ir_nl0"
 expect PASS "P8 reverted"
 
 echo
 echo "== P9: THE PARAMETER LIST — the closure environment pointer dropped =="
-sub "$FD_SPEC" "IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0" "IRFunc.mk ir_d0 (ir_nl2 ir_d1 ir_d2) ir_d0"
+sub "$FD_DEFS" "(IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat))))" "(IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat)))"
 expect FAIL "P9 mutated: two parameters where the artifact takes three, so every operand id shifts"; reason
-sub "$FD_SPEC" "IRFunc.mk ir_d0 (ir_nl2 ir_d1 ir_d2) ir_d0" "IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0"
+sub "$FD_DEFS" "(IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat)))" "(IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat))))"
 expect PASS "P9 reverted"
 
 echo
 echo "== P10: THE ENTRY BLOCK the function starts at =="
-sub "$FD_SPEC" "(ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0 (ir_blk" "(ir_nl3 ir_d0 ir_d1 ir_d2) ir_d1 (ir_blk"
+sub "$FD_DEFS" "(IRList.nil Nat)))) ir_d0 (ir_blk" "(IRList.nil Nat)))) ir_d1 (ir_blk"
 expect FAIL "P10 mutated: the function enters at bb1, which does not exist"; reason
-sub "$FD_SPEC" "(ir_nl3 ir_d0 ir_d1 ir_d2) ir_d1 (ir_blk" "(ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0 (ir_blk"
+sub "$FD_DEFS" "(IRList.nil Nat)))) ir_d1 (ir_blk" "(IRList.nil Nat)))) ir_d0 (ir_blk"
 expect PASS "P10 reverted"
 
 # NOT A CASE, and recorded rather than omitted: giving bb0 a BLOCK PARAMETER
@@ -218,16 +225,16 @@ expect PASS "P17 reverted"
 
 echo
 echo "== P18: markers_exact NON-VACUITY (the four real marker lines) =="
-sub "$FD_JSON" '"markers_detail": "4 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"'
+sub "$FD_JSON" '"markers_detail": "4 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"' 2
 expect FAIL "P18 mutated: the 4-line marker sequence becomes empty, i.e. markers_exact goes vacuous"; reason
-sub "$FD_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "4 marker line(s) identical"'
+sub "$FD_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "4 marker line(s) identical"' 2
 expect PASS "P18 reverted"
 
 echo
 echo "== P19: markers_exact itself =="
-sub "$FD_JSON" '"markers_exact": true' '"markers_exact": false'
+sub "$FD_JSON" '"markers_exact": true' '"markers_exact": false' 2
 expect FAIL "P19 mutated: the -O marker gate did not hold"; reason
-sub "$FD_JSON" '"markers_exact": false' '"markers_exact": true'
+sub "$FD_JSON" '"markers_exact": false' '"markers_exact": true' 2
 expect PASS "P19 reverted"
 
 echo
@@ -243,16 +250,16 @@ expect PASS "P20 reverted"
 
 echo
 echo "== P21: the flip event FIRED =="
-sub "$FD_JSON" '"fired": true' '"fired": false'
+sub "$FD_JSON" '"fired": true' '"fired": false' 2
 expect FAIL "P21 mutated: no codegen flip, so the derived IR is a side model"; reason
-sub "$FD_JSON" '"fired": false' '"fired": true'
+sub "$FD_JSON" '"fired": false' '"fired": true' 2
 expect PASS "P21 reverted"
 
 echo
 echo "== P22: the flip SEAM =="
-sub "$FD_JSON" '"seam": "codegen"' '"seam": "ctfe"'
+sub "$FD_JSON" '"seam": "codegen"' '"seam": "ctfe"' 2
 expect FAIL "P22 mutated: a CTFE flip is not the shipped object code"; reason
-sub "$FD_JSON" '"seam": "ctfe"' '"seam": "codegen"'
+sub "$FD_JSON" '"seam": "ctfe"' '"seam": "codegen"' 2
 expect PASS "P22 reverted"
 
 echo
@@ -264,16 +271,16 @@ expect PASS "P23 reverted"
 
 echo
 echo "== P24: the INTERPRETER differential's sample count =="
-sub "$FD_JSON" '"samples": 64' '"samples": 0'
+sub "$FD_JSON" '"samples": 64' '"samples": 0' 2
 expect FAIL "P24 mutated: \`agreed\` on zero samples is a vacuous agreement"; reason
-sub "$FD_JSON" '"samples": 0' '"samples": 64'
+sub "$FD_JSON" '"samples": 0' '"samples": 64' 2
 expect PASS "P24 reverted"
 
 echo
 echo "== P25: the CALL COUNT — bodyful reachable closure =="
-sub "$FD_JSON" '  "resolved": 0,' '  "resolved": 1,'
+sub "$FD_JSON" '  "resolved": 0,' '  "resolved": 1,' 2
 expect FAIL "P25 mutated: a resolved call reopens the closure question"; reason
-sub "$FD_JSON" '  "resolved": 1,' '  "resolved": 0,'
+sub "$FD_JSON" '  "resolved": 1,' '  "resolved": 0,' 2
 expect PASS "P25 reverted"
 
 echo
@@ -292,9 +299,9 @@ expect PASS "P27 reverted"
 
 echo
 echo "== P28: the PROVEN-NEVER-READ environment pointer =="
-sub "$FD_JSON" 'proven-never-read opaque param(s) as placeholders' 'opaque param(s) as placeholders'
+sub "$FD_JSON" 'proven-never-read opaque param(s) as placeholders' 'opaque param(s) as placeholders' 2
 expect FAIL "P28 mutated: without the producer's own never-read record, quantifying over the environment pointer with no premise is an assumption"; reason
-sub "$FD_JSON" 'opaque param(s) as placeholders' 'proven-never-read opaque param(s) as placeholders'
+sub "$FD_JSON" 'opaque param(s) as placeholders' 'proven-never-read opaque param(s) as placeholders' 2
 expect PASS "P28 reverted"
 
 # ─────────────────────── the float-semantics wall itself ───────────────────

@@ -66,8 +66,34 @@ impl ElabFailureTracker {
             ElabError::NotImplemented(_) | ElabError::Unsupported { .. } => {
                 ElabFailureCategory::NotImplemented
             }
+            // `RecursionOutsideFragment` and `SameBatchHeaderUnavailable` are
+            // the same FAILURE as a bare unknown identifier, better named:
+            // they are raised where resolution already failed, in place of the
+            // name-distance list. Categorizing them anywhere else would move
+            // counts in the corpus census for a diagnostic-only change.
+            //
+            // `UnresolvedDotTarget` (2026-08-26) is the same species again —
+            // a dot-notation target that did not resolve, previously reported
+            // as `NotImplemented("cannot extract type name from …")`. Naming it
+            // moved the message; it must not silently move it into `Other`,
+            // and `UnknownIdentifier` is also where `scripts/srcelab_classify.py`
+            // files it, so the two censuses agree.
+            //
+            // `AutoBoundHeadOverApplied` (2026-08-27) is the THIRD face of that
+            // same root — an identifier that did not resolve in a signature
+            // position, swallowed by auto-implicit and then over-applied. This
+            // one MOVES the census on purpose: it used to be counted as
+            // `TypeMismatch` (via `TooManyArguments`), which is what hid the
+            // 17-entry `Order/Basic` row inside an arity bucket. It is filed
+            // here for the same reason as the row above — it is where
+            // `scripts/srcelab_classify.py` files the new message, and the two
+            // censuses must not disagree about the same failure.
             ElabError::UnknownIdent(_)
             | ElabError::UnknownIdentWithSuggestions { .. }
+            | ElabError::UnresolvedDotTarget { .. }
+            | ElabError::AutoBoundHeadOverApplied { .. }
+            | ElabError::RecursionOutsideFragment { .. }
+            | ElabError::SameBatchHeaderUnavailable { .. }
             | ElabError::UnknownProjectionField { .. }
             | ElabError::UnknownStructureField { .. }
             | ElabError::MissingStructureFields { .. }

@@ -7,9 +7,11 @@
 //! Implements the `tower_lsp::LanguageServer` trait for clean.
 
 pub(crate) mod analysis;
+pub(crate) mod background;
 mod code_actions;
 mod document_ops;
 mod helpers;
+mod hover;
 #[cfg(test)]
 mod import_loading_tests;
 mod imports;
@@ -188,23 +190,38 @@ impl CleanConfig {
 }
 
 /// clean LSP backend
+///
+/// Every stateful field is `Arc`-shared (or, for `Client`, internally
+/// reference-counted) so `background::CleanBackend::background_handle` can
+/// build a second `CleanBackend` *view* over the same state for a per-URI
+/// background elaboration task (`tokio::spawn` needs an owned `'static`
+/// value). A handle is never a copy: state written through one view is
+/// visible through the other.
 pub struct CleanBackend {
     /// LSP client for sending notifications
     pub(crate) client: Client,
     /// Open documents
-    pub(crate) documents: DashMap<Url, Document>,
+    pub(crate) documents: Arc<DashMap<Url, Document>>,
     /// clean environment (shared across documents)
     pub(crate) env: Arc<tokio::sync::RwLock<clean_kernel::Environment>>,
     /// Definition index: maps name to definition location
-    pub(crate) definitions: DashMap<String, DefinitionInfo>,
+    pub(crate) definitions: Arc<DashMap<String, DefinitionInfo>>,
     /// RPC session manager for Lean4-compatible infoview endpoints
-    pub(crate) rpc_sessions: RpcSessionManager,
+    pub(crate) rpc_sessions: Arc<RpcSessionManager>,
     /// Live tactic goals captured by URI and source range for plainGoal/goal widgets.
-    pub(crate) tactic_goal_snapshots: DashMap<Url, Vec<TacticGoalSnapshot>>,
+    pub(crate) tactic_goal_snapshots: Arc<DashMap<Url, Vec<TacticGoalSnapshot>>>,
     /// Cached tactic argument patterns for parser-level dispatch.
+    ///
+    /// Immutable after construction, so plain `Clone` (not `Arc`) still gives
+    /// background handles an identical view.
     pub(crate) tactic_patterns: clean_parser::TacticPatterns,
     /// Client-tunable settings, updated live via `workspace/didChangeConfiguration`.
     pub(crate) config: Arc<tokio::sync::RwLock<CleanConfig>>,
+    /// Per-URI background elaboration bookkeeping (unfreeze plan deferred
+    /// item C): the latest scheduled generation plus the in-flight task
+    /// handle, so a newer `didChange` supersedes and aborts an older run.
+    /// Protocol documented in `background.rs`.
+    pub(crate) elaboration_tasks: Arc<DashMap<Url, background::ElaborationSlot>>,
 }
 
 impl CleanBackend {
@@ -213,13 +230,14 @@ impl CleanBackend {
     pub fn new(client: Client) -> Self {
         Self {
             client,
-            documents: DashMap::new(),
+            documents: Arc::new(DashMap::new()),
             env: Arc::new(tokio::sync::RwLock::new(clean_kernel::Environment::new())),
-            definitions: DashMap::new(),
-            rpc_sessions: RpcSessionManager::new(),
-            tactic_goal_snapshots: DashMap::new(),
+            definitions: Arc::new(DashMap::new()),
+            rpc_sessions: Arc::new(RpcSessionManager::new()),
+            tactic_goal_snapshots: Arc::new(DashMap::new()),
             tactic_patterns: clean_elab::tactic::builtins::builtin_tactic_patterns(),
             config: Arc::new(tokio::sync::RwLock::new(CleanConfig::default())),
+            elaboration_tasks: Arc::new(DashMap::new()),
         }
     }
 }

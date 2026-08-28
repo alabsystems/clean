@@ -93,25 +93,49 @@ fn replacement_status_fails_closed_on_sorry_and_axiom_debt() {
             .all(|gate| gate.status == ZeroTrustGateStatus::Passed)
     );
     assert!(deny_sorry.required_for_launch);
-    if fallback_debt == 0 {
-        assert!(matches!(
-            deny_sorry.status,
-            ZeroTrustGateStatus::PendingEvidence | ZeroTrustGateStatus::Passed
-        ));
-        if deny_sorry.status == ZeroTrustGateStatus::Passed {
-            assert!(deny_sorry
-                .evidence_summary
-                .contains("deny-sorry-launch-evidence.json passed"));
-        } else {
-            assert!(deny_sorry
-                .fail_closed_reason
-                .contains("fresh launch-gate evidence artifact"));
+    // G6 (2026-08-26): the row's verdict is the ratchet's CLOSURE, not its
+    // count. This asks the SAME validator the gate asks, so the two halves
+    // cannot drift apart again — and a closed ratchet carrying a nonzero
+    // sanctioned, capped occurrence count can never read `blocked`.
+    match validate_unchecked_decl_ratchet_closed(&ratchet) {
+        Err(message) => {
+            assert_eq!(deny_sorry.status, ZeroTrustGateStatus::Blocked);
+            assert!(
+                deny_sorry.fail_closed_reason.contains("is not closed"),
+                "blocked deny-sorry must print the closure branch, got: {}",
+                deny_sorry.fail_closed_reason
+            );
+            assert!(
+                deny_sorry.fail_closed_reason.contains(message.as_str()),
+                "blocked deny-sorry must quote the closure failure, got: {}",
+                deny_sorry.fail_closed_reason
+            );
         }
-    } else {
-        assert_eq!(deny_sorry.status, ZeroTrustGateStatus::Blocked);
-        assert!(deny_sorry
-            .fail_closed_reason
-            .contains("trusted fallback callsites"));
+        Ok(()) => {
+            assert!(
+                matches!(
+                    deny_sorry.status,
+                    ZeroTrustGateStatus::PendingEvidence | ZeroTrustGateStatus::Passed
+                ),
+                "a CLOSED ratchet must never leave deny-sorry blocked (status {:?}, reason {})",
+                deny_sorry.status,
+                deny_sorry.fail_closed_reason
+            );
+            assert!(
+                deny_sorry.fail_closed_reason.contains("ratchet is closed"),
+                "closed deny-sorry must print the closure branch, got: {}",
+                deny_sorry.fail_closed_reason
+            );
+            if deny_sorry.status == ZeroTrustGateStatus::Passed {
+                assert!(deny_sorry
+                    .evidence_summary
+                    .contains("deny-sorry-launch-evidence.json passed"));
+            } else {
+                assert!(deny_sorry
+                    .fail_closed_reason
+                    .contains("fresh launch-gate evidence artifact"));
+            }
+        }
     }
     assert_eq!(
         deny_sorry.debt_class,
@@ -177,12 +201,28 @@ fn replacement_status_human_fallback_denial_row_reports_live_ratchet_totals() {
         ratchet.add_decl_structural_count, ratchet.add_decl_unchecked_count, fallback_debt
     );
     let mut output = Vec::new();
+    // Locate the row by its EFFECTIVE status. This assertion used to hard-code
+    // `[green]`, which pinned the renderer's defect in place: the human view
+    // printed the hand-declared `row.status` while the same output's
+    // `readiness_accounting` line named `fallback-denial` a launch blocker.
+    let fallback_row = report
+        .rows
+        .iter()
+        .find(|row| row.id == "fallback-denial")
+        .expect("fallback-denial row in report");
+    let expected_header = format!(
+        "- fallback-denial [{}]",
+        fallback_row.effective_status.as_str()
+    );
 
     render_human(&mut output, &report).expect("render replacement status");
     let output = String::from_utf8(output).expect("human output should be utf-8");
-    let row_start = output
-        .find("- fallback-denial [green]")
-        .expect("fallback-denial row");
+    let row_start = output.find(&expected_header).unwrap_or_else(|| {
+        panic!(
+            "fallback-denial row must print its effective status {:?}, not its declared {:?}",
+            fallback_row.effective_status, fallback_row.status
+        )
+    });
     let row_tail = &output[row_start..];
     let row_end = row_tail
         .find("\n- frontend-parity")
@@ -203,6 +243,69 @@ fn replacement_status_human_fallback_denial_row_reports_live_ratchet_totals() {
     assert!(row_output.contains(DENY_SORRY_LAUNCH_EVIDENCE_PATH));
     assert!(row_output.contains("Fresh DENY_SORRY launch evidence passed"));
     assert!(!row_output.contains("[in_progress]"));
+}
+
+/// A row must never outrank its own gate in the human view.
+///
+/// The `--json` view always emitted `effective_status`; the human view emitted
+/// the hand-declared `status`, so `clean replacement status` could print
+/// `- fallback-denial [green]` in the SAME output whose `readiness_accounting`
+/// line and whose nonzero-exit message both named `fallback-denial` a launch
+/// blocker. This checks the whole row set, not one row, because the defect is
+/// in the renderer and lands on whichever row happens to disagree today.
+#[test]
+fn replacement_status_human_rows_print_effective_status_not_declared() {
+    let Ok(report) = ReplacementStatusReport::current() else {
+        eprintln!("SKIP: replacement status report artifacts not present on this machine");
+        return;
+    };
+    let mut output = Vec::new();
+    render_human(&mut output, &report).expect("render replacement status");
+    let output = String::from_utf8(output).expect("human output should be utf-8");
+
+    // The blockers named by the readiness accounting are exactly the rows that
+    // must not render green. Read them off the report so the two views are
+    // compared against each other, not against a frozen expectation.
+    let blocking = &report.readiness_accounting.launch_blocking_row_ids;
+
+    let mut checked = 0usize;
+    for row in &report.rows {
+        let header = format!("- {} [{}]", row.id, row.effective_status.as_str());
+        assert!(
+            output.contains(&header),
+            "row {} must render its effective status {:?} (declared {:?}); \
+             human output disagreed with the --json view",
+            row.id,
+            row.effective_status,
+            row.status
+        );
+        if row.effective_status != row.status {
+            // The declared claim is still shown, but only as an annotation --
+            // never as the row's headline label.
+            assert!(
+                !output.contains(&format!("- {} [{}]", row.id, row.status.as_str())),
+                "row {} printed its declared {:?} as the headline label",
+                row.id,
+                row.status
+            );
+            checked += 1;
+        }
+        if blocking.contains(&row.id) {
+            assert_ne!(
+                row.effective_status,
+                ReplacementStatus::Green,
+                "row {} is named a launch blocker yet renders green",
+                row.id
+            );
+        }
+    }
+    // Guard against the test going vacuous if every row ever agrees: the
+    // accounting must still have named at least one blocker for this report to
+    // be the fail-closed one we are checking.
+    assert!(
+        !blocking.is_empty() || checked > 0,
+        "no blocking rows and no status disagreement: nothing was actually checked"
+    );
 }
 
 #[test]
@@ -445,4 +548,148 @@ fn replacement_status_points_to_compile_runtime_evidence_report() {
         .expect("compile-runtime report rows should be an array")
         .iter()
         .any(|row| row["id"] == "public-demo-main-emit-c" && row["status"] == "passed"));
+}
+
+// ---------------------------------------------------------------------------
+// Exit discipline: a gate command must be able to say no.
+//
+// `run_status` has always failed closed. Three sibling handlers returned
+// `Ok(())` unconditionally while printing a report that carried
+// `launch_ready: false`, so `<gate> && echo GREEN` printed GREEN off a red
+// report. Two of them are NAMED gate commands for scorecard rows:
+//   * `clean replacement tactic-parity --json`     -> rows `tactic-parity`,
+//                                                     `strict-reconstruction`
+//   * `clean replacement trust-core-evidence --json` -> trailing `&&` conjunct
+//     of `proof-system-certification`, `fallback-denial`, `kernel-differential`
+//
+// Each test states the same invariant -- the handler errs exactly when its own
+// report is not launch-ready -- so it stays load-bearing in both directions
+// rather than pinning today's colour.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tactic_parity_gate_exit_status_tracks_its_own_launch_ready() {
+    let report = TacticParityReport::current();
+    let result = run_tactic_parity(TacticParityArgs {
+        command: None,
+        json: true,
+    });
+
+    assert_eq!(
+        result.is_err(),
+        !report.launch_ready,
+        "tactic-parity exit status must be derived from its report \
+         (launch_ready={}, err={:?}); this command is the named gate for the \
+         `tactic-parity` and `strict-reconstruction` rows",
+        report.launch_ready,
+        result.err().map(|error| error.to_string()),
+    );
+}
+
+#[test]
+fn trust_core_evidence_gate_exit_status_tracks_its_own_launch_ready() {
+    let Ok(report) = TrustCoreEvidenceReport::current() else {
+        eprintln!("SKIP: trust-core evidence artifacts not present on this machine");
+        return;
+    };
+    let result = run_trust_core_evidence(TrustCoreEvidenceArgs {
+        json: true,
+        kernel_soundness: false,
+        deny_sorry: false,
+        evidence: None,
+        generated_at: "1970-01-01T00:00:00Z".to_string(),
+    });
+
+    assert_eq!(
+        result.is_err(),
+        !report.launch_ready,
+        "trust-core-evidence exit status must be derived from its report \
+         (launch_ready={}, overall_status={}, err={:?}); this command is the \
+         trailing `&&` conjunct of three rows' gate commands",
+        report.launch_ready,
+        report.overall_status,
+        result.err().map(|error| error.to_string()),
+    );
+}
+
+/// Same invariant for the rust-first tooling inventory.
+///
+/// NOTE ON WHAT THIS PROVES TODAY: the inventory reads `launch_ready=true` at
+/// this commit, so this assertion is currently satisfied by BOTH the fixed and
+/// the unfixed handler -- it is not a mutation-sensitive proof right now. It is
+/// here because the read path's exit was never *derived* from the verdict (only
+/// the evidence WRITE was guarded, by `rust_first_tooling_write_refusal`), and
+/// this makes the derivation explicit so a lane regressing to non-Rust-owned
+/// cannot pass an `&&`-chained caller.
+#[test]
+fn rust_first_tooling_exit_status_tracks_its_own_launch_ready() {
+    let artifact = RustFirstToolingEvidenceArtifact::current();
+    let result = run_rust_first_tooling(RustFirstToolingEvidenceArgs {
+        json: true,
+        evidence: None,
+    });
+
+    assert_eq!(
+        result.is_err(),
+        !artifact.rust_first_tooling.launch_ready,
+        "rust-first-tooling exit status must be derived from its inventory \
+         (launch_ready={}, err={:?})",
+        artifact.rust_first_tooling.launch_ready,
+        result.err().map(|error| error.to_string()),
+    );
+    // The write-path refusal and the read-path exit must agree on the same
+    // predicate, so the two halves cannot drift.
+    assert_eq!(
+        rust_first_tooling_write_refusal(&artifact.rust_first_tooling).is_err(),
+        !artifact.rust_first_tooling.launch_ready,
+    );
+}
+
+/// The whole family, stated once: no `clean replacement` gate surface may
+/// return success while its own report declares itself not launch-ready.
+///
+/// Measured 2026-08-26 across every subcommand of the group. `status`,
+/// `release-issue-hygiene`, `validate-report`, `axiom-audit`,
+/// `tactic-parity validate-full-corpus`, `native-library coverage-matrix`,
+/// `native-library api-slice` and `native-library mathlib-api` already derived
+/// their exit from a verdict field; the three below did not.
+#[test]
+fn replacement_gate_commands_cannot_return_ok_on_a_red_report() {
+    let tactic = TacticParityReport::current();
+    if !tactic.launch_ready {
+        assert!(
+            run_tactic_parity(TacticParityArgs {
+                command: None,
+                json: true,
+            })
+            .is_err(),
+            "tactic-parity returned Ok(()) on launch_ready=false"
+        );
+    }
+    if let Ok(trust_core) = TrustCoreEvidenceReport::current() {
+        if !trust_core.launch_ready {
+            assert!(
+                run_trust_core_evidence(TrustCoreEvidenceArgs {
+                    json: true,
+                    kernel_soundness: false,
+                    deny_sorry: false,
+                    evidence: None,
+                    generated_at: "1970-01-01T00:00:00Z".to_string(),
+                })
+                .is_err(),
+                "trust-core-evidence returned Ok(()) on launch_ready=false"
+            );
+        }
+    }
+    let rust_first = RustFirstToolingEvidenceArtifact::current();
+    if !rust_first.rust_first_tooling.launch_ready {
+        assert!(
+            run_rust_first_tooling(RustFirstToolingEvidenceArgs {
+                json: true,
+                evidence: None,
+            })
+            .is_err(),
+            "rust-first-tooling returned Ok(()) on launch_ready=false"
+        );
+    }
 }

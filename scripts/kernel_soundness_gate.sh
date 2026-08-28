@@ -70,7 +70,10 @@ write_evidence() {
 import hashlib
 import json
 import os
-from datetime import UTC, datetime
+# `datetime.UTC` is 3.11+ and THIS HEREDOC RUNS UNDER THE AMBIENT `python3`, which is
+# 3.9.6 on macOS CommandLineTools -- so the import raised, `set -e` killed the script,
+# and the gate's own PASS/FAILED line was unreachable. `timezone.utc` is 3.9-safe.
+from datetime import datetime, timezone
 from pathlib import Path
 
 SCHEMA_VERSION = os.environ["KERNEL_SOUNDNESS_EVIDENCE_SCHEMA_VERSION"]
@@ -83,6 +86,40 @@ SOURCE_PATHS = [
     BASELINE_PATH,
     EXPRESSIONS_PATH,
 ]
+
+
+# TRUST-CORE PINS (added 2026-08-27). The in-binary validator
+# (cmd_replacement/launch_validation.rs -> validate_trust_core_module_tree_sha)
+# and scripts/check_trustcore_evidence_staleness.py both REQUIRE these two
+# keys, but this minter never wrote them, so every freshly minted artifact was
+# born stale and the only previous remedy was hand-editing a generated file
+# (2b3ee69ee). Mint them instead.
+TRUST_CORE_MODULE_FILE = Path("crates/clean-cli/src/cmd_replacement.rs")
+TRUST_CORE_MODULE_DIR = Path("crates/clean-cli/src/cmd_replacement")
+TRUST_CORE_MODULE_TREE_KEY = "crates/clean-cli/src/cmd_replacement/**/*.rs"
+
+
+def trust_core_module_tree_digest(root: Path) -> str:
+    """Byte-identical replication of `sha256_repo_module_tree` (artifact_io.rs)."""
+    entries = []
+    for path in root.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        stem, dot, ext = path.name.rpartition(".")
+        if dot != "." or stem == "" or ext != "rs":
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith("tests/"):
+            continue
+        entries.append((rel.encode("utf-8"), path.read_bytes()))
+    entries.sort(key=lambda entry: entry[0])
+    hasher = hashlib.sha256()
+    for rel_bytes, data in entries:
+        hasher.update(rel_bytes)
+        hasher.update(b"\x00")
+        hasher.update(len(data).to_bytes(8, "little"))
+        hasher.update(data)
+    return hasher.hexdigest()
 
 
 def sha256_file(path: Path) -> str:
@@ -138,7 +175,7 @@ baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 artifact = {
     "schema_version": SCHEMA_VERSION,
     "generated_by": "./scripts/kernel_soundness_gate.sh",
-    "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "gate_command": "./scripts/kernel_soundness_gate.sh",
     "status": os.environ["KERNEL_SOUNDNESS_GATE_STATUS"],
     "summary": {
@@ -158,7 +195,11 @@ artifact = {
         "baseline_sha256": sha256_file(BASELINE_PATH),
         "expressions_file_sha256": sha256_file(EXPRESSIONS_PATH),
     },
-    "source_sha256": {str(path): sha256_file(path) for path in SOURCE_PATHS},
+    "source_sha256": {
+        **{str(p): sha256_file(p) for p in SOURCE_PATHS},
+        str(TRUST_CORE_MODULE_FILE): sha256_file(TRUST_CORE_MODULE_FILE),
+        TRUST_CORE_MODULE_TREE_KEY: trust_core_module_tree_digest(TRUST_CORE_MODULE_DIR),
+    },
     "lanes": lanes,
 }
 EVIDENCE_PATH.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")

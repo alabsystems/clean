@@ -1,0 +1,18 @@
+(module
+  (funcs
+    (func 0
+      (params 0 1)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 2) (load (struct 0) 0 false))
+            (node (results 3) (insertfield (struct 0) 2 81 1))
+            (node (results) (store (struct 0) 0 3 false))
+            (node (results) (ret (vals)))
+          ))
+      ))
+  )
+  (globals)
+)

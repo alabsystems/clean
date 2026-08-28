@@ -315,7 +315,7 @@ impl<'a> ElabCtx<'a> {
                             "constructor telescope for {} with {} parameters",
                             class_name, ind_info.num_params
                         ),
-                        actual: format!("{result_ty:?}"),
+                        actual: format!("{result_ty}"),
                     })
                 }
             };
@@ -369,8 +369,8 @@ impl<'a> ElabCtx<'a> {
             .instantiate_levels(&self.metas.instantiate(&result_ty));
         if !self.try_unify(&result_ty, &class_ty) {
             return Err(ElabError::TypeMismatch {
-                expected: format!("{class_ty:?}"),
-                actual: format!("{result_ty:?}"),
+                expected: format!("{class_ty}"),
+                actual: format!("{result_ty}"),
             });
         }
 

@@ -251,7 +251,7 @@ pub enum PCStep {
 ///
 /// Returns `true` if the proof is a valid refutation.
 #[must_use]
-pub fn verify_pc_proof(axioms: &[GF2Polynomial], steps: &[PCStep]) -> bool {
+pub(crate) fn verify_pc_proof(axioms: &[GF2Polynomial], steps: &[PCStep]) -> bool {
     let mut derived: Vec<GF2Polynomial> = Vec::new();
 
     for step in steps {
@@ -345,7 +345,7 @@ pub fn polynomial_degree(poly: &GF2Polynomial) -> usize {
 /// `assignment[i]` gives the Boolean value for polynomial variable `i`.
 /// Variables with indices beyond the slice length are treated as `false`.
 #[must_use]
-pub fn evaluate_polynomial(poly: &GF2Polynomial, assignment: &[bool]) -> bool {
+pub(crate) fn evaluate_polynomial(poly: &GF2Polynomial, assignment: &[bool]) -> bool {
     let mut result = false;
     for mono in poly.terms.keys() {
         let mono_val = mono

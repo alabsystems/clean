@@ -32,7 +32,6 @@ use clean_kernel::cli::{CertCommands, KernelCommands};
 use clean_lake::cli::LakeArgs;
 use clean_rust_sem::cli::RustVerifyArgs;
 use clean_server::cli::ServerArgs;
-use clean_tla::cli::TlaVerifyArgs;
 #[cfg(feature = "sat-verify")]
 use clean_verify::cli::VerifyProofArgs;
 
@@ -243,8 +242,6 @@ pub(crate) enum Commands {
     },
     /// AI-driven proof discovery loop (see `clean help discover`)
     Discover(clean_discovery::cli::DiscoverArgs),
-    /// TLAPS benchmark and obligation tooling (absorbs `tlaps-bench`, #3448).
-    Tlaps(clean_tla::bench::cli::TlapsArgs),
     /// List every registered feature as a flat index
     ///
     /// Part of Epic #3436. The descriptor registry is empty in Phase 1; domain
@@ -330,15 +327,18 @@ pub(crate) enum Commands {
     /// an explicit non-goal for this MVP; the handler currently short-
     /// circuits with a `NotYetImplemented` error.
     Compile(CompileArgs),
-    /// Build and run a nullary `Nat`-returning declaration natively.
+    /// Build and run a `Nat`-returning or `IO` declaration natively.
     ///
     /// Phase 5 link step of Epic #3436: takes `<FILE>` + `--decl <NAME>`
     /// through the same emit-C closure as `clean compile --emit c`, synthesizes
-    /// a `main()` plus the small-`Nat` prelude shims the closure calls,
-    /// `cc`-compiles + links against the embedded Clean C runtime, runs the
-    /// resulting native binary, and prints its `Nat` output. The MVP entry
-    /// contract is a nullary `Nat`-returning def (e.g.
-    /// `def answer : Nat := Nat.succ (Nat.succ 0)`). `Stability::Experimental`.
+    /// a `main()` plus the prelude shims the closure calls, `cc`-compiles +
+    /// links against the embedded Clean C runtime, and runs the resulting
+    /// native binary. A nullary `Nat`-returning def (e.g.
+    /// `def answer : Nat := Nat.succ (Nat.succ 0)`) has its result printed;
+    /// Lean's own entry contract (`def main : IO Unit`, `def main : IO UInt32`,
+    /// either optionally taking `(args : List String)`) is driven to completion
+    /// and its returned `UInt32` becomes this command's exit status.
+    /// `Stability::Experimental`.
     Run(crate::cli::RunArgs),
     /// Extract a first-order computational declaration to differential-checked
     /// C (`Stability::Experimental`; see the `extract` feature descriptor).
@@ -376,13 +376,6 @@ pub(crate) enum VerifyCommands {
     /// `--list` to enumerate it. Arbitrary-file verification is deferred to a
     /// follow-up issue — see descriptor documentation.
     Rust(RustVerifyArgs),
-    /// Verify a TLA+ proof obligation via `clean-tla` (Experimental).
-    ///
-    /// Accepts a JSON-encoded `TlaObligation` file path, `--sample <NAME>` to
-    /// verify a bundled fixture, or `--list` to enumerate fixtures. See
-    /// `clean help "verify tla"` for the obligation schema. Epic #3436
-    /// Phase 4 (#3452).
-    Tla(TlaVerifyArgs),
     /// Verify a SAT/SMT proof (LRAT/DRAT/Alethe/SMT-LIB2/VeriPB).
     ///
     /// Absorbs the `proof_check` standalone binary (Epic #3436, #3511).

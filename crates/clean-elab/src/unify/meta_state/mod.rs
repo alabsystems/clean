@@ -80,9 +80,6 @@ pub struct MetaState {
     pub(super) historical_local_fvars: std::collections::HashSet<FVarId>,
     /// Next fresh metavariable id
     pub(super) next_id: u64,
-    /// Universe level constraints: param name -> assigned level
-    /// DEPRECATED: Use level_parent and level_concrete instead (kept for backwards compat)
-    pub(super) level_constraints: HashMap<Name, Level>,
     /// Union-find parent pointers for level params (param -> parent param)
     /// If a param is not in this map, it is its own root.
     pub(super) level_parent: HashMap<Name, Name>,
@@ -91,10 +88,13 @@ pub struct MetaState {
     pub(super) level_concrete: HashMap<Name, Level>,
     /// COMPOUND (params-containing, non-param) level assignments for canonical
     /// (root) params — `?u := Succ(?v)`, `?u := Max(?v, w)`. First-class U2
-    /// rung-1a store: the legacy `level_constraints` map held these where only
-    /// the own-root `instantiate_level` fallback could see them, so any
-    /// re-rooting union LOST the assignment (measured dominant class of the
-    /// rung-0b histogram, 70/97 events). Keyed by root; migrated on union.
+    /// rung-1a store: the since-removed legacy `level_constraints` map held
+    /// these where only the own-root `instantiate_level` fallback could see
+    /// them, so any re-rooting union LOST the assignment (measured dominant
+    /// class of the rung-0b histogram, 70/97 events). Closing that hole is
+    /// what made the legacy map redundant, and it was deleted on 2026-08-26
+    /// (U2 stage-3 deferral 2 — `docs/analysis/u2-stage3-deferrals-2026-08-26.md`).
+    /// Keyed by root; migrated on union.
     pub(super) level_bound: HashMap<Name, Level>,
     /// RIGID universe parameters of the declaration currently being elaborated
     /// (those written in `def f.{u,v}` / auto-bound from `Type u`). These are
@@ -131,6 +131,20 @@ pub struct MetaState {
     /// Monotone source for owned-scope tokens. Wrapping allocation skips every
     /// token still active, so a live token is never reused.
     pub(super) next_owned_scope_token: u64,
+    /// Generation of the INSTANTIATION-RELEVANT state: the metavariable map
+    /// (creation, type, captured locals, assignment), the universe-level
+    /// union-find and assignment maps, and the rigid-parameter set — i.e.
+    /// everything `instantiate` / `instantiate_levels` / `iter` can observe.
+    ///
+    /// Re-minted from `crate::state_generation::next_generation` by every
+    /// method that changes that state (`touch`), so two `MetaState`s with the
+    /// same generation have the same observable content — the invariant
+    /// `ElabCtx::shared_local_ctx` rests on (see that module for why the
+    /// source is process-wide rather than a `+1` here). Pure bookkeeping —
+    /// scope markers, the undo trail, postponed level equations, the
+    /// fresh-id cursor — deliberately does NOT bump it. `Clone` copies the
+    /// number along with the content it describes, which is exactly right.
+    pub(super) generation: u64,
 }
 
 impl MetaState {
@@ -142,7 +156,6 @@ impl MetaState {
             metas: HashMap::new(),
             historical_local_fvars: std::collections::HashSet::new(),
             next_id: 0,
-            level_constraints: HashMap::new(),
             postponed_levels: Vec::new(),
             level_parent: HashMap::new(),
             level_concrete: HashMap::new(),
@@ -152,7 +165,27 @@ impl MetaState {
             scope_markers: Vec::new(),
             owned_scope_access_attempts: HashSet::new(),
             next_owned_scope_token: 0,
+            generation: crate::state_generation::next_generation(),
         }
+    }
+
+    /// Generation of the instantiation-relevant state (see the field doc).
+    /// Equal generations mean equal observable content.
+    #[must_use]
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Record that the instantiation-relevant state is about to change.
+    ///
+    /// MAINTENANCE: every `&mut self` method that writes `metas`, a
+    /// `level_*` map or `rigid_level_params` must call this — the cache in
+    /// `ElabCtx::shared_local_ctx` is only as sound as this set is complete.
+    /// A missed site shows up as a `local-context cache is STALE` panic from
+    /// the debug-build audit in `infer/local_ctx_cache.rs`.
+    #[inline]
+    pub(super) fn touch(&mut self) {
+        self.generation = crate::state_generation::next_generation();
     }
 
     /// Declare the RIGID universe parameters of the declaration currently being
@@ -160,6 +193,7 @@ impl MetaState {
     /// genuine `Level.param`s, not metavariables (see field docs). Replaces the
     /// previous set outright, so callers set it once at declaration entry.
     pub(crate) fn set_rigid_level_params<I: IntoIterator<Item = Name>>(&mut self, names: I) {
+        self.touch();
         self.rigid_level_params = names.into_iter().collect();
     }
 
@@ -181,6 +215,7 @@ impl MetaState {
     /// solvable: they go through `fresh_universe_param`, which deliberately does
     /// NOT come here.
     pub(crate) fn add_rigid_level_param(&mut self, name: Name) {
+        self.touch();
         self.rigid_level_params.insert(name);
     }
 
@@ -199,6 +234,7 @@ impl MetaState {
 
     /// Restore a set captured by [`Self::rigid_level_params_snapshot`].
     pub(crate) fn restore_rigid_level_params(&mut self, set: std::collections::HashSet<Name>) {
+        self.touch();
         self.rigid_level_params = set;
     }
 
@@ -255,6 +291,7 @@ impl MetaState {
         self.next_id = next_id;
         self.historical_local_fvars
             .extend(locals.iter().map(|(_, fvar, _)| *fvar));
+        self.touch();
         self.metas.insert(
             id,
             MetaVar {
@@ -295,6 +332,7 @@ impl MetaState {
         if self.metas.get(&id).is_none() {
             self.historical_local_fvars
                 .extend(locals.iter().map(|(_, fvar, _)| *fvar));
+            self.touch();
             self.metas.insert(
                 id,
                 MetaVar {
@@ -371,6 +409,7 @@ impl MetaState {
                 old_value: None,
             });
             // Now do the assignment
+            self.touch();
             if let Some(meta) = self.metas.get_mut(&id) {
                 meta.assignment = Some(val);
                 return true;
@@ -512,6 +551,8 @@ impl MetaState {
     /// and `seq_focus` to propagate metavariable assignments from focused
     /// sub-proof-states back into the parent (#1802).
     pub fn merge_from(&mut self, other: &MetaState) {
+        // Conservative: one bump for the whole merge, before any write.
+        self.touch();
         for (id, meta) in &other.metas {
             let Some(existing_assignment) = self
                 .metas
@@ -549,16 +590,6 @@ impl MetaState {
         self.set_next_id(merged_next_id);
 
         // Merge level unification state (#1847)
-        // Copy new level_constraints entries from other
-        for (name, level) in &other.level_constraints {
-            if !self.level_constraints.contains_key(name) {
-                self.record_undo(UndoRecord::LevelConstraint {
-                    name: name.clone(),
-                    old_value: None,
-                });
-                self.level_constraints.insert(name.clone(), level.clone());
-            }
-        }
         // Copy new union-find parent entries from other
         for (name, parent) in &other.level_parent {
             if !self.level_parent.contains_key(name) {

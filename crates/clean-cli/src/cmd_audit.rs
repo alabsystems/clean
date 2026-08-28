@@ -1186,6 +1186,16 @@ fn load_project_source_environment(
     };
 
     let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
+    // Modules whose declarations are already in `load.env` because THIS loop
+    // elaborated their source. `modules` is in topological import order, so a
+    // workspace module's own `import Test.A` is satisfied by the time it is
+    // reached — and a source-only project has no `.olean` for it and never
+    // will. Without this record the 2026-08-26 fail-closed import policy
+    // (`clean_elab::ImportPolicy`) reads that expected absence as an
+    // unresolvable module and refuses every internal import, which is exactly
+    // what `lake_audit_source_loader_reconstructs_workspace_without_oleans`
+    // exists to catch.
+    let mut satisfied_from_source: HashSet<String> = HashSet::new();
     for module in modules {
         let Some(path) = workspace.find_module(&module) else {
             load.module_errors.push(ModuleLoadError {
@@ -1219,6 +1229,9 @@ fn load_project_source_environment(
         };
 
         let mut file_ctx = FileContext::new();
+        for loaded in &satisfied_from_source {
+            file_ctx.mark_import_satisfied_from_source(loaded);
+        }
         let mut failed = false;
         for (idx, decl) in decls.iter().enumerate() {
             let processed = preprocess_decl_with_context(decl, &mut file_ctx);
@@ -1244,6 +1257,10 @@ fn load_project_source_environment(
         load.modules_loaded += 1;
         load.load_summaries += 1;
         load.added_constants += after_constants.saturating_sub(before_constants);
+        // Only a module that elaborated CLEANLY counts as satisfying a later
+        // import: one that broke off mid-file left a partial environment, and
+        // recording it would hide that behind a resolved-looking import.
+        satisfied_from_source.insert(module);
     }
 
     load.module_errors

@@ -134,7 +134,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::alpha::{parse_sexps, serapi_id_atom, serapi_qualified_name, Sexp};
+use super::alpha::{parse_session_sexps, serapi_id_atom, serapi_qualified_name, Sexp};
 use crate::error::{MathverseError, MathverseResult};
 
 /// Hard cap on a solved base: a fixpoint pushing a monomorphic level above
@@ -148,6 +148,167 @@ const MAX_SOLVE_SWEEPS: usize = 64;
 /// SHARED by every template-polymorphic arity in the corpus, so raising it
 /// would entangle all of them; it is never a raise target.
 const SYNTHETIC_TEMPLATE_DIRPATH: &str = "mathverse_template_collapse";
+
+/// Synthetic innermost `DirPath` segment marking a BOUND polymorphic level
+/// `(Var k)` re-keyed to a declaration-owned named level — the `Var`
+/// re-leveling arm (`CLEAN_COQ_VAR_RELEVEL`, default ON; see [`rekey_var_levels`]).
+/// `(Var k)` inside declaration `D` keys as `D.__coq_var_level__/k`, so every
+/// existing named-level rule — signature binders, result arms, argument
+/// flows, invariant pins, lockstep families, the render lookup — applies to
+/// it unchanged, and the kernel arbitrates each raised rendering fail-closed
+/// exactly as for a named level.
+pub(crate) const VAR_LEVEL_DIRPATH_TAG: &str = "__coq_var_level__";
+
+thread_local! {
+    /// Test-only override of the `CLEAN_COQ_VAR_RELEVEL` switch (tests run on
+    /// their own threads; a process-wide env var would race).
+    static VAR_RELEVEL_OVERRIDE: std::cell::Cell<Option<bool>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Whether the `Var` re-leveling arm is ON for this thread: the test override
+/// first, else the `CLEAN_COQ_VAR_RELEVEL` switch — DEFAULT ON (opt OUT with
+/// `=0`), mirroring `CLEAN_COQ_UID_RELEVEL`: the arm gated 0-regression on
+/// BOTH libraries and its gains are in the promoted baselines (2026-08-21,
+/// taxonomy Update 37), so a default-off import would read as regressions
+/// against them. With `=0` the `(Var k) → Type 1` collapse and every
+/// downstream decision are byte-identical to before the arm existed.
+#[must_use]
+pub(crate) fn var_relevel_enabled() -> bool {
+    if let Some(v) = VAR_RELEVEL_OVERRIDE.with(std::cell::Cell::get) {
+        return v;
+    }
+    std::env::var_os("CLEAN_COQ_VAR_RELEVEL").is_none_or(|v| v != "0")
+}
+
+#[cfg(test)]
+pub(crate) fn set_var_relevel_override(v: Option<bool>) {
+    VAR_RELEVEL_OVERRIDE.with(|c| c.set(v));
+}
+
+/// `true` when `uid_key` is a re-keyed bound level (`….__coq_var_level__/k`).
+fn is_var_level_key(uid_key: &str) -> bool {
+    uid_key.contains(&format!(".{VAR_LEVEL_DIRPATH_TAG}/"))
+}
+
+/// Re-key every BOUND polymorphic level `(Var k)` inside the literal
+/// `(Sort (Type …))` payloads of each top-level declaration form to a
+/// declaration-owned named level (see [`VAR_LEVEL_DIRPATH_TAG`]). Returns the
+/// number of datums re-keyed.
+///
+/// Scope is deliberately narrow so that everything outside the intended
+/// effect stays byte-identical:
+/// - only `CoqConstant` / `CoqAxiom` / `CoqInductive` forms, keyed by the
+///   form's own name (a mutual block's members therefore key separately; the
+///   kernel's family replay arbitrates any divergence fail-closed);
+/// - only `Sort` payload datums — reference `Instance` payloads are never
+///   entered (they are STRIPPED at import, `serapi_ref_level_class`);
+/// - a form containing any `QSort` node is left untouched: its `(Var k)`
+///   datums belong to the sort-polymorphism shape
+///   (`alpha::derive_sort_poly_shape`), which a `Type`-payload `Var`
+///   deliberately disqualifies.
+pub(crate) fn rekey_var_levels(forms: &mut [Sexp]) -> usize {
+    forms.iter_mut().map(rekey_var_levels_in_form).sum()
+}
+
+fn rekey_var_levels_in_form(form: &mut Sexp) -> usize {
+    let Sexp::List(items) = form else { return 0 };
+    let owner = match (items.first(), items.get(1)) {
+        (Some(Sexp::Atom(h)), Some(Sexp::Atom(name)))
+            if matches!(h.as_str(), "CoqConstant" | "CoqAxiom" | "CoqInductive") =>
+        {
+            name.clone()
+        }
+        _ => return 0,
+    };
+    if items.iter().any(contains_qsort) {
+        return 0;
+    }
+    // `DirPath` segments are innermost-first, so the key (reversed, dotted)
+    // reads `<owner>.__coq_var_level__/<k>`.
+    let segs: Vec<Sexp> = std::iter::once(VAR_LEVEL_DIRPATH_TAG)
+        .chain(owner.split('.').rev())
+        .map(|s| {
+            Sexp::List(vec![
+                Sexp::Atom("Id".to_string()),
+                Sexp::Atom(s.to_string()),
+            ])
+        })
+        .collect();
+    items.iter_mut().skip(2).map(|t| rekey_walk(t, &segs)).sum()
+}
+
+fn contains_qsort(t: &Sexp) -> bool {
+    match t {
+        Sexp::Atom(a) => a == "QSort",
+        Sexp::List(items) => items.iter().any(contains_qsort),
+    }
+}
+
+fn rekey_walk(t: &mut Sexp, segs: &[Sexp]) -> usize {
+    let Sexp::List(items) = t else { return 0 };
+    enum Node {
+        Instance,
+        Sort,
+        Other,
+    }
+    let node = match items.first() {
+        Some(Sexp::Atom(h)) if h == "Instance" => Node::Instance,
+        Some(Sexp::Atom(h)) if h == "Sort" && items.len() == 2 => Node::Sort,
+        _ => Node::Other,
+    };
+    match node {
+        Node::Instance => 0,
+        Node::Sort => {
+            let Sexp::List(payload) = &mut items[1] else {
+                return 0;
+            };
+            if !matches!(payload.first(), Some(Sexp::Atom(h)) if h == "Type") {
+                return 0;
+            }
+            let Some(Sexp::List(pairs)) = payload.get_mut(1) else {
+                return 0;
+            };
+            pairs.iter_mut().map(|p| rekey_pair(p, segs)).sum()
+        }
+        Node::Other => items.iter_mut().map(|c| rekey_walk(c, segs)).sum(),
+    }
+}
+
+/// One `((… (data (Var k))) inc)` payload pair: rewrite the datum in place.
+fn rekey_pair(pair: &mut Sexp, segs: &[Sexp]) -> usize {
+    let Sexp::List(pv) = pair else { return 0 };
+    let Some(Sexp::List(fields)) = pv.first_mut() else {
+        return 0;
+    };
+    for f in fields.iter_mut() {
+        let Sexp::List(kv) = f else { continue };
+        if kv.len() != 2 || !matches!(&kv[0], Sexp::Atom(k) if k == "data") {
+            continue;
+        }
+        let k = match &kv[1] {
+            Sexp::List(d) if d.len() == 2 && matches!(&d[0], Sexp::Atom(h) if h == "Var") => {
+                match &d[1] {
+                    Sexp::Atom(k) => k.clone(),
+                    _ => continue,
+                }
+            }
+            _ => continue,
+        };
+        kv[1] = Sexp::List(vec![
+            Sexp::Atom("Level".to_string()),
+            Sexp::List(vec![
+                Sexp::List(vec![
+                    Sexp::Atom("DirPath".to_string()),
+                    Sexp::List(segs.to_vec()),
+                ]),
+                Sexp::Atom(k),
+            ]),
+        ]);
+        return 1;
+    }
+    0
+}
 
 /// Solved global `uid → base` assignment. Only RAISED (`base > 1`) uids are
 /// stored; every other named level keeps the historical base 1, so an empty
@@ -253,6 +414,13 @@ struct DeclSig {
     /// `Set → 1`, `Type payload → floor-1 max of arms`), or `None` when the
     /// codomain is not a syntactic sort.
     result: Option<Vec<LevelArm>>,
+    /// `Var` re-leveling arm: the TYPE-SYNONYM shape of the constant's VALUE
+    /// when it is `λ^n …, Π^m (…), Sort(r)` (`crelation := λ A, Π _ _ : A,
+    /// Type@{v}` → `(2, arms(v))`): the arity `m` of the synonym's own
+    /// telescope and the rendered arms of its result sort — the level an
+    /// application `R x y` of a binder `R : crelation A` lives at. `None` for
+    /// every other value shape.
+    synonym: Option<(usize, Vec<LevelArm>)>,
 }
 
 /// Mines application-site universe constraints from raw SerAPI dumps and
@@ -264,6 +432,17 @@ pub struct UniverseConstraintMiner {
     sigs: HashMap<String, DeclSig>,
     /// `base(to) ≥ base(from) + offset` edges (deduped).
     edges: HashSet<(String, String, i64)>,
+    /// `Var` re-leveling arm: edges mined from application sites that are
+    /// ALREADY REJECTED at the default rendering (argument level above the
+    /// binder level with every base at 1 — e.g. `respectful (A := crelation
+    /// A')`, a `Type 2` argument into a `Type 1` binder). They push the binder
+    /// forward exactly like [`Self::edges`] but take NO part in backward pin
+    /// propagation: the backward rule exists to keep an ACCEPTED site from
+    /// flipping to reject when its source rises, and a site the default
+    /// already rejects cannot be flipped — pinning its sources would only
+    /// freeze unrelated raises (measured: pinning `respectful.u` poisoned
+    /// `crelation.u` through this one site).
+    broken_site_edges: HashSet<(String, String, i64)>,
     /// `base(to) ≥ floor` bounds (deduped).
     floors: HashSet<(String, u32)>,
     /// Uids that must NEVER be raised: mentioned in the arity/constructor
@@ -294,7 +473,7 @@ impl UniverseConstraintMiner {
     /// Also records the STRUCTURAL PINS from non-`Prop` inductives. Errors
     /// only when the top-level s-expression stream does not parse.
     pub fn scan_signatures(&mut self, data: &str) -> MathverseResult<()> {
-        let sexps = parse_sexps(data).map_err(|e| MathverseError::ImportFailed {
+        let sexps = parse_session_sexps(data).map_err(|e| MathverseError::ImportFailed {
             system: "Coq".into(),
             reason: e.to_string(),
         })?;
@@ -312,7 +491,11 @@ impl UniverseConstraintMiner {
                     let Sexp::Atom(name) = &items[1] else {
                         continue;
                     };
-                    self.sigs.insert(name.clone(), sig_of_type(&items[2]));
+                    let mut sig = sig_of_type(&items[2]);
+                    if head == "CoqConstant" {
+                        sig.synonym = items.get(3).and_then(value_synonym_shape);
+                    }
+                    self.sigs.insert(name.clone(), sig);
                     // INVARIANT-POSITION PIN: a literal sort inside a nested
                     // binder DOMAIN (e.g. `Π(f : Type@{w} → X). …`) is
                     // compared INVARIANTLY by the kernel's Pi rule, so
@@ -369,52 +552,35 @@ impl UniverseConstraintMiner {
                         });
                         match relax {
                             Some((arity_uid, arity_inc)) => {
-                                let mut arms: Vec<LevelArm> = Vec::new();
-                                collect_sort_arms_lockstep(arity, &mut arms);
-                                for ct in &ctor_types {
-                                    collect_sort_arms_lockstep(ct, &mut arms);
+                                self.mine_lockstep_family(
+                                    &[(arity_uid, arity_inc)],
+                                    arity,
+                                    &ctor_types,
+                                );
+                            }
+                            // `Var` re-leveling arm: a family whose arity
+                            // codomain is a `max` over its OWN re-keyed bound
+                            // levels (`Equivalence : … → Type@{max(u,v)}`)
+                            // rises in lockstep on EVERY arm — each arm takes
+                            // the family-replay edges, so the max tracks the
+                            // members whichever arm the solver moves (sound:
+                            // `a ≥ m` implies `max(a,b) ≥ m`; the kernel
+                            // replay arbitrates the over-approximation). Keys
+                            // of this shape exist only under the `Var`
+                            // re-leveling arm (`CLEAN_COQ_VAR_RELEVEL`, default
+                            // ON; `=0` opts out), so the opted-out path is the
+                            // wholesale pin below, byte-identical.
+                            None => match arity_codomain_var_arms(arity) {
+                                Some(arity_arms) => {
+                                    self.mine_lockstep_family(&arity_arms, arity, &ctor_types);
                                 }
-                                let mut members: HashSet<String> = HashSet::new();
-                                for arm in arms {
-                                    match arm {
-                                        LevelArm::Uid(uid_f, k) => {
-                                            members.insert(uid_f.clone());
-                                            self.edges.insert((
-                                                arity_uid.clone(),
-                                                uid_f,
-                                                i64::from(k) - i64::from(arity_inc),
-                                            ));
-                                        }
-                                        LevelArm::Const(c) => {
-                                            let floor = i64::from(c) - i64::from(arity_inc);
-                                            if floor > 1 {
-                                                self.floors.insert((
-                                                    arity_uid.clone(),
-                                                    u32::try_from(floor).unwrap_or(1),
-                                                ));
-                                            }
-                                        }
+                                None => {
+                                    collect_sort_level_uids(arity, &mut self.pinned);
+                                    for ct in ctor_types {
+                                        collect_sort_level_uids(ct, &mut self.pinned);
                                     }
                                 }
-                                // Nested INVARIANT binder domains inside the
-                                // family keep the same pin discipline as
-                                // constant types (the wholesale pin used to
-                                // subsume this).
-                                pin_invariant_sort_positions(arity, &mut self.pinned);
-                                for ct in &ctor_types {
-                                    pin_invariant_sort_positions(ct, &mut self.pinned);
-                                }
-                                members.remove(&arity_uid);
-                                if !members.is_empty() {
-                                    self.lockstep_groups.push((arity_uid, members));
-                                }
-                            }
-                            None => {
-                                collect_sort_level_uids(arity, &mut self.pinned);
-                                for ct in ctor_types {
-                                    collect_sort_level_uids(ct, &mut self.pinned);
-                                }
-                            }
+                            },
                         }
                     }
                 }
@@ -428,7 +594,7 @@ impl UniverseConstraintMiner {
     /// application site in `data`'s types and values. Errors only when the
     /// top-level stream does not parse.
     pub fn scan_constraints(&mut self, data: &str) -> MathverseResult<()> {
-        let sexps = parse_sexps(data).map_err(|e| MathverseError::ImportFailed {
+        let sexps = parse_session_sexps(data).map_err(|e| MathverseError::ImportFailed {
             system: "Coq".into(),
             reason: e.to_string(),
         })?;
@@ -473,6 +639,12 @@ impl UniverseConstraintMiner {
                             // The kernel compares them INVARIANTLY, so link
                             // the paired levels in lockstep.
                             self.mine_type_value_telescopes(&items[2], value);
+                            // `Var` re-leveling arm: type-former definitions
+                            // under a codomain whose level is fixed by another
+                            // declaration's rendering (see the method).
+                            if var_relevel_enabled() {
+                                self.anchor_var_binders_under_fixed_codomain(&items[2], value);
+                            }
                         }
                     }
                 }
@@ -487,6 +659,34 @@ impl UniverseConstraintMiner {
                         if matches!(e.first(), Some(Sexp::Atom(h)) if h == "Ctor") && e.len() >= 3 {
                             let mut stack = Vec::new();
                             self.walk(&e[2], &mut stack);
+                        }
+                    }
+                    // `Var` re-leveling arm (see `mine_var_family_fields`):
+                    // constructor FIELDS typed by applied raisable constants
+                    // flow into each arity arm of a Var-owned family.
+                    if let Some(arity_arms) = arity_codomain_var_arms(&items[3]) {
+                        let num_params = items[4..]
+                            .iter()
+                            .find_map(|e| match e {
+                                Sexp::List(np)
+                                    if np.len() == 2
+                                        && matches!(&np[0], Sexp::Atom(h) if h == "NumParams") =>
+                                {
+                                    match &np[1] {
+                                        Sexp::Atom(n) => n.parse::<usize>().ok(),
+                                        _ => None,
+                                    }
+                                }
+                                _ => None,
+                            })
+                            .unwrap_or(0);
+                        for entry in &items[4..] {
+                            let Sexp::List(e) = entry else { continue };
+                            if matches!(e.first(), Some(Sexp::Atom(h)) if h == "Ctor")
+                                && e.len() >= 3
+                            {
+                                self.mine_var_family_fields(&arity_arms, num_params, &e[2]);
+                            }
                         }
                     }
                 }
@@ -513,8 +713,16 @@ impl UniverseConstraintMiner {
                     .filter(|to| to.starts_with(&synthetic_prefix)),
             )
             .collect();
+        // Every edge (accepted-site and broken-site alike) constrains the
+        // forward solve; only accepted-site edges propagate pins backward.
+        let all_edges: Vec<(String, String, i64)> = self
+            .edges
+            .iter()
+            .chain(self.broken_site_edges.iter())
+            .cloned()
+            .collect();
         // Immediate self-cycles (`u ≥ u + k`, `k > 0`) are unsatisfiable.
-        for (to, from, off) in &self.edges {
+        for (to, from, off) in &all_edges {
             if to == from && *off > 0 {
                 poisoned.insert(to.clone());
             }
@@ -553,8 +761,7 @@ impl UniverseConstraintMiner {
                     break;
                 }
             }
-            let edges: Vec<&(String, String, i64)> = self
-                .edges
+            let edges: Vec<&(String, String, i64)> = all_edges
                 .iter()
                 .filter(|(to, from, _)| !poisoned.contains(to) && !poisoned.contains(from))
                 .collect();
@@ -576,7 +783,7 @@ impl UniverseConstraintMiner {
             // whole `*.clone` helper class rejecting on
             // `expected Sort(1), got Sort(2)`. Only `off > 0` degrades
             // (`1 + 0 = 1` is the default base — a no-op).
-            for (to, from, off) in &self.edges {
+            for (to, from, off) in &all_edges {
                 if *off > 0 && !poisoned.contains(to) && poisoned.contains(from) {
                     let floor = u32::try_from((1 + *off).min(i64::from(MAX_RAISED_BASE) + 1))
                         .unwrap_or(MAX_RAISED_BASE + 1);
@@ -632,6 +839,270 @@ impl UniverseConstraintMiner {
                 return UniverseBaseMap { raised };
             }
             poisoned.extend(new_poison);
+        }
+    }
+
+    /// LOCKSTEP family mining for one non-`Prop` inductive (the structural-pin
+    /// relaxation): every literal-sort arm of the arity and constructor types
+    /// becomes a `≥` edge (or floor) onto EACH arity arm, and each arm registers
+    /// the members as its lockstep group (a poisoned arm freezes them, see
+    /// [`Self::solve`]). Nested invariant binder domains keep the constant-type
+    /// pin discipline. One arm is exactly the historical single-arm relaxation.
+    fn mine_lockstep_family(
+        &mut self,
+        arity_arms: &[(String, u32)],
+        arity: &Sexp,
+        ctor_types: &[&Sexp],
+    ) {
+        let mut arms: Vec<LevelArm> = Vec::new();
+        collect_sort_arms_lockstep(arity, &mut arms);
+        for ct in ctor_types {
+            collect_sort_arms_lockstep(ct, &mut arms);
+        }
+        for (arity_uid, arity_inc) in arity_arms {
+            let mut members: HashSet<String> = HashSet::new();
+            for arm in &arms {
+                match arm {
+                    LevelArm::Uid(uid_f, k) => {
+                        members.insert(uid_f.clone());
+                        self.edges.insert((
+                            arity_uid.clone(),
+                            uid_f.clone(),
+                            i64::from(*k) - i64::from(*arity_inc),
+                        ));
+                    }
+                    LevelArm::Const(c) => {
+                        let floor = i64::from(*c) - i64::from(*arity_inc);
+                        if floor > 1 {
+                            self.floors
+                                .insert((arity_uid.clone(), u32::try_from(floor).unwrap_or(1)));
+                        }
+                    }
+                }
+            }
+            for (u, _) in arity_arms {
+                members.remove(u);
+            }
+            if !members.is_empty() {
+                self.lockstep_groups.push((arity_uid.clone(), members));
+            }
+        }
+        pin_invariant_sort_positions(arity, &mut self.pinned);
+        for ct in ctor_types {
+            pin_invariant_sort_positions(ct, &mut self.pinned);
+        }
+    }
+
+    /// `Var` re-leveling arm, pass B: the kernel's inductive universe check
+    /// needs every constructor FIELD's sort to fit under the arity sort.
+    /// Literal-sort fields are lockstep edges already (pass A); a field whose
+    /// type is an APPLIED raisable constant (`Equivalence_Reflexive :
+    /// Reflexive A R`, sort = the definitional class's RESULT sort) is only
+    /// computable once every signature is registered, so it is mined here as
+    /// an ordinary flow into each arity arm — the record then rises with the
+    /// classes it bundles instead of rejecting wholesale once they rise.
+    /// Parameters (the leading `num_params` binders) are not fields and are
+    /// skipped; anything whose level is not syntactically determined mines
+    /// nothing (fail-closed, as everywhere in this pass).
+    fn mine_var_family_fields(
+        &mut self,
+        arity_arms: &[(String, u32)],
+        num_params: usize,
+        ctor_type: &Sexp,
+    ) {
+        let mut stack: Vec<Option<Vec<LevelArm>>> = Vec::new();
+        let mut cur = ctor_type;
+        let mut idx = 0usize;
+        while let Sexp::List(items) = cur {
+            if !matches!(items.first(), Some(Sexp::Atom(h)) if h == "Prod") || items.len() < 4 {
+                break;
+            }
+            if idx >= num_params {
+                if let Some(arms) = term_type_level(&items[2], &self.sigs, &stack, 0) {
+                    for (uid_a, inc_a) in arity_arms {
+                        self.record_binder_flow(
+                            &BinderKind::RaisableNamed(uid_a.clone(), *inc_a),
+                            arms.clone(),
+                        );
+                    }
+                }
+            }
+            stack.push(sort_value_arms(&items[2]));
+            cur = &items[3];
+            idx += 1;
+        }
+    }
+
+    /// `Var` re-leveling arm: a TYPE-FORMER definition (value = λ-telescope
+    /// ending in a `Π` or a sort) whose declared CODOMAIN is an applied
+    /// type synonym with a level-bearing result of ITS OWN bound keys
+    /// (`respectful : Π A B R R', crelation (A → B)`, `relation_equivalence :
+    /// Π A, crelation (crelation A)`) has its result level FIXED by that
+    /// synonym's single rendering (`crelation`'s `v`), while its value's
+    /// inferred sort may rise with its own binder levels (`respectful`'s body
+    /// `Π x y : A, …` lives at `A`'s level). Coq kept the two consistent with
+    /// a constraint (`max(u0,u2) ≤ v`) that has no monomorphic encoding short
+    /// of cycling `crelation` upward, so the fixed level is treated as an
+    /// UNRAISABLE SINK: every level arm of the body's sort is pinned
+    /// (measured: raising `respectful.u` rejected it and, as a type-only
+    /// stand-in, took every `Proper (_ ==> _)` consumer down with it). The
+    /// body's sort is computed with the synonym-aware level below, so a
+    /// `Prop`-valued body (`complement := λ A R x y, R x y → False`) pins
+    /// NOTHING and its binders stay raisable; an undeterminable body pins the
+    /// definition's own bound binders (fail-closed). Proof terms are not type
+    /// formers and are never touched; named levels keep today's behaviour.
+    fn anchor_var_binders_under_fixed_codomain(&mut self, decl_type: &Sexp, value: &Sexp) {
+        // Declared type: binder kinds + the codomain synonym.
+        let mut binders: Vec<BinderKind> = Vec::new();
+        let mut cur = decl_type;
+        while let Sexp::List(items) = cur {
+            if !matches!(items.first(), Some(Sexp::Atom(h)) if h == "Prod") || items.len() < 4 {
+                break;
+            }
+            binders.push(classify_binder_domain(&items[2]));
+            cur = &items[3];
+        }
+        let Some(head_key) = synonym_app_head_key(cur) else {
+            return;
+        };
+        let Some((syn_arity, fixed_arms)) =
+            self.sigs.get(&head_key).and_then(|s| s.synonym.clone())
+        else {
+            return;
+        };
+        if !fixed_arms
+            .iter()
+            .any(|a| matches!(a, LevelArm::Uid(u, _) if is_var_level_key(u)))
+        {
+            return;
+        }
+        // Value: peel casts and the λ-telescope (building the level context);
+        // the body must be a type former.
+        let mut ctx: Vec<TypeFormerCtx> = Vec::new();
+        let mut v = value;
+        let mut lambdas = 0usize;
+        loop {
+            let Sexp::List(items) = v else { return };
+            match items.first() {
+                Some(Sexp::Atom(h)) if h == "Cast" && items.len() >= 2 => v = &items[1],
+                Some(Sexp::Atom(h)) if h == "Lambda" && items.len() >= 4 => {
+                    ctx.push(self.type_former_ctx_entry(&items[2]));
+                    lambdas += 1;
+                    v = &items[3];
+                }
+                Some(Sexp::Atom(h)) if h == "Prod" || h == "Sort" => break,
+                _ => return,
+            }
+        }
+        let own_var_binders: Vec<String> = binders
+            .iter()
+            .filter_map(|b| match b {
+                BinderKind::RaisableNamed(u, _) if is_var_level_key(u) => Some(u.clone()),
+                _ => None,
+            })
+            .collect();
+        if lambdas != binders.len() + syn_arity {
+            self.pinned.extend(own_var_binders);
+            return;
+        }
+        match self.type_former_level(v, &mut ctx) {
+            Some(body_arms) => self.record_binder_flow(&BinderKind::UnraisableSort, body_arms),
+            None => self.pinned.extend(own_var_binders),
+        }
+    }
+
+    /// Level context entry for one λ/Π binder domain of a type former: a
+    /// syntactic sort (its value arms), an applied type synonym with a known
+    /// shape (`R : crelation A`), or anything else.
+    fn type_former_ctx_entry(&self, domain: &Sexp) -> TypeFormerCtx {
+        if let Some(arms) = sort_value_arms(domain) {
+            return TypeFormerCtx::Sort(arms);
+        }
+        if let Some((m, arms)) = synonym_app_head_key(domain)
+            .and_then(|k| self.sigs.get(&k).and_then(|s| s.synonym.clone()))
+        {
+            return TypeFormerCtx::Synonym(m, arms);
+        }
+        TypeFormerCtx::Other
+    }
+
+    /// The rendered LEVEL OF THE SORT of a type-former body `t` (`t :
+    /// Sort(level)`), symbolically, in the binder context `ctx` (innermost
+    /// last): sorts, bound type variables, applications of synonym-typed
+    /// bound variables at full arity (`R x y` with `R : crelation A`),
+    /// applied constants (their registered result sort), and `Π`s with the
+    /// `imax` rule. `None` whenever the level is not syntactically determined
+    /// (fail-closed).
+    fn type_former_level(&self, t: &Sexp, ctx: &mut Vec<TypeFormerCtx>) -> Option<Vec<LevelArm>> {
+        let Sexp::List(items) = t else { return None };
+        let head = match items.first() {
+            Some(Sexp::Atom(s)) => s.as_str(),
+            _ => return None,
+        };
+        match head {
+            "Cast" if items.len() >= 2 => self.type_former_level(&items[1], ctx),
+            "Sort" => sort_value_arms(t).map(|arms| arms_plus(arms, 1)),
+            "Rel" => {
+                let j: usize = match items.get(1) {
+                    Some(Sexp::Atom(a)) => a.parse().ok()?,
+                    _ => return None,
+                };
+                if j == 0 || j > ctx.len() {
+                    return None;
+                }
+                match &ctx[ctx.len() - j] {
+                    TypeFormerCtx::Sort(arms) => Some(arms.clone()),
+                    _ => None,
+                }
+            }
+            "App" if items.len() >= 3 => {
+                let Sexp::List(args) = &items[2] else {
+                    return None;
+                };
+                let Sexp::List(f) = &items[1] else {
+                    return None;
+                };
+                match f.first() {
+                    Some(Sexp::Atom(h)) if h == "Rel" => {
+                        let j: usize = match f.get(1) {
+                            Some(Sexp::Atom(a)) => a.parse().ok()?,
+                            _ => return None,
+                        };
+                        if j == 0 || j > ctx.len() {
+                            return None;
+                        }
+                        match &ctx[ctx.len() - j] {
+                            TypeFormerCtx::Synonym(m, arms) if *m == args.len() => {
+                                Some(arms.clone())
+                            }
+                            _ => None,
+                        }
+                    }
+                    Some(Sexp::Atom(h)) if h == "Const" || h == "Ind" => {
+                        let key = reference_sig_key(&items[1])?;
+                        self.sigs.get(&key)?.result.clone()
+                    }
+                    _ => None,
+                }
+            }
+            "Const" | "Ind" => {
+                let key = reference_sig_key(t)?;
+                self.sigs.get(&key)?.result.clone()
+            }
+            "Prod" if items.len() >= 4 => {
+                let k_dom = self.type_former_level(&items[2], ctx)?;
+                ctx.push(self.type_former_ctx_entry(&items[2]));
+                let k_cod = self.type_former_level(&items[3], ctx);
+                ctx.pop();
+                let k_cod = k_cod?;
+                if k_cod == vec![LevelArm::Const(0)] {
+                    return Some(vec![LevelArm::Const(0)]);
+                }
+                let mut out = k_dom;
+                out.extend(k_cod);
+                Some(out)
+            }
+            _ => None,
         }
     }
 
@@ -890,6 +1361,42 @@ impl UniverseConstraintMiner {
                     .insert((u2.clone(), u1.clone(), i64::from(*k1) - i64::from(*k2)));
             }
             _ => {
+                // `Var` re-leveling arm: multi-arm `max` result sorts over
+                // re-keyed bound levels are the definitional-class norm
+                // (`Irreflexive R := Reflexive (complement R)`: `Type@{max(u,v)}`
+                // on BOTH sides). Equality of the two maxes is implied by
+                // pairwise equality of the arms under ANY bijection, so pair
+                // them positionally (payload order) when the counts match, else
+                // link every arm to every arm — both are sufficient for the
+                // kernel's invariant comparison and keep the family raisable
+                // instead of pinning it wholesale (measured: this one pin
+                // poisoned the whole crelation cluster backward). Named or
+                // mixed arms keep today's pin, byte-identical.
+                if !h.is_empty()
+                    && !d.is_empty()
+                    && h.iter().chain(d.iter()).all(|(u, _)| is_var_level_key(u))
+                {
+                    let pairs: Vec<(&(String, u32), &(String, u32))> = if h.len() == d.len() {
+                        h.iter().zip(d.iter()).collect()
+                    } else {
+                        h.iter()
+                            .flat_map(|a| d.iter().map(move |b| (a, b)))
+                            .collect()
+                    };
+                    for ((u1, k1), (u2, k2)) in pairs {
+                        self.edges.insert((
+                            u1.clone(),
+                            u2.clone(),
+                            i64::from(*k2) - i64::from(*k1),
+                        ));
+                        self.edges.insert((
+                            u2.clone(),
+                            u1.clone(),
+                            i64::from(*k1) - i64::from(*k2),
+                        ));
+                    }
+                    return;
+                }
                 for (u, _) in h.iter().chain(d.iter()) {
                     self.pinned.insert(u.clone());
                 }
@@ -921,6 +1428,20 @@ impl UniverseConstraintMiner {
     fn record_binder_flow(&mut self, binder: &BinderKind, arms: Vec<LevelArm>) {
         match binder {
             BinderKind::RaisableNamed(uid_f, inc_f) => {
+                // Site verdict at the DEFAULT rendering (every base 1): the
+                // argument level is the max over its arms (`Const c → c`,
+                // `Uid(_, k) → 1 + k`) against the binder level `1 + inc`.
+                // Under the `Var` arm, a site the default already rejects
+                // feeds `broken_site_edges` (forward-only; see the field).
+                let broken_at_default = var_relevel_enabled()
+                    && arms
+                        .iter()
+                        .map(|a| match a {
+                            LevelArm::Const(c) => *c,
+                            LevelArm::Uid(_, k) => 1 + *k,
+                        })
+                        .max()
+                        .is_some_and(|lvl| lvl > 1 + *inc_f);
                 for arm in arms {
                     match arm {
                         LevelArm::Const(c) => {
@@ -932,7 +1453,11 @@ impl UniverseConstraintMiner {
                         }
                         LevelArm::Uid(a, k) => {
                             let off = i64::from(k) - i64::from(*inc_f);
-                            self.edges.insert((uid_f.clone(), a, off));
+                            if broken_at_default {
+                                self.broken_site_edges.insert((uid_f.clone(), a, off));
+                            } else {
+                                self.edges.insert((uid_f.clone(), a, off));
+                            }
                         }
                     }
                 }
@@ -947,6 +1472,55 @@ impl UniverseConstraintMiner {
             BinderKind::NonSort => {}
         }
     }
+}
+
+/// One binder of a type former's level context (see
+/// [`UniverseConstraintMiner::type_former_level`]).
+#[derive(Clone, Debug)]
+enum TypeFormerCtx {
+    /// Domain is a syntactic sort: a bound TYPE variable of these value arms.
+    Sort(Vec<LevelArm>),
+    /// Domain is an applied type synonym of arity `m` whose result sort has
+    /// these arms: a bound SYNONYM-TYPED variable (`R : crelation A`).
+    Synonym(usize, Vec<LevelArm>),
+    /// Anything else (an element binder): no level information.
+    Other,
+}
+
+/// The signature key of the head of an applied (or bare) constant node used
+/// AS A TYPE: `(App (Const C) args)` / `(Const C)` / `(Ind …)`.
+fn synonym_app_head_key(t: &Sexp) -> Option<String> {
+    let Sexp::List(items) = t else { return None };
+    match items.first() {
+        Some(Sexp::Atom(h)) if h == "App" && items.len() >= 3 => reference_sig_key(&items[1]),
+        Some(Sexp::Atom(h)) if h == "Const" || h == "Ind" => reference_sig_key(t),
+        _ => None,
+    }
+}
+
+/// The type-synonym shape of a VALUE `λ^n …, Π^m (…), Sort(r)`: `(m, arms(r))`
+/// (see [`DeclSig::synonym`]). `None` for any other shape.
+fn value_synonym_shape(value: &Sexp) -> Option<(usize, Vec<LevelArm>)> {
+    let mut v = value;
+    loop {
+        let Sexp::List(items) = v else { return None };
+        match items.first() {
+            Some(Sexp::Atom(h)) if h == "Cast" && items.len() >= 2 => v = &items[1],
+            Some(Sexp::Atom(h)) if h == "Lambda" && items.len() >= 4 => v = &items[3],
+            _ => break,
+        }
+    }
+    let mut m = 0usize;
+    let mut cur = v;
+    while let Sexp::List(items) = cur {
+        if matches!(items.first(), Some(Sexp::Atom(h)) if h == "Prod") && items.len() >= 4 {
+            m += 1;
+            cur = &items[3];
+        } else {
+            break;
+        }
+    }
+    sort_value_arms(cur).map(|arms| (m, arms))
 }
 
 /// The signature-registry key of a `Const`/`Ind`/`Construct` reference node,
@@ -1061,6 +1635,40 @@ fn arity_codomain_named_level(arity: &Sexp) -> Option<(String, u32)> {
         }
     }
     single_named_level_sort(cur)
+}
+
+/// `Some(arms)` when the inductive arity's CODOMAIN is a `(Sort (Type …))`
+/// whose EVERY datum is a re-keyed bound level (`….__coq_var_level__/k`, the
+/// `Var` re-leveling arm) — the multi-arm lockstep eligibility shape. `None`
+/// for any named, fixed, or mixed arm (today's rules apply unchanged).
+fn arity_codomain_var_arms(arity: &Sexp) -> Option<Vec<(String, u32)>> {
+    let mut cur = arity;
+    while let Sexp::List(items) = cur {
+        if matches!(items.first(), Some(Sexp::Atom(h)) if h == "Prod") && items.len() >= 4 {
+            cur = &items[3];
+        } else {
+            break;
+        }
+    }
+    let mut out = Vec::new();
+    for arm in sort_value_arms(cur)? {
+        match arm {
+            // The model floor arm `type_payload_value_arms` always includes,
+            // and a pierced-`Set` arm at or below it (`Type@{max(Set,u,v)}`,
+            // the `StrictOrder` record's arity): neither can exceed a raised
+            // bound arm, so neither disqualifies the family (measured: the
+            // `Set` arm alone sent `StrictOrder` to the wholesale pin, its
+            // fields rose with `Irreflexive`, and the family replay failed).
+            LevelArm::Const(c) if c <= 1 => {}
+            LevelArm::Uid(u, k) if is_var_level_key(&u) => out.push((u, k)),
+            _ => return None,
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 /// Collect the rendered level arms — WITH increments — of every literal
@@ -1365,7 +1973,11 @@ fn sig_of_type(ty: &Sexp) -> DeclSig {
         cur = &items[3];
     }
     let result = sort_value_arms(cur);
-    DeclSig { binders, result }
+    DeclSig {
+        binders,
+        result,
+        synonym: None,
+    }
 }
 
 /// `Some((uid_key, inc))` when `t` is exactly a single-arm named-level
@@ -1851,5 +2463,291 @@ mod tests {
             bases.raised_base("TARGET/1").is_none(),
             "a degraded floor above the cap must poison the target, got {bases:?}"
         );
+    }
+
+    // ---- the `Var` re-leveling arm (CLEAN_COQ_VAR_RELEVEL) ----
+
+    /// Real `Coq.Classes.CRelationClasses` dump forms (sertop 8.20, verbatim):
+    /// `crelation@{u v} (A : Type@{u}) := A -> A -> Type@{v}` ...
+    const RAW_VAR_CRELATION: &str = r#"(CoqConstant Coq.Classes.CRelationClasses.crelation (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Sort (Type ((((hash 14) (data (Var 0))) 0) (((hash 15) (data (Var 1))) 1))))) (Lambda ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (Rel 1) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (Rel 2) (Sort (Type ((((hash 15) (data (Var 1))) 0))))))))"#;
+    /// ... `Reflexive@{u v} (R : crelation A) := forall x, R x x` (a
+    /// definitional class, result sort `Type@{max(u,v)}`) ...
+    const RAW_VAR_REFLEXIVE: &str = r#"(CoqConstant Coq.Classes.CRelationClasses.Reflexive (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Prod ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (Sort (Type ((((hash 14) (data (Var 0))) 0) (((hash 15) (data (Var 1))) 0)))))) (Lambda ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Lambda ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (Prod ((binder_name (Name (Id x))) (binder_relevance Relevant)) (Rel 2) (App (Rel 2) ((Rel 1) (Rel 1)))))))"#;
+    /// ... the `Equivalence` record (arity `Type@{max(u,v)}`, a multi-arm
+    /// `max` over its OWN bound levels, fields `Reflexive R`/`Symmetric R`/
+    /// `Transitive R`) ...
+    const RAW_VAR_EQUIVALENCE_IND: &str = r#"(CoqInductive Coq.Classes.CRelationClasses.Equivalence 0 (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Prod ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (Sort (Type ((((hash 14) (data (Var 0))) 0) (((hash 15) (data (Var 1))) 0)))))) (NumParams 2) (Ctor Coq.Classes.CRelationClasses.Build_Equivalence (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Prod ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (Prod ((binder_name (Name (Id Equivalence_Reflexive))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id Reflexive)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 2) (Rel 1))) (Prod ((binder_name (Name (Id Equivalence_Symmetric))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id Symmetric)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 3) (Rel 2))) (Prod ((binder_name (Name (Id Equivalence_Transitive))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id Transitive)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 4) (Rel 3))) (App (Ind (((MutInd (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id Equivalence)) ()) 0) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 5) (Rel 4))))))))))"#;
+    /// ... `iffT_Reflexive : Reflexive iffT` — applies `Reflexive` AT THE SORT
+    /// LITERAL `Type@{v}`, so `Reflexive`'s `A` binder must sit at `Type 2` ...
+    const RAW_VAR_IFFT_REFLEXIVE: &str = r#"(CoqConstant Coq.Classes.CRelationClasses.iffT_Reflexive (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id Reflexive)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Sort (Type ((((hash 15) (data (Var 1))) 0)))) (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id iffT)) ()) (Instance (() (((hash 15) (data (Var 1))) ((hash 15) (data (Var 1)))))))))) (Cast (Lambda ((binder_name (Name (Id x))) (binder_relevance Relevant)) (Sort (Type ((((hash 15) (data (Var 1))) 0)))) (App (Construct ((((MutInd (KerName (MPfile (DirPath ((Id Datatypes) (Id Init) (Id Coq)))) (Id prod)) ()) 0) 1) (Instance (() ())))) ((Prod ((binder_name Anonymous) (binder_relevance Relevant)) (Rel 1) (Rel 2)) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (Rel 1) (Rel 2)) (Lambda ((binder_name (Name (Id X))) (binder_relevance Relevant)) (Rel 1) (Rel 1)) (Lambda ((binder_name (Name (Id X))) (binder_relevance Relevant)) (Rel 1) (Rel 1))))) DEFAULTcast (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id Reflexive)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Sort (Type ((((hash 15) (data (Var 1))) 0)))) (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id iffT)) ()) (Instance (() (((hash 15) (data (Var 1))) ((hash 15) (data (Var 1))))))))))))"#;
+    /// ... and `relation_equivalence : forall A, crelation (crelation A)` —
+    /// the SELF-APPLICATION (`crelation A : Type 2` fed to `crelation`'s
+    /// `Type 1` binder) that no uniform collapse satisfies (statement only).
+    const RAW_VAR_RELATION_EQUIVALENCE_AXIOM: &str = r#"(CoqAxiom Coq.Classes.CRelationClasses.relation_equivalence (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 15) (data (Var 1))) ((hash 16) (data (Var 2)))))))) ((App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 17) (data (Var 3)))))))) ((Rel 1)))))))"#;
+    /// `relation_equivalence`'s real type with a `prod`-free value
+    /// (`fun R R' => forall x y, R x y -> R' x y`), so the kernel e2e needs
+    /// only `crelation` in the environment.
+    const RAW_VAR_REL2: &str = r#"(CoqConstant SerTop.rel2 (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 15) (data (Var 1))) ((hash 16) (data (Var 2)))))))) ((App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 17) (data (Var 3)))))))) ((Rel 1)))))) (Lambda ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Lambda ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 17) (data (Var 3)))))))) ((Rel 1))) (Lambda ((binder_name (Name (Id R'))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 17) (data (Var 3)))))))) ((Rel 2))) (Prod ((binder_name (Name (Id x))) (binder_relevance Relevant)) (Rel 3) (Prod ((binder_name (Name (Id y))) (binder_relevance Relevant)) (Rel 4) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (App (Rel 4) ((Rel 2) (Rel 1))) (App (Rel 4) ((Rel 3) (Rel 2))))))))))"#;
+
+    const CREL_U: &str = "Coq.Classes.CRelationClasses.crelation.__coq_var_level__/0";
+    const CREL_V: &str = "Coq.Classes.CRelationClasses.crelation.__coq_var_level__/1";
+    const REFL_U: &str = "Coq.Classes.CRelationClasses.Reflexive.__coq_var_level__/0";
+    const EQUIV_U: &str = "Coq.Classes.CRelationClasses.Equivalence.__coq_var_level__/0";
+    const EQUIV_V: &str = "Coq.Classes.CRelationClasses.Equivalence.__coq_var_level__/1";
+
+    /// Run `f` with the `Var` arm forced ON (thread-local override), restoring
+    /// the default afterwards even on panic.
+    fn with_var_relevel<T>(on: bool, f: impl FnOnce() -> T) -> T {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                set_var_relevel_override(None);
+            }
+        }
+        let _reset = Reset;
+        set_var_relevel_override(Some(on));
+        f()
+    }
+
+    fn first_binder_datum(form: &Sexp) -> Sexp {
+        // (CoqConstant name (Prod annot (Sort (Type ((((hash) (data D)) inc)))) ...) ...)
+        let Sexp::List(items) = form else {
+            panic!("form is a list")
+        };
+        let Sexp::List(prod) = &items[2] else {
+            panic!("type is a Prod")
+        };
+        let Sexp::List(sort) = &prod[2] else {
+            panic!("binder domain is a Sort")
+        };
+        let Sexp::List(payload) = &sort[1] else {
+            panic!("Type payload")
+        };
+        let Sexp::List(pairs) = &payload[1] else {
+            panic!("pairs")
+        };
+        let Sexp::List(pair) = &pairs[0] else {
+            panic!("pair")
+        };
+        let Sexp::List(fields) = &pair[0] else {
+            panic!("fields")
+        };
+        fields
+            .iter()
+            .find_map(|f| match f {
+                Sexp::List(kv) if matches!(&kv[0], Sexp::Atom(k) if k == "data") => {
+                    Some(kv[1].clone())
+                }
+                _ => None,
+            })
+            .expect("datum")
+    }
+
+    fn count_atoms(t: &Sexp, atom: &str) -> usize {
+        match t {
+            Sexp::Atom(a) => usize::from(a == atom),
+            Sexp::List(items) => items.iter().map(|c| count_atoms(c, atom)).sum(),
+        }
+    }
+
+    #[test]
+    fn test_rekey_var_levels_keys_sort_payloads_by_owner_and_leaves_instances() {
+        let mut forms = with_var_relevel(false, || {
+            parse_session_sexps(RAW_VAR_CRELATION).expect("parses")
+        });
+        // Flag OFF (`CLEAN_COQ_VAR_RELEVEL=0`): the bound datum is untouched.
+        assert!(matches!(
+            first_binder_datum(&forms[0]),
+            Sexp::List(ref d) if matches!(d.first(), Some(Sexp::Atom(h)) if h == "Var")
+        ));
+        let instances_before = count_atoms(&forms[0], "Instance");
+        let rekeyed = rekey_var_levels(&mut forms);
+        // crelation: binder `Type@{Var 0}`, codomain `max(Var 0, Var 1 + 1)`,
+        // value binder `Type@{Var 0}` and body sort `Type@{Var 1}` = 5 datums.
+        assert_eq!(rekeyed, 5, "every Sort-payload Var datum is re-keyed");
+        assert_eq!(
+            level_datum_uid_key(&first_binder_datum(&forms[0])).as_deref(),
+            Some(CREL_U),
+            "the key is declaration-owned: <owner>.__coq_var_level__/<k>"
+        );
+        assert_eq!(
+            count_atoms(&forms[0], "Instance"),
+            instances_before,
+            "reference Instance payloads are never entered"
+        );
+        assert_eq!(
+            rekey_var_levels(&mut forms),
+            0,
+            "idempotent: a second pass finds no bound datum"
+        );
+        // The session parser applies the same rewrite under the switch.
+        let on = with_var_relevel(true, || {
+            parse_session_sexps(RAW_VAR_CRELATION).expect("parses")
+        });
+        assert_eq!(
+            level_datum_uid_key(&first_binder_datum(&on[0])).as_deref(),
+            Some(CREL_U)
+        );
+    }
+
+    #[test]
+    fn test_rekey_var_levels_skips_sort_polymorphic_qsort_forms() {
+        // A `QSort` form's `(Var k)` datums belong to the sort-polymorphism
+        // shape and are left alone wholesale (even its plain Type payloads).
+        let src = r#"(CoqConstant SerTop.qpoly (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (QSort (Var 0) ((((hash 1) (data (Var 0))) 0)))) (Sort (Type ((((hash 2) (data (Var 1))) 0))))) (Sort (Type ((((hash 2) (data (Var 1))) 0)))))"#;
+        let mut forms = parse_sexp(src).map(|f| vec![f]).expect("parses");
+        assert_eq!(rekey_var_levels(&mut forms), 0);
+        assert_eq!(count_atoms(&forms[0], "Var"), 4);
+    }
+
+    #[test]
+    fn test_miner_var_self_application_raises_param_level_not_codomain_level() {
+        // `relation_equivalence : forall A, crelation (crelation A)` mines
+        // `base(crelation.u) >= base(crelation.v) + 1` from the inner
+        // application's result sort — solved: `u -> 2`, `v` stays at the
+        // default base 1 (a uniform raise would only shift the mismatch).
+        let input = format!("{RAW_VAR_CRELATION}\n{RAW_VAR_RELATION_EQUIVALENCE_AXIOM}");
+        let bases = with_var_relevel(true, || mine(&input));
+        assert_eq!(
+            bases.raised_base(CREL_U),
+            Some(2),
+            "{:?}",
+            bases.raised_entries()
+        );
+        assert_eq!(
+            bases.raised_base(CREL_V),
+            None,
+            "{:?}",
+            bases.raised_entries()
+        );
+        // Flag OFF: nothing is keyed, nothing is raised (byte-identical).
+        let off = with_var_relevel(false, || mine(&input));
+        assert!(off.is_empty(), "{:?}", off.raised_entries());
+    }
+
+    #[test]
+    fn test_miner_var_owned_record_rises_in_lockstep_with_its_raised_field_class() {
+        // `iffT_Reflexive` applies `Reflexive` at a sort literal -> Reflexive.u
+        // raises to 2 -> its result sort `max(u,v)` becomes Type 2 -> the
+        // `Equivalence` record's field `Equivalence_Reflexive : Reflexive A R`
+        // now lives at Type 2, so BOTH arms of the record's own `max(u,v)`
+        // arity must follow (the kernel's field-under-arity check), instead
+        // of the multi-arm wholesale pin that would freeze the record at
+        // Type 1 and reject its family replay.
+        let input = format!(
+            "{RAW_VAR_CRELATION}\n{RAW_VAR_REFLEXIVE}\n{RAW_VAR_EQUIVALENCE_IND}\n{RAW_VAR_IFFT_REFLEXIVE}"
+        );
+        let bases = with_var_relevel(true, || mine(&input));
+        let entries = bases.raised_entries();
+        assert_eq!(bases.raised_base(REFL_U), Some(2), "{entries:?}");
+        assert_eq!(bases.raised_base(EQUIV_U), Some(2), "{entries:?}");
+        assert_eq!(bases.raised_base(EQUIV_V), Some(2), "{entries:?}");
+        // `crelation`'s param follows `Reflexive`'s (`R : crelation A` with
+        // `A : Type@{Reflexive.u}`); its codomain level stays put.
+        assert_eq!(bases.raised_base(CREL_U), Some(2), "{entries:?}");
+        assert_eq!(bases.raised_base(CREL_V), None, "{entries:?}");
+    }
+
+    #[test]
+    fn test_e2e_var_relevel_crelation_self_application_kernel_verifies() {
+        // The measured crelation boundary, end to end: `rel2 : forall A,
+        // crelation (crelation A)` (the `relation_equivalence` statement with
+        // a `prod`-free value) rejects under the uniform `Var -> Type 1`
+        // collapse and KERNEL-VERIFIES under the Var raise — the raised
+        // rendering is `crelation : Type 2 -> Type 2`, Coq-lane cumulativity
+        // absorbs the `Type 1` argument `A`, and the self-application
+        // `crelation (crelation A)` fits.
+        let input = format!("{RAW_VAR_CRELATION}\n{RAW_VAR_REL2}");
+        let on = with_var_relevel(true, || verify_with_mining(&input));
+        assert!(
+            on.kernel_verified_names
+                .contains(&"SerTop.rel2".to_string()),
+            "rel2 must kernel-verify under the Var raise; fallbacks: {:?}, failures: {:?}",
+            on.axiom_fallback_names,
+            on.failures
+        );
+        assert!(
+            on.kernel_verified_names
+                .contains(&"Coq.Classes.CRelationClasses.crelation".to_string()),
+            "crelation itself re-checks at the raised rendering; failures: {:?}",
+            on.failures
+        );
+        let off = with_var_relevel(false, || verify_with_mining(&input));
+        assert!(
+            !off.kernel_verified_names
+                .contains(&"SerTop.rel2".to_string()),
+            "negative control: under the uniform collapse rel2 keeps today's rejection"
+        );
+    }
+
+    /// ... `complement (R : crelation A) : crelation A := fun x y => R x y -> False` ...
+    const RAW_VAR_COMPLEMENT: &str = r#"(CoqConstant Coq.Classes.CRelationClasses.complement (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Prod ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 9) (data SProp))))))) ((Rel 2))))) (Lambda ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Lambda ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (Lambda ((binder_name (Name (Id x))) (binder_relevance Relevant)) (Rel 2) (Lambda ((binder_name (Name (Id y))) (binder_relevance Relevant)) (Rel 3) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (App (Rel 3) ((Rel 2) (Rel 1))) (Ind (((MutInd (KerName (MPfile (DirPath ((Id Logic) (Id Init) (Id Coq)))) (Id False)) ()) 0) (Instance (() ()))))))))))"#;
+    /// ... and the definitional class `Irreflexive (R : crelation A) :=
+    /// Reflexive (complement R)` — an ALIAS value whose result sort is the
+    /// multi-arm `Type@{max(u,v)}` on both sides.
+    const RAW_VAR_IRREFLEXIVE: &str = r#"(CoqConstant Coq.Classes.CRelationClasses.Irreflexive (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Prod ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (Sort (Type ((((hash 9) (data SProp)) 0) (((hash 14) (data (Var 0))) 0)))))) (Lambda ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Lambda ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 1))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id Reflexive)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 9) (data SProp))))))) ((Rel 2) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id complement)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 2) (Rel 1))))))))"#;
+
+    /// `Coq.Init.Logic.False`, so `complement`'s body `R x y -> False` has a
+    /// determinable (`Prop`) sort in the fixture exactly as in the corpus.
+    const RAW_FALSE_IND: &str =
+        r#"(CoqInductive Coq.Init.Logic.False 0 (Sort Prop) (NumParams 0))"#;
+
+    #[test]
+    fn test_miner_var_multi_arm_alias_result_links_instead_of_pinning() {
+        // Measured root cause of the first gate cycle: `Irreflexive`'s alias
+        // value fell into the alias rule's fail-closed "pin every arm" branch
+        // (only single-uid result sorts were linked), pinning `Reflexive.u/v`
+        // and poisoning the whole crelation cluster BACKWARD (`Equivalence.u`,
+        // `Equivalence_Transitive.u`, `crelation.u`). With the var-keyed
+        // multi-arm link, `iffT_Reflexive`'s floor raises `Reflexive.u` and
+        // `Irreflexive.u` follows in lockstep; nothing is pinned.
+        let input = format!(
+            "{RAW_FALSE_IND}\n{RAW_VAR_CRELATION}\n{RAW_VAR_REFLEXIVE}\n{RAW_VAR_COMPLEMENT}\n{RAW_VAR_IRREFLEXIVE}\n{RAW_VAR_IFFT_REFLEXIVE}"
+        );
+        let bases = with_var_relevel(true, || mine(&input));
+        let entries = bases.raised_entries();
+        assert_eq!(bases.raised_base(REFL_U), Some(2), "{entries:?}");
+        assert_eq!(
+            bases.raised_base("Coq.Classes.CRelationClasses.Irreflexive.__coq_var_level__/0"),
+            Some(2),
+            "{entries:?}"
+        );
+        assert_eq!(bases.raised_base(CREL_U), Some(2), "{entries:?}");
+        assert_eq!(bases.raised_base(CREL_V), None, "{entries:?}");
+    }
+
+    /// `respectful (R : crelation A) (R' : crelation B) : crelation (A -> B)`
+    /// (the `==>` combinator; value = the `Eval compute`d λ-telescope ending in
+    /// a `Π`) ...
+    const RAW_VAR_RESPECTFUL: &str = r#"(CoqConstant Coq.Classes.CMorphisms.respectful (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Prod ((binder_name (Name (Id B))) (binder_relevance Relevant)) (Sort (Type ((((hash 16) (data (Var 2))) 0)))) (Prod ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 2))) (Prod ((binder_name (Name (Id R'))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 16) (data (Var 2))) ((hash 17) (data (Var 3)))))))) ((Rel 2))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 18) (data (Var 4))) ((hash 19) (data (Var 5)))))))) ((Prod ((binder_name Anonymous) (binder_relevance Relevant)) (Rel 4) (Rel 4)))))))) (Lambda ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 14) (data (Var 0))) 0)))) (Lambda ((binder_name (Name (Id B))) (binder_relevance Relevant)) (Sort (Type ((((hash 16) (data (Var 2))) 0)))) (Lambda ((binder_name (Name (Id R))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Rel 2))) (Lambda ((binder_name (Name (Id R'))) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 16) (data (Var 2))) ((hash 17) (data (Var 3)))))))) ((Rel 2))) (Lambda ((binder_name (Name (Id f))) (binder_relevance Relevant)) (Prod ((binder_name (Name (Id x))) (binder_relevance Relevant)) (Rel 4) (Rel 4)) (Lambda ((binder_name (Name (Id g))) (binder_relevance Relevant)) (Prod ((binder_name (Name (Id x))) (binder_relevance Relevant)) (Rel 5) (Rel 5)) (Prod ((binder_name (Name (Id x))) (binder_relevance Relevant)) (Rel 6) (Prod ((binder_name (Name (Id y))) (binder_relevance Relevant)) (Rel 7) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (App (Rel 6) ((Rel 2) (Rel 1))) (App (Rel 6) ((App (Rel 5) ((Rel 3))) (App (Rel 4) ((Rel 2)))))))))))))))"#;
+    /// ... and `proper_proper : Proper (relation_equivalence ==> eq ==> iffT)
+    /// (@Proper A)` (statement only), which applies `respectful` AT `A :=
+    /// crelation A'` — a `Type 2` argument into `respectful`'s `Type 1` binder.
+    const RAW_VAR_PROPER_PROPER_AXIOM: &str = r#"(CoqAxiom Coq.Classes.CMorphisms.proper_proper (Prod ((binder_name (Name (Id A))) (binder_relevance Relevant)) (Sort (Type ((((hash 20) (data (Var 6))) 0)))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CMorphisms) (Id Classes) (Id Coq)))) (Id Proper)) ()) (Instance (() (((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((Prod ((binder_name Anonymous) (binder_relevance Relevant)) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 20) (data (Var 6))) ((hash 21) (data (Var 7)))))))) ((Rel 1))) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (Rel 2) (Sort (Type ((((hash 21) (data (Var 7))) 0)))))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CMorphisms) (Id Classes) (Id Coq)))) (Id respectful)) ()) (Instance (() (((hash 16) (data (Var 2))) ((hash 17) (data (Var 3))) ((hash 18) (data (Var 4))) ((hash 19) (data (Var 5))) ((hash 14) (data (Var 0))) ((hash 15) (data (Var 1)))))))) ((App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id crelation)) ()) (Instance (() (((hash 20) (data (Var 6))) ((hash 21) (data (Var 7)))))))) ((Rel 1))) (Prod ((binder_name Anonymous) (binder_relevance Relevant)) (Rel 1) (Sort (Type ((((hash 21) (data (Var 7))) 0))))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id relation_equivalence)) ()) (Instance (() (((hash 20) (data (Var 6))) ((hash 16) (data (Var 2))) ((hash 17) (data (Var 3))) ((hash 21) (data (Var 7)))))))) ((Rel 1))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CMorphisms) (Id Classes) (Id Coq)))) (Id respectful)) ()) (Instance (() (((hash 20) (data (Var 6))) ((hash 9) (data SProp)) ((hash 22) (data (Var 8))) ((hash 21) (data (Var 7))) ((hash 18) (data (Var 4))) ((hash 19) (data (Var 5)))))))) ((Rel 1) (Sort (Type ((((hash 21) (data (Var 7))) 0)))) (App (Ind (((MutInd (KerName (MPfile (DirPath ((Id Logic) (Id Init) (Id Coq)))) (Id eq)) ()) 0) (Instance (() ())))) ((Rel 1))) (Const ((Constant (KerName (MPfile (DirPath ((Id CRelationClasses) (Id Classes) (Id Coq)))) (Id iffT)) ()) (Instance (() (((hash 21) (data (Var 7))) ((hash 21) (data (Var 7)))))))))))) (App (Const ((Constant (KerName (MPfile (DirPath ((Id CMorphisms) (Id Classes) (Id Coq)))) (Id Proper)) ()) (Instance (() (((hash 20) (data (Var 6))) ((hash 21) (data (Var 7)))))))) ((Rel 1)))))))"#;
+
+    #[test]
+    fn test_miner_var_type_former_under_fixed_codomain_anchors_without_poisoning_sources() {
+        // Measured gate cycle 2: `proper_proper`'s site raised `respectful.u`
+        // (A) and `.w` (B) to 2, the value's `Π x y : A, …` then outgrew the
+        // codomain `crelation (A -> B)` whose level is fixed by `crelation`'s
+        // single rendering, the kernel rejected `respectful`, and 32 `Proper
+        // (_ ==> _)` consumers fell with it. The anchor keeps `respectful`'s
+        // binders at the default; the site's edges are broken-site edges
+        // (already rejected at the default), so the anchor does NOT poison
+        // `crelation.u` backward — the self-application raise survives.
+        let input = format!(
+            "{RAW_VAR_CRELATION}\n{RAW_VAR_RELATION_EQUIVALENCE_AXIOM}\n{RAW_VAR_RESPECTFUL}\n{RAW_VAR_PROPER_PROPER_AXIOM}"
+        );
+        let bases = with_var_relevel(true, || mine(&input));
+        let entries = bases.raised_entries();
+        assert_eq!(
+            bases.raised_base("Coq.Classes.CMorphisms.respectful.__coq_var_level__/0"),
+            None,
+            "{entries:?}"
+        );
+        // `B`'s level does not enter the body's sort (`f x : B` is an
+        // element), so `respectful.w` is free to follow its use sites.
+        assert_eq!(bases.raised_base(CREL_U), Some(2), "{entries:?}");
+        assert_eq!(bases.raised_base(CREL_V), None, "{entries:?}");
     }
 }

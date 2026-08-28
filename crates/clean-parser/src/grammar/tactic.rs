@@ -577,12 +577,50 @@ impl Parser {
         Ok(SurfaceTactic::Conv(span, loc, tacs))
     }
 
+    /// Consume Lean's `optConfig` boolean options — `+ident` — at the head of a
+    /// tactic's argument region, returning how many were eaten.
+    ///
+    /// `simp +contextual`, `simp +arith only [foo]`, `decide +kernel`,
+    /// `grind +ring` are one grammar (`Lean.Parser.Tactic.optConfig`), and the
+    /// `+` there is NOT a term operator. Measured on mathlib4 `43ad0e9d2`:
+    /// **832 sites** (767 `simp`, 38 `decide`, 19 `grind`, 8 `simp_all`), with
+    /// the option list always BEFORE `only` (191 × `simp +x only`, 0 ×
+    /// `simp only +x`), which is the order Lean's grammar fixes.
+    ///
+    /// This exists because the argument region used to reach the TERM grammar,
+    /// where a no-op prefix `+` quietly returned its operand — so `+contextual`
+    /// became the term `contextual` and the option was dropped without a word.
+    /// Deleting that prefix (the `→+` misparse) correctly makes a leading `+`
+    /// in a term a loud error, which is exactly why the config syntax needs its
+    /// own rule here rather than an accidental one over there. Since Lean has
+    /// no prefix `+` in terms, a `+` at this position can only be a config
+    /// option, so the rule is exact rather than a guess.
+    ///
+    /// The option NAMES are consumed and discarded — the tactics do not yet
+    /// interpret them, which is the pre-existing state (they were dropped
+    /// before too, just via a misparse). Only the `+ident` form is handled;
+    /// `-ident` is left alone because in argument position it is
+    /// indistinguishable here from a negated term (`exact -h`), and no measured
+    /// mathlib4 site needs it.
+    pub(super) fn eat_tactic_config_items(&mut self) -> usize {
+        let mut eaten = 0;
+        while self.check(&TokenKind::Plus) && matches!(self.peek_kind(1), Some(TokenKind::Ident(_)))
+        {
+            self.advance(); // `+`
+            self.advance(); // the option name
+            eaten += 1;
+        }
+        eaten
+    }
+
     /// Parse arguments for a named tactic, using pattern-aware parsing when
     /// a [`TacticArgPattern`] is available for this tactic name.
     ///
     /// Falls back to [`parse_named_tactic_args`] (generic expression list)
     /// when no pattern is registered.
     fn parse_named_tactic_args_for(&mut self, name: &str) -> Result<Vec<SurfaceExpr>, ParseError> {
+        // `optConfig` precedes every argument form in Lean's tactic grammar.
+        self.eat_tactic_config_items();
         match self.tactic_pattern(name).cloned() {
             Some(TacticArgPattern::Nullary) => Ok(Vec::new()),
             Some(TacticArgPattern::TermArg) => {

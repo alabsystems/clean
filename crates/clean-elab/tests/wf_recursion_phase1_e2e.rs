@@ -62,6 +62,33 @@ fn register_one(env: &mut Environment, source: &str) -> Result<ElabResult, ElabE
     elaborate_decl_and_register(env, &processed)
 }
 
+/// Is the definition value a `WellFounded.fix` application (under any leading
+/// parameter lambdas)?
+///
+/// STRUCTURAL on purpose. This assertion used to read
+/// `format!("{value:?}").contains("WellFounded.fix")`, which **can never be
+/// true**: `Name`'s derived `Debug` prints its segments as a list
+/// (`suffix: ["WellFounded", "fix"]`), so the dotted spelling does not occur
+/// anywhere in the rendering. Both admitting tests in this file were therefore
+/// RED at every commit since they were written — a gate that cannot pass is a
+/// gate that never gated. (Measured 2026-08-22 at `f391bd466`, before and
+/// after the R3 change, on the unmodified tree.)
+fn head_is_wf_fix(value: &clean_kernel::Expr) -> bool {
+    use clean_kernel::ExprKind;
+    let mut cursor = value.clone();
+    loop {
+        match cursor.kind() {
+            ExprKind::Lam(_, _, body) => cursor = clean_kernel::Expr::clone(body),
+            ExprKind::MData(_, inner) => cursor = clean_kernel::Expr::clone(inner),
+            _ => break,
+        }
+    }
+    matches!(
+        cursor.get_app_fn().kind(),
+        ExprKind::Const(name, _) if *name == Name::from_string("WellFounded.fix")
+    )
+}
+
 /// Assert `name` registered as a kernel-checked, sorry-free `WellFounded.fix`
 /// definition whose transitive axiom closure is foundational-only.
 fn assert_wf_definition_registered(env: &Environment, name: &str) {
@@ -76,10 +103,9 @@ fn assert_wf_definition_registered(env: &Environment, name: &str) {
         !value.has_sorry(),
         "{name} must be sorry-free, got {value:?}"
     );
-    let printed = format!("{value:?}");
     assert!(
-        printed.contains("WellFounded.fix"),
-        "{name} must be lowered through WellFounded.fix, got {printed}"
+        head_is_wf_fix(value),
+        "{name} must be lowered through WellFounded.fix, got {value:?}"
     );
     // "Prove"-grade: nothing outside the foundational axioms in the closure.
     let foundational = ["propext", "Quot.sound", "Classical.choice"];

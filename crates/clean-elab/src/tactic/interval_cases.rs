@@ -7,7 +7,7 @@
 //! Extracted from `finite_cases.rs` for file-size compliance.
 
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprKind, Level};
+use clean_kernel::{Expr, ExprKind, FVarId, Level};
 
 use super::finite_cases::{make_nat_literal, substitute_fvar};
 use super::finite_cases_proof::build_or_elim_chain;
@@ -110,6 +110,13 @@ fn build_interval_goals(
             tactic: "interval_cases".into(),
             detail: "interval size does not fit in memory".into(),
         })?;
+    // GOAL-DERIVED minting (see existential.rs by_cases): the k-th non-final
+    // branch's equality local is bound by the k-th true-side lambda of the
+    // Or.rec chain (under k false-branch binders), so it must carry id
+    // `base + k` of the destination meta's positional window — the global
+    // cursor drifts past that window whenever anything minted since the
+    // goal's meta was created.
+    let mut eq_fvar_id = state.goal_binder_base(goal);
     for (case_idx, value) in (lower..=upper).enumerate() {
         let value_expr = make_int_literal(value);
         let mut new_ctx = goal.local_ctx.clone();
@@ -120,8 +127,11 @@ fn build_interval_goals(
         // current fallback has no constructive proof of `h = final_value`, so
         // granting that equality would fabricate local authority.
         if case_idx + 1 < value_count {
+            let eq_fvar = FVarId::new(eq_fvar_id);
+            eq_fvar_id += 1;
+            state.next_fvar = state.next_fvar.max(eq_fvar_id);
             new_ctx.push(LocalDecl {
-                fvar: state.fresh_fvar(),
+                fvar: eq_fvar,
                 name: format!("{hyp_name}_eq"),
                 ty: make_equality_type(
                     &Expr::const_(Name::from_string("Nat"), vec![]),

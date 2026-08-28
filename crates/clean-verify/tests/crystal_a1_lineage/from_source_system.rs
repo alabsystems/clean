@@ -42,7 +42,9 @@
 //! Structural correspondence, not a semantic proof that Clean's `IRInst`
 //! encoding means what trust-ir's does. The lineage digest is RECORDED, not
 //! recomputed from the artifact here; verifying it at flip time is the
-//! compiler's job. And `ir_fs_module` is hand-transcribed: this makes an
+//! compiler's job. And since 2026-08-21 `ir_fs_module` is MINTED rather than
+//! hand-transcribed (`tests/crystal_a2_mint_fs.rs`, `src/ir_mint`): this gate
+//! reads the same generated script the spec replays. Historically: this made an
 //! incorrect transcription FAIL, it does not make a correct one automatic.
 
 use super::*;
@@ -57,7 +59,9 @@ fn from_source_system_proved_module_matches_the_emitted_artifact() {
     );
     let emitted = parse_emitted(&text);
     let clean = parse_clean(
-        &clean_block_sources("eval_ir_from_source.rs", "const SRC_IR_FS_B"),
+        // The registered blocks are the MINTED script (crystal A2,
+        // `src/ir_mint`) as of 2026-08-21 — the same lines the spec replays.
+        &clean_block_sources("generated/ir_fs.defs.txt", "def ir_fs_b"),
         "def ir_fs_b",
     );
 
@@ -212,7 +216,7 @@ fn from_source_system_proved_module_matches_the_emitted_artifact() {
     // uncompared on seven of the nine chains until the 2026-08-16 lane audit.
     assert_entry_params(
         &text,
-        &clean_block_sources("eval_ir_from_source.rs", "const SRC_IR_FS_FUNC"),
+        &clean_block_sources("generated/ir_fs.defs.txt", "def ir_fs_func"),
         "from_source_system",
     );
     assert_lanes(&emitted, &clean, "from_source_system");

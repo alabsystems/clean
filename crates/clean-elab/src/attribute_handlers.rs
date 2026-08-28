@@ -33,7 +33,7 @@ pub const DEFAULT_INSTANCE_PRIORITY: u32 = 1000;
 
 /// Information about a registered default instance.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DefaultInstanceInfo {
+pub(crate) struct DefaultInstanceInfo {
     /// The declaration name registered as a default instance.
     pub name: Name,
     /// Priority for resolution ordering (higher = tried first).
@@ -81,7 +81,7 @@ impl AttributeHandlerRegistry {
 
     /// Number of registered coercions.
     #[must_use]
-    pub fn coercion_count(&self) -> usize {
+    pub(crate) fn coercion_count(&self) -> usize {
         self.coercions.len()
     }
 
@@ -99,13 +99,13 @@ impl AttributeHandlerRegistry {
     // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
     // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
     #[allow(dead_code)]
-    pub fn init_fns(&self) -> impl Iterator<Item = &Name> {
+    pub(crate) fn init_fns(&self) -> impl Iterator<Item = &Name> {
         self.init_fns.keys()
     }
 
     /// Number of registered init functions.
     #[must_use]
-    pub fn init_fn_count(&self) -> usize {
+    pub(crate) fn init_fn_count(&self) -> usize {
         self.init_fns.len()
     }
 
@@ -121,7 +121,7 @@ impl AttributeHandlerRegistry {
 
     /// Get default instance info for a declaration, if registered.
     #[must_use]
-    pub fn get_default_instance(&self, name: &Name) -> Option<&DefaultInstanceInfo> {
+    pub(crate) fn get_default_instance(&self, name: &Name) -> Option<&DefaultInstanceInfo> {
         self.default_instances.get(name)
     }
 
@@ -132,7 +132,7 @@ impl AttributeHandlerRegistry {
 
     /// Number of registered default instances.
     #[must_use]
-    pub fn default_instance_count(&self) -> usize {
+    pub(crate) fn default_instance_count(&self) -> usize {
         self.default_instances.len()
     }
 
@@ -147,13 +147,13 @@ impl AttributeHandlerRegistry {
     }
 
     /// Iterate over all registered match pattern names.
-    pub fn match_patterns(&self) -> impl Iterator<Item = &Name> {
+    pub(crate) fn match_patterns(&self) -> impl Iterator<Item = &Name> {
         self.match_patterns.keys()
     }
 
     /// Number of registered match patterns.
     #[must_use]
-    pub fn match_pattern_count(&self) -> usize {
+    pub(crate) fn match_pattern_count(&self) -> usize {
         self.match_patterns.len()
     }
 }
@@ -185,7 +185,7 @@ fn validate_decl_exists(decl_name: &Name, env: &Environment) -> Result<(), ElabE
 ///
 /// - [`ElabError::UnknownIdent`] if `decl_name` is not in `env`.
 /// - [`ElabError::Unsupported`] if `decl_name` is already registered as a coercion.
-pub fn handle_coe(
+pub(crate) fn handle_coe(
     decl_name: &Name,
     env: &Environment,
     registry: &mut AttributeHandlerRegistry,
@@ -211,7 +211,7 @@ pub fn handle_coe(
 ///
 /// - [`ElabError::UnknownIdent`] if `decl_name` is not in `env`.
 /// - [`ElabError::Unsupported`] if `decl_name` is already registered as an init function.
-pub fn handle_init(
+pub(crate) fn handle_init(
     decl_name: &Name,
     env: &Environment,
     registry: &mut AttributeHandlerRegistry,
@@ -238,7 +238,7 @@ pub fn handle_init(
 ///
 /// - [`ElabError::UnknownIdent`] if `decl_name` is not in `env`.
 /// - [`ElabError::Unsupported`] if `decl_name` is already registered as a default instance.
-pub fn handle_default_instance(
+pub(crate) fn handle_default_instance(
     decl_name: &Name,
     env: &Environment,
     registry: &mut AttributeHandlerRegistry,
@@ -275,7 +275,7 @@ pub fn handle_default_instance(
 ///
 /// - [`ElabError::UnknownIdent`] if `decl_name` is not in `env`.
 /// - [`ElabError::Unsupported`] if `decl_name` is already registered as a match pattern.
-pub fn handle_match_pattern(
+pub(crate) fn handle_match_pattern(
     decl_name: &Name,
     env: &Environment,
     registry: &mut AttributeHandlerRegistry,
@@ -310,7 +310,7 @@ pub type UserAttributeHandler =
 /// this is the Phase 3 extension point that lets a project register its own
 /// `@[myAttr]` behaviour.
 #[derive(Clone, Default)]
-pub struct UserAttributeRegistry {
+pub(crate) struct UserAttributeRegistry {
     handlers: HashMap<String, UserAttributeHandler>,
 }
 
@@ -343,12 +343,12 @@ impl UserAttributeRegistry {
 
     /// Number of registered user attributes.
     #[must_use]
-    pub fn registered_count(&self) -> usize {
+    pub(crate) fn registered_count(&self) -> usize {
         self.handlers.len()
     }
 
     /// Names of all registered user attributes.
-    pub fn attribute_names(&self) -> impl Iterator<Item = &str> {
+    pub(crate) fn attribute_names(&self) -> impl Iterator<Item = &str> {
         self.handlers.keys().map(String::as_str)
     }
 

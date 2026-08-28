@@ -102,7 +102,7 @@ impl ParsedLevel {
 
 impl<'a> CompactedRegion<'a> {
     /// Read a Level object at a file offset
-    pub fn read_level_at(&self, offset: usize) -> OleanResult<ParsedLevel> {
+    pub(crate) fn read_level_at(&self, offset: usize) -> OleanResult<ParsedLevel> {
         self.read_level_at_depth(offset, 0)
     }
 

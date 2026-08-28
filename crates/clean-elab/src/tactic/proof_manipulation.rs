@@ -229,9 +229,7 @@ fn cases_core(
                     let dep_names: Vec<String> = goal
                         .local_ctx
                         .iter()
-                        .filter(|d| {
-                            d.fvar != hyp_fvar && d.fvar != *b_fvar && d.fvar != *beta_fvar
-                        })
+                        .filter(|d| d.fvar != hyp_fvar && d.fvar != *b_fvar && d.fvar != *beta_fvar)
                         .filter(|d| {
                             let fvars = crate::tactic::hypothesis::collect_fvars(&d.ty);
                             fvars.contains(b_fvar) || fvars.contains(beta_fvar)
@@ -245,10 +243,9 @@ fn cases_core(
                         if reverted.iter().any(|r| r == name) {
                             continue;
                         }
-                        match crate::tactic::specialize_generalize::revert_with_deps(state, name) {
-                            Ok(names) => reverted.extend(names),
-                            Err(e) => return Err(e),
-                        }
+                        reverted.extend(crate::tactic::specialize_generalize::revert_with_deps(
+                            state, name,
+                        )?);
                     }
                     // Re-read: `revert` replaced the goal.
                     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();

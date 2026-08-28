@@ -32,7 +32,14 @@ s=open(p).read()
 assert a in s and s.count(a)==1, "anchor must occur exactly once: %s" % a[:60]
 open(p,'w').write(s.replace(a,b,1))
 PY
-} || exit 9
+  rc=$?
+  # NOTE the binding: `|| exit 9` after a function DEFINITION binds to the
+  # always-zero definition, never to the calls — capture $? inside instead.
+  if [[ $rc -ne 0 ]]; then
+    echo "FATAL: substitution failed (anchor did not occur exactly once): $2"
+    exit 9
+  fi
+}
 
 echo "== baseline =="
 expect PASS "baseline: eval_ir green"

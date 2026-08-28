@@ -1221,15 +1221,23 @@ impl Environment {
         rejected
     }
 
-    /// Upgrade axiom stubs to definitions with values.
+    /// Upgrade axiom stubs to definitions with values — UNCHECKED (test-only).
     ///
-    /// When `.olean.private` provides the full definition for a constant that the
-    /// base `.olean` exported as an axiom stub (Lean 4.29+ module system), this
-    /// method replaces the existing axiom (no value) with the definition (with
-    /// value, reducibility hints, etc.). Constants whose existing entry already
-    /// has a value are left unchanged (not overwritten).
+    /// DEMOTED 2026-08-24 (R1-STUB, census row `axiom-stub-upgrade`): every
+    /// production caller now goes through
+    /// [`upgrade_axiom_stubs_checked`](Self::upgrade_axiom_stubs_checked),
+    /// which anchors the incoming record to the stub's type and kernel-checks
+    /// the incoming value. This variant injects a δ-unfoldable VALUE with no
+    /// check at all, so it is compiled only for test builds (the `test` cfg or
+    /// the empty `test-fixtures` feature enabled by downstream
+    /// dev-dependencies) — a production call no longer compiles.
     ///
-    /// Part of #3134.
+    /// Original contract (#3134): when `.olean.private` provides the full
+    /// definition for a constant that the base `.olean` exported as an axiom
+    /// stub (Lean 4.29+ module system), replace the existing axiom (no value)
+    /// with the definition (value, reducibility hints, etc.). Constants whose
+    /// existing entry already has a value are left unchanged (not overwritten).
+    #[cfg(any(test, feature = "test-fixtures"))]
     pub(crate) fn upgrade_axiom_stubs(
         &mut self,
         constants: impl Iterator<Item = ConstantInfo>,
@@ -1252,35 +1260,244 @@ impl Environment {
         upgraded
     }
 
-    /// Bulk register inductives, skipping duplicate checks.
+    /// Upgrade axiom stubs to definitions with values, WITH kernel re-checking
+    /// (R1-STUB, closing census row `axiom-stub-upgrade` per the G4
+    /// checked-tier precedent [`extend_constants_checked`](Self::extend_constants_checked)).
     ///
-    /// This is more efficient than calling `register_inductive_unchecked` in a loop.
-    /// Constants are also added for each inductive.
-    #[inline]
-    /// ENSURES: Returns a value consistent with the function's documented semantics.
-    /// REQUIRES: none
-    pub(crate) fn extend_inductives_unchecked(
+    /// The production lane for the `.olean.private` stub-upgrade healing
+    /// (#3134) and the mathverse per-constant demand-load. Unlike the retired
+    /// unchecked door — which wholesale-replaced the resident entry, letting
+    /// the reducer δ-unfold an arbitrary injected value — every record here
+    /// must earn its swap:
+    ///
+    ///   1. **The stub must exist.** A record whose name has no resident entry
+    ///      is refused ([`EnvError::UpgradeTargetMissing`]): an upgrade against
+    ///      nothing has no type anchor.
+    ///   2. **Structural tier (unconditional).**
+    ///      [`validate_constant_info_structural`](Self::validate_constant_info_structural)
+    ///      — no leaked fvar/mvar, no duplicate/out-of-scope `Level::Param`.
+    ///   3. **Type anchor.** The incoming type must BE the stub's type,
+    ///      compared alpha-insensitively on positional level params (same
+    ///      arity; structural equality first, kernel `is_def_eq` fallback —
+    ///      the same discipline as `upgrade_axiom_to_checked_decl`). Replacing
+    ///      the entry must never change the constant's stated type
+    ///      ([`EnvError::UpgradeTypeMismatch`]).
+    ///   4. **Kernel type-check (dependency-tolerant, exactly G4).**
+    ///      `infer_sort` on the incoming type and `check_type(value, type)` on
+    ///      the incoming value — the `add_decl` machinery. The SOLE tolerated
+    ///      outcome is `TypeError::UnknownConst`: a forward/external reference
+    ///      legitimately unresolvable mid-load (the per-constant demand-load
+    ///      assembles its closure incrementally), not a smuggle. Any other
+    ///      type error refuses the record.
+    ///
+    /// A refused record REFUSES fail-closed: the stub stays exactly as it was,
+    /// nothing registers, and the `(name, error)` pair is returned to the
+    /// caller for loud accounting. Records that are silent no-ops under the
+    /// original contract stay silent no-ops: an already-value-bearing resident
+    /// is never overwritten, and a value-less incoming record (e.g. a
+    /// policy-elided proof body) carries nothing to install.
+    ///
+    /// Successful swaps install the incoming `ConstantInfo` verbatim
+    /// (preserving imported reducibility hints) and stamp it exactly as the G4
+    /// checked lane stamps its records (`insert_constants_raw`'s conservative
+    /// `Unchecked` — the `UnknownConst` tolerance means a record is not
+    /// GUARANTEED fully checked, so the stamp never over-claims).
+    ///
+    /// Returns `(upgraded_count, refused_records)`.
+    pub(crate) fn upgrade_axiom_stubs_checked(
         &mut self,
-        inductives: impl Iterator<Item = InductiveVal>,
+        constants: impl Iterator<Item = ConstantInfo>,
+    ) -> (usize, Vec<(Name, EnvError)>) {
+        use crate::tc::TypeError;
+
+        // A kernel type error is FATAL unless it is a bare `UnknownConst` (an
+        // unresolved forward/external dependency, not a smuggle) — the exact
+        // G4 tolerance of `extend_constants_checked`.
+        fn is_tolerable(e: &TypeError) -> bool {
+            matches!(e, TypeError::UnknownConst(_))
+        }
+
+        let mut upgraded = 0usize;
+        let mut rejected: Vec<(Name, EnvError)> = Vec::new();
+        for ci in constants {
+            let name = ci.name.clone();
+
+            // 1. The stub must exist.
+            let Some(existing) = self.constants.get(&name) else {
+                rejected.push((name.clone(), EnvError::UpgradeTargetMissing { name }));
+                continue;
+            };
+            // Silent no-op lane (the original #3134 contract): never overwrite
+            // a value-bearing resident; nothing to install without a value.
+            if existing.value.is_some() || ci.value.is_none() {
+                continue;
+            }
+
+            // 3. Type anchor (arity first; borrow of `existing` ends at the
+            // clones below, freeing `self` for the TypeChecker).
+            if existing.level_params.len() != ci.level_params.len() {
+                let detail = format!(
+                    "level-param arity {} differs from existing arity {}",
+                    ci.level_params.len(),
+                    existing.level_params.len()
+                );
+                rejected.push((name.clone(), EnvError::UpgradeTypeMismatch { name, detail }));
+                continue;
+            }
+            let existing_type = existing.type_.clone();
+            let existing_level_params = existing.level_params.clone();
+
+            // 2. Structural tier.
+            if let Err(e) = self.validate_constant_info_structural(&ci) {
+                rejected.push((name, e));
+                continue;
+            }
+
+            // 3. (continued) Positional alpha-insensitive type identity.
+            let incoming_type = if existing_level_params == ci.level_params {
+                ci.type_.clone()
+            } else {
+                let renaming: Vec<Level> = existing_level_params
+                    .iter()
+                    .map(|n| Level::param(n.clone()))
+                    .collect();
+                ci.type_
+                    .instantiate_level_params_direct(&ci.level_params, &renaming)
+            };
+            if existing_type != incoming_type {
+                let tc = TypeChecker::with_mode(self, self.mode());
+                if !tc.is_def_eq(&existing_type, &incoming_type) {
+                    rejected.push((
+                        name.clone(),
+                        EnvError::UpgradeTypeMismatch {
+                            name,
+                            detail: "declared type is not definitionally equal to the \
+                                     existing value-free constant's type"
+                                .to_string(),
+                        },
+                    ));
+                    continue;
+                }
+            }
+
+            // 4. Kernel type-check, `UnknownConst`-tolerant (G4). The stub
+            // stays resident during the check — the same posture as G4's
+            // insert-first batch re-check; a self-referencing value resolves
+            // to the stub's (identical) type, so the check stays consistent,
+            // and the conservative stamp below claims nothing stronger.
+            {
+                let tc = TypeChecker::with_mode(self, self.mode());
+                if let Err(e) = tc.infer_sort(&ci.type_) {
+                    if !is_tolerable(&e) {
+                        rejected
+                            .push((name.clone(), EnvError::TypeCheckFailed { name, source: e }));
+                        continue;
+                    }
+                }
+                let mut value_error: Option<TypeError> = None;
+                if let Some(value) = ci.value.as_ref() {
+                    if let Err(e) = tc.check_type(value, &ci.type_) {
+                        if !is_tolerable(&e) {
+                            value_error = Some(e);
+                        }
+                    }
+                }
+                if let Some(e) = value_error {
+                    rejected.push((name.clone(), EnvError::TypeCheckFailed { name, source: e }));
+                    continue;
+                }
+            }
+
+            // The swap: install the checked record; stamp per the G4 lane.
+            self.constants.insert(name.clone(), ci);
+            self.declaration_verification
+                .insert(name, super::DeclarationVerification::Unchecked);
+            upgraded += 1;
+        }
+        if upgraded > 0 {
+            self.generation += 1;
+        }
+        (upgraded, rejected)
+    }
+
+    /// O(1) structural validation shared by the inductive-family structural
+    /// tier (R1-IND) — the exact check set of
+    /// [`validate_constant_info_structural`](Self::validate_constant_info_structural),
+    /// adapted per payload type (the caller passes every expression the record
+    /// carries: the type, plus each recursor rule's `rhs`, which participates
+    /// in ι-reduction and is exactly where a leaked fvar/mvar would smuggle):
+    /// 1. No duplicate universe level parameters
+    /// 2. No expression or level metavariables in any carried expression
+    /// 3. No free variables (FVar) in any carried expression
+    /// 4. All `Level::Param` references in the declared `level_params`
+    fn validate_family_record_structural(
+        name: &Name,
+        level_params: &[Name],
+        exprs: &[&Expr],
+    ) -> Result<(), EnvError> {
+        // Check 1: duplicate universe level parameters
+        for (i, p) in level_params.iter().enumerate() {
+            if level_params[..i].contains(p) {
+                return Err(EnvError::DuplicateLevelParam {
+                    name: name.clone(),
+                    param: p.clone(),
+                });
+            }
+        }
+        for &expr in exprs {
+            // Check 2: no metavariables
+            if expr.has_expr_mvar_quick() || expr.has_level_mvar_quick() {
+                return Err(EnvError::ContainsMetavar { name: name.clone() });
+            }
+            // Check 3: no free variables
+            if expr.has_fvar_quick() {
+                return Err(EnvError::ContainsFreeVar {
+                    name: name.clone(),
+                    fvars: super::types::collect_fvar_ids_for_diagnostics(&[expr]),
+                });
+            }
+            // Check 4: undefined level params
+            if let Some(undef) = super::decl_add::find_undef_level_param(expr, level_params) {
+                return Err(EnvError::UndefinedLevelParam {
+                    name: name.clone(),
+                    param: undef,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Raw bulk-insert of inductives (constants map + inductives map + stamp +
+    /// generation bump). Shared implementation for `extend_inductives_unchecked`
+    /// (the demoted test-only bypass) and `extend_inductives_structural` (the
+    /// R1-IND structural tier, which validates each record first). Private on
+    /// purpose: this is the un-gated primitive, so only the accounted lanes
+    /// may call it.
+    fn insert_inductives_raw(
+        &mut self,
+        inductives: Vec<InductiveVal>,
+        verification: super::DeclarationVerification,
+        caller: &'static str,
     ) {
-        let inductives: Vec<_> = inductives.collect();
+        #[cfg(not(debug_assertions))]
+        let _ = caller;
         #[cfg(debug_assertions)]
         {
             let mut batch_names = hashbrown::HashSet::new();
             for ind in &inductives {
                 debug_assert!(
                     !self.constants.contains_key(&ind.name),
-                    "extend_inductives_unchecked duplicate constant: {}",
+                    "{caller} duplicate constant: {}",
                     ind.name
                 );
                 debug_assert!(
                     !self.inductives.contains_key(&ind.name),
-                    "extend_inductives_unchecked duplicate inductive: {}",
+                    "{caller} duplicate inductive: {}",
                     ind.name
                 );
                 debug_assert!(
                     batch_names.insert(ind.name.clone()),
-                    "extend_inductives_unchecked duplicate inductive in batch: {}",
+                    "{caller} duplicate inductive in batch: {}",
                     ind.name
                 );
             }
@@ -1303,41 +1520,37 @@ impl Environment {
         self.inductives
             .extend(inductives.into_iter().map(|ind| (ind.name.clone(), ind)));
         for name in names {
-            self.declaration_verification
-                .insert(name, super::DeclarationVerification::Unchecked);
+            self.declaration_verification.insert(name, verification);
         }
         self.generation += 1;
     }
 
-    /// Bulk register constructors, skipping duplicate checks.
-    ///
-    /// This is more efficient than calling `register_constructor_unchecked` in a loop.
-    /// Constants are also added for each constructor.
-    #[inline]
-    /// ENSURES: Returns a value consistent with the function's documented semantics.
-    /// REQUIRES: none
-    pub(crate) fn extend_constructors_unchecked(
+    /// Raw bulk-insert of constructors — see [`insert_inductives_raw`](Self::insert_inductives_raw).
+    fn insert_constructors_raw(
         &mut self,
-        constructors: impl Iterator<Item = ConstructorVal>,
+        constructors: Vec<ConstructorVal>,
+        verification: super::DeclarationVerification,
+        caller: &'static str,
     ) {
-        let constructors: Vec<_> = constructors.collect();
+        #[cfg(not(debug_assertions))]
+        let _ = caller;
         #[cfg(debug_assertions)]
         {
             let mut batch_names = hashbrown::HashSet::new();
             for ctor in &constructors {
                 debug_assert!(
                     !self.constants.contains_key(&ctor.name),
-                    "extend_constructors_unchecked duplicate constant: {}",
+                    "{caller} duplicate constant: {}",
                     ctor.name
                 );
                 debug_assert!(
                     !self.constructors.contains_key(&ctor.name),
-                    "extend_constructors_unchecked duplicate constructor: {}",
+                    "{caller} duplicate constructor: {}",
                     ctor.name
                 );
                 debug_assert!(
                     batch_names.insert(ctor.name.clone()),
-                    "extend_constructors_unchecked duplicate constructor in batch: {}",
+                    "{caller} duplicate constructor in batch: {}",
                     ctor.name
                 );
             }
@@ -1363,41 +1576,37 @@ impl Environment {
                 .map(|ctor| (ctor.name.clone(), ctor)),
         );
         for name in names {
-            self.declaration_verification
-                .insert(name, super::DeclarationVerification::Unchecked);
+            self.declaration_verification.insert(name, verification);
         }
         self.generation += 1;
     }
 
-    /// Bulk register recursors, skipping duplicate checks.
-    ///
-    /// This is more efficient than calling `register_recursor_unchecked` in a loop.
-    /// Constants are also added for each recursor.
-    #[inline]
-    /// ENSURES: Returns a value consistent with the function's documented semantics.
-    /// REQUIRES: none
-    pub(crate) fn extend_recursors_unchecked(
+    /// Raw bulk-insert of recursors — see [`insert_inductives_raw`](Self::insert_inductives_raw).
+    fn insert_recursors_raw(
         &mut self,
-        recursors: impl Iterator<Item = RecursorVal>,
+        recursors: Vec<RecursorVal>,
+        verification: super::DeclarationVerification,
+        caller: &'static str,
     ) {
-        let recursors: Vec<_> = recursors.collect();
+        #[cfg(not(debug_assertions))]
+        let _ = caller;
         #[cfg(debug_assertions)]
         {
             let mut batch_names = hashbrown::HashSet::new();
             for rec in &recursors {
                 debug_assert!(
                     !self.constants.contains_key(&rec.name),
-                    "extend_recursors_unchecked duplicate constant: {}",
+                    "{caller} duplicate constant: {}",
                     rec.name
                 );
                 debug_assert!(
                     !self.recursors.contains_key(&rec.name),
-                    "extend_recursors_unchecked duplicate recursor: {}",
+                    "{caller} duplicate recursor: {}",
                     rec.name
                 );
                 debug_assert!(
                     batch_names.insert(rec.name.clone()),
-                    "extend_recursors_unchecked duplicate recursor in batch: {}",
+                    "{caller} duplicate recursor in batch: {}",
                     rec.name
                 );
             }
@@ -1420,10 +1629,169 @@ impl Environment {
         self.recursors
             .extend(recursors.into_iter().map(|rec| (rec.name.clone(), rec)));
         for name in names {
-            self.declaration_verification
-                .insert(name, super::DeclarationVerification::Unchecked);
+            self.declaration_verification.insert(name, verification);
         }
         self.generation += 1;
+    }
+
+    /// Bulk register inductives, skipping duplicate checks — UNCHECKED (test-only).
+    ///
+    /// DEMOTED 2026-08-24 (R1-IND, census row `ind-meta-bulk`): every
+    /// production caller now goes through
+    /// [`extend_inductives_structural`](Self::extend_inductives_structural).
+    /// This variant performs NO validation at all, so it is compiled only for
+    /// test builds (the `test` cfg or the empty `test-fixtures` feature
+    /// enabled by downstream dev-dependencies) — a production call no longer
+    /// compiles.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    #[inline]
+    pub(crate) fn extend_inductives_unchecked(
+        &mut self,
+        inductives: impl Iterator<Item = InductiveVal>,
+    ) {
+        self.insert_inductives_raw(
+            inductives.collect(),
+            super::DeclarationVerification::Unchecked,
+            "extend_inductives_unchecked",
+        );
+    }
+
+    /// Bulk register inductives with structural validation (R1-IND).
+    ///
+    /// The structural tier for the `.olean` import's inductive-metadata leg,
+    /// mirroring [`extend_constants_structural`](Self::extend_constants_structural):
+    /// each record passes the same O(1) checks (no duplicate level params, no
+    /// metavariables, no free variables, `Level::Param` scope) over every
+    /// expression it carries before insertion; a failing record is diverted to
+    /// the returned `Vec` and NEVER inserted (fail-closed refusal, named
+    /// error). Inserted records are stamped `StructuralOnly`.
+    ///
+    /// Duplicate name checking is NOT performed here — callers pre-filter
+    /// duplicates (as the import path already does).
+    pub(crate) fn extend_inductives_structural(
+        &mut self,
+        inductives: impl Iterator<Item = InductiveVal>,
+    ) -> Vec<(Name, EnvError)> {
+        let mut valid = Vec::new();
+        let mut rejected = Vec::new();
+        for ind in inductives {
+            match Self::validate_family_record_structural(
+                &ind.name,
+                &ind.level_params,
+                &[&ind.type_],
+            ) {
+                Ok(()) => valid.push(ind),
+                Err(e) => rejected.push((ind.name.clone(), e)),
+            }
+        }
+        self.insert_inductives_raw(
+            valid,
+            super::DeclarationVerification::StructuralOnly,
+            "extend_inductives_structural",
+        );
+        rejected
+    }
+
+    /// Bulk register constructors, skipping duplicate checks — UNCHECKED (test-only).
+    ///
+    /// DEMOTED 2026-08-24 (R1-IND, census row `ind-meta-bulk`): every
+    /// production caller now goes through
+    /// [`extend_constructors_structural`](Self::extend_constructors_structural).
+    /// See [`extend_inductives_unchecked`](Self::extend_inductives_unchecked)
+    /// for the gating rationale.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    #[inline]
+    pub(crate) fn extend_constructors_unchecked(
+        &mut self,
+        constructors: impl Iterator<Item = ConstructorVal>,
+    ) {
+        self.insert_constructors_raw(
+            constructors.collect(),
+            super::DeclarationVerification::Unchecked,
+            "extend_constructors_unchecked",
+        );
+    }
+
+    /// Bulk register constructors with structural validation (R1-IND) — see
+    /// [`extend_inductives_structural`](Self::extend_inductives_structural).
+    pub(crate) fn extend_constructors_structural(
+        &mut self,
+        constructors: impl Iterator<Item = ConstructorVal>,
+    ) -> Vec<(Name, EnvError)> {
+        let mut valid = Vec::new();
+        let mut rejected = Vec::new();
+        for ctor in constructors {
+            match Self::validate_family_record_structural(
+                &ctor.name,
+                &ctor.level_params,
+                &[&ctor.type_],
+            ) {
+                Ok(()) => valid.push(ctor),
+                Err(e) => rejected.push((ctor.name.clone(), e)),
+            }
+        }
+        self.insert_constructors_raw(
+            valid,
+            super::DeclarationVerification::StructuralOnly,
+            "extend_constructors_structural",
+        );
+        rejected
+    }
+
+    /// Bulk register recursors, skipping duplicate checks — UNCHECKED (test-only).
+    ///
+    /// DEMOTED 2026-08-24 (R1-IND, census row `ind-meta-bulk`): every
+    /// production caller now goes through
+    /// [`extend_recursors_structural`](Self::extend_recursors_structural).
+    /// See [`extend_inductives_unchecked`](Self::extend_inductives_unchecked)
+    /// for the gating rationale.
+    #[cfg(any(test, feature = "test-fixtures"))]
+    #[inline]
+    pub(crate) fn extend_recursors_unchecked(
+        &mut self,
+        recursors: impl Iterator<Item = RecursorVal>,
+    ) {
+        self.insert_recursors_raw(
+            recursors.collect(),
+            super::DeclarationVerification::Unchecked,
+            "extend_recursors_unchecked",
+        );
+    }
+
+    /// Bulk register recursors with structural validation (R1-IND) — see
+    /// [`extend_inductives_structural`](Self::extend_inductives_structural).
+    ///
+    /// The validated expression set includes every rule's `rhs` alongside the
+    /// recursor type: rule right-hand sides participate in ι-reduction, so a
+    /// leaked fvar/mvar or out-of-scope level there is exactly the smuggle
+    /// class the structural tier closes.
+    pub(crate) fn extend_recursors_structural(
+        &mut self,
+        recursors: impl Iterator<Item = RecursorVal>,
+    ) -> Vec<(Name, EnvError)> {
+        let mut valid = Vec::new();
+        let mut rejected = Vec::new();
+        for rec in recursors {
+            let mut exprs: Vec<&Expr> = Vec::with_capacity(1 + rec.rules.len());
+            exprs.push(&rec.type_);
+            exprs.extend(rec.rules.iter().map(|rule| &rule.rhs));
+            match Self::validate_family_record_structural(&rec.name, &rec.level_params, &exprs) {
+                Ok(()) => {
+                    drop(exprs);
+                    valid.push(rec);
+                }
+                Err(e) => {
+                    drop(exprs);
+                    rejected.push((rec.name.clone(), e));
+                }
+            }
+        }
+        self.insert_recursors_raw(
+            valid,
+            super::DeclarationVerification::StructuralOnly,
+            "extend_recursors_structural",
+        );
+        rejected
     }
 
     /// Register field names for a structure (single-constructor inductive).

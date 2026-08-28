@@ -11,6 +11,7 @@ Run: python3 scripts/test_verify_runner.py
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -29,8 +30,55 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 _SANDBOX = tempfile.mkdtemp(prefix="verify_runner_test_")
 os.environ["VERIFY_RUNNER_STATE_DIR"] = os.path.join(_SANDBOX, "state")
 os.environ["VERIFY_RUNNER_TARGET_DIR"] = os.path.join(_SANDBOX, "target")
+# THREE writable locations, not two. The journal is the third, and it was
+# missed on the first pass: every `write_record` in this file appended to the
+# real ~/.local/state/clean/suite-journal/ until this line existed, which is the
+# same defect the two lines above exist to prevent -- synthetic entries in the
+# durable artifact, indistinguishable to every later reader from measured ones.
+os.environ["VERIFY_RUNNER_JOURNAL_DIR"] = os.path.join(_SANDBOX, "journal")
 
 import verify_runner as vr  # noqa: E402
+
+# NO UNIT TEST MAY TOUCH THE MACHINE-WIDE ADMISSION GATE.
+#
+# `run_one` acquires a heavy_gate reservation for every target it runs, and the
+# end-to-end classes below drive it with synthetic commands (`true`, `false`,
+# a `sleep`). Unpatched, each of those blocks on a real 12 GB reservation.
+#
+# Measured 2026-08-23 on a busy box: this file wedged at
+# `RunOne...synthetic::fail`, holding a 12 GB ticket in the real queue behind a
+# fully-subscribed 96 GB budget, and was still waiting when its 300 s timeout
+# expired -- so the suite could not be run at all while the machine was in use,
+# and the 12 GB it reserved for a `/bin/false` starved work that needed it.
+#
+# The gate is a property of the RUNNER, not of these tests; the one test that is
+# actually about acquisition keeps a real handle below and drives it against an
+# absent gate script, which returns immediately.
+_REAL_GATE_ACQUIRE = vr._gate_acquire
+_REAL_GATE_RELEASE = vr._gate_release
+_GATE_PATCHES: list = []
+
+
+def setUpModule() -> None:
+    for name, replacement in (
+        # `(token, admitted, refused)` since bf96b221a gave a REFUSAL its own
+        # return value; the stub is admitted-and-not-refused. A 2-tuple here
+        # errored 12 tests with `not enough values to unpack` and left
+        # scripts/check_script_selftests.sh -- a full-mode leg of
+        # scripts/local_gate.sh -- unquarantined RED at HEAD.
+        ("_gate_acquire", lambda _gb, _label: ("unit-test-token", True, False)),
+        ("_gate_release", lambda _token: None),
+    ):
+        patcher = mock.patch.object(vr, name, replacement)
+        patcher.start()
+        _GATE_PATCHES.append(patcher)
+
+
+def tearDownModule() -> None:
+    for patcher in reversed(_GATE_PATCHES):
+        patcher.stop()
+    _GATE_PATCHES.clear()
+
 
 ENTRY = {"id": "pkg::test::t", "package": "pkg", "kind": "test", "argv": ["cargo", "test"]}
 DIGEST = "sha256:aaaa"
@@ -100,6 +148,47 @@ class TestDeriveBucket(unittest.TestCase):
         """Anything unrecognised must fall through to UNKNOWN, never to GREEN."""
         row = vr.derive(ENTRY, record(status="probably fine"), DIGEST)
         self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+
+    def test_derive_green_that_ran_zero_tests_is_unknown_not_green(self):
+        """THE VACUOUS GREEN. `cargo test -p clean-kernel axiom_refutation_gate`
+        exits 0 with "0 passed; ...; 10412 filtered out" because that gate lives
+        in clean-verify. libtest calls that ok; the runner must not."""
+        row = vr.derive(
+            ENTRY,
+            record(
+                final_line="test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10412 filtered out",
+                counts={"passed": 0, "failed": 0, "ignored": 0, "result_lines": 1},
+            ),
+            DIGEST,
+        )
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        self.assertIn("ZERO tests", row["reason"])
+
+    def test_derive_green_that_ran_tests_stays_green(self):
+        """The anti-correlation arm: same shape, one test ran, still GREEN.
+
+        Without it the arm above would pass against a rule that demoted
+        everything."""
+        row = vr.derive(
+            ENTRY,
+            record(counts={"passed": 1, "failed": 0, "ignored": 0, "result_lines": 1}),
+            DIGEST,
+        )
+        self.assertEqual(row["bucket"], vr.BUCKET_GREEN)
+
+    def test_derive_green_shell_gate_with_no_result_line_stays_green(self):
+        """A gate row prints no `test result:` line at all -- 11 such records
+        exist in data/suite_state/ -- so the zero-test rule must not fire on it."""
+        row = vr.derive(
+            {"id": "gate::paragon", "package": "__workspace__", "kind": "gate", "argv": ["x"]},
+            record(
+                target="gate::paragon",
+                final_line="paragon ratchet: PASS",
+                counts={"passed": 0, "failed": 0, "ignored": 0, "result_lines": 0},
+            ),
+            DIGEST,
+        )
+        self.assertEqual(row["bucket"], vr.BUCKET_GREEN)
 
     def test_derive_seeded_record_with_matching_digest_still_unknown(self):
         """A seeded record must not be launderable by any digest coincidence."""
@@ -991,10 +1080,17 @@ class MemoryAdmissionTests(unittest.TestCase):
         # suite must still run, just without admission control, and the tuple
         # must preserve that fact for the row's `gate_admitted` provenance.
         with mock.patch.object(vr, "HEAVY_GATE", vr.REPO_ROOT / "no" / "such"):
-            token, enforced = vr._gate_acquire(4, "t")
+            # The REAL implementation, not the module-level stub: this test is
+            # the one that is about acquisition. An absent gate script makes it
+            # return without ever queueing.
+            token, enforced, refused = _REAL_GATE_ACQUIRE(4, "t")
             self.assertIsNone(token)
             self.assertFalse(enforced)
-            vr._gate_release(token)         # must not raise
+            # An ABSENT gate is not a REFUSAL. `refused` makes run_one record
+            # STATUS_ERROR and skip the target entirely, so conflating the two
+            # would turn "no gate installed" into "the whole suite is UNKNOWN".
+            self.assertFalse(refused)
+            _REAL_GATE_RELEASE(token)       # must not raise
 
     def test_peak_rss_measures_a_real_process_group(self):
         proc = subprocess.Popen(
@@ -1011,6 +1107,92 @@ class MemoryAdmissionTests(unittest.TestCase):
         self.assertGreater(out[0], 0.2)      # saw the ~300 MB allocation
         self.assertLess(out[0], 4.0)         # and did not invent a number
 
+
+
+class ASkippedGateIsNotAPass(unittest.TestCase):
+    """A gate that exits 0 without measuring anything must not read GREEN.
+
+    Measured 2026-08-23 at 3a2aaaa2e:
+
+        [worker] DONE (1/11) gate::srcelab -> GREEN (527.7s) SRCELAB_GATE=skipped:no-binary
+
+    `source_elab_gate.sh` (like `kv_ratchet_gate.sh`) skip-greens when its
+    prerequisite is absent, and says so in a machine-readable verdict line.
+    Exiting 0 is right for the pre-push hook, which must not refuse a pusher
+    over an unbuilt release binary; it is wrong for this artifact, where the row
+    then asserts the source-elab ratchet held while nothing ran.
+    """
+
+    def _run(self, script: str) -> dict:
+        entry = {"id": "gate::probe", "package": "__workspace__", "kind": "gate",
+                 "argv": ["/bin/sh", "-c", script], "_dirs": [vr.REPO_ROOT / "scripts"]}
+        return vr.run_one(entry, timeout=60, timeout_basis="test")
+
+    def test_a_skip_verdict_on_exit_zero_is_recorded_skipped(self):
+        rec = self._run("echo SRCELAB_GATE=skipped:no-binary; exit 0")
+        self.assertEqual(rec["status"], vr.STATUS_SKIPPED)
+        self.assertEqual(rec["final_line"], "SRCELAB_GATE=skipped:no-binary")
+        self.assertIn("not a pass", rec["notes"])
+
+    def test_a_skipped_record_derives_to_unknown_not_green(self):
+        rec = self._run("echo KV_RATCHET_GATE=skipped:no-corpus; exit 0")
+        entry = {"id": "gate::probe", "package": "__workspace__", "kind": "gate",
+                 "argv": rec and ["/bin/sh"]}
+        got = vr.derive(entry, rec, rec["input_digest"])
+        self.assertEqual(got["bucket"], vr.BUCKET_UNKNOWN)
+
+    def test_a_measured_gate_still_reads_green(self):
+        rec = self._run("echo SRCELAB_GATE=measured; exit 0")
+        self.assertEqual(rec["status"], vr.STATUS_GREEN)
+
+    def test_a_failing_gate_is_still_red_not_skipped(self):
+        rec = self._run("echo SRCELAB_GATE=failed:regression; exit 1")
+        self.assertEqual(rec["status"], vr.STATUS_RED)
+
+    def test_the_word_skipped_in_test_output_does_not_hijack_a_pass(self):
+        # Only the gates' own verdict grammar counts. A test that prints the
+        # word must not be demoted.
+        rec = self._run("echo 'note: 3 cases skipped:none relevant'; exit 0")
+        self.assertEqual(rec["status"], vr.STATUS_GREEN)
+
+
+class AnInterruptedRunKeepsItsWeight(unittest.TestCase):
+    """A killed run must not downgrade its own retry to the unmeasured default.
+
+    Measured 2026-08-23: the worker was stopped to clear a machine-wide gate
+    wedge while eight targets sat in the queue. Each left a RUNNING record with
+    a blank `peak_rss_gb`, so `_gate_weight_gb` -- which read only that key --
+    would have re-admitted `kernel_core_red_env_fidelity` (measured peak
+    56.3 GB) at the 12 GB default. Under-reserving by 44 GB is precisely the
+    unaccounted concurrency of reports/kernel-panic-rca-2026-08-19.md.
+    """
+
+    def test_a_blank_running_record_falls_back_to_the_carried_peak(self):
+        killed = {"status": vr.STATUS_RUNNING, "peak_rss_gb": None,
+                  "prior_peak_rss_gb": 56.3}
+        with mock.patch.object(vr, "load_record", return_value=killed):
+            self.assertEqual(vr._gate_weight_gb("t"), 85)      # ceil(56.3 * 1.5)
+
+    def test_a_fresh_measurement_wins_over_the_carried_one(self):
+        both = {"peak_rss_gb": 8.8, "prior_peak_rss_gb": 56.3}
+        with mock.patch.object(vr, "load_record", return_value=both):
+            self.assertEqual(vr._gate_weight_gb("t"), 14)      # ceil(8.8 * 1.5)
+
+    def test_a_junk_carried_value_still_falls_back_to_the_default(self):
+        for bad in ({"prior_peak_rss_gb": 0}, {"prior_peak_rss_gb": -3},
+                    {"prior_peak_rss_gb": "big"}, {"prior_peak_rss_gb": True}):
+            with mock.patch.object(vr, "load_record", return_value=bad):
+                self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+
+    def test_the_running_template_carries_the_peak_forward(self):
+        # Ordering matters as much as the field: the carried value must be read
+        # from the PREVIOUS record, before the RUNNING template overwrites it.
+        src = (vr.REPO_ROOT / "scripts" / "verify_runner.py").read_text()
+        read_at = src.index("prior_peak = _prior_peak_rss_gb(")
+        field_at = src.index('"prior_peak_rss_gb": prior_peak,')
+        template_at = src.index('"status": STATUS_RUNNING')
+        self.assertLess(read_at, template_at)
+        self.assertLess(template_at, field_at)
 
 
 class WeightIsReadBeforeTheRecordIsOverwritten(unittest.TestCase):
@@ -1031,6 +1213,394 @@ class WeightIsReadBeforeTheRecordIsOverwritten(unittest.TestCase):
             "the gate weight must be read before the RUNNING record overwrites "
             "peak_rss_gb, or the runner never learns",
         )
+
+class AForegroundWorkerIsVisibleToTheGuards(unittest.TestCase):
+    """A worker must announce itself however it was started.
+
+    `run` daemonizes and `daemonize.py --pidfile` writes WORKER_PIDFILE for it;
+    `run --foreground` wrote nothing, so a foreground worker was invisible to
+    every reader of that file. That silently disarmed two guards: `cmd_run`'s
+    "a worker is already running" check, and the refuse-to-re-pin check in
+    `scripts/verify_runner_pinned.sh`, whose entire job is to stop a checkout
+    moving a measurement's own sources underneath it.
+
+    Measured 2026-08-25: a `--foreground` pinned run was in flight at dba565b24
+    when a `status` call in another shell re-pinned the same worktree to
+    d67054a45 and the guard said nothing, because worker.pid still held a
+    long-dead pid from an earlier lane. The run's result was discarded.
+    """
+
+    def setUp(self):
+        if vr.WORKER_PIDFILE.exists():
+            vr.WORKER_PIDFILE.unlink()
+
+    def tearDown(self):
+        if vr.WORKER_PIDFILE.exists():
+            vr.WORKER_PIDFILE.unlink()
+
+    def test_the_pidfile_is_live_for_the_whole_worker_body(self):
+        seen = {}
+
+        def spy(_args):
+            seen["content"] = vr.WORKER_PIDFILE.read_text().strip()
+            return 0
+
+        with mock.patch.object(vr, "_worker_loop", spy), \
+             mock.patch.object(vr, "install_signal_handlers", lambda: None):
+            rc = vr.cmd_worker(mock.Mock(queue="unused"))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            seen.get("content"), str(os.getpid()),
+            "a foreground worker must write its own pid to WORKER_PIDFILE, or "
+            "verify_runner_pinned.sh will re-pin the worktree underneath it",
+        )
+        self.assertFalse(
+            vr.WORKER_PIDFILE.exists(),
+            "the worker must drop its claim on the way out, or the next run "
+            "sees a stale pid",
+        )
+
+    def test_the_claim_survives_an_exception_but_is_still_dropped(self):
+        with mock.patch.object(vr, "_worker_loop", mock.Mock(side_effect=RuntimeError("boom"))), \
+             mock.patch.object(vr, "install_signal_handlers", lambda: None):
+            with self.assertRaises(RuntimeError):
+                vr.cmd_worker(mock.Mock(queue="unused"))
+        self.assertFalse(vr.WORKER_PIDFILE.exists())
+
+    def test_a_worker_never_unlinks_a_claim_that_is_not_its_own(self):
+        """`--restart` writes the new pid; the dying incumbent must not erase it.
+
+        Otherwise the replacement worker is invisible and both guards re-open --
+        the exact hole this class exists to close.
+        """
+        vr.WORKER_PIDFILE.parent.mkdir(parents=True, exist_ok=True)
+        vr.WORKER_PIDFILE.write_text(f"{os.getpid() + 1}\n", encoding="utf-8")
+        vr._release_worker_pidfile()
+        self.assertTrue(
+            vr.WORKER_PIDFILE.exists(),
+            "releasing must compare pids: a departing worker that unlinks the "
+            "live worker's claim re-opens the guard it was meant to close",
+        )
+
+
+class AToolchainRefusalIsNotARed(unittest.TestCase):
+    """A gate the toolchain refused to RUN must not read RED.
+
+    `ASkippedGateIsNotAPass` closes the exit-0 half of this: exiting 0 without
+    measuring is UNKNOWN, not GREEN. This is the non-zero half, and it fails the
+    other way -- toward a red the code did not earn.
+
+    Measured 2026-08-25 at d67054a45, `gate::clippy`, recorded RED after 23.6s:
+
+        error: branded Tippy driver identity changed: directory-chain identity
+        changed while embedded Tippy compiler was running: selected Trust
+        toolchain directory ancestor `$HOME` changed identity or contents
+
+    The Trust frontends authenticate their own stage2 binary and every ancestor
+    directory of it. One of those ancestors is the HOME DIRECTORY, and a dozen
+    lanes write into it, so the check trips constantly. Nothing was tampered
+    with: `targo-tippy` had not been written since Aug 8. Clippy never linted a
+    line -- so the run says nothing about the workspace, and RED says it is
+    dirty.
+    """
+
+    _REFUSAL = (
+        "error: branded Tippy driver identity changed: directory-chain identity "
+        "changed while embedded Tippy compiler was running: selected Trust toolchain "
+        "directory ancestor `$HOME` changed identity or contents"
+    )
+
+    def _run(self, script: str) -> dict:
+        entry = {"id": "gate::probe", "package": "__workspace__", "kind": "gate",
+                 "argv": ["/bin/sh", "-c", script], "_dirs": [vr.REPO_ROOT / "scripts"]}
+        return vr.run_one(entry, timeout=60, timeout_basis="test")
+
+    def test_a_refusal_is_recorded_error_not_red(self):
+        rec = self._run(f"echo '{self._REFUSAL}'; exit 1")
+        self.assertEqual(rec["status"], vr.STATUS_ERROR)
+        self.assertIn("REFUSED", rec["notes"])
+        self.assertIn("nothing measured", rec["final_line"])
+
+    def test_a_refusal_derives_to_unknown(self):
+        rec = self._run(f"echo '{self._REFUSAL}'; exit 1")
+        entry = {"id": "gate::probe", "package": "__workspace__", "kind": "gate", "argv": ["/bin/sh"]}
+        got = vr.derive(entry, rec, rec["input_digest"])
+        self.assertEqual(got["bucket"], vr.BUCKET_UNKNOWN)
+
+    def test_unknown_still_fails_the_board(self):
+        """The point is to relabel an unmeasurable row, never to excuse it."""
+        counts = {vr.BUCKET_GREEN: 0, vr.BUCKET_RED: 0,
+                  vr.BUCKET_UNKNOWN: 1, vr.BUCKET_RUNNING: 0}
+        self.assertEqual(vr.gate_exit_code(counts), 2)
+
+    def test_a_real_lint_failure_is_still_red(self):
+        rec = self._run(
+            "echo 'error: this expression creates a reference which is immediately dereferenced'; "
+            "echo 'error: could not compile `clean-kernel` (lib) due to 1 previous error'; exit 101"
+        )
+        self.assertEqual(
+            rec["status"], vr.STATUS_RED,
+            "a genuine -D warnings failure must never be laundered into UNKNOWN",
+        )
+
+    def test_the_word_identity_in_lint_output_does_not_launder_a_red(self):
+        rec = self._run("echo 'error: identity of this value changed'; exit 101")
+        self.assertEqual(rec["status"], vr.STATUS_RED)
+
+
+
+class TheCheckoutAccident(unittest.TestCase):
+    """A checkout reverts data/suite_state/ under a live writer. Nothing is lost.
+
+    This is the accident, reproduced against a real git repository rather than
+    described: `data/suite_state/` is git-TRACKED and is also RUNNER OUTPUT that
+    changes without a commit, so `git checkout` / `git restore` / a branch
+    switch puts the committed content back -- exit 0, no warning, no error. A
+    routine crash-recovery checkout destroyed a complete 14.33-hour sweep that
+    way, and the results survived only because the worker's out-of-tree log
+    happened to still hold them. Recovering from a log is heroics, not a design.
+
+    Two forms, because a checkout destroys a record two different ways:
+
+      A. REVERT-TO-STALE -- the record was tracked and the sweep overwrote it in
+         place; the checkout puts the OLDER content back. Worse than deletion:
+         the file exists, parses, and claims a stale input digest, so `derive`
+         reports UNKNOWN and the sweep's result is gone as information.
+      B. DELETION -- the record was created after the last commit and tree
+         hygiene removes it.
+
+    Both must recover, byte-identical, from one command.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="checkout_accident_")
+        self.repo = Path(self.tmp) / "repo"
+        self.state = self.repo / "data" / "suite_state"
+        self.state.mkdir(parents=True)
+        self._git("init", "-q", "-b", "main")
+        self._git("config", "user.email", "t@example.com")
+        self._git("config", "user.name", "t")
+        self._journal_env = mock.patch.dict(
+            os.environ, {"VERIFY_RUNNER_JOURNAL_DIR": str(Path(self.tmp) / "journal")})
+        self._journal_env.start()
+        self._state_patch = mock.patch.object(vr, "STATE_DIR", self.state)
+        self._state_patch.start()
+
+    def tearDown(self) -> None:
+        self._state_patch.stop()
+        self._journal_env.stop()
+
+    def _git(self, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(self.repo), *args],
+                              check=True, capture_output=True, text=True)
+
+    @staticmethod
+    def _record(target: str, status: str, when: str, digest: str) -> dict:
+        return {"schema": vr.SCHEMA, "target": target, "status": status,
+                "source": "measured", "finished_at": when, "input_digest": digest,
+                "runner_host": "simhost", "final_line": f"test result: {status}"}
+
+    def _sweep(self) -> dict[str, dict]:
+        """A committed older state, then a sweep that overwrites it in place."""
+        targets = [("clean-verify::test::eval_ir", "GREEN"),
+                   ("clean-verify::test::the_red_env", "RED"),
+                   ("gate::srcelab", "GREEN"),
+                   ("clean-verify::lib#shard#misc", "GREEN")]
+        for target, _ in targets:
+            vr._project_record(self._record(target, "GREEN", "2026-08-01T00:00:00Z", "sha256:STALE"))
+        self._git("add", "-A")
+        self._git("commit", "-qm", "state(suite): an older sweep")
+        sweep = {t: self._record(t, s, f"2026-08-25T0{i}:00:00Z", "sha256:FRESH")
+                 for i, (t, s) in enumerate(targets)}
+        for record in sweep.values():
+            vr.write_record(record)          # the shipped write-through path
+        return sweep
+
+    def test_form_a_revert_to_stale_content_is_fully_recovered(self):
+        sweep = self._sweep()
+        self._git("checkout", "--", "data/suite_state")
+
+        rewound = [t for t in sweep if vr.load_record(t) != sweep[t]]
+        self.assertEqual(len(rewound), len(sweep), "the accident did not reproduce")
+        self.assertTrue(all(vr.load_record(t)["input_digest"] == "sha256:STALE" for t in sweep),
+                        "every record should have been rewound to its committed content")
+
+        report = vr.heal_projection(quiet=True)
+        restored = sorted(a["target"] for a in report["actions"] if a["verdict"] == "restore")
+        self.assertEqual(restored, sorted(sweep))
+        for target, record in sweep.items():
+            self.assertEqual(vr.load_record(target), record,
+                             f"{target} was not restored byte-identically")
+
+    def test_form_b_deletion_after_the_last_commit_is_fully_recovered(self):
+        self._sweep()
+        self._git("add", "-A")
+        self._git("commit", "-qm", "state(suite): the sweep")
+        fresh = self._record("clean-verify::test::brand_new", "GREEN",
+                             "2026-08-25T09:00:00Z", "sha256:FRESH")
+        vr.write_record(fresh)
+        subprocess.run(["git", "-C", str(self.repo), "clean", "-qfd", "--", "data/suite_state"],
+                       check=True, capture_output=True)
+        self.assertIsNone(vr.load_record("clean-verify::test::brand_new"))
+
+        vr.heal_projection(quiet=True)
+        self.assertEqual(vr.load_record("clean-verify::test::brand_new"), fresh)
+
+    def test_recovery_does_not_depend_on_a_pidfile(self):
+        """The falsification arm option (b) would have needed, and could not pass.
+
+        A checkout guard keyed on the worker pidfile only covers the in-flight
+        case, and this runner has already shipped a pidfile that one of its two
+        launch paths never wrote (`run --foreground`, fixed in edf6ec0f5) -- a
+        guard on it would have been silently disarmed. So the protection must
+        not read one, and that is asserted rather than assumed: no pidfile is
+        written anywhere here, and the recovery still holds.
+        """
+        sweep = self._sweep()
+        self._git("checkout", "--", "data/suite_state")
+        self.assertEqual(list(Path(self.tmp).rglob("worker.pid")), [])
+        vr.heal_projection(quiet=True)
+        for target, record in sweep.items():
+            self.assertEqual(vr.load_record(target), record)
+        self.assertEqual(list(Path(self.tmp).rglob("worker.pid")), [])
+
+    def test_a_newer_record_from_another_machine_is_never_clobbered(self):
+        """The journal is local truth, not global truth.
+
+        Records reach this directory from other machines through git. A journal
+        that overwrote whatever it did not recognise would turn a data-loss bug
+        into a data-corruption bug, so a projection record STRICTLY NEWER than
+        anything this journal holds is reported `foreign` and left alone.
+        """
+        self._sweep()
+        foreign = self._record("clean-verify::test::eval_ir", "RED",
+                               "2026-09-01T00:00:00Z", "sha256:OTHER")
+        foreign["runner_host"] = "othermachine"
+        vr._project_record(foreign)
+        report = vr.reconcile_projection(apply=True)
+        verdicts = {a["target"]: a["verdict"] for a in report["actions"]}
+        self.assertEqual(verdicts["clean-verify::test::eval_ir"], "foreign")
+        self.assertEqual(vr.load_record("clean-verify::test::eval_ir"), foreign)
+
+    def test_without_the_journal_call_the_same_accident_is_unrecoverable(self):
+        """The protection IS `journal_append` inside `write_record`.
+
+        Nothing about the recovery above is a property of the runner in general;
+        it is a property of that one call. Remove it -- which is what
+        `_project_record` alone is -- and the identical accident is fatal. This
+        is the arm that makes the four above mean something.
+        """
+        orphan = self._record("gate::unjournalled", "GREEN",
+                              "2026-08-25T10:00:00Z", "sha256:FRESH")
+        vr._project_record(orphan)                       # the pre-journal write path
+        subprocess.run(["git", "-C", str(self.repo), "clean", "-qfd", "--", "data/suite_state"],
+                       check=True, capture_output=True)
+        report = vr.reconcile_projection(apply=True)
+        self.assertIsNone(vr.load_record("gate::unjournalled"))
+        self.assertEqual(report["counts"]["restore"], 0)
+
+    def test_an_adopted_entry_never_overwrites_a_record_that_differs(self):
+        """Adoption claims nothing, so it must not be able to displace anything.
+
+        The concrete case this was written for: on 2026-08-25 the lane that lost
+        the 14.33-hour sweep recovered it from `worker.log` and pushed the
+        reconstructed records. A journal that had already adopted the reverted,
+        STALE versions of those same targets must not re-project them over the
+        recovery -- and it must not depend on the reconstructed timestamps
+        happening to compare the right way for that to hold.
+        """
+        stale = self._record("gate::srcelab", "GREEN", "2026-09-09T00:00:00Z", "sha256:STALE")
+        vr._project_record(stale)
+        self.assertEqual(vr.journal_adopt()["adopted"], ["gate::srcelab"])
+
+        recovered = self._record("gate::srcelab", "GREEN", "2026-08-01T00:00:00Z", "sha256:REAL")
+        vr._project_record(recovered)                    # arrived by git, OLDER stamp
+        report = vr.reconcile_projection(apply=True)
+        verdicts = {a["target"]: a["verdict"] for a in report["actions"]}
+        self.assertEqual(verdicts["gate::srcelab"], "held")
+        self.assertEqual(vr.load_record("gate::srcelab"), recovered)
+
+    def test_an_adopted_entry_still_restores_a_record_the_tree_lost(self):
+        """The other half: `held` must not turn adoption into a no-op."""
+        record = self._record("gate::srcelab", "GREEN", "2026-08-01T00:00:00Z", "sha256:REAL")
+        vr._project_record(record)
+        vr.journal_adopt()
+        vr.record_path("gate::srcelab").unlink()
+        vr.heal_projection(quiet=True)
+        self.assertEqual(vr.load_record("gate::srcelab"), record)
+
+    def test_a_torn_journal_line_is_reported_not_skipped(self):
+        self._sweep()
+        journal = vr.journal_path()
+        journal.write_text(journal.read_text() + '{"schema":"clean.suite_journal/v1","tar\n')
+        report = vr.reconcile_projection()
+        self.assertTrue(report["problems"], "a truncated append must be reported")
+        self.assertIn("not valid JSON", report["problems"][0])
+
+    def test_retired_shard_records_are_never_journalled_or_projected(self):
+        """The 125 retired fine-cut records stay evidence and stay inert."""
+        retired = self.state / "shards" / "clean-verify__lib" / "superseded-fine-cut-9ec362dbb"
+        retired.mkdir(parents=True)
+        (retired / "clean-verify__lib__shard__gone.json").write_text(
+            json.dumps({"schema": vr.SCHEMA, "target": "clean-verify::lib::shard::gone",
+                        "status": "GREEN"}) + "\n")
+        seen = {doc["target"] for _path, doc in vr.projection_records()}
+        self.assertNotIn("clean-verify::lib::shard::gone", seen)
+        adopted = vr.journal_adopt()["adopted"]
+        self.assertNotIn("clean-verify::lib::shard::gone", adopted)
+
+
+class TheJournalIsWiredIntoTheWritePath(unittest.TestCase):
+    """Source-level pins, so an edit that disarms the protection cannot be quiet."""
+
+    def test_write_record_journals_before_it_projects(self):
+        src = (vr.REPO_ROOT / "scripts" / "verify_runner.py").read_text()
+        body = src.split("\ndef write_record(record: dict[str, Any]) -> None:\n", 1)[1]
+        body = body.split("\n\ndef ", 1)[0]
+        self.assertLess(body.index("journal_append(record)"), body.index("_project_record(record)"),
+                        "journal-last leaves a window where the tracked file exists and the "
+                        "durable one does not, and that window is when a checkout is fatal")
+
+    def test_status_heals_the_projection_before_deriving_from_it(self):
+        src = (vr.REPO_ROOT / "scripts" / "verify_runner.py").read_text()
+        body = src.split("\ndef cmd_status(args: argparse.Namespace) -> int:\n", 1)[1]
+        body = body.split("\n\ndef ", 1)[0]
+        self.assertLess(body.index("heal_projection()"), body.index("build_inventory("),
+                        "a record the working tree lost must be re-projected before the table "
+                        "is derived, or status reports UNKNOWN for a measured target")
+
+    def test_the_journal_lives_outside_the_repository(self):
+        saved = os.environ.pop("VERIFY_RUNNER_JOURNAL_DIR", None)
+        try:
+            path = vr.journal_path()
+        finally:
+            if saved is not None:
+                os.environ["VERIFY_RUNNER_JOURNAL_DIR"] = saved
+        self.assertNotIn(str(vr.REPO_ROOT), str(path),
+                         "a journal inside the working tree is one `git clean -xdf` from "
+                         "being exactly as fragile as the projection it protects")
+
+    def test_this_test_module_never_writes_the_machine_journal(self):
+        """Found by measurement, not by review, so it is pinned.
+
+        Before the sandbox covered VERIFY_RUNNER_JOURNAL_DIR, every
+        `write_record` in this file appended to the real
+        ~/.local/state/clean/suite-journal/ -- synthetic entries in the durable
+        artifact, indistinguishable to every later reader from measured ones,
+        and re-projectable into the tracked directory by any `status`.
+        """
+        self.assertTrue(str(vr.journal_path()).startswith(_SANDBOX),
+                        f"{vr.journal_path()} is outside the test sandbox {_SANDBOX}")
+
+    def test_the_journal_is_keyed_on_the_projection_not_the_checkout(self):
+        """One journal per projection: the pinned runner shares data/suite_state/."""
+        first = vr.journal_path()
+        with mock.patch.object(vr, "STATE_DIR", Path(self.__class__.__name__) / "other"):
+            second = vr.journal_path()
+        self.assertNotEqual(first, second)
+        self.assertEqual(first, vr.journal_path())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

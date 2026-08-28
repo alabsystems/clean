@@ -27,6 +27,7 @@ pub(crate) mod toolchain;
 pub use clap_args::{CacheCommands, LakeArgs, LakeCommands, ScriptCommands};
 pub use dispatch::run_lake;
 pub use features::FEATURES;
+pub use toolchain::DEFAULT_CLEAN_TOOLCHAIN;
 
 use std::path::PathBuf;
 
@@ -91,6 +92,35 @@ pub struct InitArgs {
     pub name: String,
     /// Create a library (true) or executable (false) project
     pub lib: bool,
+}
+
+impl InitArgs {
+    /// Arguments for initializing a LIBRARY project.
+    ///
+    /// `InitArgs` is `#[non_exhaustive]`, so callers outside this crate
+    /// (including the crate's own integration tests, e.g. the Lake parity
+    /// battery in `tests/parity_battery.rs`) have no struct-literal syntax
+    /// for it; these named constructors are the supported way in. Two named
+    /// constructors instead of one taking `lib: bool`, per the org
+    /// bool-parameter rule.
+    #[must_use]
+    pub fn lib_project(dir: Option<PathBuf>, name: impl Into<String>) -> Self {
+        Self {
+            dir,
+            name: name.into(),
+            lib: true,
+        }
+    }
+
+    /// Arguments for initializing an EXECUTABLE project (root `Main.lean`).
+    #[must_use]
+    pub fn exe_project(dir: Option<PathBuf>, name: impl Into<String>) -> Self {
+        Self {
+            dir,
+            name: name.into(),
+            lib: false,
+        }
+    }
 }
 
 /// Arguments for `lake fetch`

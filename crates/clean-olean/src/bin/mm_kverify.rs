@@ -2,28 +2,50 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Kernel-verify Metamath theorems from a `.mm` file.
+//! Kernel-verify Metamath theorems from a `.mm` file — the SEQUENTIAL verifier,
+//! and therefore the reference the two-pass pipeline's output is compared against.
 //!
-//! Usage: `mm_kverify <path.mm> [max_provables]`
+//! Usage: `mm_kverify <path.mm> [max_provables] [--exposure]`
 //!
 //! Parses the database, then has the Clean kernel certify each `$p` theorem
 //! (reusing earlier theorems by proof inlining). Prints verified / failed /
 //! skipped counts. `max_provables` bounds how many theorems are attempted (the
 //! inlining strategy blows up on deeply-reused proofs in large databases).
+//!
+//! `--exposure` additionally answers the R1-MM exposure question for this
+//! database prefix: does it contain a theorem the SEQUENTIAL verifier skips
+//! because it may not reuse a dependency that IS itself verified? Every such pair
+//! is a theorem the pre-fix two-pass export shipped as `KernelVerified` and the
+//! fixed `mm_gate` now drops. See
+//! `docs/issues/2026-08-23-r1-mm-two-pass-theorem.md` §3.3.
 
 use std::process::ExitCode;
 use std::time::Instant;
 
-use clean_olean::metamath::{kernel_verify_database_prefix_count_only, parse_database_file};
+use clean_olean::metamath::{
+    ground_reuse_exposure, kernel_verify_database_prefix_count_only, parse_database_file,
+};
+
+/// `--exposure` exit code when the prefix DOES exercise the R1-MM gap. Distinct
+/// from 1 (an error) and 2 (a usage error) so a caller can tell "measured, and the
+/// answer is yes" from "the run broke".
+const EXIT_EXPOSED: u8 = 3;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
-        eprintln!("usage: mm_kverify <path.mm> [max_provables]");
+    let exposure = args.iter().any(|a| a == "--exposure");
+    let positional: Vec<&String> = args
+        .iter()
+        .enumerate()
+        .filter(|(i, a)| *i == 0 || !a.starts_with("--"))
+        .map(|(_, a)| a)
+        .collect();
+    if positional.len() < 2 {
+        eprintln!("usage: mm_kverify <path.mm> [max_provables] [--exposure]");
         return ExitCode::FAILURE;
     }
-    let path = &args[1];
-    let limit = args
+    let path = positional[1];
+    let limit = positional
         .get(2)
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(usize::MAX);
@@ -110,6 +132,40 @@ fn main() -> ExitCode {
         items.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
         for (k, n) in items.iter().take(8) {
             println!("    other[{n}]: {k}");
+        }
+    }
+
+    if exposure {
+        // R1-MM EXPOSURE. A pair here is a theorem the sequential verifier refuses
+        // to build because it may not reuse `dep`, where `dep` nevertheless
+        // VERIFIED — i.e. `dep` is verified-but-not-citable (the ground fallback).
+        // The pre-fix two-pass export shipped every such dependent as
+        // `KernelVerified`; the fixed gate drops them.
+        let pairs = ground_reuse_exposure(&report);
+        let ground: std::collections::HashSet<&str> =
+            report.ground_only.iter().map(String::as_str).collect();
+        println!("=== R1-MM exposure: {path} (limit={limit}) ===");
+        println!("  verified:             {}", report.verified.len());
+        println!("  verified ground-only: {}", report.ground_only.len());
+        println!("  exposed dependents:   {}", pairs.len());
+        for (dependent, dep) in &pairs {
+            let how = if ground.contains(dep.as_str()) {
+                "ground-only"
+            } else {
+                // Verified and cited but absent from the reuse cache for some other
+                // reason. Report it rather than fold it into the ground-only story.
+                "verified-but-uncached (NOT the ground fallback — investigate)"
+            };
+            println!("  EXPOSED {dependent} <- {dep} [{how}]");
+        }
+        if pairs.is_empty() {
+            println!("  R1MM_EXPOSURE_VERDICT CLEAN (no verified-but-non-citable dependency is cited in this prefix)");
+        } else {
+            println!(
+                "  R1MM_EXPOSURE_VERDICT EXPOSED ({} dependent(s) the pre-fix two-pass export shipped and the fixed gate drops)",
+                pairs.len()
+            );
+            return ExitCode::from(EXIT_EXPOSED);
         }
     }
     ExitCode::SUCCESS

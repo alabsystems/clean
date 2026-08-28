@@ -76,7 +76,6 @@ enum RawGit {
         #[serde(default)]
         rev: Option<String>,
         #[serde(default, rename = "subDir")]
-        #[allow(dead_code)]
         sub_dir: Option<String>,
     },
 }
@@ -90,7 +89,6 @@ struct RawSource {
     url: Option<String>,
     rev: Option<String>,
     #[serde(rename = "subDir")]
-    #[allow(dead_code)]
     sub_dir: Option<String>,
     dir: Option<String>,
 }
@@ -131,13 +129,20 @@ impl RawRequire {
         let mut rev: Option<String> = self.rev;
         let mut path: Option<String> = self.path;
 
+        let mut sub_dir: Option<String> = None;
+
         match self.git {
             Some(RawGit::Url(url)) => git = Some(url),
-            Some(RawGit::Table { url, rev: r, .. }) => {
+            Some(RawGit::Table {
+                url,
+                rev: r,
+                sub_dir: sd,
+            }) => {
                 git = Some(url);
                 if rev.is_none() {
                     rev = r;
                 }
+                sub_dir = sd;
             }
             None => {}
         }
@@ -151,11 +156,26 @@ impl RawRequire {
                     if rev.is_none() {
                         rev = src.rev;
                     }
+                    if sub_dir.is_none() {
+                        sub_dir = src.sub_dir;
+                    }
                 }
                 Some("path") if path.is_none() => {
                     path = src.dir;
                 }
                 _ => {}
+            }
+        }
+
+        // Scope-only (Reservoir) require — the shape ALL of real Mathlib's
+        // lakefile.toml dependencies use: no git URL and no path, only
+        // `scope = "..."`. Derive the git URL from the scope offline; parsing
+        // must never reach the network. A wrong derivation surfaces at clone
+        // time with an error naming the scope-only require
+        // (`fetch::resolve_single_dependency`).
+        if git.is_none() && path.is_none() {
+            if let Some(scope) = self.scope.as_deref().filter(|s| !s.is_empty()) {
+                git = Some(reservoir_offline_git_url(scope, &self.name));
             }
         }
 
@@ -165,8 +185,62 @@ impl RawRequire {
             rev,
             path: path.map(PathBuf::from),
             version: self.version,
+            scope: self.scope,
+            sub_dir: sub_dir.map(PathBuf::from),
         }
     }
+}
+
+/// Reservoir packages whose GitHub repository name differs from the package
+/// name, making the `https://github.com/{scope}/{name}` convention wrong for
+/// them. Keys are exact `(scope, name)` pairs as they appear in `[[require]]`
+/// entries. Spellings verified against a real Mathlib checkout's
+/// `lake-manifest.json` (mathlib4 @ 43ad0e9d2e14) and the Lake audit journal.
+/// `mathlib` itself is listed because the convention would
+/// resolve it to `leanprover-community/mathlib` — the Lean 3 repository.
+const RESERVOIR_REPO_OVERRIDES: &[(&str, &str, &str)] = &[
+    (
+        "leanprover-community",
+        "importGraph",
+        "https://github.com/leanprover-community/import-graph",
+    ),
+    (
+        "leanprover-community",
+        "proofwidgets",
+        "https://github.com/leanprover-community/ProofWidgets4",
+    ),
+    (
+        "leanprover-community",
+        "Qq",
+        "https://github.com/leanprover-community/quote4",
+    ),
+    (
+        "leanprover",
+        "Cli",
+        "https://github.com/leanprover/lean4-cli",
+    ),
+    (
+        "leanprover-community",
+        "mathlib",
+        "https://github.com/leanprover-community/mathlib4",
+    ),
+];
+
+/// Map a scope-only (Reservoir) require to a concrete git URL with no network
+/// access: the `https://github.com/{scope}/{name}` convention, except for the
+/// [`RESERVOIR_REPO_OVERRIDES`] entries.
+///
+/// INTERIM: the full fix is the Reservoir registry lookup
+/// (`GET https://reservoir.lean-lang.org/api/v1/packages/{scope}/{name}`) with
+/// this mapping as the offline fallback. Until that lands, a wrong derivation
+/// fails at clone time with an error naming the scope/name and stating that
+/// the Reservoir API was not consulted.
+pub(crate) fn reservoir_offline_git_url(scope: &str, name: &str) -> String {
+    RESERVOIR_REPO_OVERRIDES
+        .iter()
+        .find(|(s, n, _)| *s == scope && *n == name)
+        .map(|(_, _, url)| (*url).to_string())
+        .unwrap_or_else(|| format!("https://github.com/{scope}/{name}"))
 }
 
 impl RawTomlLakefile {
@@ -252,7 +326,7 @@ impl LakeConfig {
     }
 
     /// Load and parse a `lakefile.toml` file.
-    pub fn load_toml(lakefile_path: &Path) -> LakeResult<Self> {
+    pub(crate) fn load_toml(lakefile_path: &Path) -> LakeResult<Self> {
         if !lakefile_path.exists() {
             return Err(LakeError::LakefileNotFound(lakefile_path.to_path_buf()));
         }
@@ -285,170 +359,5 @@ impl LakeConfig {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The canonical Mathlib-dependent template emitted by Lake's own
-    /// `lake init … math` (verified against `src/lake/Lake/CLI/Init.lean`).
-    #[test]
-    fn parse_mathlib_template() {
-        let content = r#"
-name = "myproject"
-version = "0.1.0"
-keywords = ["math"]
-defaultTargets = ["MyProject"]
-
-[leanOptions]
-pp.unicode.fun = true
-relaxedAutoImplicit = false
-
-[[require]]
-name = "mathlib"
-scope = "leanprover-community"
-rev = "v4.30.0"
-
-[[lean_lib]]
-name = "MyProject"
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("template must parse");
-        assert_eq!(cfg.package.name, "myproject");
-        assert_eq!(cfg.package.version.as_deref(), Some("0.1.0"));
-        assert_eq!(cfg.default_targets, vec!["MyProject".to_string()]);
-
-        assert_eq!(cfg.package.dependencies.len(), 1);
-        let dep = &cfg.package.dependencies[0];
-        assert_eq!(dep.name, "mathlib");
-        // `rev` with no explicit git/version is preserved as the revision.
-        assert_eq!(dep.rev.as_deref(), Some("v4.30.0"));
-
-        assert_eq!(cfg.libs.len(), 1);
-        assert_eq!(cfg.libs[0].name, "MyProject");
-        // Root defaults to the lib name when `roots` is omitted.
-        assert_eq!(cfg.libs[0].roots, vec!["MyProject".to_string()]);
-    }
-
-    #[test]
-    fn parse_exe_with_default_root() {
-        let content = r#"
-name = "tool"
-defaultTargets = ["tool"]
-
-[[lean_exe]]
-name = "tool"
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("exe lakefile must parse");
-        assert_eq!(cfg.exes.len(), 1);
-        assert_eq!(cfg.exes[0].name, "tool");
-        // Executable root defaults to the exe name.
-        assert_eq!(cfg.exes[0].root, "tool");
-    }
-
-    #[test]
-    fn parse_require_git_string_and_path_forms() {
-        let content = r#"
-name = "p"
-
-[[require]]
-name = "depgit"
-git = "https://github.com/example/dep"
-rev = "abc123"
-
-[[require]]
-name = "deplocal"
-path = "../local-dep"
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("git/path requires must parse");
-        assert_eq!(cfg.package.dependencies.len(), 2);
-
-        let g = &cfg.package.dependencies[0];
-        assert_eq!(g.git.as_deref(), Some("https://github.com/example/dep"));
-        assert_eq!(g.rev.as_deref(), Some("abc123"));
-
-        let p = &cfg.package.dependencies[1];
-        assert_eq!(p.path.as_deref(), Some(Path::new("../local-dep")));
-        assert!(p.git.is_none());
-    }
-
-    #[test]
-    fn parse_require_git_table_form() {
-        let content = r#"
-name = "p"
-
-[[require]]
-name = "deptable"
-git = { url = "https://github.com/example/dep", rev = "deadbeef" }
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("git-table require must parse");
-        let d = &cfg.package.dependencies[0];
-        assert_eq!(d.git.as_deref(), Some("https://github.com/example/dep"));
-        assert_eq!(d.rev.as_deref(), Some("deadbeef"));
-    }
-
-    #[test]
-    fn parse_require_source_table_form() {
-        let content = r#"
-name = "p"
-
-[[require]]
-name = "depsrc"
-
-[require.source]
-type = "git"
-url = "https://github.com/example/src"
-rev = "f00"
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("source-table require must parse");
-        let d = &cfg.package.dependencies[0];
-        assert_eq!(d.git.as_deref(), Some("https://github.com/example/src"));
-        assert_eq!(d.rev.as_deref(), Some("f00"));
-    }
-
-    /// Forward-compatibility: unknown top-level and per-target keys must be
-    /// ignored, not rejected, so a newer `lakefile.toml` still loads.
-    #[test]
-    fn unknown_keys_are_ignored() {
-        let content = r#"
-name = "p"
-someFutureKey = "whatever"
-platformIndependent = true
-
-[[lean_lib]]
-name = "L"
-futureLibKey = 42
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("unknown keys must be tolerated");
-        assert_eq!(cfg.package.name, "p");
-        assert_eq!(cfg.libs[0].name, "L");
-    }
-
-    #[test]
-    fn explicit_roots_and_globs_preserved() {
-        let content = r#"
-name = "p"
-
-[[lean_lib]]
-name = "L"
-srcDir = "src"
-roots = ["L", "L.Extra"]
-globs = ["L.+"]
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("lib with roots/globs must parse");
-        let lib = &cfg.libs[0];
-        assert_eq!(lib.roots, vec!["L".to_string(), "L.Extra".to_string()]);
-        assert_eq!(lib.globs, vec!["L.+".to_string()]);
-        assert_eq!(lib.src_dir.as_deref(), Some(Path::new("src")));
-    }
-
-    #[test]
-    fn toolchain_falls_back_to_lean_version() {
-        let content = r#"
-name = "p"
-toolchain = "leanprover/lean4:v4.30.0-rc2"
-"#;
-        let cfg = LakeConfig::parse_toml(content).expect("toolchain key must parse");
-        assert_eq!(
-            cfg.package.lean_version.as_deref(),
-            Some("leanprover/lean4:v4.30.0-rc2")
-        );
-    }
-}
+#[path = "toml_config_tests.rs"]
+mod toml_config_tests;

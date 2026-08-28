@@ -68,7 +68,7 @@ pub(crate) enum ScalarTy {
 }
 
 impl ScalarTy {
-    fn of(e: &Expr) -> Option<Self> {
+    pub(crate) fn of(e: &Expr) -> Option<Self> {
         let ExprKind::Const(n, _) = e.kind() else {
             return None;
         };
@@ -96,7 +96,15 @@ impl ScalarTy {
 
     fn c_literal(self, v: u64) -> String {
         match self {
-            ScalarTy::Bool | ScalarTy::Nat => format!("clean_box({v}u)"),
+            // `Nat` is the boxed runtime object; every FIXED-WIDTH scalar,
+            // INCLUDING `Bool`, is unboxed. `emit_c`'s `emit_type` maps
+            // `IRType::Bool` to `uint8_t`, so boxing a Bool argument produced
+            // `passing 'clean_obj *' to parameter of type 'uint8_t'` and the
+            // whole battery failed to link — which is how the first
+            // control-flow declaration (`if b then x else y`) was blocked on
+            // the C lane even though the emitter compiled it correctly.
+            ScalarTy::Nat => format!("clean_box({v}u)"),
+            ScalarTy::Bool => format!("(uint8_t){v}"),
             _ => format!("{v}ull"),
         }
     }
@@ -176,6 +184,27 @@ fn find_recursion(e: &Expr) -> Option<Name> {
             return;
         }
         let s = n.to_string();
+        // `Nat.rec` IS ADMITTED. Structural recursion on `Nat` elaborates to it,
+        // and the backends lower it to a loop whose bound is the scrutinee —
+        // `Nat.rec z s n` is exactly "apply `s` n times starting from `z`". So
+        // termination is not a new proof obligation: it is inherited from the
+        // kernel, which accepted the definition only because the recursor is
+        // well-founded, and it is MANIFEST in the emitted code as a counted
+        // loop.
+        //
+        // Everything else still refuses, and the distinction is the point:
+        //
+        //   `WellFounded.fix` / `Acc.rec` — termination rests on an accessibility
+        //   proof that is ERASED at extraction. Emitting a loop for those would
+        //   assert a bound the artifact does not carry, and a non-terminating
+        //   extraction HANGS the battery rather than failing it. That is the one
+        //   failure mode this harness cannot report, so it must not be reachable.
+        //
+        //   Other `.rec`/`.recOn`/`.brecOn` — recursion over containers whose
+        //   values are not in the v1 scalar allowlist anyway.
+        if s == "Nat.rec" {
+            return;
+        }
         if s.ends_with(".rec")
             || s.ends_with(".recOn")
             || s.ends_with(".brecOn")
@@ -272,6 +301,11 @@ fn handle_extract_c(args: &ExtractArgs) -> anyhow::Result<()> {
     // 7. Differential: kernel-side evaluation of the same applications.
     differential_check(&env, &args.decl, &sig, &battery, &native_results)?;
 
+    // 7b. TV leg (extract v1.2): kernel-decided translation certificate for
+    // the trust-ir lowering of the same closure, when the build carries it.
+    // A kernel REFUSAL is a detected miscompile — the extract fails closed.
+    let tv = tv_certificate_entry(args)?;
+
     // 8. Manifest + atomic install.
     let staging = tmp.path().join("out");
     std::fs::create_dir_all(&staging)?;
@@ -287,6 +321,7 @@ fn handle_extract_c(args: &ExtractArgs) -> anyhow::Result<()> {
         "differential": "PASSED — every battery point agrees with kernel-side evaluation",
         "claim": "differential check over the recorded battery; NOT a proof of \
                   translation correctness (see designs/2026-08-06-clean-extract-width1.md)",
+        "tv": tv,
     });
     std::fs::write(
         staging.join("manifest.json"),
@@ -622,6 +657,104 @@ fn copy_dir(from: &Path, to: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The TV leg of the extract manifest (v1.2): run the SAME L5CNF closure
+/// through the trust-ir backend with `certify_translation` on (the default)
+/// and report the target decl's kernel-decided certificate status.
+///
+/// THE CLAIM IS SCOPED HONESTLY. The certificate — minted by
+/// `emit_trust_ir_tv`, independently re-checkable by trust-ir-build's
+/// `clean_backend_tv` anchor — says the emitted TRUST-IR function denotes the
+/// original kernel definition under the Nat-mod-2^w vocabulary (Fragment-2/4).
+/// It says NOTHING about the `.c` text this extract ships; that text is held
+/// only to the differential. The manifest wording keeps the two separate.
+///
+/// Fail-closed split:
+/// - kernel REFUSAL (a detected miscompile of an in-fragment decl) — the
+///   whole extract errors and writes nothing (the `?` at the call site);
+/// - out-of-fragment decl — an honest `"skipped"` status with the minter's
+///   reason, never a fake certificate.
+#[cfg(feature = "trust-ir-backend")]
+fn tv_certificate_entry(args: &ExtractArgs) -> anyhow::Result<serde_json::Value> {
+    use clean_compiler::emit_trust_ir::TrustIrError;
+    use clean_compiler::pass_manager::PipelineError;
+
+    let compile_args = compile_args_for(args);
+    let (lcnf, env, pipeline) = select_lcnf_decl(&compile_args)?;
+    // The census/object-path config: `ExternCalls` carries the runtime ABI
+    // import table, which is what lets `declare_extern_fallbacks` declare the
+    // shim-dropped closure boundary (UInt32.toNat & co.) as typed extern
+    // imports instead of dying `undefined function`. `Dialect` (the default)
+    // has no runtime table, so emission failed on exactly those symbols.
+    let emit_cfg = clean_compiler::emit_trust_ir::TrustIrConfig {
+        runtime_lowering: clean_compiler::emit_trust_ir::RuntimeLowering::ExternCalls,
+        ..clean_compiler::emit_trust_ir::TrustIrConfig::default()
+    };
+    let (_module, report) = match clean_compiler::pass_manager::compile_lcnf_to_trust_ir_with_report(
+        &lcnf, &env, &pipeline, &emit_cfg,
+    ) {
+        Ok(ok) => ok,
+        // A kernel REFUSAL is a DETECTED MISCOMPILE of an in-fragment decl:
+        // the same L5CNF lowering feeds the shipped C, so nothing ships.
+        Err(PipelineError::TrustIr(TrustIrError::TranslationRefused(refused))) => {
+            anyhow::bail!(
+                "TV leg: kernel REFUSED the translation certificate (detected                  miscompile) for {refused:?} — refusing to ship"
+            );
+        }
+        // Any other error means the trust-ir backend cannot even EMIT this
+        // closure (e.g. an extern the C lane covers with a shim is simply
+        // undefined there). There is nothing to certify — an honest
+        // "unattempted" with the reason, never a fake status either way.
+        Err(other) => {
+            return Ok(serde_json::json!({
+                "status": "unattempted",
+                "decl": args.decl,
+                "reason": format!("trust-ir lowering unavailable for this closure: {other}"),
+            }));
+        }
+    };
+    let scope = "kernel-decided certificate that the emitted TRUST-IR function \
+                 denotes the original kernel definition (Nat mod 2^w, \
+                 Fragment-2/4); says NOTHING about the shipped .c text, which \
+                 is held only to the differential";
+    if report.certified.iter().any(|n| n == &args.decl) {
+        return Ok(serde_json::json!({
+            "status": "certified",
+            "decl": args.decl,
+            "scope": scope,
+            "recheck": "trust-ir-build anchor clean_backend_tv",
+            "closure_certified": report.certified,
+            "closure_skipped": report.skipped.len(),
+        }));
+    }
+    let reason = report
+        .skipped
+        .iter()
+        .find(|(n, _)| n == &args.decl)
+        .map(|(_, r)| r.clone())
+        .unwrap_or_else(|| "no stored kernel value to certify against".to_string());
+    Ok(serde_json::json!({
+        "status": "skipped",
+        "decl": args.decl,
+        "reason": reason,
+        "scope": scope,
+        "closure_certified": report.certified,
+        "closure_skipped": report.skipped.len(),
+    }))
+}
+
+/// Without the `trust-ir-backend` feature there is no certificate machinery in
+/// the binary at all — the manifest says so instead of silently omitting the
+/// field (an absent field reads as "nobody thought about it"; this reads as
+/// "not attempted, and here is why").
+#[cfg(not(feature = "trust-ir-backend"))]
+fn tv_certificate_entry(_args: &ExtractArgs) -> anyhow::Result<serde_json::Value> {
+    Ok(serde_json::json!({
+        "status": "unavailable",
+        "note": "built without the trust-ir-backend feature; no TV certificate \
+                 was attempted",
+    }))
+}
+
 fn compile_args_for(args: &ExtractArgs) -> clean_compiler::cli::CompileArgs {
     clean_compiler::cli::CompileArgs {
         file: Some(args.file.clone()),
@@ -632,18 +765,22 @@ fn compile_args_for(args: &ExtractArgs) -> clean_compiler::cli::CompileArgs {
     }
 }
 
-/// Elaborate the source file and select the declaration, keeping only the
-/// ENVIRONMENT.
+/// Elaborate the source file, keeping only the ENVIRONMENT.
 ///
-/// Both backends go through [`select_lcnf_decl`] so they see the same
-/// environment: intra-project `import` resolution, elaboration trust-warning
-/// refusals, and kernel-checked registration. The Rust backend discards the
-/// LCNF — it translates the kernel value directly — but shares this front half
-/// deliberately, so a decl cannot mean one thing to one backend and something
-/// else to the other.
+/// Both backends go through [`crate::cmd_compile::elaborate_file_to_env`] so
+/// they see the same environment: intra-project `import` resolution,
+/// elaboration trust-warning refusals, and kernel-checked registration. A decl
+/// cannot mean one thing to one backend and something else to the other.
+///
+/// What the Rust lane deliberately does NOT share is `select_lcnf_decl`'s
+/// L5CNF lowering of the root: it translates the KERNEL value directly, and
+/// requiring the root to also be L5CNF-lowerable rejected declarations inside
+/// the Rust emitter's own fragment. Measured case: a three-arm Nat match
+/// (`| 0 => 1 | 1 => 2 | _ => 0`) elaborates with a beta-redex default arm
+/// (`(fun _ => 0) k`), which `to_lcnf` refuses (`Application head: Lam`) —
+/// so both lanes refused a term the Rust table translates soundly.
 fn elaborate_for_extraction(args: &ExtractArgs) -> anyhow::Result<Environment> {
-    let (_lcnf, env, _pipeline) = select_lcnf_decl(&compile_args_for(args))?;
-    Ok(env)
+    crate::cmd_compile::elaborate_file_to_env(&args.file)
 }
 
 /// Reuse the `clean compile` closure/emitter for the C text.
@@ -696,7 +833,9 @@ fn render_battery_driver(
     c_source: &str,
 ) -> String {
     let mangled = native_build::mangle_decl_symbol(decl);
-    let boxed_ret = matches!(sig.ret, ScalarTy::Nat | ScalarTy::Bool);
+    // Only `Nat` comes back boxed; `Bool` is a `uint8_t` like the other
+    // fixed-width scalars (see `c_literal`).
+    let boxed_ret = matches!(sig.ret, ScalarTy::Nat);
     // If the emitted C already defines the symbol with an unboxed ABI the
     // call sites below match it structurally; the C compiler is the final
     // arbiter (a mismatch is a compile error, fail-closed).
@@ -948,50 +1087,625 @@ mod tests {
         assert!(!out_dir.exists(), "a refused extraction must write nothing");
     }
 
-    /// MEASURED GAP: UIntW ARITHMETIC does not reach the emitter yet.
+    /// UIntW ARITHMETIC reaches the Wasm emitter — the design's V1 pick, natively.
     ///
-    /// `def duo (a b : UInt32) : UInt32 := UInt32.add a b` refuses, because the
-    /// prelude's `UInt32.add` is compiled FROM SOURCE and routes through boxed
-    /// `Nat` (`clean_box_uint32` → `l_UInt32_toNat` → `l_Nat_add` →
-    /// `l_UInt32_ofNat`), so `boxed_ir_decls` carries `Object`-typed bindings
-    /// that are outside the Wasm fragment.
+    /// This test previously pinned the OPPOSITE, and said so: wiring the verb
+    /// revealed that `def duo (a b : UInt32) := UInt32.add a b` refused with
+    /// "type Object is outside the Wasm fragment", because the prelude's
+    /// `UInt32.add` is compiled FROM SOURCE through boxed `Nat`
+    /// (`clean_box_uint32` → `UInt32.toNat` → `Nat.add` → `UInt32.ofNat`), so its
+    /// `IRDecl` carried `Object` bindings that sank the whole module.
     ///
-    /// This is a REAL build item, and it is exactly what wiring the verb
-    /// exposed: rank 11's emitter was tested against hand-built `IRDecl`s, so
-    /// nothing had ever checked whether the pipeline actually produces IR in its
-    /// fragment. Closing it means lowering saturated UIntW ops to native BinOps
-    /// (as `emit_trust_ir`'s `uint_arith_binop` already does) instead of through
-    /// boxed Nat.
+    /// The callee's body was never needed: `lower_expr` already lowered a
+    /// saturated call to `UIntW.{add,sub,mul}` into the native instruction.
+    /// `lower_module` now SKIPS the primitives themselves — the same shape as
+    /// `native_build::is_primitive_denylisted` on the C side — keyed on the very
+    /// table that lowers the call sites, so the skip set and the realized set
+    /// cannot drift.
     ///
-    /// Pinned as a test so the day that lowering lands, this FAILS and says so.
+    /// The result is the design's canonical V1 pick as straight-line native Wasm:
+    ///
+    /// ```wat
+    /// (func $l_affineU (export "affineU") (param $v0 i32) (param $v1 i32) (result i32)
+    ///   local.get $v0  local.get $v1  i32.mul  local.set $v2
+    ///   local.get $v2  local.get $v1  i32.add  local.set $v3
+    ///   local.get $v3)
+    /// ```
+    ///
+    /// No boxing, no calls, and the differential agrees with kernel evaluation on
+    /// every battery point INCLUDING the 2^32 wraparound pair — which is what
+    /// actually establishes that Wasm's modular i32 matches Lean's `UInt32`.
     #[test]
-    fn test_extract_wasm_refuses_uintw_arithmetic_through_the_boxed_nat_path() {
+    fn test_extract_wasm_lowers_uintw_arithmetic_to_native_instructions() {
         let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-wasm-gap-")
+            .prefix("clean-extract-wasm-arith-")
             .tempdir()
             .expect("scratch dir");
-        let src_path = tmp.path().join("duo.lean");
+        let src_path = tmp.path().join("affine.lean");
         std::fs::write(
             &src_path,
-            "def duo (a b : UInt32) : UInt32 := UInt32.add a b\n",
+            "def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b\n",
         )
         .expect("write source");
         let out_dir = tmp.path().join("out");
 
         let args = ExtractArgs {
             file: src_path,
-            decl: "duo".to_string(),
+            decl: "affineU".to_string(),
             out: out_dir.clone(),
             backend: ExtractBackend::Wasm,
             keep_temp: false,
         };
-        let err = handle_extract_command(&args)
-            .expect_err("UIntW arithmetic does not reach the Wasm fragment today");
-        let msg = err.to_string();
+        match handle_extract_command(&args) {
+            Ok(()) => {
+                let wat =
+                    std::fs::read_to_string(out_dir.join("affineU.wat")).expect("emitted wat");
+                assert!(
+                    wat.contains("i32.mul") && wat.contains("i32.add"),
+                    "UIntW arithmetic must lower to NATIVE instructions, not calls \
+                     through boxed Nat; got:\n{wat}"
+                );
+                assert!(
+                    !wat.contains("call"),
+                    "the emitted module must be call-free — a `call` means the boxed \
+                     prelude body leaked back in; got:\n{wat}"
+                );
+                let manifest: serde_json::Value = serde_json::from_str(
+                    &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+                )
+                .expect("manifest is JSON");
+                assert!(
+                    manifest["differential"]
+                        .as_str()
+                        .is_some_and(|d| d.starts_with("PASSED")),
+                    "the differential must have RUN: {manifest}"
+                );
+                assert!(
+                    manifest["battery_points"].as_u64().expect("points") >= 8,
+                    "the battery must include the wraparound pair that proves Wasm's \
+                     modular i32 matches Lean UInt32: {manifest}"
+                );
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(
+                    msg.contains("E_WASM_NO_HOST"),
+                    "without a Wasm host the ONLY acceptable outcome is the explicit \
+                     no-host refusal; got: {msg}"
+                );
+            }
+        }
+    }
+
+    /// The battery must STRADDLE a Bool branch, or control-flow extraction is
+    /// validating nothing.
+    ///
+    /// This is the anti-vacuity property for `if`. The differential compares
+    /// native execution against kernel evaluation per battery point — but if
+    /// every point supplied the same Bool, only ONE arm of the conditional
+    /// would ever run, and a backend that emitted the branches backwards would
+    /// still pass. `build_battery` zips per-type batteries with modular
+    /// wraparound, so a Bool (battery `[0, 1]`) alternates against the longer
+    /// integer battery. Pinned here because a later battery change could
+    /// silently make a Bool constant and quietly hollow out every branch test.
+    #[test]
+    fn test_battery_straddles_a_bool_branch() {
+        let sig = GateSig {
+            params: vec![ScalarTy::Bool, ScalarTy::UInt32, ScalarTy::UInt32],
+            ret: ScalarTy::UInt32,
+        };
+        let battery = build_battery(&sig);
+        let bools: std::collections::HashSet<u64> =
+            battery.iter().filter_map(|t| t.first().copied()).collect();
         assert!(
-            msg.contains("outside the Wasm fragment"),
-            "expected the emitter's own fragment refusal (the boxed-Nat route), \
-             got: {msg}"
+            bools.contains(&0) && bools.contains(&1),
+            "the battery must exercise BOTH arms of a Bool conditional; got {bools:?} \
+             over {} points",
+            battery.len()
+        );
+    }
+
+    /// CONTROL FLOW end to end: `if` extracts on the C and Rust lanes.
+    ///
+    /// This is the increment that takes extraction from "straight-line
+    /// arithmetic" to something you could point at real code. Both lanes run
+    /// the full chain — emit, build, run the battery, differential against
+    /// kernel evaluation — and the battery straddles the branch (see above), so
+    /// a backwards conditional would be caught rather than merely unexercised.
+    ///
+    /// The C lane could always EMIT the branch; what blocked it was the battery
+    /// driver boxing a `Bool` argument while `emit_type` maps `IRType::Bool` to
+    /// an unboxed `uint8_t`, so the program failed to link. The Rust lane needed
+    /// `ite` in its emission table.
+    #[test]
+    fn test_extract_control_flow_if_on_c_and_rust() {
+        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
+            let tmp = tempfile::Builder::new()
+                .prefix("clean-extract-if-")
+                .tempdir()
+                .expect("scratch dir");
+            let src_path = tmp.path().join("ifs.lean");
+            std::fs::write(
+                &src_path,
+                "def pick (b : Bool) (x y : UInt32) : UInt32 := if b then x else y\n",
+            )
+            .expect("write source");
+            let out_dir = tmp.path().join("out");
+
+            let args = ExtractArgs {
+                file: src_path,
+                decl: "pick".to_string(),
+                out: out_dir.clone(),
+                backend,
+                keep_temp: false,
+            };
+            handle_extract_command(&args)
+                .unwrap_or_else(|e| panic!("`if` must extract on the {backend:?} lane: {e}"));
+
+            let manifest: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+            )
+            .expect("manifest is JSON");
+            assert!(
+                manifest["differential"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("PASSED")),
+                "{backend:?}: the differential must PASS: {manifest}"
+            );
+
+            if backend == ExtractBackend::Rust {
+                let rs = std::fs::read_to_string(out_dir.join("pick.rs")).expect("emitted rust");
+                assert!(
+                    rs.contains("if a { b } else { c }"),
+                    "the Rust lane must emit a real conditional with the arms in \
+                     SOURCE order — swapping them would still typecheck; got:\n{rs}"
+                );
+                // Check for an `unsafe` BLOCK/fn, not the word — the module's
+                // own header comment advertises "no `unsafe`", so a bare
+                // substring test matches the promise instead of a violation.
+                assert!(
+                    !rs.contains("unsafe {") && !rs.contains("unsafe fn"),
+                    "the readable-Rust guarantee must hold through control flow \
+                     too; got:\n{rs}"
+                );
+            }
+        }
+    }
+
+    /// `match` on a Nat extracts on both lanes — the second control-flow form,
+    /// and the first that BINDS a variable.
+    ///
+    /// `Nat.casesOn` is what a `| 0 => … | k + 1 => …` match elaborates to. The
+    /// successor arm binds the predecessor, so unlike `if` the emitter has to
+    /// extend its scope rather than just pick between two closed expressions.
+    ///
+    /// The battery for a `Nat` parameter is `[0, 1, 2, 3, 7, 12, 63]`, so it
+    /// contains `0` AND non-zero values — both arms run, which is what makes the
+    /// differential meaningful here (see `test_battery_straddles_a_bool_branch`
+    /// for the same property stated for `if`).
+    #[test]
+    fn test_extract_match_on_nat_on_c_and_rust() {
+        const SRC: &str = "\
+def predOr (n : Nat) : Nat :=
+  match n with
+  | 0 => 0
+  | k + 1 => k
+";
+        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
+            let tmp = tempfile::Builder::new()
+                .prefix("clean-extract-match-")
+                .tempdir()
+                .expect("scratch dir");
+            let src_path = tmp.path().join("mt.lean");
+            std::fs::write(&src_path, SRC).expect("write source");
+            let out_dir = tmp.path().join("out");
+
+            let args = ExtractArgs {
+                file: src_path,
+                decl: "predOr".to_string(),
+                out: out_dir.clone(),
+                backend,
+                keep_temp: false,
+            };
+            handle_extract_command(&args)
+                .unwrap_or_else(|e| panic!("`match` must extract on the {backend:?} lane: {e}"));
+
+            let manifest: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+            )
+            .expect("manifest is JSON");
+            assert!(
+                manifest["differential"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("PASSED")),
+                "{backend:?}: the differential must PASS: {manifest}"
+            );
+
+            if backend == ExtractBackend::Rust {
+                let rs = std::fs::read_to_string(out_dir.join("predOr.rs")).expect("emitted rust");
+                assert!(
+                    rs.contains("== 0") && rs.contains("- 1"),
+                    "the successor arm must bind the PREDECESSOR, not the scrutinee; \
+                     got:\n{rs}"
+                );
+                assert!(
+                    !rs.contains("unsafe {") && !rs.contains("unsafe fn"),
+                    "the readable-Rust guarantee must survive a binding match; got:\n{rs}"
+                );
+            }
+        }
+    }
+
+    /// The THREE-ARM match — `| 0 => 1 | 1 => 2 | _ => 0` — extracts on the
+    /// Rust lane.
+    ///
+    /// This is the traffic-light protocol stepper's SPEC step
+    /// (`data/graduation/clean-streams`), and the first match whose
+    /// elaboration carries a BETA-REDEX: the shared `_` arm arrives inside the
+    /// successor branch as an application whose head is a LAMBDA, not a
+    /// constant. `translate_beta_redex` binds each redex argument once with a
+    /// `let` and translates the body in the extended scope.
+    ///
+    /// Rust lane only, deliberately: the C lane goes through the L5CNF
+    /// lowering, which refuses this exact term (`Application head: Lam`).
+    /// Pinning that refusal here would turn a lowering gap into a contract —
+    /// the gap is a compiler-side build item, and `scripts/streams_green.sh`
+    /// records whatever C-lane verdict it measures instead.
+    ///
+    /// The Nat battery is `[0, 1, 2, 3, 7, 12, 63]`, so the differential
+    /// exercises all three arms AND the out-of-invariant points (7, 12, 63 all
+    /// take the `_` arm) against kernel evaluation.
+    #[test]
+    fn test_extract_three_arm_match_on_rust() {
+        const SRC: &str = "\
+def stepCase (i : Nat) : Nat :=
+  match i with
+  | 0 => 1
+  | 1 => 2
+  | _ => 0
+";
+        let tmp = tempfile::Builder::new()
+            .prefix("clean-extract-3arm-")
+            .tempdir()
+            .expect("scratch dir");
+        let src_path = tmp.path().join("steps.lean");
+        std::fs::write(&src_path, SRC).expect("write source");
+        let out_dir = tmp.path().join("out");
+
+        let args = ExtractArgs {
+            file: src_path,
+            decl: "stepCase".to_string(),
+            out: out_dir.clone(),
+            backend: ExtractBackend::Rust,
+            keep_temp: false,
+        };
+        handle_extract_command(&args)
+            .unwrap_or_else(|e| panic!("the three-arm match must extract on the Rust lane: {e}"));
+
+        let manifest: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+        )
+        .expect("manifest is JSON");
+        assert!(
+            manifest["differential"]
+                .as_str()
+                .is_some_and(|d| d.starts_with("PASSED")),
+            "the differential must PASS: {manifest}"
+        );
+
+        let rs = std::fs::read_to_string(out_dir.join("stepCase.rs")).expect("emitted rust");
+        for arm in ["1u64", "2u64", "0u64"] {
+            assert!(
+                rs.contains(arm),
+                "all three arm values must appear in the emitted code; missing {arm}:\n{rs}"
+            );
+        }
+        assert!(
+            !rs.contains("unsafe {") && !rs.contains("unsafe fn"),
+            "the readable-Rust guarantee must survive the redex; got:\n{rs}"
+        );
+    }
+
+    /// The Nat battery exercises BOTH arms of a zero/succ match.
+    ///
+    /// Same anti-vacuity property as the Bool one: if every battery point were
+    /// non-zero, the zero arm would never run and an emitter that dropped it
+    /// entirely would still pass.
+    #[test]
+    fn test_battery_straddles_a_nat_zero_succ_match() {
+        let sig = GateSig {
+            params: vec![ScalarTy::Nat],
+            ret: ScalarTy::Nat,
+        };
+        let battery = build_battery(&sig);
+        let has_zero = battery.iter().any(|t| t.first() == Some(&0));
+        let has_succ = battery.iter().any(|t| t.first().is_some_and(|v| *v > 0));
+        assert!(
+            has_zero && has_succ,
+            "the battery must exercise both the zero and successor arms; got {battery:?}"
+        );
+    }
+
+    /// The battery DIVIDES BY ZERO, which is what makes total division
+    /// checkable at all.
+    ///
+    /// Lean's `Nat.div`/`Nat.mod` are total (`n / 0 = 0`, `n % 0 = n`) while
+    /// Rust and C both fault. If no battery point had a zero divisor, an
+    /// emitter using a bare `/` would pass the differential and then fault in
+    /// production — the worst possible outcome for a tool whose entire claim is
+    /// that the artifact agrees with the kernel.
+    ///
+    /// The zipped battery pairs equal indices, so it only supplies `(0, 0)`;
+    /// the CROSSED point (first param's last value against the others' first)
+    /// is what supplies a nonzero numerator over a zero divisor. That crossed
+    /// point is therefore load-bearing, not a nicety.
+    #[test]
+    fn test_battery_divides_by_zero() {
+        let sig = GateSig {
+            params: vec![ScalarTy::Nat, ScalarTy::Nat],
+            ret: ScalarTy::Nat,
+        };
+        let battery = build_battery(&sig);
+        assert!(
+            battery.iter().any(|t| t.get(1) == Some(&0)),
+            "some battery point must have a ZERO divisor: {battery:?}"
+        );
+        assert!(
+            battery
+                .iter()
+                .any(|t| t.get(1) == Some(&0) && t.first().is_some_and(|n| *n != 0)),
+            "and one must divide a NONZERO numerator by zero — `0 / 0` alone does \
+             not distinguish `n / 0 = 0` from a fault: {battery:?}"
+        );
+    }
+
+    /// `Nat.div`/`Nat.mod` extract with LEAN's total semantics on both lanes.
+    ///
+    /// Verified live, not just asserted: with the guard removed and a bare `/`
+    /// emitted, the battery binary dies with `attempt to divide by zero` and the
+    /// extraction FAILS. The wrong emission does not silently disagree — it
+    /// faults, and the harness refuses to ship it.
+    #[test]
+    fn test_extract_total_div_mod_on_c_and_rust() {
+        const SRC: &str = "\
+def divn (a b : Nat) : Nat := Nat.div a b
+def modn (a b : Nat) : Nat := Nat.mod a b
+";
+        for (decl, zero_case) in [("divn", "0u64"), ("modn", "__d2n")] {
+            for backend in [ExtractBackend::C, ExtractBackend::Rust] {
+                let tmp = tempfile::Builder::new()
+                    .prefix("clean-extract-div-")
+                    .tempdir()
+                    .expect("scratch dir");
+                let src_path = tmp.path().join("dv.lean");
+                std::fs::write(&src_path, SRC).expect("write source");
+                let out_dir = tmp.path().join("out");
+
+                let args = ExtractArgs {
+                    file: src_path,
+                    decl: decl.to_string(),
+                    out: out_dir.clone(),
+                    backend,
+                    keep_temp: false,
+                };
+                handle_extract_command(&args).unwrap_or_else(|e| {
+                    panic!("`{decl}` must extract on the {backend:?} lane: {e}")
+                });
+
+                let manifest: serde_json::Value = serde_json::from_str(
+                    &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+                )
+                .expect("manifest is JSON");
+                assert!(
+                    manifest["differential"]
+                        .as_str()
+                        .is_some_and(|d| d.starts_with("PASSED")),
+                    "{decl}/{backend:?}: the differential must PASS: {manifest}"
+                );
+
+                if backend == ExtractBackend::Rust {
+                    let rs = std::fs::read_to_string(out_dir.join(format!("{decl}.rs")))
+                        .expect("emitted rust");
+                    assert!(
+                        rs.contains("== 0"),
+                        "{decl}: the zero-divisor guard IS the semantics, not \
+                         defensive coding; got:\n{rs}"
+                    );
+                    assert!(
+                        rs.contains(zero_case),
+                        "{decl}: the zero case must yield `{zero_case}` — `n / 0 = 0` \
+                         but `n % 0 = n`, and swapping them typechecks; got:\n{rs}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The recursion boundary: `Nat.rec` in, well-founded recursion OUT.
+    ///
+    /// This is the safety property behind admitting recursion at all.
+    /// `Nat.rec` lowers to a counted loop whose bound is the scrutinee, so
+    /// termination is inherited from the kernel — which accepted the source
+    /// definition only because the recursor is well-founded — and is manifest in
+    /// the artifact.
+    ///
+    /// `WellFounded.fix` / `Acc.rec` are different in kind: their termination
+    /// rests on an accessibility proof that extraction ERASES. Emitting a loop
+    /// for those would assert a bound the artifact does not carry. And the
+    /// failure mode is the one this harness CANNOT report — a non-terminating
+    /// extraction hangs the differential battery rather than failing it. So they
+    /// must stay refused, and that is asserted here rather than assumed.
+    #[test]
+    fn test_recursion_boundary_admits_nat_rec_and_refuses_well_founded() {
+        let nat_rec = Expr::const_(Name::from_string("Nat.rec"), vec![]);
+        assert!(
+            find_recursion(&nat_rec).is_none(),
+            "`Nat.rec` must be admitted — it lowers to a counted loop"
+        );
+        for refused in [
+            "WellFounded.fix",
+            "Acc.rec",
+            "List.rec",
+            "Nat.brecOn",
+            "Nat.recOn",
+        ] {
+            let e = Expr::const_(Name::from_string(refused), vec![]);
+            assert!(
+                find_recursion(&e).is_some(),
+                "`{refused}` must STILL refuse: its termination is not a counted \
+                 bound the extracted artifact carries"
+            );
+        }
+    }
+
+    /// RECURSION end to end: a structurally recursive definition extracts on
+    /// both lanes, and the Rust artifact is a BOUNDED LOOP.
+    ///
+    /// `sumTo` is genuinely recursive in source — `sumTo k` in its own body —
+    /// and elaborates through `Nat.rec`.
+    #[test]
+    fn test_extract_structural_recursion_on_c_and_rust() {
+        const SRC: &str = "\
+def sumTo (n : Nat) : Nat :=
+  match n with
+  | 0 => 0
+  | k + 1 => Nat.add (sumTo k) (Nat.succ k)
+";
+        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
+            let tmp = tempfile::Builder::new()
+                .prefix("clean-extract-rec-")
+                .tempdir()
+                .expect("scratch dir");
+            let src_path = tmp.path().join("rec.lean");
+            std::fs::write(&src_path, SRC).expect("write source");
+            let out_dir = tmp.path().join("out");
+
+            let args = ExtractArgs {
+                file: src_path,
+                decl: "sumTo".to_string(),
+                out: out_dir.clone(),
+                backend,
+                keep_temp: false,
+            };
+            handle_extract_command(&args).unwrap_or_else(|e| {
+                panic!("structural recursion must extract on the {backend:?} lane: {e}")
+            });
+
+            let manifest: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+            )
+            .expect("manifest is JSON");
+            assert!(
+                manifest["differential"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("PASSED")),
+                "{backend:?}: the differential must PASS: {manifest}"
+            );
+
+            if backend == ExtractBackend::Rust {
+                let rs = std::fs::read_to_string(out_dir.join("sumTo.rs")).expect("emitted rust");
+                assert!(
+                    rs.contains("while") && rs.contains("+= 1"),
+                    "the artifact must be a COUNTED loop — the bound is what makes \
+                     termination manifest; got:\n{rs}"
+                );
+                // Count `sumTo(` — a CALL — not the bare name, which also
+                // appears in the generated header comment. Exactly one
+                // occurrence is the definition itself.
+                assert_eq!(
+                    rs.matches("sumTo(").count(),
+                    1,
+                    "the emitted function must not call ITSELF: unbounded recursion \
+                     would HANG the battery rather than fail it, and a hang is the \
+                     one outcome this harness cannot report; got:\n{rs}"
+                );
+            }
+        }
+    }
+
+    /// `==` extracts on both lanes, composing `ite` with `BEq.beq`.
+    ///
+    /// `if i == 0 then …` elaborates the condition through
+    /// `instBEqOfDecidableEq Nat instDecidableEqNat` — the decide-wrapper whose
+    /// `beq a b` is literally `decide (a = b)`. That IS structural equality, so
+    /// it is emitted as Rust `==`; the emitted body is the readable
+    /// `if (a == 0u64) { … }` chain.
+    #[test]
+    fn test_extract_beq_chain_on_c_and_rust() {
+        const SRC: &str = "\
+def stepC (i : Nat) : Nat :=
+  if i == 0 then 1 else if i == 1 then 2 else 0
+";
+        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
+            let tmp = tempfile::Builder::new()
+                .prefix("clean-extract-beq-")
+                .tempdir()
+                .expect("scratch dir");
+            let src_path = tmp.path().join("beq.lean");
+            std::fs::write(&src_path, SRC).expect("write source");
+            let out_dir = tmp.path().join("out");
+            let args = ExtractArgs {
+                file: src_path,
+                decl: "stepC".to_string(),
+                out: out_dir.clone(),
+                backend,
+                keep_temp: false,
+            };
+            handle_extract_command(&args)
+                .unwrap_or_else(|e| panic!("`==` must extract on the {backend:?} lane: {e}"));
+            let manifest: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+            )
+            .expect("manifest is JSON");
+            assert!(
+                manifest["differential"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("PASSED")),
+                "{backend:?}: the differential must PASS: {manifest}"
+            );
+            if backend == ExtractBackend::Rust {
+                let rs = std::fs::read_to_string(out_dir.join("stepC.rs")).expect("emitted");
+                assert!(
+                    rs.contains("== 0u64") && rs.contains("== 1u64"),
+                    "the canonical instance must emit as Rust `==`; got:\n{rs}"
+                );
+            }
+        }
+    }
+
+    /// THE FAIL-CLOSED DIRECTION, which is the load-bearing part: a CUSTOM
+    /// `BEq` instance must REFUSE, never be emitted as `==`.
+    ///
+    /// `weird` below says every pair of Nats is equal. Emitting Rust `==` for
+    /// it would be a silently wrong program — and the differential battery
+    /// would only catch it if a battery point happened to land on a
+    /// disagreement, which is exactly the kind of luck a fail-closed emitter
+    /// must not rely on.
+    #[test]
+    fn test_extract_beq_custom_instance_refuses() {
+        const SRC: &str = "\
+def weird : BEq Nat := BEq.mk (fun _ _ => true)
+def bad (a b : Nat) : Bool := @BEq.beq Nat weird a b
+";
+        let tmp = tempfile::Builder::new()
+            .prefix("clean-extract-beq-bad-")
+            .tempdir()
+            .expect("scratch dir");
+        let src_path = tmp.path().join("bad.lean");
+        std::fs::write(&src_path, SRC).expect("write source");
+        let out_dir = tmp.path().join("out");
+        let args = ExtractArgs {
+            file: src_path,
+            decl: "bad".to_string(),
+            out: out_dir.clone(),
+            backend: ExtractBackend::Rust,
+            keep_temp: false,
+        };
+        let err = handle_extract_command(&args)
+            .expect_err("a custom BEq instance must refuse on the Rust lane");
+        assert!(
+            err.to_string().contains("weird") || err.to_string().contains("instance"),
+            "the refusal must name the non-canonical instance; got: {err}"
         );
         assert!(!out_dir.exists(), "a refused extraction must write nothing");
     }
@@ -1282,7 +1996,10 @@ mod tests {
     /// is to refuse with a code the caller can act on.
     #[test]
     fn test_rust_emitter_refuses_constants_outside_the_v1_table() {
-        let env = env_with("def g (n : Nat) : Nat := Nat.succ n");
+        // `Nat.succ` used to be the unlisted example; it is now emitted (the
+        // recursion work needed it). `Nat.beq` is a real prelude constant that
+        // the v1 Rust table genuinely does not carry.
+        let env = env_with("def g (n : Nat) : Bool := Nat.beq n n");
         let name = Name::from_string("g");
         let sig = extraction_gate(&env, &name).expect("gate accepts a first-order Nat def");
         let err = extract_rust::emit_rust_module(&env, &name, &sig)
@@ -1306,7 +2023,7 @@ mod tests {
     fn test_gate_refuses_prop_and_recursion() {
         let env = env_with(
             "theorem trivial_imp (P : Prop) (h : P) : P := h\n\
-             def looped (n : Nat) : Nat := Nat.rec 0 (fun _ ih => ih) n",
+             def looped (l : List Nat) : Nat := List.rec 0 (fun _ _ ih => ih) l",
         );
         assert!(
             matches!(
@@ -1315,12 +2032,15 @@ mod tests {
             ),
             "Prop telescope must refuse E_PROP"
         );
+        // `Nat.rec` is now ADMITTED (it lowers to a counted loop), so the
+        // recursion refusal is pinned with a recursor that is still out of
+        // scope. Changed deliberately, not because the old case regressed.
         assert!(
             matches!(
                 extraction_gate(&env, &Name::from_string("looped")),
-                Err(ExtractRefusal::Recursion(_, _))
+                Err(ExtractRefusal::Recursion(_, _) | ExtractRefusal::TypeParam(_))
             ),
-            "recursor use must refuse E_RECURSION"
+            "a non-Nat recursor must still refuse"
         );
     }
 
@@ -1341,5 +2061,167 @@ mod tests {
             ),
             "unknown decl must refuse E_NONCOMPUTABLE"
         );
+    }
+
+    /// REGRESSION (measured hang): the kernel leg at `UInt32 ==` over big
+    /// literals.
+    ///
+    /// `equ (4294967295 : UInt32) 4294967295` elaborates its numerals as
+    /// `UInt32.ofNat (@OfNat.ofNat Nat 4294967295 (instOfNatNat _))`. The
+    /// `instDecidableEqUInt32` native reducer used to DECLINE that wrapper
+    /// shape (it only read raw `Nat` literals), so whnf fell back to
+    /// δι-grinding the structural `decEq` — Θ(2^32) unary work, a
+    /// multi-minute hang sampled as a nested `try_iota_reduction` tower.
+    /// Fixed by peeling the CANONICAL `OfNat` wrapper in
+    /// `get_uint_ctor_val` (clean-kernel `native_reducers_uint.rs`), which
+    /// this exercises through the production `kernel_eval` path.
+    ///
+    /// The worker thread + timeout converts a regression back into a LOUD
+    /// failure instead of a silent test-suite hang.
+    #[test]
+    fn test_kernel_eval_uint32_eq_big_literals_terminates() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let env = env_with("def equ (a b : UInt32) : Bool := a == b");
+            let sig = GateSig {
+                params: vec![ScalarTy::UInt32, ScalarTy::UInt32],
+                ret: ScalarTy::Bool,
+            };
+            let big = 4_294_967_295u64;
+            let results: Vec<(Vec<u64>, String)> = [
+                (vec![big, big], "1"),
+                (vec![big, 0], "0"),
+                (vec![0, big], "0"),
+                (vec![4_294_967_290, big], "0"),
+            ]
+            .into_iter()
+            .map(|(inputs, want)| {
+                let got = kernel_eval(&env, "equ", &sig, &inputs)
+                    .expect("kernel leg must reduce UInt32 == to a literal");
+                (inputs, format!("{got} (want {want})"))
+            })
+            .collect();
+            let _ = tx.send(results);
+        });
+        let results = rx.recv_timeout(std::time::Duration::from_secs(120)).expect(
+            "kernel leg must terminate — a timeout here is the Θ(2^32) decEq grind regressing",
+        );
+        for (inputs, got_want) in results {
+            let (got, want) = got_want.split_once(" (want ").expect("format");
+            let want = want.trim_end_matches(')');
+            assert_eq!(got, want, "kernel leg wrong at inputs {inputs:?}");
+        }
+    }
+
+    /// The v1.2 TV leg: the C-lane manifest carries an explicit `tv` entry in
+    /// EVERY build. Feature off: an honest `"unavailable"` note (an absent
+    /// field would read as "nobody thought about it"). Feature on: the
+    /// kernel-decided certificate status for the target decl —
+    /// `"certified"`/`"skipped"`, never a silent omission — plus the scope
+    /// wording that keeps the trust-ir claim separate from the shipped .c
+    /// text (which only the differential covers).
+    #[test]
+    fn test_extract_c_manifest_carries_tv_entry() {
+        let tmp = tempfile::Builder::new()
+            .prefix("clean-extract-tv-")
+            .tempdir()
+            .expect("scratch dir");
+        let src_path = tmp.path().join("affine.lean");
+        std::fs::write(
+            &src_path,
+            "def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b\n",
+        )
+        .expect("write source");
+        let out_dir = tmp.path().join("out");
+        let args = ExtractArgs {
+            file: src_path,
+            decl: "affineU".to_string(),
+            out: out_dir.clone(),
+            backend: ExtractBackend::C,
+            keep_temp: false,
+        };
+        handle_extract_command(&args).expect("affineU extracts on the C lane");
+        let manifest: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+        )
+        .expect("manifest is JSON");
+        let tv = &manifest["tv"];
+        if cfg!(feature = "trust-ir-backend") {
+            // THE PIN AT ITS FINAL FORM (measured 2026-08-25): `affineU`
+            // CERTIFIES. The ladder it climbed, each rung measured: Dialect
+            // lowering died `undefined function` (no runtime table) →
+            // ExternCalls emitted but the compositional certificate could not
+            // ground (`UInt32.add`/`mul` were compiled from source, shadowing
+            // the emitter's native-BinOp arm) → the emitter now skips the
+            // primitives (emit_wasm's discipline) so the root's arithmetic IS
+            // native wrapping BinOps, squarely inside the Fragment-2/3
+            // vocabulary, and the kernel-decided mint closes. Regressing any
+            // rung turns this back into skipped/unattempted and fails here.
+            assert_eq!(
+                tv["status"], "certified",
+                "feature-on affineU must carry the kernel-decided certificate: {tv}"
+            );
+            assert!(
+                tv["closure_certified"]
+                    .as_array()
+                    .is_some_and(|c| c.iter().any(|n| n == "affineU")),
+                "the certified list must name the root: {tv}"
+            );
+            assert!(
+                tv["scope"]
+                    .as_str()
+                    .is_some_and(|s| s.contains("NOTHING about the shipped .c")),
+                "the honest scope wording must survive: {tv}"
+            );
+        } else {
+            assert_eq!(
+                tv["status"], "unavailable",
+                "feature-off builds must say so explicitly: {tv}"
+            );
+        }
+    }
+
+    /// The user-visible closure of the same gap: `UInt32 ==` extracts on BOTH
+    /// lanes with the full battery — whose diagonal includes the exact
+    /// measured-hang pair `(4294967295, 4294967295)` and whose crossed point
+    /// supplies a mixed big/zero comparison.
+    #[test]
+    fn test_extract_uint32_eq_on_c_and_rust() {
+        const SRC: &str = "def equ (a b : UInt32) : Bool := a == b\n";
+        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
+            let tmp = tempfile::Builder::new()
+                .prefix("clean-extract-equ-")
+                .tempdir()
+                .expect("scratch dir");
+            let src_path = tmp.path().join("equ.lean");
+            std::fs::write(&src_path, SRC).expect("write source");
+            let out_dir = tmp.path().join("out");
+            let args = ExtractArgs {
+                file: src_path,
+                decl: "equ".to_string(),
+                out: out_dir.clone(),
+                backend,
+                keep_temp: false,
+            };
+            handle_extract_command(&args)
+                .unwrap_or_else(|e| panic!("UInt32 == must extract on the {backend:?} lane: {e}"));
+            let manifest: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
+            )
+            .expect("manifest is JSON");
+            assert!(
+                manifest["differential"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("PASSED")),
+                "{backend:?}: the differential must PASS: {manifest}"
+            );
+            if backend == ExtractBackend::Rust {
+                let rs = std::fs::read_to_string(out_dir.join("equ.rs")).expect("emitted");
+                assert!(
+                    rs.contains("(a == b)"),
+                    "UInt32 == must emit as Rust `==`; got:\n{rs}"
+                );
+            }
+        }
     }
 }

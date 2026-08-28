@@ -75,10 +75,10 @@ fn test_verify_app_basic() {
     // Certificate for the identity function λ (x : Prop). x
     let id_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -93,9 +93,9 @@ fn test_verify_app_basic() {
 
     // App certificate: result type = Prop (from Pi codomain instantiated)
     let cert = ProofCert::App {
-        fn_cert: Box::new(id_cert),
+        fn_cert: Arc::new(id_cert),
         fn_type: Box::new(Expr::pi(BinderInfo::Default, prop.clone(), prop.clone())),
-        arg_cert: Box::new(arg_cert),
+        arg_cert: Arc::new(arg_cert),
         result_type: Box::new(prop.clone()),
     };
 
@@ -122,10 +122,10 @@ fn test_verify_app_arg_type_mismatch() {
 
     let id_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -139,9 +139,9 @@ fn test_verify_app_arg_type_mismatch() {
     };
 
     let cert = ProofCert::App {
-        fn_cert: Box::new(id_cert),
+        fn_cert: Arc::new(id_cert),
         fn_type: Box::new(Expr::pi(BinderInfo::Default, prop.clone(), prop.clone())),
-        arg_cert: Box::new(arg_cert),
+        arg_cert: Arc::new(arg_cert),
         result_type: Box::new(prop),
     };
 
@@ -165,11 +165,11 @@ fn test_verify_app_non_pi_function() {
     ));
 
     let cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Sort {
+        fn_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         fn_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
-        arg_cert: Box::new(ProofCert::Sort {
+        arg_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(prop),
@@ -204,13 +204,13 @@ fn test_verify_let_basic() {
     );
 
     let cert = ProofCert::Let {
-        type_cert: Box::new(ProofCert::Sort {
+        type_cert: Arc::new(ProofCert::Sort {
             level: Level::succ(Level::zero()),
         }),
-        value_cert: Box::new(ProofCert::Sort {
+        value_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(type1.clone()),
         }),
@@ -241,14 +241,14 @@ fn test_verify_let_value_type_mismatch() {
 
     let nat_type = Expr::const_(Name::from_string("Nat"), vec![]);
     let cert = ProofCert::Let {
-        type_cert: Box::new(ProofCert::Sort {
+        type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        value_cert: Box::new(ProofCert::Lit {
+        value_cert: Arc::new(ProofCert::Lit {
             lit: Literal::Nat(BigNat::Small(42)),
             type_: Box::new(nat_type),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -280,15 +280,15 @@ fn test_verify_let_type_not_a_type() {
     );
 
     let cert = ProofCert::Let {
-        type_cert: Box::new(ProofCert::Lit {
+        type_cert: Arc::new(ProofCert::Lit {
             lit: Literal::Nat(BigNat::Small(42)),
             type_: Box::new(nat_type.clone()),
         }),
-        value_cert: Box::new(ProofCert::Lit {
+        value_cert: Arc::new(ProofCert::Lit {
             lit: Literal::Nat(BigNat::Small(42)),
             type_: Box::new(nat_type),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop),
         }),
@@ -499,11 +499,11 @@ fn test_verify_pi_binder_mismatch() {
 
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Implicit,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         arg_level: Level::succ(Level::zero()),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -526,11 +526,11 @@ fn test_verify_pi_level_mismatch() {
 
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         arg_level: Level::zero(),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -561,10 +561,10 @@ fn test_verify_lam_binder_mismatch() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Implicit,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -593,11 +593,11 @@ fn test_verify_lam_arg_not_a_type() {
     let nat_type = Expr::const_(Name::from_string("Nat"), vec![]);
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Lit {
+        arg_type_cert: Arc::new(ProofCert::Lit {
             lit: Literal::Nat(BigNat::Small(42)),
             type_: Box::new(nat_type),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(nat_lit.clone()),
         }),
@@ -666,7 +666,7 @@ fn test_verify_def_eq_valid() {
     let type1 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
 
     let cert = ProofCert::DefEq {
-        inner: Box::new(ProofCert::Sort {
+        inner: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expected_type: Box::new(type1.clone()),
@@ -767,11 +767,11 @@ fn test_verify_app_cert_on_sort_expr() {
 
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let cert = ProofCert::App {
-        fn_cert: Box::new(ProofCert::Sort {
+        fn_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         fn_type: Box::new(prop.clone()),
-        arg_cert: Box::new(ProofCert::Sort {
+        arg_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(prop.clone()),
@@ -855,11 +855,11 @@ fn test_verify_pi_result_is_imax() {
 
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         arg_level: Level::succ(Level::zero()),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -898,20 +898,20 @@ fn k_combinator_cert() -> ProofCert {
     };
     let body_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::BVar {
+        arg_type_cert: Arc::new(ProofCert::BVar {
             idx: 1,
             expected_type: Box::new(type0.clone()),
         }),
-        body_cert: Box::new(body_body_cert),
+        body_cert: Arc::new(body_body_cert),
         result_type: Box::new(Expr::pi(BinderInfo::Default, bv(1), bv(2))),
     };
     let lam_x_cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::BVar {
+        arg_type_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(type0.clone()),
         }),
-        body_cert: Box::new(body_cert),
+        body_cert: Arc::new(body_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             bv(0),
@@ -920,10 +920,10 @@ fn k_combinator_cert() -> ProofCert {
     };
     ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(lam_x_cert),
+        body_cert: Arc::new(lam_x_cert),
         result_type: Box::new(Expr::pi(
             BinderInfo::Default,
             type0,
@@ -956,12 +956,12 @@ fn rejected_scoped_certificate_does_not_leak_binder_authority() {
     let lam = Expr::lam(BinderInfo::Default, prop.clone(), bv(0));
     let malformed = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         // The expression body is BVar(0), so this certificate fails only
         // after the Lam verifier has extended its local context.
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 1,
             expected_type: Box::new(prop.clone()),
         }),

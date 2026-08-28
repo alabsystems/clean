@@ -206,7 +206,7 @@ impl ProvenanceSidecar {
 
     /// Verify that a header's `sidecar_digest` matches its provenance record,
     /// re-encoding under the same bincode config the records were decoded from.
-    pub fn verify_digest(&self, header: &MathverseConstantHeader) -> bool {
+    pub(crate) fn verify_digest(&self, header: &MathverseConstantHeader) -> bool {
         match self.get(header.provenance_idx) {
             Some(record) => {
                 Self::record_digest_with(record, self.encoding) == header.sidecar_digest
@@ -267,7 +267,7 @@ impl ProvenanceBuilder {
     }
 
     /// Set the source system version string.
-    pub fn source_version(mut self, version: &str) -> Self {
+    pub(crate) fn source_version(mut self, version: &str) -> Self {
         self.record.source_version = Some(version.to_string());
         self
     }
@@ -279,13 +279,13 @@ impl ProvenanceBuilder {
     }
 
     /// Set the import timestamp (Unix epoch seconds).
-    pub fn import_timestamp(mut self, ts: u64) -> Self {
+    pub(crate) fn import_timestamp(mut self, ts: u64) -> Self {
         self.record.import_timestamp = ts;
         self
     }
 
     /// Set the pipeline version.
-    pub fn pipeline_version(mut self, version: u32) -> Self {
+    pub(crate) fn pipeline_version(mut self, version: u32) -> Self {
         self.record.pipeline_version = version;
         self
     }

@@ -65,6 +65,39 @@ pub struct Tags {
     /// The artifact's INTERFACE: the facts the core module cannot hold and the
     /// emitted text does print. See [`super::interface`].
     pub interface: Interface,
+    /// The `usize` TARGET FACT, present only on a chain whose body contains
+    /// the type. `usize` is target-dependent; a table without this lane keeps
+    /// both text readers fail-closed on the token, and a table with it states
+    /// the resolved width (a fact about the recorded producer target, never an
+    /// assumption) and the exact number of sites the body resolves, which is
+    /// what catches a `u64`-for-`usize` swap the resolved core text cannot.
+    pub usize_pin: Option<UsizePin>,
+    /// The chain's NON-ROOT bodies: canonical function index → (the Clean name
+    /// prefix its definitions carry, its own interface).
+    ///
+    /// EMPTY for every one-body chain, which is all seventeen that came before
+    /// `has_loose_bvars` — and the emptiness is what keeps their minted
+    /// scripts byte-identical under this lane's arrival.
+    ///
+    /// A chain is more than one body when the emitted MODULE contains more
+    /// than one function, which is a different fact from calling one:
+    /// `level_is_zero` calls `<LevelArc as Deref>::deref` and its module
+    /// defines only itself, so its `funcs` lane has two rows and this lane has
+    /// none. Here both `has_loose_bvars` and `loose_bvar_range` are DEFINED in
+    /// the module — that is what makes `ir_call_exec` resolve rather than go
+    /// `stuck no_func` — so the callee needs a name prefix of its own and an
+    /// interface of its own, and both are pinned here rather than written by
+    /// hand into the specification.
+    pub extra_bodies: BTreeMap<u32, (String, Interface)>,
+}
+
+/// The pinned resolution of `usize` for one chain — a TARGET fact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UsizePin {
+    /// The width `usize` resolves to on the recorded producer target.
+    pub bits: u32,
+    /// Exactly how many `usize` tokens the chain's emitted body contains.
+    pub sites: u32,
 }
 
 impl Tags {
@@ -233,6 +266,50 @@ impl Tags {
         out
     }
 
+    /// The canonical function indices of the bodies the MODULE contains, in
+    /// module order.
+    ///
+    /// Always starts at [`SELF_FUNC_INDEX`](super::SELF_FUNC_INDEX) — the root
+    /// is the body the chain is named for — and continues in ascending
+    /// canonical order, which is the order reader A projects them in.
+    #[must_use]
+    pub(crate) fn body_canonicals(&self) -> Vec<u32> {
+        let mut v = vec![super::SELF_FUNC_INDEX];
+        v.extend(self.extra_bodies.keys().copied());
+        v
+    }
+
+    /// The Clean definition-name prefix for one body, given the chain prefix.
+    ///
+    /// The root's prefix IS the chain's, so a one-body chain never consults
+    /// this lane and mints exactly what it always did.
+    pub(crate) fn body_prefix<'a>(&'a self, canonical: u32, chain: &'a str) -> &'a str {
+        match self.extra_bodies.get(&canonical) {
+            Some((prefix, _)) => prefix,
+            None => chain,
+        }
+    }
+
+    /// The pinned interface of one body.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NoImage`] when the index is neither the root nor a
+    /// listed extra body — fail-closed, because an unpinned interface is the
+    /// `param-type` blind slot again, one body further out.
+    pub(crate) fn body_interface(&self, canonical: u32) -> Result<&Interface, CoreError> {
+        if canonical == super::SELF_FUNC_INDEX {
+            return Ok(&self.interface);
+        }
+        self.extra_bodies
+            .get(&canonical)
+            .map(|(_, i)| i)
+            .ok_or_else(|| {
+                CoreError::NoImage(format!(
+                    "canonical function index {canonical} is a BODY of this module and the tag                      table pins no interface for it"
+                ))
+            })
+    }
+
     /// The alias definitions, in canonical order, that [`mint`](super::mint)
     /// emits ahead of the block definitions.
     #[must_use]
@@ -326,6 +403,28 @@ pub fn parse(json: &str) -> Result<Tags, CoreError> {
             )));
         }
     }
+    if let Some(u) = v.get("usize") {
+        let bits = u32::try_from(
+            u.get("bits")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| CoreError::Shape("`usize` lane has no `bits`".into()))?,
+        )
+        .map_err(|_| CoreError::Shape("`usize.bits` does not fit u32".into()))?;
+        let sites = u32::try_from(
+            u.get("sites")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| CoreError::Shape("`usize` lane has no `sites`".into()))?,
+        )
+        .map_err(|_| CoreError::Shape("`usize.sites` does not fit u32".into()))?;
+        // A pin for a body with no site would be a stale target assumption
+        // riding along unexercised; a chain without the type omits the lane.
+        if bits == 0 || sites == 0 {
+            return Err(CoreError::Shape(
+                "`usize` lane must pin a non-zero width and at least one site".into(),
+            ));
+        }
+        tags.usize_pin = Some(UsizePin { bits, sites });
+    }
     // The `funcs` lane is dense from 0: it indexes the ONE namespace the core
     // module's `(func N …)` and `(call M …)` share, and a hole in it would mean
     // a callee index no row accounts for.
@@ -362,8 +461,103 @@ pub fn parse(json: &str) -> Result<Tags, CoreError> {
                     .into(),
             )
         })?;
-    tags.interface = Interface {
-        function_name: tags.body.clone(),
+    tags.interface = interface_lane(iface, tags.body.clone())?;
+    // `extra_bodies` is OPTIONAL, and its absence means "this module defines
+    // one function". That default is the honest one — it is what every chain
+    // before `has_loose_bvars` measured — and it is the reason those chains'
+    // committed scripts do not move under this lane.
+    if let Some(rows) = v.get("extra_bodies") {
+        let rows = rows.as_array().ok_or_else(|| {
+            CoreError::Shape("`extra_bodies` must be an array of body rows".into())
+        })?;
+        for row in rows {
+            let canonical = u32::try_from(
+                row.get("canonical")
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or_else(|| {
+                        CoreError::Shape("extra_bodies row has no `canonical`".into())
+                    })?,
+            )
+            .map_err(|_| {
+                CoreError::Shape("extra_bodies row's `canonical` does not fit u32".into())
+            })?;
+            if canonical == super::SELF_FUNC_INDEX {
+                return Err(CoreError::Shape(
+                    "canonical index 0 is the ROOT body; it is pinned by the top-level `body` and                      `interface`, and listing it again would create a second source of truth"
+                        .into(),
+                ));
+            }
+            // Every body is a function of this module, so it must be a row of
+            // the ONE namespace `(func N …)` and `(call M …)` share. A body
+            // the `funcs` lane does not list is a numeral standing for
+            // nothing, exactly like an unpinned callee.
+            let (_, pinned_name) = tags.func_pin(canonical)?;
+            let pinned_name = pinned_name.clone();
+            let prefix = row
+                .get("prefix")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| {
+                    CoreError::Shape(
+                        "extra_bodies row has no `prefix`: its Clean definitions would have to                          share the chain's names and collide with the root's blocks"
+                            .into(),
+                    )
+                })?
+                .to_string();
+            let name = row
+                .get("body")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| CoreError::Shape("extra_bodies row has no `body`".into()))?
+                .to_string();
+            if name != pinned_name {
+                return Err(CoreError::Shape(format!(
+                    "extra body {canonical} says `{name}` and the `funcs` lane says                      `{pinned_name}`; the two name the same function or the table is wrong"
+                )));
+            }
+            let sub = row
+                .get("interface")
+                .and_then(serde_json::Value::as_object)
+                .ok_or_else(|| {
+                    CoreError::Shape(format!(
+                        "extra body {canonical} (`{name}`) has no `interface` object"
+                    ))
+                })?;
+            if tags
+                .extra_bodies
+                .insert(canonical, (prefix, interface_lane(sub, name)?))
+                .is_some()
+            {
+                return Err(CoreError::Shape(format!(
+                    "extra_bodies canonical index {canonical} appears twice"
+                )));
+            }
+        }
+        // Two bodies sharing a name prefix would mint two `<prefix>_b0` lines
+        // and the second would fail to register — or, worse, register a block
+        // the other function's `IRFunc` then names.
+        let mut prefixes: Vec<&str> = tags
+            .extra_bodies
+            .values()
+            .map(|(p, _)| p.as_str())
+            .collect();
+        prefixes.sort_unstable();
+        let n = prefixes.len();
+        prefixes.dedup();
+        if prefixes.len() != n {
+            return Err(CoreError::Shape(
+                "two bodies of this module share a Clean name prefix".into(),
+            ));
+        }
+    }
+    Ok(tags)
+}
+
+/// One `interface` object — the root's, or an extra body's.
+fn interface_lane(
+    iface: &serde_json::Map<String, serde_json::Value>,
+    function_name: String,
+) -> Result<Interface, CoreError> {
+    Ok(Interface {
+        function_name,
         linkage: keyword_lane(iface, "linkage", &super::LINKAGES)?,
         calling_conv: keyword_lane(iface, "calling_conv", &super::CALLING_CONVS)?,
         functy: functy_lane(iface)?,
@@ -372,8 +566,7 @@ pub fn parse(json: &str) -> Result<Tags, CoreError> {
         block_params: params_lane(iface, "block_params")?,
         aligns: str_lane(iface, "aligns")?,
         clauses: str_lane(iface, "clauses")?.into_iter().collect(),
-    };
-    Ok(tags)
+    })
 }
 
 /// One pinned header KEYWORD — the linkage or the calling convention.

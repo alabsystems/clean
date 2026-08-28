@@ -638,3 +638,208 @@ fn test_add_decl_profile_heartbeats_option() {
         }
     }
 }
+
+// ── Ambient per-declaration budget (task #31) ────────────────────────────
+//
+// The per-`TypeChecker` heartbeat above bounds ONE checker. These bound a
+// DECLARATION, across every checker built while it runs. Each test runs on its
+// own thread because the ambient budget is thread-local; the harness reuses
+// threads between tests, and a leftover limit would starve unrelated tests.
+
+use crate::tc::{
+    clear_declaration_budget, declaration_budget_exhausted, declaration_budget_used,
+    reset_declaration_budget, set_declaration_budget,
+};
+
+fn on_budget_thread<F: FnOnce() + Send + 'static>(f: F) {
+    std::thread::spawn(f)
+        .join()
+        .expect("declaration-budget test thread must not panic");
+}
+
+/// THE POINT OF THE MECHANISM: the ambient budget binds a checker whose OWN
+/// heartbeat is unlimited.
+///
+/// `set_heartbeat_limit(0)` is not an exotic configuration — it is what the
+/// tactic engine, the olean verifier and several elaborator paths ask for, and
+/// it is exactly the configuration a runaway declaration reaches through. If
+/// the ambient tick were placed after `tick_heartbeat`'s `limit == 0` early
+/// return, this test would loop forever inside the budget instead of failing.
+#[test]
+fn test_declaration_budget_binds_a_checker_with_unlimited_heartbeat() {
+    on_budget_thread(|| {
+        let env = Environment::new();
+        let mut tc = TypeChecker::new(&env);
+        tc.set_heartbeat_limit(0);
+        assert_eq!(tc.heartbeat_limit(), 0, "checker heartbeat must be off");
+
+        set_declaration_budget(4);
+        let prop = Expr::sort(Level::zero());
+        let mut last = Ok(Expr::sort(Level::zero()));
+        for _ in 0..64 {
+            last = tc.infer_type(&prop);
+            if last.is_err() {
+                break;
+            }
+        }
+        assert!(
+            matches!(
+                last,
+                Err(TypeError::DeclarationBudgetExhausted { limit: 4 })
+            ),
+            "an unlimited-heartbeat checker must still exhaust the ambient \
+             declaration budget, and must say so in its own variant: {last:?}"
+        );
+        clear_declaration_budget();
+    });
+}
+
+/// The ambient exhaustion is reported as its OWN error, never as
+/// `HeartbeatExceeded`.
+///
+/// A consumer that special-cases `HeartbeatExceeded` (the olean verifier's
+/// two-tier escalation, `clean-mathverse`'s Tier-1/Tier-2 retry) must not be
+/// tricked into retrying a declaration whose OWNER cut it off — that owner set
+/// the limit deliberately.
+#[test]
+fn test_declaration_budget_error_is_distinct_from_heartbeat_exceeded() {
+    on_budget_thread(|| {
+        let env = Environment::new();
+        let mut tc = TypeChecker::new(&env);
+        tc.set_heartbeat_limit(1_000_000);
+
+        set_declaration_budget(2);
+        let prop = Expr::sort(Level::zero());
+        let mut last = Ok(Expr::sort(Level::zero()));
+        for _ in 0..64 {
+            last = tc.infer_type(&prop);
+            if last.is_err() {
+                break;
+            }
+        }
+        assert!(
+            !matches!(last, Err(TypeError::HeartbeatExceeded { .. })),
+            "must not masquerade as the per-checker heartbeat: {last:?}"
+        );
+        assert!(
+            matches!(last, Err(TypeError::DeclarationBudgetExhausted { .. })),
+            "must be the declaration-budget variant: {last:?}"
+        );
+        clear_declaration_budget();
+    });
+}
+
+/// A FRESH checker draws from the SAME pot. This is the difference between
+/// bounding a step and bounding a declaration: the per-checker heartbeat
+/// resets to `DEFAULT_HEARTBEAT_LIMIT` every time a caller builds a new
+/// `TypeChecker`, so a declaration that keeps building them is unbounded.
+#[test]
+fn test_declaration_budget_is_shared_across_type_checkers() {
+    on_budget_thread(|| {
+        let env = Environment::new();
+        set_declaration_budget(3);
+        let prop = Expr::sort(Level::zero());
+
+        // Spend the whole budget through checker #1…
+        let tc1 = TypeChecker::new(&env);
+        for _ in 0..64 {
+            if tc1.infer_type(&prop).is_err() {
+                break;
+            }
+        }
+        assert!(declaration_budget_exhausted(), "budget must be spent");
+
+        // …and a brand-new checker must find the pot empty, not refilled.
+        let tc2 = TypeChecker::new(&env);
+        let result = tc2.infer_type(&prop);
+        assert!(
+            matches!(result, Err(TypeError::DeclarationBudgetExhausted { .. })),
+            "a fresh TypeChecker must NOT get a fresh declaration budget: {result:?}"
+        );
+        clear_declaration_budget();
+    });
+}
+
+/// Disabled by default: with no limit set, the ambient path is inert and
+/// nothing about existing behavior moves.
+#[test]
+fn test_declaration_budget_off_by_default_changes_nothing() {
+    on_budget_thread(|| {
+        let env = Environment::new();
+        let tc = TypeChecker::new(&env);
+        let prop = Expr::sort(Level::zero());
+        for _ in 0..2_000 {
+            let _ = tc
+                .infer_type(&prop)
+                .expect("with no ambient budget set, inference must never be cut off");
+        }
+        assert!(!declaration_budget_exhausted());
+        assert_eq!(declaration_budget_used(), 0);
+    });
+}
+
+/// `reset_declaration_budget` refills, which is what makes the budget
+/// PER-DECLARATION rather than per-run.
+#[test]
+fn test_declaration_budget_reset_lets_the_next_declaration_run() {
+    on_budget_thread(|| {
+        let env = Environment::new();
+        let tc = TypeChecker::new(&env);
+        let prop = Expr::sort(Level::zero());
+
+        set_declaration_budget(2);
+        for _ in 0..64 {
+            if tc.infer_type(&prop).is_err() {
+                break;
+            }
+        }
+        assert!(declaration_budget_exhausted());
+
+        reset_declaration_budget();
+        assert!(!declaration_budget_exhausted());
+        let _ = tc
+            .infer_type(&prop)
+            .expect("after a reset the next declaration must get fuel");
+        clear_declaration_budget();
+    });
+}
+
+/// The ambient budget is drained by `whnf` ITSELF, not only by the paths that
+/// `infer_type` happens to take.
+///
+/// This test exists because of a NEGATIVE mutation result (2026-08-27). Moving
+/// `tick_heartbeat`'s ambient tick after its `limit == 0` early return — the
+/// mutation meant to prove that placement load-bearing — left every other
+/// declaration-budget test GREEN, because `infer_type` routes through
+/// `infer_type_with_cert`, whose own ambient check caught the exhaustion
+/// first. A test that cannot tell the two hooks apart proves neither.
+///
+/// So drive `whnf` directly, with the checker's own heartbeat disabled: the
+/// only thing that can spend ambient fuel here is
+/// `inc_heartbeat_categorized`'s hook. Delete it and `used` stays 0.
+#[test]
+fn test_declaration_budget_is_drained_by_whnf_itself() {
+    on_budget_thread(|| {
+        let env = Environment::new();
+        let mut tc = TypeChecker::new(&env);
+        tc.set_heartbeat_limit(0);
+        assert_eq!(tc.heartbeat_limit(), 0, "checker heartbeat must be off");
+
+        // Armed but unreachable: the counter runs, nothing can be cut off.
+        set_declaration_budget(u64::MAX);
+        // A beta-redex, so `whnf` has real work and cannot be answered from a
+        // trivially-normal short circuit.
+        let sort = Expr::sort(Level::zero());
+        let redex = Expr::app(
+            Expr::lam(BinderInfo::Default, sort.clone(), Expr::bvar(0)),
+            sort,
+        );
+        let _ = tc.whnf(&redex);
+        assert!(
+            declaration_budget_used() > 0,
+            "whnf must spend ambient declaration fuel; it spent {}",
+            declaration_budget_used()
+        );
+        clear_declaration_budget();
+    });
+}

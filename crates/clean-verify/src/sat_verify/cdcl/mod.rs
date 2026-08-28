@@ -55,7 +55,7 @@ pub type Clause = Vec<Literal>;
 
 /// Extract the variable index from a literal.
 #[must_use]
-pub fn var_of(lit: Literal) -> u32 {
+pub(crate) fn var_of(lit: Literal) -> u32 {
     lit.unsigned_abs()
 }
 
@@ -115,7 +115,7 @@ impl CdclState {
     }
 
     #[must_use]
-    pub fn eval_literal(&self, lit: Literal) -> Option<bool> {
+    pub(crate) fn eval_literal(&self, lit: Literal) -> Option<bool> {
         let var = var_of(lit) as usize;
         self.assignment.get(var).and_then(|a| {
             a.map(|v| {
@@ -245,13 +245,13 @@ impl CdclState {
 
     /// Return the trail index of a variable, or `None` if unassigned.
     #[must_use]
-    pub fn trail_index_of(&self, var: u32) -> Option<usize> {
+    pub(crate) fn trail_index_of(&self, var: u32) -> Option<usize> {
         self.trail.iter().position(|e| var_of(e.literal) == var)
     }
 
     /// Return the decision level at which a variable was assigned.
     #[must_use]
-    pub fn level_of(&self, var: u32) -> Option<u32> {
+    pub(crate) fn level_of(&self, var: u32) -> Option<u32> {
         self.trail
             .iter()
             .find(|e| var_of(e.literal) == var)

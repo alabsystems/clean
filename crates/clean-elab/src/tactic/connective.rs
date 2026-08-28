@@ -829,8 +829,14 @@ pub fn by_contra(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     // The negation of the goal: goal → False
     let neg_goal = Expr::pi(BinderInfo::Default, goal.target.clone(), false_type.clone());
 
-    // Create a fresh fvar for the new hypothesis h : ¬goal
-    let hyp_fvar = state.fresh_fvar();
+    // Create the new hypothesis h : ¬goal — GOAL-DERIVED minting (see
+    // existential.rs by_cases): cursor-minted ids drift out of the scope
+    // checker's goal-derived window.
+    let hyp_fvar = {
+        let base = state.goal_binder_base(&goal);
+        state.next_fvar = state.next_fvar.max(base + 1);
+        FVarId::new(base)
+    };
 
     // Create the new local context with h : ¬goal
     let mut new_ctx = goal.local_ctx.clone();

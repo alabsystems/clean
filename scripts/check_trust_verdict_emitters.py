@@ -68,6 +68,31 @@ def is_test_path(rel: Path) -> bool:
     return name.endswith("kani.rs") or "kani" in name or "test" in name
 
 
+# Rust non-code spans — same construction and rationale as
+# check_add_decl_ratchet.py / check_env_bypass_census.py. Blanking these BEFORE
+# matching is what keeps arm (1) from charging an engineer for DOCUMENTING a
+# verdict: this file's own subject matter is the token it greps for, so a
+# trailing `// ... = TrustLevel::KernelVerified` in an explanation used to read
+# as a new unclassified emitter. Lane ANTICORR, 2026-08-25.
+NONCODE_RE = re.compile(
+    r"/\*.*?\*/"                    # block comment (non-nested)
+    r"|//[^\n]*"                    # line comment
+    r'|(?:b?r)(#*)"(?:.|\n)*?"\1'   # raw string   r"..."  r#"..."#
+    r'|b?"(?:\\.|[^"\\])*"'         # string literal
+    r"|'(?:\\.|[^\\'])'",           # char literal
+    re.DOTALL,
+)
+
+
+def _blank(match: re.Match[str]) -> str:
+    return "".join("\n" if ch == "\n" else " " for ch in match.group(0))
+
+
+def strip_noncode(text: str) -> str:
+    """Blank comments and literal bodies, preserving line geometry."""
+    return NONCODE_RE.sub(_blank, text)
+
+
 def strip_cfg_test_blocks(text: str) -> str:
     """Blank out top-level `#[cfg(test)] mod ... { ... }` bodies so inline test
     fixtures inside otherwise-production files do not trip the scanner. Brace-
@@ -191,13 +216,12 @@ def main() -> int:  # noqa: C901 (single linear gate)
         if is_test_path(rel):
             continue
         try:
-            text = strip_cfg_test_blocks(path.read_text())
+            raw_text = path.read_text()
+            text = strip_cfg_test_blocks(strip_noncode(raw_text))
         except OSError as exc:
             sys.exit(f"FAIL: cannot read {rel}: {exc}")
+        raw_lines = raw_text.splitlines()
         for lineno, line in enumerate(text.splitlines(), 1):
-            stripped = line.lstrip()
-            if stripped.startswith("//") or stripped.startswith("*"):
-                continue
             if not CONSTRUCT_RE.search(line) or READ_RE.search(line):
                 continue
             site = f"{rel}:{lineno}"
@@ -206,7 +230,7 @@ def main() -> int:  # noqa: C901 (single linear gate)
             ok = False
             print(
                 f"FAIL: unclassified trust-verdict construction at {site}:\n"
-                f"    {line.strip()}\n"
+                f"    {raw_lines[lineno - 1].strip()}\n"
                 f"  -> a new `TrustLevel::KernelVerified` is minted here. Add a "
                 f"data/trust_verdict_emitters.json entry (with a verdict_construction_sites "
                 f"'{site}') classifying its BASIS, and a // SOUNDNESS: comment if it "

@@ -24,18 +24,27 @@ use crate::tactic::core::{
     TRUSTED_ARITH_SOURCE_SITE_RATCHET, TRUSTED_AY_CALL_SITE_RATCHET,
 };
 use crate::test_support::source_scan::{
-    cfg_test_mod_line_ranges, code_before_line_comment, collect_rust_source_files,
-    line_is_inside_cfg_test_mod, DEFAULT_PRODUCTION_RULES,
+    collect_rust_source_files, production_code_lines, DEFAULT_PRODUCTION_RULES,
 };
 
-/// Count occurrences of a pattern in source files, excluding files whose path
-/// contains the given substring. Uses path containment to handle both single-file
-/// and directory-module layouts — e.g., exclude `tactic/core/` matches both
-/// the old `tactic/core.rs` and the split `tactic/core/mod.rs`, `tactic/core/goal_ops.rs`.
+/// Count occurrences of a pattern in the PRODUCTION CODE of source files,
+/// excluding files whose path contains the given substring. Uses path
+/// containment to handle both single-file and directory-module layouts — e.g.,
+/// exclude `tactic/core/` matches both the old `tactic/core.rs` and the split
+/// `tactic/core/mod.rs`, `tactic/core/goal_ops.rs`.
 ///
 /// Skips lines inside `#[cfg(test)] mod` blocks — inline test modules are
 /// not production code. Distinguishes test modules from conditional imports
 /// (`#[cfg(test)] use ...`). (#2533 regression)
+///
+/// ANTI-CORRELATION FIX (lane ANTICORR, 2026-08-25). This used to match
+/// `line.matches(pattern)` on RAW lines, so it counted every MENTION of the
+/// forbidden call, comments and string literals included. Both ratchets it
+/// feeds are pinned at 0, so a single `// SOUNDNESS:` comment naming
+/// `metas.assign(` or `.close_goal_unchecked(` — the prose CLAUDE.md's
+/// soundness rule asks for — turned the gate red with no behaviour change,
+/// and the cheapest green was to delete the explanation. It now counts over
+/// [`production_code_lines`], which blanks comments and literal bodies first.
 fn count_pattern_in_files(files: &[PathBuf], pattern: &str, exclude_path_part: &str) -> usize {
     let mut total = 0;
     for file in files {
@@ -45,12 +54,8 @@ fn count_pattern_in_files(files: &[PathBuf], pattern: &str, exclude_path_part: &
         }
         let content = std::fs::read_to_string(file)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", file.display(), e));
-        let test_mod_ranges = cfg_test_mod_line_ranges(&content);
-        for (idx, line) in content.lines().enumerate() {
-            if line_is_inside_cfg_test_mod(&test_mod_ranges, idx) {
-                continue;
-            }
-            total += line.matches(pattern).count();
+        for (_, code) in production_code_lines(&content) {
+            total += code.matches(pattern).count();
         }
     }
     total
@@ -78,12 +83,7 @@ fn count_pattern_in_files_excluding_imports(
         }
         let content = std::fs::read_to_string(file)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", file.display(), e));
-        let test_mod_ranges = cfg_test_mod_line_ranges(&content);
-        for (idx, line) in content.lines().enumerate() {
-            if line_is_inside_cfg_test_mod(&test_mod_ranges, idx) {
-                continue;
-            }
-            let code = code_before_line_comment(line);
+        for (_, code) in production_code_lines(&content) {
             let trimmed = code.trim_start();
             if trimmed.is_empty() {
                 continue;
@@ -165,8 +165,8 @@ fn collect_local_decl_rewrite_sites(
             .unwrap_or(file)
             .display()
             .to_string();
-        for (line_num, line) in content.lines().enumerate() {
-            let code = line.split("//").next().unwrap_or("").trim();
+        for (line_no, raw_code) in production_code_lines(&content) {
+            let code = raw_code.trim();
             if code.is_empty() {
                 continue;
             }
@@ -187,7 +187,7 @@ fn collect_local_decl_rewrite_sites(
                 && !code.contains("ty: ")
                 && !code.contains("value: ");
             if is_indexed_bypass || is_iterator_bypass {
-                sites.push((rel_path.clone(), line_num + 1, code.to_string()));
+                sites.push((rel_path.clone(), line_no, code.to_string()));
             }
         }
     }
@@ -212,6 +212,64 @@ let comment_only = target; // create_trusted_ay_term(inline_comment)
     assert_eq!(
         count, 1,
         "line comments and inline comment suffixes must not count as production call sites"
+    );
+}
+
+/// THE ANTI-CORRELATION ARM (lane ANTICORR, 2026-08-25).
+///
+/// `METAS_ASSIGN_BYPASS_RATCHET` and `CLOSE_GOAL_UNCHECKED_RATCHET` are both 0,
+/// and the second is asserted with `==`. Before this fix the counter matched raw
+/// lines, so the `// SOUNDNESS:` comment CLAUDE.md's soundness rule asks for —
+/// naming the call it is promising NOT to make — was itself counted as a bypass
+/// site and turned the ratchet red with no behaviour change. The cheapest way to
+/// green was to delete the explanation: the gate punished the behaviour it exists
+/// to encourage. If this test ever fails, that has come back.
+#[test]
+fn count_pattern_in_files_does_not_count_soundness_prose_as_a_bypass() {
+    let temp = tempfile::tempdir().expect("create temp dir");
+    let file = temp.path().join("sample.rs");
+    std::fs::write(
+        &file,
+        r#"// SOUNDNESS: this tactic must never call metas.assign( directly, and must
+// never reach for .close_goal_unchecked( -- both bypass the kernel check.
+
+/// Doc comment naming `metas.assign(` and `.close_goal_unchecked(` too.
+/** Block comment: metas.assign( and .close_goal_unchecked( */
+fn diagnostic() -> &'static str {
+    "use close_goal instead of metas.assign( or .close_goal_unchecked("
+}
+"#,
+    )
+    .expect("write sample.rs");
+
+    for pattern in ["metas.assign(", ".close_goal_unchecked("] {
+        assert_eq!(
+            count_pattern_in_files(std::slice::from_ref(&file), pattern, "never/matches"),
+            0,
+            "comments and string literals naming {pattern} are prose, not bypass sites"
+        );
+    }
+}
+
+/// The counter must still see the real thing, including when a comment shares
+/// the line — the fix must not be a way to hide a bypass behind a `//`.
+#[test]
+fn count_pattern_in_files_still_counts_real_calls_beside_comments() {
+    let temp = tempfile::tempdir().expect("create temp dir");
+    let file = temp.path().join("sample.rs");
+    std::fs::write(
+        &file,
+        r#"fn real(state: &mut ProofState, goal: MetaId, proof: Expr) {
+    state.metas.assign(goal, proof); // SOUNDNESS: no, this one is real
+}
+"#,
+    )
+    .expect("write sample.rs");
+
+    assert_eq!(
+        count_pattern_in_files(&[file], "metas.assign(", "never/matches"),
+        1,
+        "a real call is still counted when a comment sits on the same line"
     );
 }
 
@@ -473,12 +531,7 @@ fn count_elab_sorry_source_sites(files: &[PathBuf]) -> usize {
     for file in files {
         let content = std::fs::read_to_string(file)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", file.display(), e));
-        let test_mod_ranges = cfg_test_mod_line_ranges(&content);
-        for (idx, line) in content.lines().enumerate() {
-            if line_is_inside_cfg_test_mod(&test_mod_ranges, idx) {
-                continue;
-            }
-            let code = code_before_line_comment(line);
+        for (_, code) in production_code_lines(&content) {
             let trimmed = code.trim_start();
             if trimmed.is_empty() {
                 continue;

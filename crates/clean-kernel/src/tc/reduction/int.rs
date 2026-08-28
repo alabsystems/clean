@@ -248,3 +248,297 @@ fn mk_int_expr(v: IntVal) -> Expr {
         )
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Native `Int`-predecessor fold: `Nat.rec (fun _ => Int) z pred N  ↝  z − N`
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Iteration count at or above which the closed `Int`-predecessor fold is
+/// computed natively instead of ι-expanded one step at a time.
+///
+/// `2^9 = 512`, the same constant and rationale as the two native-`Nat` grind
+/// guards (`native_nat_binop_grind_stuck`, `native_nat_grind_recursor_stuck`):
+/// comfortably above any count a legitimate definitional proof unfolds by hand,
+/// and at-or-below every perf-class grind. **Below the threshold this reducer
+/// declines without touching a single operand**, so every small fold in the
+/// existing corpus keeps a bit-identical reduction order and normal form.
+const INT_PRED_FOLD_MIN_ITERATIONS: u64 = 1 << 9;
+
+impl TypeChecker<'_> {
+    /// Compute a **closed `Int`-predecessor fold** in O(limbs) instead of
+    /// Θ(count) unary ι-steps.
+    ///
+    /// Fires iff `e` is exactly
+    ///
+    /// ```text
+    /// Nat.rec (fun _ : Nat => Int)
+    ///         z
+    ///         (fun (_ : Nat) (ih : Int) =>
+    ///            Int.rec (fun _ : Int => Int)
+    ///                    (fun a : Nat => Nat.rec (fun _ : Nat => Int)
+    ///                                            (Int.negSucc Nat.zero)
+    ///                                            (fun m _ => Int.ofNat m)
+    ///                                            a)
+    ///                    (fun b : Nat => Int.negSucc (Nat.succ b))
+    ///                    ih)
+    ///         N
+    /// ```
+    ///
+    /// with `N` a closed `Nat` literal `>= INT_PRED_FOLD_MIN_ITERATIONS` and `z`
+    /// WHNF-reducing to a closed `Int`. The result is the constructor literal
+    /// for `z − N`.
+    ///
+    /// # Why this exists (measured)
+    ///
+    /// `import Init.GrindInstances` re-checks the `Int32`/`Int64`/`BitVec`
+    /// conversion lemmas, whose `toInt` bodies are `↑(toBitVec.toNat) − 2^32`
+    /// (resp. `2^64`) *elaborated as this fold*. Measured 2026-08-26 at
+    /// `69f4f4a70`: **599,888 of 600,000** ι-expansions over a large literal in
+    /// that import are this exact recursor, the count decrementing by exactly 1
+    /// per expansion from `2^32`, i.e. ~4.3 billion steps — the run reached
+    /// 10.4 GB RSS in 13 s and was killed. Lean evaluates the same term in O(1)
+    /// through GMP.
+    ///
+    /// # SOUNDNESS
+    ///
+    /// This reducer **mints a value**, so the match must *determine* the folded
+    /// function rather than merely suggest it. Two things make it exact.
+    ///
+    /// 1. **The step function is pinned by exhaustive case analysis.** Every
+    ///    node of the minor premise is matched — no wildcards, no "head is
+    ///    `Int.rec`, trust the rest". Given the match, for every closed `v : Int`:
+    ///    - `v = Int.ofNat 0`   → `Nat.rec … Nat.zero` = `Int.negSucc 0` = `−1`
+    ///    - `v = Int.ofNat (m+1)` → `Int.ofNat m` = `v − 1`
+    ///    - `v = Int.negSucc b` (= `−(b+1)`) → `Int.negSucc (b+1)` = `v − 1`
+    ///
+    ///    `Int` has exactly these two constructors (checked against the
+    ///    environment below), so `step v = v − 1` for **all** `v`, and the outer
+    ///    `Nat.rec` therefore denotes `z − N` by induction on `N`. The bound
+    ///    `n : Nat` provably does not occur in the body: the match pins every
+    ///    `BVar` occurrence in the tree, and each is the `ih`.
+    ///
+    /// 2. **The recursors are pinned to the standard ones.** `Nat.rec` and
+    ///    `Int.rec` are checked in the environment for the standard shape *and
+    ///    constructor-to-minor association* (`std_two_ctor_rec`), so a shadowed
+    ///    or reordered `Int` cannot be mistaken for the real one.
+    ///
+    /// Every failure mode is a decline (`None`), which leaves the ordinary ι
+    /// path untouched. The minted term is the same value the ι chain converges
+    /// to, in the canonical literal form `mk_int_expr` already produces for
+    /// `reduce_int`.
+    pub(in crate::tc) fn reduce_int_pred_fold(
+        &self,
+        e: &Expr,
+        rec_name: &crate::name::Name,
+    ) -> Option<Expr> {
+        if *rec_name != *names::NAT_REC {
+            return None;
+        }
+        if e.get_app_num_args() != 4 {
+            return None;
+        }
+        let args = e.get_app_args();
+        // Motive must be `fun _ : Nat => Int` — an Int-valued fold.
+        if !is_const_motive(args[0], &names::INT) {
+            return None;
+        }
+        // The minor premise must be exactly the Int predecessor (see SOUNDNESS).
+        if !is_int_pred_step(args[2]) {
+            return None;
+        }
+        // Both recursors must be the standard ones, with the standard
+        // constructor-to-minor association.
+        if !self.std_two_ctor_rec(
+            &names::NAT_REC,
+            &names::NAT,
+            &names::NAT_ZERO,
+            0,
+            &names::NAT_SUCC,
+            1,
+        ) || !self.std_two_ctor_rec(
+            &names::INT_REC,
+            &names::INT,
+            &names::INT_OF_NAT,
+            1,
+            &names::INT_NEG_SUCC,
+            1,
+        ) {
+            return None;
+        }
+        // Iteration count: a closed literal at or above the threshold. Below it
+        // we decline WITHOUT having touched `z`, so small folds are unperturbed.
+        let count = self.get_nat_bignat_whnf_pub(args[3])?;
+        if matches!(&count, BigNat::Small(v) if *v < INT_PRED_FOLD_MIN_ITERATIONS) {
+            return None;
+        }
+        // Accumulator: must WHNF to a closed `Int`.
+        let z = self.get_int_whnf(args[1])?;
+        let result = int_add(
+            &z,
+            &IntVal {
+                neg: true,
+                mag: count,
+            },
+        );
+        Some(mk_int_expr(result))
+    }
+
+    /// Is `rec` the environment's recursor for a standard non-parametric,
+    /// non-indexed, two-constructor inductive `ind`, whose minor premises are in
+    /// the order `c0` (with `f0` fields) then `c1` (with `f1` fields)?
+    ///
+    /// This is what lets `reduce_int_pred_fold` read a minor premise *positionally*
+    /// and still know which constructor it computes on.
+    fn std_two_ctor_rec(
+        &self,
+        rec: &crate::name::Name,
+        ind: &crate::name::Name,
+        c0: &crate::name::Name,
+        f0: u32,
+        c1: &crate::name::Name,
+        f1: u32,
+    ) -> bool {
+        let Some(rv) = self.env.get_recursor(rec) else {
+            return false;
+        };
+        rv.inductive_name == *ind
+            && rv.arg_order == crate::inductive::RecursorArgOrder::MajorAfterMinors
+            && rv.num_params == 0
+            && rv.num_indices == 0
+            && rv.num_motives == 1
+            && rv.num_minors == 2
+            && !rv.is_k
+            && rv.rules.len() == 2
+            && rv.rules[0].constructor_name == *c0
+            && rv.rules[0].num_fields == f0
+            && rv.rules[1].constructor_name == *c1
+            && rv.rules[1].num_fields == f1
+    }
+}
+
+/// Strip `MData` annotations, which are reduction-transparent.
+fn peel(e: &Expr) -> &Expr {
+    let mut cur = e;
+    while let ExprKind::MData(_, inner) = cur.kind() {
+        cur = inner;
+    }
+    cur
+}
+
+fn is_const(e: &Expr, name: &crate::name::Name) -> bool {
+    matches!(peel(e).kind(), ExprKind::Const(n, _) if *n == *name)
+}
+
+fn is_bvar(e: &Expr, idx: u32) -> bool {
+    matches!(peel(e).kind(), ExprKind::BVar(i) if *i == idx)
+}
+
+/// `fun _ => <Const name>` — a constant motive returning the type `name`.
+/// The body is a bare `Const`, so the bound variable provably does not occur.
+fn is_const_motive(e: &Expr, name: &crate::name::Name) -> bool {
+    match peel(e).kind() {
+        ExprKind::Lam(_, _, body) => is_const(body, name),
+        _ => false,
+    }
+}
+
+/// `Nat.zero` or the literal `0` — both denote zero.
+fn is_nat_zero(e: &Expr) -> bool {
+    match peel(e).kind() {
+        ExprKind::Lit(Literal::Nat(n)) => n.is_zero(),
+        _ => is_const(e, &names::NAT_ZERO),
+    }
+}
+
+/// Match a spine `f a1 … ak` whose head is `Const name`, returning the args.
+fn app_of_const<'a>(
+    e: &'a Expr,
+    name: &crate::name::Name,
+    arity: usize,
+) -> Option<smallvec::SmallVec<[&'a Expr; 8]>> {
+    let e = peel(e);
+    if !matches!(e.kind(), ExprKind::App(..)) {
+        return None;
+    }
+    if !is_const(e.get_app_fn(), name) {
+        return None;
+    }
+    let args = e.get_app_args();
+    if args.len() != arity {
+        return None;
+    }
+    Some(args)
+}
+
+/// Is `s` exactly `fun (_ : Nat) (ih : Int) => ih − 1`, written as the `Int.rec`
+/// case split the elaborator emits? See `reduce_int_pred_fold`'s SOUNDNESS note
+/// — this match pins every node, which is what makes the fold's value derivable.
+fn is_int_pred_step(s: &Expr) -> bool {
+    // fun (_ : Nat) => fun (ih : Int) => body   (ih is BVar 0 inside `body`)
+    let ExprKind::Lam(_, _, inner) = peel(s).kind() else {
+        return false;
+    };
+    let ExprKind::Lam(_, _, body) = peel(inner).kind() else {
+        return false;
+    };
+    // Int.rec (fun _ : Int => Int) <ofNat case> <negSucc case> ih
+    let Some(rec_args) = app_of_const(body, &names::INT_REC, 4) else {
+        return false;
+    };
+    if !is_const_motive(rec_args[0], &names::INT) || !is_bvar(rec_args[3], 0) {
+        return false;
+    }
+    is_of_nat_pred_case(rec_args[1]) && is_neg_succ_pred_case(rec_args[2])
+}
+
+/// `fun (a : Nat) => Nat.rec (fun _ : Nat => Int) (Int.negSucc Nat.zero)
+///                           (fun (m : Nat) (_ : Int) => Int.ofNat m) a`
+///
+/// i.e. `Int.ofNat a − 1`: zero ↦ `−1`, `m+1` ↦ `Int.ofNat m`.
+fn is_of_nat_pred_case(e: &Expr) -> bool {
+    let ExprKind::Lam(_, _, body) = peel(e).kind() else {
+        return false;
+    };
+    let Some(args) = app_of_const(body, &names::NAT_REC, 4) else {
+        return false;
+    };
+    // motive `fun _ : Nat => Int`; major is the bound `a` (BVar 0).
+    if !is_const_motive(args[0], &names::INT) || !is_bvar(args[3], 0) {
+        return false;
+    }
+    // zero case: `Int.negSucc Nat.zero` = −1.
+    let Some(zero_case) = app_of_const(args[1], &names::INT_NEG_SUCC, 1) else {
+        return false;
+    };
+    if !is_nat_zero(zero_case[0]) {
+        return false;
+    }
+    // succ case: `fun (m : Nat) (_ : Int) => Int.ofNat m`. Inside the two
+    // binders `m` is BVar 1, so the induction hypothesis is provably unused.
+    let ExprKind::Lam(_, _, inner) = peel(args[2]).kind() else {
+        return false;
+    };
+    let ExprKind::Lam(_, _, succ_body) = peel(inner).kind() else {
+        return false;
+    };
+    match app_of_const(succ_body, &names::INT_OF_NAT, 1) {
+        Some(a) => is_bvar(a[0], 1),
+        None => false,
+    }
+}
+
+/// `fun (b : Nat) => Int.negSucc (Nat.succ b)`
+///
+/// i.e. `Int.negSucc b − 1`: `−(b+1) − 1 = −(b+2)`.
+fn is_neg_succ_pred_case(e: &Expr) -> bool {
+    let ExprKind::Lam(_, _, body) = peel(e).kind() else {
+        return false;
+    };
+    let Some(neg) = app_of_const(body, &names::INT_NEG_SUCC, 1) else {
+        return false;
+    };
+    match app_of_const(neg[0], &names::NAT_SUCC, 1) {
+        Some(s) => is_bvar(s[0], 0),
+        None => false,
+    }
+}

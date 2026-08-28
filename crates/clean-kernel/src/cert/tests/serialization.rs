@@ -33,10 +33,10 @@ fn test_cert_serialize_json_complex() {
 
     let cert = ProofCert::Lam {
         binder_info: BinderInfo::Default,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
-        body_cert: Box::new(ProofCert::BVar {
+        body_cert: Arc::new(ProofCert::BVar {
             idx: 0,
             expected_type: Box::new(prop.clone()),
         }),
@@ -55,11 +55,11 @@ fn test_cert_serialize_json_complex() {
 fn test_cert_serialize_bincode() {
     let cert = ProofCert::Pi {
         binder_info: BinderInfo::Implicit,
-        arg_type_cert: Box::new(ProofCert::Sort {
+        arg_type_cert: Arc::new(ProofCert::Sort {
             level: Level::succ(Level::zero()),
         }),
         arg_level: Level::succ(Level::succ(Level::zero())),
-        body_type_cert: Box::new(ProofCert::Sort {
+        body_type_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         body_level: Level::succ(Level::zero()),
@@ -106,7 +106,7 @@ fn test_cert_serialize_with_mdata() {
     let metadata = vec![(Name::from_string("key"), MDataValue::Bool(true))];
     let cert = ProofCert::MData {
         metadata,
-        inner_cert: Box::new(ProofCert::Sort {
+        inner_cert: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         result_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
@@ -121,7 +121,7 @@ fn test_cert_serialize_with_mdata() {
 #[test]
 fn test_cert_serialize_def_eq() {
     let cert = ProofCert::DefEq {
-        inner: Box::new(ProofCert::Sort {
+        inner: Arc::new(ProofCert::Sort {
             level: Level::zero(),
         }),
         expected_type: Box::new(Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())))),
@@ -144,8 +144,8 @@ fn test_cert_serialize_def_eq() {
     assert_eq!(cert, restored2);
 }
 
-fn leaf() -> Box<ProofCert> {
-    Box::new(ProofCert::SProp)
+fn leaf() -> Arc<ProofCert> {
+    Arc::new(ProofCert::SProp)
 }
 
 fn all_proof_cert_wire_fixtures() -> Vec<(&'static str, ProofCert)> {
@@ -605,7 +605,7 @@ fn deep_cert(depth: usize) -> ProofCert {
     let mut cert = ProofCert::SProp;
     for _ in 0..depth {
         cert = ProofCert::Squash {
-            inner_cert: Box::new(cert),
+            inner_cert: Arc::new(cert),
         };
     }
     cert

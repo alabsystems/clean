@@ -1,0 +1,78 @@
+-- P47 — p30's silent-monomorphization class, reached through the MINT-NAME
+-- door. U2 stage-3 deferral 1 (docs/analysis/u2-implementation-plan-2026-08-24.md
+-- §3 stage 3, delta 3c, first bullet), exhibited and closed 2026-08-26.
+--
+-- Stage 3 deferred a first-class `LevelMVarId` / total `is_rigid_level_param`
+-- with the honest reason "no measured failure behind it today. Schedule it
+-- when one appears." One appeared.
+--
+-- THE DEFECT (measured on the release binary at 9cd4f68f6, `--prelude
+-- builtin`). The auto-bind path (`infer/elab_core.rs`) decided "this universe
+-- name is already a parameter of the declaration" by testing membership in
+-- `ElabCtx::universe_params`. But that vector is the UNION of two populations:
+-- the RIGID names (declared `.{u}`, file-scope `universe u`, auto-bound) and
+-- the MINTED ones — `fresh_universe_param` pushes every `u_N` it hands out
+-- there so the next mint skips it. A user-WRITTEN universe name that collides
+-- with a name this declaration had already minted therefore read as "already
+-- a parameter", never reached the rigid set, and stayed SOLVABLE.
+--
+-- Five shapes, one declaration body, differing only in the universe's NAME:
+--
+--   def badNoHole                   : Sort u_0 := Nat   FAIL  (auto-bound)
+--   def badDeclared.{u_0}           : Sort u_0 := Nat   FAIL  (declared)
+--   universe u_0 ; def badFile      : Sort u_0 := Nat   FAIL  (file-scope)
+--   def badAutoNamed (β : Sort _)   : Sort w   := Nat   FAIL  (auto-bound)
+--   def badAutoCollide (β : Sort _) : Sort u_0 := Nat   PASS  <-- THE DEFECT
+--
+-- The last two are the SAME declaration with the universe renamed `w` -> `u_0`.
+-- The `Sort _` hole mints `u_0` first, so the written `u_0` was read as
+-- already-a-parameter and `add_level_constraint` solved it to `1`. The
+-- parameter then VANISHED — p30's own tell, reproduced verbatim:
+--
+--   def asType : Type := badAutoCollide Nat        -- typechecked (collapsed)
+--   def atZero : Type := @badAutoCollide.{0} Nat
+--     -- UniverseLevelMismatch { name: "badAutoCollide", expected: 0, actual: 1 }
+--     -- i.e. ZERO universe parameters survived
+--
+-- Lean rejects the declaration. Clean accepted it.
+--
+-- THE FIX: `elab_level` asks for the TOTAL role of the name
+-- (`crate::level_role::LevelParamRole` — Rigid / Minted / Foreign, where
+-- Minted = universe_params \ rigid) instead of the union's membership. A name
+-- the user WROTE is a genuine parameter whatever else shares its spelling, so
+-- it is promoted to rigid — resolving the clash in the loud-refusal direction,
+-- never the silent-solve one.
+--
+-- AMENDED 2026-08-26b — THE CLASH NO LONGER EXISTS TO RESOLVE. This header
+-- used to continue "Two levels can still share one name (level identity is
+-- still `Level::Param(Name)`; separating them is the `LevelMVarId`
+-- kernel-representation refactor, still out of scope)". Level identity IS
+-- still `Level::Param(Name)` and no kernel representation moved — but
+-- universe metavariables are now minted into a RESERVED namespace the surface
+-- grammar cannot produce (`?u_0`, `?u_1`, …;
+-- `crate::level_mint::MINT_PREFIX`), so a written name and a minted one can
+-- no longer be the same string in the first place. `badAutoCollide` below is
+-- therefore refused for the ORDINARY reason its `Sort w` twin above is: `u_0`
+-- is an auto-bound parameter of this declaration and `:= Nat` monomorphizes
+-- it. The pinned fragment is unchanged, and that is the claim — reserving the
+-- namespace removed the p49 cost WITHOUT relaxing this refusal by one
+-- character.
+--
+-- The role classification stays, and stays load-bearing as defence in depth:
+-- it is what makes the auto-bind path correct for ANY name that is already a
+-- parameter, rather than correct only while the namespaces happen to be
+-- disjoint. If the reservation ever regressed, this fixture would catch it
+-- through that classifier instead of silently reopening the defect.
+--
+-- p48 is this probe's PRECISION companion and is not optional: a MUST_FAIL
+-- file cannot tell a precise refusal from an over-broad one, because an
+-- elaborator that rejected every `u_N`-spelled universe would satisfy it too.
+
+-- The rename control. Auto-bound `w` cannot collide with a mint, so this line
+-- failed before the fix as well; it is here so the collision line below is
+-- legible as a RENAME of it rather than as a new shape.
+def badAutoNamed (β : Sort _) : Sort w := Nat
+
+-- The collision. `Sort _` mints `u_0`; the written `u_0` must still be the
+-- declaration's own rigid parameter, so `Sort u_0 := Nat` is a loud mismatch.
+def badAutoCollide (β : Sort _) : Sort u_0 := Nat

@@ -2,103 +2,52 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Measured-open A1 lineage for the designated `Level::is_zero` target.
+//! A1 lineage for the designated `Level::is_zero` target — the rows that state
+//! what the chain's theorems are ABOUT.
 //!
-//! Link 2a (proved module = emitted module) is still open here. These tests pin
-//! both the emitted body and the exact closure wall. When the wall moves they
-//! deliberately fail, requiring a real transcription and equality gate.
+//! ## 2026-08-22 — the decision (lane LZW)
 //!
-//! ## 2026-08-20 — the wall is UNCHANGED, and now it is itemized
+//! The mint derived the emitted body mechanically and diffed it against the
+//! registered module; they differed in four classes, printed verbatim by the
+//! gate (`tests/crystal_a2_mint_lz.rs`). The registered module was therefore
+//! the hand SEMANTIC MODEL of `Level::is_zero` with the deref inlined, and
+//! `ir_lz_correct` / `ir_lz_machine_sound` were theorems about a module the
+//! compiler does not emit. Decision memo:
+//! `designs/2026-08-22-is-zero-model-vs-minted-decision.md`. What landed:
 //!
-//! Crystal A2 (`src/ir_mint`) mints `has_cubical_layer`'s module from the
-//! emitted artifact. It deliberately does **not** touch `ir_lz_module`, so the
-//! `assert_ne!` below stands exactly as written and is not inverted.
+//! * the hand model is `ir_lzm_module` (`eval_ir_crystal.rs`), and the A4/A5
+//!   theorems are `ir_lzm_correct` / `ir_lzm_machine_sound` — about the MODEL;
+//! * the MINTED module is registered as `ir_lz_module`
+//!   (`eval_ir_level_minted.rs`, replayed from `generated/ir_lz.defs.txt`),
+//!   gated M1–M10 like every other chain, with reader C (M4) now covering the
+//!   designated target;
+//! * over the minted module the A4 sentence is REFUTED, kernel-checked
+//!   (`ir_lz_minted_refutes_a4_on_max`): the `Max` and `IMax` arms call
+//!   `<LevelArc as Deref>::deref`, which the module does not define, and go
+//!   `stuck no_func` where A4 says they return. Link 4 is OPEN.
 //!
-//! Two things the same machinery measured about this body, though, because they
-//! correct the record rather than move the gate:
+//! The rows below pin all of that from the sources, so the next lane finds it
+//! by a failing test rather than by memory: the emitted body (verbatim), the
+//! four divergence classes (class by class, both sides parsed), which module
+//! each theorem names, and the one measurement behind "Option A does not buy
+//! the theorem" — the deref callee itself does not read, let alone mint.
 //!
-//! * The emitted `is_zero` body projects to a COMPLETE core module
-//!   (`src/spec/core_spec/generated/ir_lz.core.txt`: ten blocks, two `gep`s,
-//!   four calls to two callees, a short-circuit through a second join block).
-//!   Transcribability was never the blocker.
-//! * Minting it refuses today for exactly one nameable reason — numeral 64 is
-//!   outside the registered `ir_d0..ir_d16` atom pool — pinned by
-//!   `crystal_a2_mint`'s `level_is_zero_mints_only_up_to_a_named_refusal`.
+//! ## 2026-08-20 — the stated wall was HALF A WALL (kept: it is the reason the
+//! callee-identity lane exists)
 //!
-//! ## 2026-08-20, second entry — the stated wall was HALF A WALL
-//!
-//! What this file said, verbatim, until today:
-//!
-//! > What actually costs something is downstream: a minted `ir_lz_module`
-//! > contains `call` to a callee that is not in the module, `ir_call_exec` is
-//! > fail-closed on that, and `ir_lz_correct` would become unprovable about the
-//! > minted term. Closing 2a here means RETIRING that theorem, not repairing
-//! > it. That is a decision, not a build item, and it is not taken here.
-//!
-//! **The middle clause was false, and it is the clause that carries the safety.**
-//! `ir_call_exec` resolves through `ir_func_find`, and `ir_func_find` matches on
-//! the candidate function's OWN id — the recursor arm is
-//! `(fun (i : Nat) … (ir_nat_eqb i k))` where `i` is `IRFunc`'s first field
-//! (`src/spec/core_spec/eval_ir_state.rs`). The minter hard-coded the projected
-//! function's own id to `0` while interning CALLEE ids by first use, also from
-//! `0`, in a **separate** namespace, and the two collided on that numeral: the
-//! core read `(func 0 …)` for `Level::is_zero` with `(call 0 …)` for
-//! `LevelArc::deref` — a different function — and `(call 1 …)` for the genuine
-//! self-call.
-//!
-//! So a minted `ir_lz_module` would **not** have gone stuck on the deref.
-//! `ir_func_find` would have found `is_zero`, and the machine would have
-//! silently executed a recursive call to `is_zero` where the program calls
-//! `deref` — a type-confused program the semantics accepts. Only the real
-//! self-call went stuck. The wall stood in front of the harmless half and left
-//! the harmful half open.
-//!
-//! **The collision itself is closed** (same day, sibling lane): both writers of
-//! the core form now draw the function's own id and its callee ids from one
-//! namespace, and `generated/ir_lz.core.txt` reads `(call 1 …)` for the deref
-//! and `(call 0 …)` for the recursive call. What remains here is the
-//! consequence, which the collision was hiding, and
-//! `level_is_zero_callee_identity.rs` holds both worlds to account mechanically
-//! rather than in prose.
-//!
-//! ## With callee identity fixed, is a minted `ir_lz_module` safe — and does
-//! `ir_lz_correct` survive?
-//!
-//! **Safe: yes. Survives: no — and it is REFUTED, not merely unprovable.**
-//!
-//! *Safe.* With the function's own id and the callee ids drawn from one
-//! namespace, `call deref` names an id no `IRFunc` in the module carries,
-//! `ir_func_find` returns `IROption.none`, and `ir_call_exec` halts
-//! `IROutcome.stuck IRFault.no_func`. That is the fail-closed behaviour the old
-//! comment claimed, and with the collision gone it is true. No misroute remains.
-//!
-//! *But the theorem does not survive.* `ir_lz_correct` asserts, for **every**
-//! `l` with `EncodesLiveLevelRef mem r l` and enough fuel, that `ir_eval`
-//! returns `ret (bool (level_is_zero l))`. The emitted body reaches a `deref`
-//! call on exactly two arms — `Max` (case 2 -> bb4) and `IMax` (the default edge,
-//! bb5) — while `Zero` (bb1), `Succ` (bb2) and `Param` (bb3) return a constant
-//! with no call at all. `emitted_recursive_arms_are_the_ones_that_call_out`
-//! (same sibling file) pins that split. Over a minted module that defines only `is_zero`, the machine
-//! therefore halts *stuck* on every `Max` and every `IMax`, where the theorem
-//! says it returns. The statement is false there, so retiring is not a stylistic
-//! choice between two provable framings: the theorem as written cannot be
-//! restated over the minted module without dropping two of its five arms.
-//!
-//! **So the decision still needs taking — but it is a different decision, and it
-//! has a build item under it after all.** The blocker is not "a call has no
-//! callee"; it is that the reachable closure is not BODYFUL, which is exactly
-//! the `a0_criteria.bodyful_reachable_closure == FAIL` this file already
-//! asserts. Minting the deref in is not enough either: its own entry block calls
-//! two further functions (`level_is_zero_deref_callee.trust-ir.txt`, straight
-//! line, not a panic branch) that the artifact carries as declarations only. The
-//! honest statement is that `ir_lz_correct` survives a minted `ir_lz_module`
-//! only when the transitive callee closure is lowered with bodies — a named,
-//! measurable producer build item — and that retiring the theorem is the
-//! alternative to doing that work, not a substitute for understanding it.
-//!
-//! None of this moves the `assert_ne!` wall below, and none of it is taken here.
+//! `ir_call_exec` resolves through `ir_func_find`, which matches on the
+//! candidate's OWN id. The minter used to number the projected function `0`
+//! while interning callees from `0` in a separate namespace, so `(call 0 …)`
+//! for `LevelArc::deref` would have RESOLVED to `is_zero` itself — a
+//! type-confused program the semantics accepted. The namespaces are one now
+//! (self interned first; `generated/ir_lz.core.txt` reads `(call 1 …)` for the
+//! deref and `(call 0 …)` for the recursion), the deref call goes `stuck
+//! no_func`, and `level_is_zero_callee_identity.rs` holds both worlds to
+//! account mechanically.
 
 use std::path::PathBuf;
+
+use clean_verify::ir_mint;
 
 use super::*;
 
@@ -131,17 +80,48 @@ fn emitted_body_is_recorded_verbatim() {
         BTreeSet::from([6, 9]),
         "two join blocks take bool block parameters"
     );
-    assert!(
-        text.contains("gep inbounds i8, ptr %0, %8")
-            && text.contains("gep inbounds i8, ptr %0, %10"),
-        "payload reads are geps at byte offsets 8 and 16"
+    // *** THE LAYOUT OBLIGATION, PINNED BY VALUE — NOT BY REGISTER NAME. ***
+    //
+    // This assertion used to read `text.contains("gep inbounds i8, ptr %0, %8")`
+    // and claim "byte offsets 8 and 16". It checked neither. `%8` is an SSA
+    // REGISTER NAME; what it HOLDS is decided by a separate `const i64` line, so
+    // the old check passed unchanged if `repr(Rust)` moved the fields and `%8`
+    // became `const i64 24`. An assertion whose message claims more than it
+    // tests is worse than none: it reports the obligation as guarded.
+    //
+    // The offsets matter because `EncodesLevelArcF` (eval_ir_lzb.rs) places the
+    // two `LevelArc` pointers at heap cells `a+8` and `a+16` to match them. That
+    // correspondence is an ASSUMPTION about `repr(Rust)` field placement, which
+    // is unspecified and free to reorder, and it is NOT discharged here. What
+    // this does is stop it drifting SILENTLY: resolve each gep's offset register
+    // through its `const i64` binding and pin the resulting values.
+    let consts: BTreeMap<&str, u64> = regex_lite_const_i64(&text).into_iter().collect();
+    let offsets: Vec<u64> = text
+        .lines()
+        .filter_map(|l| l.split_once("gep inbounds i8, ptr %0, %"))
+        .map(|(_, rest)| rest.split_whitespace().next().unwrap_or(""))
+        .map(|reg| {
+            *consts.get(reg).unwrap_or_else(|| {
+                panic!("gep offset register %{reg} has no `const i64` binding in the fixture")
+            })
+        })
+        .collect();
+    assert_eq!(
+        offsets,
+        vec![8u64, 16, 16],
+        "the emitted body geps the receiver to these BYTE OFFSETS, and EncodesLevelArcF \
+         places its field cells at a+8 / a+16 to match. If this fails, repr(Rust) moved the \
+         LevelArc fields and the representation relation describes a layout the compiler no \
+         longer emits"
     );
     assert!(!text.contains("unreachable"));
 }
 
-/// Pin the exact reason link 2a remains open and the live CFG divergence.
+/// The A0 verdicts as the fixture records them, and the dataflow identity of
+/// the deref callee — unchanged by the decision, re-pinned so the closure
+/// question stays measured.
 #[test]
-fn is_not_transcribed_and_the_wall_stands() {
+fn a0_evidence_and_the_deref_callee_are_pinned() {
     let evidence: serde_json::Value = serde_json::from_str(&fixture("level_is_zero.a0.json"))
         .expect("the A0 evidence must be valid JSON");
     assert_eq!(evidence["def_path"].as_str(), Some("level::Level::is_zero"));
@@ -154,33 +134,35 @@ fn is_not_transcribed_and_the_wall_stands() {
     assert_eq!(evidence["derived_mir"]["verdict"].as_str(), Some("agreed"));
     assert_eq!(
         evidence["a0_criteria"]["bodyful_reachable_closure"].as_str(),
-        Some("FAIL")
+        Some("FAIL"),
+        "the closure is not bodyful: architectural (rustc has no cross-crate THIR)"
     );
+    // The 2026-08-13 top-level flip verdict is historical; the fixture's own
+    // `current_source_bound_pin` (2026-08-21) records the flip FIRING. Both
+    // are pinned as what they are.
     assert_eq!(
         evidence["a0_criteria"]["flip_event_observed"].as_str(),
         Some("FAIL")
     );
     assert_eq!(evidence["flip_event"]["fired"].as_bool(), Some(false));
+    assert_eq!(
+        evidence["current_source_bound_pin"]["flip_event"]["fired"].as_bool(),
+        Some(true),
+        "the source-bound pin is the current flip status; the top-level block is the 2026-08-13 \
+         measurement it supersedes"
+    );
+    assert_eq!(
+        evidence["current_source_bound_pin"]["derived_mir"]["markers_exact"].as_bool(),
+        Some(true)
+    );
 
     let body = fixture("level_is_zero.trust-ir.txt");
     let callee = fixture("level_is_zero_deref_callee.trust-ir.txt");
 
-    // The deref call site, identified STRUCTURALLY rather than by its index.
-    //
-    // This assertion used to read `body.contains("call @func.4914")`, with a
-    // comment saying "func 4914 is that deref". `@func.N` is a whole-crate
-    // function-table index: it moves whenever clean-kernel gains or loses an
-    // item, and whenever the producer changes how many bodies it lowers, with
-    // not one instruction changed. Measured 2026-08-19: a producer-only A/B on
-    // a byte-identical clean tree moved `@func.N` on this very body. So the
-    // literal was a gate that fires on renumbering — the kind that gets
-    // switched off, taking the real check with it.
-    //
-    // The claim worth keeping has no index in it: is_zero calls a one-argument
-    // function whose RESULT is immediately consumed by the other callee, and
-    // that first function is `<LevelArc as Deref>::deref`. That is read off the
-    // dataflow, so it survives renumbering and still fails if the call
-    // structure moves.
+    // The deref call site, identified STRUCTURALLY rather than by its index
+    // (`@func.N` moves under renumbering — measured 2026-08-19): is_zero calls
+    // a one-argument function whose RESULT is immediately consumed by the
+    // other callee, and that first function is `<LevelArc as Deref>::deref`.
     let sites = call_sites(&body);
     assert_eq!(
         sites.len(),
@@ -189,7 +171,6 @@ fn is_not_transcribed_and_the_wall_stands() {
     );
     let callees: BTreeSet<u32> = sites.iter().map(|s| s.callee).collect();
     assert_eq!(callees.len(), 2, "two distinct callees, three sites each");
-
     let consumed: BTreeSet<u32> = sites.iter().flat_map(|s| s.args.iter().copied()).collect();
     let deref_ids: BTreeSet<u32> = sites
         .iter()
@@ -215,11 +196,6 @@ fn is_not_transcribed_and_the_wall_stands() {
         "the pinned callee fixture must be that deref (observed at @func.{deref_id} when the \
          body fixture was taken; the index is recorded, never asserted)"
     );
-
-    // The deref's own callees: two distinct functions, both declaration-only.
-    // Their indices are not asserted either, and could not be checked from a
-    // fixture in any case — that they are bodyless is what
-    // `a0_criteria.bodyful_reachable_closure == FAIL`, asserted above, records.
     let deref_sites = call_sites(&callee);
     assert_eq!(deref_sites.len(), 2, "the deref makes exactly two calls");
     assert_eq!(
@@ -231,32 +207,212 @@ fn is_not_transcribed_and_the_wall_stands() {
         2,
         "to two distinct functions, which keep the reachable closure non-bodyful"
     );
+}
 
-    let clean = parse_clean(
-        &std::fs::read_to_string(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/spec/core_spec/eval_ir_crystal.rs"),
-        )
-        .expect("eval_ir_crystal.rs must be readable"),
-        "def ir_lz_b",
-    );
-    assert_eq!(clean.blocks, (0..7).collect::<Vec<u32>>());
-    assert_eq!(
-        clean.cases,
-        BTreeMap::from([(0, 1), (1, 2), (2, 3), (3, 5), (4, 2)])
-    );
-    assert_eq!(clean.default, 6);
-    assert!(clean.param_blocks.is_empty());
-
+/// **The four recorded divergence classes, class by class, both sides parsed
+/// from source.** The model (`def ir_lzm_b…` in `eval_ir_crystal.rs`) against
+/// the emitted body (the fixture). If either side moves, the class that moved
+/// is named.
+#[test]
+fn the_model_and_the_emitted_body_differ_in_four_recorded_classes() {
+    let body = fixture("level_is_zero.trust-ir.txt");
     let emitted = parse_emitted(&body);
-    assert_ne!(
-        emitted, clean,
-        "the wall moved: transcribe the body and replace this with equality"
+    let model_src = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/spec/core_spec/eval_ir_crystal.rs"),
+    )
+    .expect("eval_ir_crystal.rs must be readable");
+    let model = parse_clean(&model_src, "def ir_lzm_b");
+
+    // Class 1 — THE SWITCH: arms, default, and the exhaustive flag.
+    assert_eq!(
+        model.cases,
+        BTreeMap::from([(0, 1), (1, 2), (2, 3), (3, 5), (4, 2)]),
+        "model: five arms, Succ and Param sharing b2"
     );
-    assert_ne!(
-        emitted.default, clean.default,
-        "emitted default bb{} is reachable IMax; Clean default bb{} is a trap",
-        emitted.default, clean.default
+    assert_eq!(
+        model.default, 6,
+        "model: the default is the unreachable trap"
     );
+    assert_eq!(
+        emitted.cases,
+        BTreeMap::from([(0, 1), (1, 2), (2, 4), (4, 3)]),
+        "emitted: four arms, Param in its own block"
+    );
+    assert_eq!(emitted.default, 5, "emitted: IMax rides the default edge");
+    let model_b0 = model_src
+        .split("def ir_lzm_b0 ")
+        .nth(1)
+        .and_then(|r| r.split("def ir_lzm_b1 ").next())
+        .expect("the model's b0 source");
+    assert!(
+        model_b0.contains("ir_sc0))))) Bool.true"),
+        "model: exhaustive_enum_unreachable TRUE"
+    );
+    assert!(
+        ir_mint::IR_LZ_CORE.contains("(case 2 4 (args))) false)"),
+        "emitted (reader A): exhaustive_enum_unreachable FALSE"
+    );
+    assert!(
+        !body.contains("unreachable") && model_src.contains("(ir_nd IRInst.unreachable)"),
+        "the trap exists only in the model"
+    );
+
+    // Class 2 — per-arm RET vs BR to a join with a bool block parameter.
+    assert!(model.param_blocks.is_empty(), "model: no join blocks");
+    assert_eq!(emitted.param_blocks, BTreeSet::from([6, 9]));
+    let model_blocks: Vec<String> = (0..7).map(|k| model_block(&model_src, k)).collect();
+    let model_rets = model_blocks
+        .iter()
+        .filter(|b| b.contains("IRInst.ret"))
+        .count();
+    assert_eq!(model_rets, 4, "model: b1, b2, b4, b5 each return");
+    assert_eq!(
+        body.lines()
+            .filter(|l| l.trim().starts_with("ret "))
+            .count(),
+        1,
+        "emitted: exactly one ret, in the join bb6"
+    );
+
+    // Class 3 — the deref: inlined null-check + assert + ONE self-call in the
+    // model; gep + call deref + call self in the emitted body.
+    let recursive: Vec<&String> = model_blocks
+        .iter()
+        .filter(|b| b.contains("IRInst.call"))
+        .collect();
+    assert_eq!(recursive.len(), 3, "model: b3, b4, b5 recurse");
+    for b in &recursive {
+        assert!(
+            b.contains("IRInst.extractfield")
+                && b.contains("IRConst.null_")
+                && b.contains("IRInst.icmp")
+                && b.contains("IRInst.assert")
+                && b.contains("IRInst.call ir_d0")
+                && !b.contains("IRInst.call ir_d1")
+                && !b.contains("IRInst.gep"),
+            "model arm: extractfield + null + icmp + assert + self-call only:\n{b}"
+        );
+    }
+    assert!(
+        !body.contains("assert") && !body.contains("null"),
+        "emitted: no assert, no null constant"
+    );
+    assert_eq!(
+        body.lines().filter(|l| l.contains("= gep ")).count(),
+        3,
+        "emitted: three geps (offsets 8, 16, 16)"
+    );
+    assert_eq!(
+        call_sites(&body)
+            .iter()
+            .map(|s| s.callee)
+            .collect::<BTreeSet<u32>>()
+            .len(),
+        2,
+        "emitted: two callees — the deref and itself"
+    );
+
+    // Class 4 — the block census.
+    assert_eq!(model.blocks, (0..7).collect::<Vec<u32>>());
+    assert_eq!(emitted.blocks, (0..10).collect::<Vec<u32>>());
+
+    assert_ne!(emitted, model, "the wall: the two CFGs differ");
+}
+
+/// **Which module each theorem is about — source-bound.** The A4/A5 theorems
+/// name the MODEL; the chain's name is carried by the MINTED module; the
+/// refutation quantifies over the minted one. A rename that silently put the
+/// theorems back over the chain's name fails here.
+#[test]
+fn the_theorems_are_about_the_model_and_the_minted_module_carries_the_chain_name() {
+    let correct = spec_source("eval_ir_correct.rs");
+    let a4 = correct
+        .split("def ir_lzm_correct ")
+        .nth(1)
+        .and_then(|r| r.split(" := ").next())
+        .expect("ir_lzm_correct's statement");
+    assert!(
+        a4.contains("ir_eval fuel ir_lzm_module ir_d0"),
+        "A4 quantifies over the MODEL: {a4}"
+    );
+    assert!(
+        !a4.contains("ir_lz_module"),
+        "and not over the minted module"
+    );
+    assert!(
+        correct.contains("def ir_lzm_machine_sound ")
+            && !correct.contains("def ir_lz_correct ")
+            && !correct.contains("def ir_lz_machine_sound "),
+        "the old names are gone from the theorem file"
+    );
+
+    assert!(
+        ir_mint::IR_LZ_DEFS.contains("def ir_lz_module : IRModule :="),
+        "the minted script defines the chain-named module"
+    );
+    let minted_stage = spec_source("eval_ir_level_minted.rs");
+    assert!(
+        minted_stage.contains("include_str!(\"generated/ir_lz.defs.txt\")"),
+        "and the spec registers it by replaying that script"
+    );
+    let refutation = minted_stage
+        .split("def ir_lz_minted_refutes_a4_on_max ")
+        .nth(1)
+        .expect("the refutation is registered");
+    assert!(
+        refutation.contains("ir_eval fuel ir_lz_module ir_d0 (ir_vl1 r) mem na")
+            && refutation.contains("bool_true_ne_false C"),
+        "the refutation's hypothesis is A4 over the MINTED module and its conclusion is every C"
+    );
+    assert!(
+        minted_stage.contains("\"ir_lz_on_max_stuck\"")
+            && minted_stage.contains("\"ir_lz_on_imax_stuck\"")
+            && minted_stage.contains("(IROutcome.stuck IRFault.no_func)"),
+        "the stuck witnesses are registered (their `def` lines are assembled by `witness()`, \
+         so the names are pinned as the literals that call it)"
+    );
+}
+
+/// **Option A, measured.** "Rebase the theorems onto the minted module by
+/// minting the deref callee too" needs the deref to read; it does not. The
+/// fixture `level_is_zero_deref_callee.trust-ir.txt` is refused by reader B
+/// and by the projection gate, and the refusal names the construct. Even if it
+/// read, its entry block is two calls to `Option::as_deref` / `Option::expect`
+/// — declaration-only in the artifact — so a two-function module would go
+/// stuck one call deeper, not return.
+#[test]
+fn option_a_measured_the_deref_callee_does_not_read() {
+    let callee = fixture("level_is_zero_deref_callee.trust-ir.txt");
+    let e = ir_mint::read_emitted(&callee).map(|_| ()).expect_err(
+        "the deref callee must be REFUSED by reader B, not read into an incoherent module",
+    );
+    let msg = format!("{e}");
+    assert!(
+        msg.contains("global_addr"),
+        "the refusal is the `global_addr` of the expect message — a global the module would not \
+         declare: {msg}"
+    );
+    let tags = ir_mint::tags::parse(ir_mint::IR_LZ_TAGS).expect("the lz tag table parses");
+    let e = ir_mint::project(&callee, &tags)
+        .map(|_| ())
+        .expect_err("and by the projection gate");
+    eprintln!("deref callee: reader B refuses: {msg}\n          projection refuses: {e}");
+    assert!(
+        callee.contains("global_addr @global.") && callee.contains("ptr_from_parts"),
+        "the constructs that keep it out of the fragment are in the fixture"
+    );
+}
+
+/// The Rust source of the model's block `k` — from its `def ir_lzm_b{k}`
+/// literal to the next registration call — so per-block content can be
+/// asserted with `IRInst.`-prefixed needles that no description string spells.
+fn model_block(src: &str, k: u32) -> String {
+    let start = src
+        .find(&format!("\"def ir_lzm_b{k} "))
+        .unwrap_or_else(|| panic!("the model has no block b{k}"));
+    let rest = &src[start..];
+    let end = rest.find("self.add_recursive_def(").unwrap_or(rest.len());
+    rest[..end].to_string()
 }
 
 /// One `%r = call @func.N(%a, %b)` site, with every index kept as a NUMBER
@@ -267,22 +423,15 @@ struct CallSite {
     args: Vec<u32>,
 }
 
-/// Parse the call sites out of an emitted body.
-///
-/// Deliberately tolerant of everything a whole-crate renumbering can change and
-/// intolerant of everything it cannot: the register numbers, the callee index
-/// and the argument list are read as data, and a line that looks like a call
-/// but does not parse is a hard failure rather than a skip — a silently dropped
-/// call site would weaken every count asserted against it.
+/// Parse the call sites out of an emitted body. Tolerant of everything a
+/// whole-crate renumbering can change and intolerant of everything it cannot:
+/// a call-shaped line this parser does not read is a hard failure, because
+/// every assertion above is a COUNT.
 fn call_sites(body: &str) -> Vec<CallSite> {
     let mut out = Vec::new();
     for raw in body.lines() {
         let line = raw.split("; #").next().unwrap_or(raw).trim();
         let Some((lhs, rhs)) = line.split_once(" = call @func.") else {
-            // A call shape this parser does not read — a void call, say — must
-            // stop the test, not be skipped: every assertion above is a COUNT,
-            // and a silently dropped call site makes each of them agree with a
-            // body that has more calls than it thinks.
             assert!(
                 !line.contains("call @func."),
                 "call-shaped line this parser does not read: `{line}`. Counting call sites is \
@@ -322,4 +471,23 @@ fn call_sites(body: &str) -> Vec<CallSite> {
         });
     }
     out
+}
+
+/// Every `%N = const i64 V` binding in a trust-ir body, as `(N, V)`.
+///
+/// A three-line parser rather than a dependency: this crate's test targets do
+/// not pull `regex`, and the fixture's format is fixed (`TrustIr text format
+/// v1`). It exists so a gep's offset can be resolved to the VALUE it uses
+/// instead of the register name it mentions.
+fn regex_lite_const_i64(text: &str) -> Vec<(&str, u64)> {
+    text.lines()
+        .filter_map(|l| l.trim().strip_prefix('%'))
+        .filter_map(|r| r.split_once(" = const i64 "))
+        .filter_map(|(reg, rest)| {
+            rest.split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<u64>().ok())
+                .map(|v| (reg, v))
+        })
+        .collect()
 }

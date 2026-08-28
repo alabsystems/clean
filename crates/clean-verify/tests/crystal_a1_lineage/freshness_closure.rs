@@ -92,6 +92,34 @@ fn every_committed_trust_ir_fixture_is_compared_against_a_live_dump() {
         dir.display()
     );
 
+    // `tests/fixtures/synth/` holds the W2a SYNTHETIC modules — authored for
+    // the semdiff battery, emitted by no producer, so no live dump can
+    // re-derive them and this closure deliberately does not cover them. That
+    // is a checked invariant, not an escape hatch: every file there must
+    // SELF-DECLARE as synthetic and carry the `synth_` prefix, so an emitted
+    // fixture can never hide from this closure by moving directories.
+    let synth_dir = dir.join("synth");
+    if synth_dir.is_dir() {
+        for entry in std::fs::read_dir(&synth_dir).expect("readable synth fixtures dir") {
+            let entry = entry.expect("readable dir entry");
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(stem) = name.strip_suffix(".trust-ir.txt") else {
+                continue;
+            };
+            assert!(
+                stem.starts_with("synth_"),
+                "tests/fixtures/synth/{name} lacks the synth_ prefix; the synth directory is \
+                 only for authored synthetic modules, never emitted bodies"
+            );
+            let text = std::fs::read_to_string(entry.path()).expect("readable synth fixture");
+            assert!(
+                text.contains("SYNTHETIC MODULE"),
+                "tests/fixtures/synth/{name} does not self-declare as a SYNTHETIC MODULE; an \
+                 emitted body may not live outside this freshness closure"
+            );
+        }
+    }
+
     let uncovered: Vec<&String> = committed.difference(&covered).collect();
     assert!(
         uncovered.is_empty(),

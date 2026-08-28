@@ -1735,11 +1735,16 @@ fn insert_or_upgrade(env: &mut Environment, ci: ConstantInfo) {
                 && existing.kind == ConstantKind::Axiom
                 && ci.value.is_some() =>
         {
-            let name = ci.name.clone();
-            if env.upgrade_axiom_stubs(std::iter::once(ci)) == 0 {
-                // Stub was not an upgradeable axiom: replace outright.
-                env.forget_decl(&name);
-            }
+            // R1-STUB (2026-08-24): checked upgrade — the incoming type must
+            // kernel-match the stub's type and the incoming value must
+            // check_type against it (UnknownConst-tolerant, because this
+            // demand-load lane assembles its closure incrementally and
+            // forward references are legitimate). A refusal leaves the stub
+            // in place FAIL-CLOSED: closure constants are context-only (see
+            // the SOUNDNESS notes below) — a refused upgrade can at worst
+            // make the named TARGET's own kernel gauntlet fail loudly, never
+            // mint a false KernelVerified — and nothing registers unchecked.
+            let (_upgraded, _refused) = env.upgrade_axiom_stubs_checked(std::iter::once(ci));
         }
         // A value-less non-upgradeable entry, or nothing: (re)insert fresh.
         Some(_) => {

@@ -40,9 +40,16 @@ fn test_elab_by_tactic_ring_nf_preserves_proof_chain() {
 /// `elab_by_tactic` when performing beta reduction on the goal target.
 ///
 /// Target: `(fun x : Nat => x) Nat.zero = Nat.zero`
-/// Tactic: `by dsimp; rfl`
-/// dsimp beta-reduces the LHS to `Nat.zero`, then rfl closes.
+/// Tactic: `by dsimp`
+/// dsimp beta-reduces the LHS to `Nat.zero` and closes the now-reflexive goal.
 /// Exercises the `replace_target_def_eq` path in the full elab pipeline.
+///
+/// The tactic was `by dsimp; rfl` until 2026-08-26, when `dsimp` gained Lean's
+/// finisher. Measured against leanprover/lean4 v4.30.0-rc2, real Lean rejects
+/// the old spelling on exactly this shape — `by dsimp; rfl` reports
+/// `No goals to be solved` — so the trailing `rfl` was pinning a divergence,
+/// not coverage. What this test guards (MetaId(0) connectivity through
+/// `replace_target_def_eq`) is unchanged.
 #[test]
 fn test_elab_by_tactic_dsimp_beta_preserves_proof_chain() {
     let mut env = Environment::new();
@@ -60,8 +67,8 @@ fn test_elab_by_tactic_dsimp_beta_preserves_proof_chain() {
     assert_tactic_preserves_target(
         &env,
         target,
-        "by dsimp; rfl",
-        "dsimp followed by rfl should elaborate successfully through elab_by_tactic",
+        "by dsimp",
+        "dsimp should elaborate successfully through elab_by_tactic and close the goal",
         "dsimp proof should be closed",
         "dsimp proof type should match the original target after post-hoc verification",
     );

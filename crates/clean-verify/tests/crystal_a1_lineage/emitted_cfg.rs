@@ -659,11 +659,13 @@ pub(crate) fn clean_block_sources(file: &str, const_prefix: &str) -> String {
 /// One registered string constant selected by its complete Rust identifier.
 ///
 /// This is deliberately different from [`clean_block_sources`], whose prefix
-/// semantics are useful for multi-block modules. A one-block obligation must
-/// not silently absorb a future sibling such as `SRC_IR_FA_B1` or
-/// `SRC_IR_FA_B0_DIAGNOSTIC`; the `:` after the identifier binds the exact Rust
-/// declaration, and the cardinality check fails closed on a missing/duplicate
-/// declaration.
+/// semantics are useful for multi-block modules: a one-block obligation must
+/// not silently absorb a prefixed sibling, and the `:` after the identifier
+/// binds the exact Rust declaration. Its last per-chain callers (the float
+/// tranche) migrated to MINTED scripts on 2026-08-21, so the helper is now
+/// exercised only by its own fail-closed tests below — kept because the
+/// remaining hand-transcribed chains may still want it while they migrate.
+#[allow(dead_code)]
 pub(crate) fn clean_named_const_source(file: &str, const_name: &str) -> String {
     exact_const_source(&spec_source(file), const_name)
 }

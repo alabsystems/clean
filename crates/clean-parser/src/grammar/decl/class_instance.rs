@@ -95,9 +95,18 @@ impl Parser {
 
         self.expect(&TokenKind::Where)?;
 
-        // Parse fields (same as structure)
+        // Parse fields (same as structure), including Lean's parenthesized
+        // binder groups (`(op : a → a)`) interleaved with simple fields — the
+        // same silently-zero-fields gap the structure `where` block had.
         let mut fields = Vec::new();
-        while self.is_field_start() {
+        loop {
+            if self.check(&TokenKind::LParen) {
+                fields.extend(self.parse_paren_field_binders()?);
+                continue;
+            }
+            if !self.is_field_start() {
+                break;
+            }
             let field_span = self.current_span();
             let field_name = self.ident()?;
 
@@ -221,7 +230,23 @@ impl Parser {
         let name = if let TokenKind::Ident(_) = self.current_kind() {
             let saved_pos = self.pos;
             if let Ok(candidate) = self.qualified_ident() {
-                if self.check(&TokenKind::Colon) {
+                // A name is confirmed by a following `:` OR any binder opener:
+                // `instance Pi.unique {β : α → Sort v} [∀ a, Unique (β a)] : …`
+                // is a NAMED instance with binders (Mathlib Logic/Unique.lean:166).
+                // Requiring an immediate `:` made the name parse backtrack, after
+                // which `optional_binders` consumed `Pi` as a bare binder name
+                // and died at the dot ("expected Colon, got Dot"). An anonymous
+                // instance can never start with an identifier — its form is
+                // `instance : T` or `instance [binders] : T` — so ident-then-
+                // opener is unambiguous.
+                if matches!(
+                    self.current_kind(),
+                    TokenKind::Colon
+                        | TokenKind::LParen
+                        | TokenKind::LBrace
+                        | TokenKind::LBracket
+                        | TokenKind::StrictLBrace
+                ) {
                     Some(candidate)
                 } else {
                     self.pos = saved_pos;

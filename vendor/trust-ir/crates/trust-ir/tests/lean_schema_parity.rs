@@ -196,10 +196,12 @@ fn inst_and_castop_track_the_lean_model() {
     // decomposition (Semantics/Cast.lean fpToSISatRaw / fpToUISatRaw) — with
     // interpreter-agreement native_decide fixtures at two widths per op
     // (Semantics/ExecutableFixtures.lean fptosisat_* / fptouisat_*).
-    // Note: cast_op_excluded (bridge.rs) still conservatively excludes the
-    // pair from the cross-IR bridge subset (as it does the Transmute /
-    // ReifyFnPointer partials); that subset gate is a separate, stricter
-    // decision from the name+semantics parity this test enforces.
+    // Note: cast_op_excluded (bridge.rs) excludes the pair from the
+    // lowering-target subset (no proven bridge/ay lowering yet), exactly as
+    // the ratified subset does (lowering-target-subset.md; the conformance
+    // crate's bridge_subset_agreement gate pins the two spellings
+    // identical). Subset membership is a separate decision from the
+    // name+semantics parity this test enforces.
     const CASTOP_ALLOWLIST: &[&str] = &[];
     assert_parity("CastOp", &rust_castop, &lean_castop_ctors, CASTOP_ALLOWLIST);
 

@@ -294,7 +294,7 @@ fn apply_aux_collect_goals(
                     Ok(())
                 }
                 UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-                    expected: format!("{target:?}"),
+                    expected: format!("{target}"),
                     actual: msg,
                 }),
                 UnifyResult::Stuck => Err(TacticError::UnificationFailed(

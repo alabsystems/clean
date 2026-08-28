@@ -402,17 +402,41 @@ fn test_process_imports_mathlib_zmod_basic_surface_type() {
     );
 }
 
+/// An import naming a module nothing provides must FAIL, and the failure must
+/// name the module.
+///
+/// Until 2026-08-26 this test was `test_process_imports_unknown_ignored` and
+/// asserted `result.is_ok()` with the comment "Unknown imports should be
+/// silently ignored". That is the behavior that let `clean check` report
+/// `1 passed, 0 failed` on a file whose import resolves to nothing.
 #[test]
-fn test_process_imports_unknown_ignored() {
+fn test_process_imports_unknown_fails_closed() {
     let mut env = Environment::new();
 
-    // Unknown imports should be silently ignored
     let paths = vec![vec!["Some", "Unknown", "Module"]
         .into_iter()
         .map(String::from)
         .collect()];
-    let result = process_imports(&mut env, &paths);
-    assert!(result.is_ok(), "Unknown imports should not cause errors");
+    let err = process_imports(&mut env, &paths)
+        .expect_err("an import that resolves to nothing must not succeed");
+    let ElabError::UnresolvedImport { module, .. } = &err else {
+        panic!("expected UnresolvedImport, got {err:?}");
+    };
+    assert_eq!(module, "Some.Unknown.Module");
+}
+
+/// The opt-out keeps the legacy behavior available on purpose.
+#[test]
+fn test_process_imports_unknown_permissive_is_ignored() {
+    use crate::ImportPolicy;
+
+    let mut env = Environment::new();
+    let paths = vec![vec!["Some", "Unknown", "Module"]
+        .into_iter()
+        .map(String::from)
+        .collect()];
+    process_imports_with_policy(&mut env, &paths, ImportPolicy::Permissive)
+        .expect("permissive mode must keep warn-and-continue");
 }
 
 #[test]
@@ -436,7 +460,10 @@ fn test_process_imports_lean_elab_tactic_succeeds_via_shim() {
         .into_iter()
         .map(String::from)
         .collect()];
-    imports::process_imports_clean_native(&mut env, &paths)
+    // FailClosed on purpose: `Lean` / `Lean.*` is a DECLARED provider
+    // (`prelude_providers::has_declared_prelude`), so the shim must remain
+    // resolvable under the default policy and not need the permissive opt-out.
+    imports::process_imports_clean_native(&mut env, &paths, ImportPolicy::FailClosed)
         .expect("Lean.Elab.Tactic must import via the Clean-native meta shim");
 
     // Whichever path served the import, the core Lean meta types must resolve so

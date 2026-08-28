@@ -1,0 +1,42 @@
+{
+ "prefix": "ir_fw",
+ "body": "flat::types::FlatFlags::with",
+ "core_digest": "08de27321bd401ee31d2f1064b0f0161f2474ae56d0385b22eed95eabb0bed9d",
+ "defs_digest": "fe708a0e306b7bf88032afeae869fb42774d6f28ee376570e6f2cd3ac229c479",
+ "def_count": 4,
+ "def_count_note": "ONE alias (ir_fw_tflags -- the first minted struct row the MODULE ITSELF names, in its const and insertfield) plus the one block, the func and the module.",
+ "artifact_core_digest": "1d4c941b83fad172e218a74735e29c2c652d9102423c657cc36c944faefff6c6",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. `flat_flags_with` is NOT one of the eleven producer A/B rows (the chain landed after that record was cut), so this 2026-08-21 laneREG projection is its first committed reader-A record; the committed fixture is reader B's independent copy of the same body and M2 compares them exactly.",
+ "reader_a": {
+  "dump": "$HOME/trust/scratchpad/laneREG/wc-REG/dump_O3/clean_kernel.trust-ir.bin",
+  "dump_sha256": "af1597c4dffc1f722044457232caeacdf7f02c74bcfe5db7ff95314314c6c4cc",
+  "artifact_func_index": 3834,
+  "artifact_func_id": 3834,
+  "artifact_functy_id": 486,
+  "artifact_functy_note": "486 on the dump this migration was revalidated against, where the COMMITTED fixture says 489: the whole-crate function-TYPE index moves under a producer re-interning with zero instructions changed, exactly like func_id. The interface pin compares reader B's header against the fixture-era 489; reader A's value is RECORDED, NEVER COMPARED, like observed_ty.",
+  "artifact_linkage": "external",
+  "artifact_calling_conv": "rustcc",
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [],
+  "crate_struct_ids_seen": [
+   1017
+  ],
+  "crate_struct_ids_seen_note": "NON-EMPTY, unlike its sibling `contains`: this body's const and insertfield NAME the struct, so FlatFlags has a genuine first-use index and the tag-table row is a real aggregate row, not an interface-only one.",
+  "crate_func_ids_seen": [
+   3834
+  ],
+  "crate_func_names_seen": [
+   "flat::types::FlatFlags::with"
+  ],
+  "aligns_erased": [],
+  "param_tys_erased": [
+   "Struct(StructId(1017))",
+   "Struct(StructId(1017))"
+  ],
+  "block_param_tys_erased": []
+ },
+ "text_unwitnessed": [],
+ "text_unwitnessed_note": "EMPTY: the body contains no `switch`, so the emitted TEXT fully determines the core module and M2 is an EXACT comparison with no mask.",
+ "producer_dumps_observed": 1,
+ "producer_dumps_note": "ONE dump (laneREG wc-REG dump_O3, 2026-08-21), stated as such: this chain is not in generated/ir_mint.producer_ab.json, so unlike its eight predecessors it has no three-producer invariance record yet -- what M2/M3/M4 establish is that this dump, the committed fixture and the elaborated term agree on ONE core module. The struct id 1017 and the instruction text match the fixture era byte-for-byte; only functy moved (489 -> 486), the recorded drift class."
+}

@@ -26,10 +26,40 @@ pub enum RunResult {
     /// A `bool` return; Clean-side `IRScalar.bool_`.
     Bool(bool),
     /// An unsigned integer return; Clean-side `IRScalar.int_`.
-    Int(u32),
+    ///
+    /// `u64` since the W1 fixture widening: `META_TAG` returns `1 << 63` and
+    /// the `ExprMeta` bodies return values above `u32::MAX`'s reach. Values at
+    /// or below [`MAX_IR_NUMERAL`] still encode as `ir_d<N>`; larger ones
+    /// encode as the raw decimal literal the spec's parser reads natively —
+    /// the same encoding the committed concrete witnesses use
+    /// (`ir_ni_w_u32max_survives` carries the literal `4294967295`).
+    Int(u64),
     /// A fieldless-enum return, reduced to its variant tag; Clean-side
     /// `ir_var <tag> ir_sp0` — an aggregate scalar with an empty payload spine.
-    EnumTag(u32),
+    EnumTag(u64),
+    /// A binary64 return, carried as its BIT PATTERN on both sides; Clean-side
+    /// `IRScalar.float_ n` (the float-residue lane, 2026-08-25). The carrier is
+    /// the pattern and never a host `f64`: comparing patterns keeps NaN
+    /// payloads and signed zeros exact, where a host round-trip could
+    /// canonicalize either. Encodes through the same literal/name split as
+    /// `Int` — a real pattern exceeds [`MAX_IR_NUMERAL`] by ~17 orders of
+    /// magnitude, so it rides the raw-literal half (`wide_float`'s rule).
+    Float(u64),
+    /// A void return (`ret` with no operands); Clean-side
+    /// `IROutcome.ret (IRList.nil IRScalar)`.
+    ///
+    /// A first-class answer, not a missing one: `strict_monads` genuinely
+    /// returns nothing, and folding that into `Fault` would misread the one
+    /// chain whose whole point is its side effect.
+    Unit,
+    /// A MULTI-VALUE return, in order — the W3 overflow lane's shape: an
+    /// `Overflow` node binds two results (value, flag) and the honest
+    /// observation returns them all through the multi-value `ret` both
+    /// machines already have (`ir_ret_to` binds positionally and "loses
+    /// nothing"; trust-ir returns `outcome.returns` as a list). Elements are
+    /// the scalar variants only — a nested `Many`/`Unit`/`Fault` has no
+    /// Clean `ret`-payload encoding and refuses, never approximates.
+    Many(Vec<RunResult>),
     /// The run did not return. The string is the executor's own stable code.
     Fault(String),
 }
@@ -40,6 +70,18 @@ impl core::fmt::Display for RunResult {
             RunResult::Bool(b) => write!(f, "bool {b}"),
             RunResult::Int(n) => write!(f, "int {n}"),
             RunResult::EnumTag(n) => write!(f, "enum tag {n}"),
+            RunResult::Float(n) => write!(f, "float bits {n}"),
+            RunResult::Unit => write!(f, "unit"),
+            RunResult::Many(vs) => {
+                write!(f, "[")?;
+                for (i, v) in vs.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{v}")?;
+                }
+                write!(f, "]")
+            }
             RunResult::Fault(c) => write!(f, "fault {c}"),
         }
     }
@@ -55,9 +97,12 @@ impl RunResult {
         match self {
             RunResult::Bool(true) => Some("(IRScalar.bool_ Bool.true)".to_owned()),
             RunResult::Bool(false) => Some("(IRScalar.bool_ Bool.false)".to_owned()),
-            RunResult::Int(n) => Some(format!("(IRScalar.int_ {})", ir_numeral(*n).ok()?)),
-            RunResult::EnumTag(n) => Some(format!("(ir_var {} ir_sp0)", ir_numeral(*n).ok()?)),
-            RunResult::Fault(_) => None,
+            RunResult::Int(n) => Some(format!("(IRScalar.int_ {})", ir_nat_term(*n))),
+            RunResult::EnumTag(n) => Some(format!("(ir_var {} ir_sp0)", ir_nat_term(*n))),
+            RunResult::Float(n) => Some(format!("(IRScalar.float_ {})", ir_nat_term(*n))),
+            // A multi-value return is a ret-payload LIST, not a scalar; its
+            // encoding lives in `super::wide::wide_ret_values`.
+            RunResult::Many(_) | RunResult::Unit | RunResult::Fault(_) => None,
         }
     }
 }
@@ -73,6 +118,25 @@ pub(crate) fn ir_numeral(n: u32) -> Result<String, DiffError> {
         return Err(DiffError::NumeralOutOfRange(n));
     }
     Ok(format!("ir_d{n}"))
+}
+
+/// The Clean `Nat` term for `n`, with no upper bound.
+///
+/// Values at or below [`MAX_IR_NUMERAL`] keep the `ir_d<N>` name the earlier
+/// obligations used; larger values are emitted as the raw decimal literal,
+/// which the spec's parser reads natively and the kernel folds through the
+/// `ir_wrap` literal-folding lemmas — the exact encoding of the committed
+/// concrete witnesses (`ir_br_concrete_unbounded` carries `4294967295`,
+/// `ir_hlb_w_boundary` carries `17592186044416`). This is why the W1 wide
+/// obligations have no numeral ceiling on VALUES: only generated *names* were
+/// ever bounded, and literals are not names.
+#[must_use]
+pub(crate) fn ir_nat_term(n: u64) -> String {
+    if n <= u64::from(MAX_IR_NUMERAL) {
+        format!("ir_d{n}")
+    } else {
+        n.to_string()
+    }
 }
 
 /// A body reached by loading a one-cell heap through a pointer argument — the

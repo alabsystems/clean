@@ -412,6 +412,45 @@ pub(super) fn expr_to_let_value(
                 return lower_rec_apply(ctx, expr, parts);
             }
             let (head, args) = collect_app_args(expr);
+
+            // BETA-REDEX head: `(fun x => body) a₁ … aₙ`. Match elaboration
+            // leaves exactly this in DEFAULT arms — a wildcard arm arrives as
+            // `(fun _ : Nat => 0) k` — and this funnel refused it
+            // ("Application head: Lam"), which silently blocked every fixed
+            // multi-arm match from the extraction pipeline (measured on the
+            // streams flagship's `stepCase`; the Rust extraction lane hit and
+            // fixed the same shape on its side).
+            //
+            // Reduce it here, BIND-ONCE: each argument goes through
+            // `expr_to_arg`, which let-binds a compound argument and returns an
+            // atom, and only the ATOM is substituted into the body — so an
+            // argument's work is never duplicated however many times the
+            // binder occurs. Erased/Type arguments carry no runtime work and
+            // substitute as themselves. The reduct then re-enters this
+            // function; each pass strips at least one `Lam`, so this
+            // terminates, and an over-applied redex keeps its trailing
+            // arguments as an ordinary application of the reduct.
+            if matches!(head.kind(), ExprKind::Lam(..)) {
+                let mut cur = head.clone();
+                let mut consumed = 0usize;
+                for arg in &args {
+                    let ExprKind::Lam(_, _, body) = cur.kind() else {
+                        break;
+                    };
+                    let atom = match expr_to_arg(ctx, arg)? {
+                        Arg::FVar(id) => Expr::fvar(id),
+                        _ => (*arg).clone(),
+                    };
+                    cur = body.instantiate(&atom);
+                    consumed += 1;
+                }
+                let mut reduct = cur;
+                for arg in args.iter().skip(consumed) {
+                    reduct = Expr::app(reduct, (*arg).clone());
+                }
+                return expr_to_let_value(ctx, &reduct);
+            }
+
             let lcnf_args = args
                 .into_iter()
                 .map(|a| expr_to_arg(ctx, a))

@@ -14,19 +14,27 @@
 
 use super::*;
 
+/// The minted `def` line for one name, from the committed script.
+fn minted_line(name: &str) -> &'static str {
+    let prefix = format!("def {name} ");
+    ir_fd_module_defs()
+        .iter()
+        .find(|l| l.starts_with(&prefix))
+        .unwrap_or_else(|| panic!("the minted script must define {name}"))
+}
+
 /// The whole body: one `fdiv` at f64 over `%1, %2` into `%3`, then `ret %3`.
 /// Every token in that sentence is a lane the CFG gate compares.
 #[test]
 fn test_the_body_is_one_typed_fdiv_and_a_ret_of_its_result() {
-    assert!(SRC_IR_FD_B0.contains("IRInst.binop IRBinOp.fdiv ir_fd_tf64 ir_d1 ir_d2) ir_d3"));
-    assert!(SRC_IR_FD_B0.contains("IRInst.ret (ir_nl1 ir_d3)"));
+    let b0 = minted_line("ir_fd_b0");
+    assert!(b0.contains("IRInst.binop IRBinOp.fdiv (IRTy.float_ 64) ir_d1 ir_d2) ir_d3"));
+    assert!(b0.contains("IRInst.ret (ir_nl1 ir_d3)"));
     // …and it returns the QUOTIENT, not the dividend. This is the assertion
     // the `rets` lane exists for: `ret %1` agreed with every earlier lane.
-    assert!(!SRC_IR_FD_B0.contains("IRInst.ret (ir_nl1 ir_d1)"));
+    assert!(!b0.contains("IRInst.ret (ir_nl1 ir_d1)"));
     assert!(
-        !SRC_IR_FD_B0.contains("condbr")
-            && !SRC_IR_FD_B0.contains("switch")
-            && !SRC_IR_FD_B0.contains("IRInst.br "),
+        !b0.contains("condbr") && !b0.contains("switch") && !b0.contains("IRInst.br "),
         "one block, no control flow at all"
     );
 }
@@ -50,7 +58,10 @@ fn test_the_type_is_binary64() {
 /// Three parameters, and the first is the closure environment.
 #[test]
 fn test_three_parameters_and_the_env_pointer_is_unconstrained() {
-    assert!(SRC_IR_FD_FUNC.contains("IRFunc.mk ir_d0 (ir_nl3 ir_d0 ir_d1 ir_d2) ir_d0"));
+    assert!(minted_line("ir_fd_func").contains(
+        "IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 \
+         (IRList.nil Nat)))) ir_d0"
+    ));
     assert!(SRC_IR_FD_MACH0.contains("ir_bind_params (ir_nl3 ir_d0 ir_d1 ir_d2)"));
     // …through the FIFTH chain's builders. Re-declaring `ir_nl3` / `ir_vl3`
     // here is a duplicate definition that only the FULL spec build rejects.
@@ -187,14 +198,11 @@ fn test_float_division_by_zero_is_not_integer_division_by_zero() {
 
 #[test]
 fn test_sources_balanced_ascii() {
-    for src in [
+    for src in ir_fd_module_defs().iter().copied().chain([
         SRC_IR_FD_TF64,
         SRC_ENV_REDUCE_FLOAT_DIV,
         SRC_ENCODESF64VAL,
         SRC_IR_FD_RES,
-        SRC_IR_FD_B0,
-        SRC_IR_FD_FUNC,
-        SRC_IR_FD_MODULE,
         SRC_IR_FD_MACH0,
         SRC_IR_FD_M1,
         SRC_IR_FD_ONE_STEP,
@@ -233,7 +241,7 @@ fn test_sources_balanced_ascii() {
         SRC_W_UDIV_CONTRAST,
         SRC_W_CORRECT_WITNESS,
         SRC_W_DIVZERO_WITNESS,
-    ] {
+    ]) {
         let mut d: i64 = 0;
         for ch in src.chars() {
             match ch {

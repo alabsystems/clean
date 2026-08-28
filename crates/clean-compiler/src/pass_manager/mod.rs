@@ -56,6 +56,8 @@ use thiserror::Error;
 
 #[cfg(feature = "trust-ir-backend")]
 pub use pipeline::compile_lcnf_to_trust_ir;
+#[cfg(feature = "trust-ir-backend")]
+pub use pipeline::compile_lcnf_to_trust_ir_with_report;
 pub use pipeline::{
     compile_lcnf_decls, compile_lcnf_to_c, compile_lcnf_to_rust, PipelineArtifacts, PipelineConfig,
     PipelineError,

@@ -348,6 +348,9 @@ where
 
     // Create a sub-proof-state for the conv body
     let mut conv_ps = state.clone_with_fresh_goal_target(old_target.clone());
+    // Stamp the sub-state as a conv body (same boundary contract as
+    // `eval_conv_goal` / `eval_conv_hyps`; see `ProofState::in_conv_body`).
+    conv_ps.in_conv_body = true;
 
     // Execute the body
     body(&mut conv_ps)?;

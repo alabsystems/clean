@@ -73,6 +73,7 @@ EVIDENCE: dict[str, str] = {
     "flat_flags_with": "flat_flags_with.lineage.json",
     "node_id_index": "node_id_index.lineage.json",
     "simp_priority_value": "simp_priority_value.lineage.json",
+    "has_loose_bvars": "has_loose_bvars.lineage.json",
 }
 
 # These are the numbering tokens whose concrete identity is consumed outside
@@ -147,11 +148,125 @@ def git_text(rev: str, rel: str) -> str:
         refuse(f"committed fixture {rev}:{rel} is not UTF-8 ({exc})")
 
 
+def git_maybe_text(rev: str, rel: str) -> str | None:
+    """Like git_text, but returns None when the path does not exist at rev.
+
+    Only a missing path is tolerated; any other git failure still refuses, so a
+    broken repository cannot be misread as a chain addition.
+    """
+    probe = subprocess.run(
+        ("git", "cat-file", "-e", f"{rev}:{rel}"),
+        cwd=REPO,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if probe.returncode != 0:
+        return None
+    return git_text(rev, rel)
+
+
+def validate_chain_additions(manifest: dict[str, Any]) -> set[str]:
+    """Validate the manifest's reviewed chain-addition declaration.
+
+    A chain addition is a NEW fixture stem entering the comparator body set:
+    its fixture is pinned byte-exactly from this very dump and it has no
+    committed predecessor pin. The declaration is explicit so a fixture that
+    merely escaped commit can never ride through as an accidental addition.
+    """
+    declared = manifest.get("chain_additions", [])
+    if not isinstance(declared, list) or not all(
+        isinstance(s, str) and s for s in declared
+    ):
+        refuse("chain_additions must be a list of fixture stems")
+    additions = set(declared)
+    if len(additions) != len(declared):
+        refuse(f"chain_additions contains duplicates: {sorted(declared)}")
+    unknown = additions - (set(BODIES) | set(EXTRA_BODIES))
+    if unknown:
+        refuse(
+            "chain_additions names stems outside the live comparator body set: "
+            f"{sorted(unknown)}"
+        )
+    bound = {s for s, rows in REQUIRED_BINDINGS.items() if rows}
+    if additions & bound:
+        refuse(
+            "a load-bearing bound stem cannot be declared as a chain addition: "
+            f"{sorted(additions & bound)}"
+        )
+    return additions
+
+
+def inherited_binding_set(
+    manifest: dict[str, Any], depth_cap: int = 16
+) -> set[tuple[str, str, str, str]]:
+    """Resolve the binding set an authenticated successor manifest inherits.
+
+    A successor manifest carries no bindings of its own; its authority is the
+    reviewed manifest it names. Each hop is authenticated against the named
+    predecessor record's recorded post-write hash, so a hand-edited file can
+    never become the alleged source of the load-bearing mappings.
+    """
+    seen: set[str] = set()
+    for _ in range(depth_cap):
+        bindings = manifest.get("bindings")
+        if not isinstance(bindings, list):
+            refuse("binding manifest carries no bindings list")
+        mode = manifest.get("binding_mode", "numbering-repin")
+        if bindings or mode == "numbering-repin":
+            return manifest_binding_set(manifest)
+        rec_rel = manifest.get("prior_rebaseline_record")
+        man_rel = manifest.get("prior_binding_manifest")
+        if not isinstance(rec_rel, str) or not isinstance(man_rel, str):
+            refuse("empty successor manifest names no authenticated predecessor")
+        if man_rel in seen:
+            refuse(f"successor manifest chain loops at {man_rel}")
+        seen.add(man_rel)
+        rec_path = REPO / rec_rel
+        if (
+            rec_path.parent != REPO / "data"
+            or not rec_path.name.startswith("crystal_fixture_rebaseline_")
+            or not rec_path.is_file()
+        ):
+            refuse(f"successor hop names a missing predecessor record: {rec_rel}")
+        try:
+            rec = json.loads(rec_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            refuse(f"cannot read successor hop record {rec_rel}: {exc}")
+        if not isinstance(rec, dict) or rec.get("schema") != "clean.crystal.fixture_rebaseline/v1":
+            refuse(f"successor hop record is not a rebaseline ledger: {rec_rel}")
+        if rec.get("append_only") is not True:
+            refuse(f"successor hop record is not append-only: {rec_rel}")
+        prov = rec.get("provenance")
+        if not isinstance(prov, dict):
+            refuse(f"successor hop record has no provenance: {rec_rel}")
+        exact(
+            "successor hop manifest name",
+            Path(man_rel).name,
+            str(prov.get("binding_manifest")),
+        )
+        man_path = REPO / man_rel
+        if not man_path.is_file():
+            refuse(f"successor hop manifest is missing: {man_rel}")
+        exact(
+            "successor hop manifest hash",
+            sha256(man_path),
+            str(prov.get("binding_manifest_sha256")),
+        )
+        try:
+            manifest = json.loads(man_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            refuse(f"cannot read successor hop manifest {man_rel}: {exc}")
+        if not isinstance(manifest, dict):
+            refuse(f"successor hop manifest is not an object: {man_rel}")
+    refuse("successor manifest chain exceeds the authenticated depth cap")
+
+
 def validate_existing_pin_set(
     existing: dict[Path, object],
     expected_paths: set[Path],
     new_record_rel: str,
     committed_rev: str,
+    additions: set[str] | None = None,
 ) -> tuple[str | None, dict[str, Any] | None]:
     """Authenticate the complete current pin generation before replacing it.
 
@@ -211,10 +326,12 @@ def validate_existing_pin_set(
     exact("predecessor schema", str(prior.get("schema")), "clean.crystal.fixture_rebaseline/v1")
     if prior.get("append_only") is not True:
         refuse(f"current-source predecessor is not append-only: {prior_rel}")
-    if set(prior.get("complete_body_set") or []) != set(BODIES) | set(EXTRA_BODIES):
+    additions = additions or set()
+    retained_bodies = (set(BODIES) | set(EXTRA_BODIES)) - additions
+    if set(prior.get("complete_body_set") or []) != retained_bodies:
         refuse(f"current-source predecessor has a stale body set: {prior_rel}")
     ledger = prior.get("lineage_evidence")
-    if not isinstance(ledger, dict) or set(ledger) != set(EVIDENCE):
+    if not isinstance(ledger, dict) or set(ledger) != set(EVIDENCE) - additions:
         refuse(f"current-source predecessor has an incomplete lineage ledger: {prior_rel}")
     provenance = prior.get("provenance")
     if not isinstance(provenance, dict):
@@ -236,6 +353,8 @@ def validate_existing_pin_set(
             refuse(f"current-source predecessor has no provenance.{key}: {prior_rel}")
 
     for stem, filename in EVIDENCE.items():
+        if stem in additions:
+            continue
         path = FIXTURES / filename
         pin = existing[path]
         assert isinstance(pin, dict)
@@ -497,6 +616,7 @@ def verify_required_bindings(
     manifest: dict[str, Any],
     prior_record_rel: str | None,
     prior_record: dict[str, Any] | None,
+    additions: set[str] | None = None,
 ) -> None:
     supplied = manifest_binding_set(manifest)
     required = {
@@ -504,9 +624,17 @@ def verify_required_bindings(
         for stem, rows in REQUIRED_BINDINGS.items()
         for cls, old, new in rows
     }
+    additions = additions or set()
 
     mode = manifest.get("binding_mode", "numbering-repin")
-    if mode == "identical-fixtures-successor":
+    if mode in ("identical-fixtures-successor", "chain-addition-successor"):
+        if mode == "identical-fixtures-successor" and additions:
+            refuse(
+                "chain additions require the explicit chain-addition-successor mode: "
+                f"{sorted(additions)}"
+            )
+        if mode == "chain-addition-successor" and not additions:
+            refuse("a chain-addition successor must declare its chain_additions")
         if prior_record_rel is None or prior_record is None:
             refuse("an identical-fixtures successor has no authenticated predecessor record")
         exact(
@@ -540,7 +668,7 @@ def verify_required_bindings(
             refuse(f"cannot read successor predecessor binding manifest: {exc}")
         if not isinstance(prior_manifest, dict):
             refuse("successor predecessor binding manifest is not an object")
-        inherited = manifest_binding_set(prior_manifest)
+        inherited = inherited_binding_set(prior_manifest)
         if inherited != required:
             refuse(
                 "successor predecessor no longer covers the complete load-bearing mapping set: "
@@ -757,7 +885,44 @@ def selftest() -> None:
     else:
         raise AssertionError("successor binding inheritance accepted numbering drift")
 
-    print("crystal fixture rebaseline selftest: PASS (5 fail-closed controls)")
+    # A chain addition must name a stem the live comparator actually tracks.
+    try:
+        validate_chain_additions({"chain_additions": ["not_a_tracked_stem"]})
+    except Refusal:
+        pass
+    else:
+        raise AssertionError("an unknown chain addition was accepted")
+
+    # Declared additions force the explicit chain-addition mode; the plain
+    # identical-fixtures successor cannot smuggle a new body in.
+    try:
+        verify_required_bindings(
+            {},
+            {"bindings": [], "binding_mode": "identical-fixtures-successor"},
+            "data/x.json",
+            {},
+            {"some_new_stem"},
+        )
+    except Refusal:
+        pass
+    else:
+        raise AssertionError("an identical-fixtures successor accepted chain additions")
+
+    # And the chain-addition mode with nothing declared is a contradiction.
+    try:
+        verify_required_bindings(
+            {},
+            {"bindings": [], "binding_mode": "chain-addition-successor"},
+            "data/x.json",
+            {},
+            set(),
+        )
+    except Refusal:
+        pass
+    else:
+        raise AssertionError("a chain-addition successor accepted an empty declaration")
+
+    print("crystal fixture rebaseline selftest: PASS (8 fail-closed controls)")
 
 
 def main() -> int:
@@ -847,6 +1012,7 @@ def main() -> int:
     exact("manifest IR digest", str(manifest.get("dump_ir_sha256")), args.expect_ir_sha256)
     exact("manifest pre-report digest", str(manifest.get("pre_report_sha256")), args.expect_pre_report_sha256)
     exact("axes schema", str(axes.get("schema_self")), "clean.trust_ir_build.measured.v1")
+    additions = validate_chain_additions(manifest)
 
     bodies = validate_body_set(report.get("bodies"))
     if set(EVIDENCE) != set(BODIES) or len(set(EVIDENCE.values())) != len(EVIDENCE):
@@ -875,8 +1041,26 @@ def main() -> int:
             refuse(f"cannot audit current-source evidence pins in {path}: {exc}")
         if isinstance(value, dict) and "current_source_bound_pin" in value:
             existing_current_pins[path] = value["current_source_bound_pin"]
+    # A declared chain addition has no predecessor pin; the sole tolerated pin
+    # on one is this run's own interrupted-write replay.
+    addition_evidence_paths = {
+        FIXTURES / EVIDENCE[stem] for stem in additions if stem in EVIDENCE
+    }
+    replayed_addition_paths: set[Path] = set()
+    for path in sorted(addition_evidence_paths & set(existing_current_pins)):
+        pin = existing_current_pins[path]
+        if not (isinstance(pin, dict) and pin.get("record") == record_rel):
+            refuse(
+                "a declared chain addition already carries a foreign current-source pin: "
+                f"{path.relative_to(REPO)}"
+            )
+        replayed_addition_paths.add(path)
     prior_record_rel, prior_record = validate_existing_pin_set(
-        existing_current_pins, expected_evidence_paths, record_rel, clean_rev
+        existing_current_pins,
+        (expected_evidence_paths - addition_evidence_paths) | replayed_addition_paths,
+        record_rel,
+        clean_rev,
+        additions,
     )
 
     dump_text = ir_path.read_text(encoding="utf-8", errors="replace")
@@ -886,12 +1070,22 @@ def main() -> int:
         if not fixture.is_file():
             refuse(f"{stem}: fixture is missing: {fixture}")
         rel = fixture.relative_to(REPO).as_posix()
-        before = git_text(clean_rev, rel)
-        plans[stem] = plan_body(stem, bodies[stem], dump_text, before)
+        committed = git_maybe_text(clean_rev, rel)
+        if committed is None and stem not in additions:
+            refuse(
+                f"{stem}: fixture is not committed at {clean_rev} and is not a "
+                "declared chain addition"
+            )
+        if committed is not None and stem in additions:
+            refuse(f"{stem}: declared chain addition is already committed at {clean_rev}")
         worktree_text = fixture.read_text()
+        # An addition's only acceptable "before" is the exact live body: the
+        # identical-successor discipline below then rejects any drifted pin.
+        before = committed if committed is not None else worktree_text
+        plans[stem] = plan_body(stem, bodies[stem], dump_text, before)
         if worktree_text not in (before, plans[stem]["live_text"]):
             refuse(f"{stem}: worktree fixture is neither the committed old pin nor exact live body")
-    verify_required_bindings(plans, manifest, prior_record_rel, prior_record)
+    verify_required_bindings(plans, manifest, prior_record_rel, prior_record, additions)
 
     trust_version = run(str(args.trustc), "-vV").splitlines()
     trust_rev = next(
@@ -909,9 +1103,21 @@ def main() -> int:
         if path not in expected_evidence_paths or not path.is_file():
             refuse(f"{stem}: lineage evidence file is missing: {path}")
         try:
-            worktree_value = json.loads(path.read_text())
+            raw_text = path.read_text()
+            worktree_value = json.loads(raw_text)
             rel = path.relative_to(REPO).as_posix()
-            old_text = git_text(clean_rev, rel)
+            old_text = git_maybe_text(clean_rev, rel)
+            if old_text is None:
+                if stem not in additions:
+                    refuse(f"{stem}: lineage evidence is not committed at {clean_rev}")
+                # A chain addition's reviewed pre-pin evidence file IS the
+                # historical baseline this ledger records.
+                old_text = raw_text
+            elif stem in additions:
+                refuse(
+                    f"{stem}: declared chain addition already has committed "
+                    f"lineage evidence at {clean_rev}"
+                )
             old_value = json.loads(old_text)
         except (OSError, json.JSONDecodeError) as exc:
             refuse(f"{stem}: cannot read lineage evidence {path}: {exc}")
@@ -1045,6 +1251,7 @@ def main() -> int:
             "measurement_driver_sha256": sha256(REPO / "scripts" / "trust_ir_build.sh"),
         },
         "complete_body_set": sorted(plans),
+        "chain_additions": sorted(additions),
         "primary_body_count": len(BODIES),
         "helper_body_count": len(EXTRA_BODIES),
         "bindings": manifest["bindings"],

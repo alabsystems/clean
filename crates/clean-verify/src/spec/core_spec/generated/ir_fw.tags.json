@@ -1,0 +1,61 @@
+{
+ "chain": "ir_fw",
+ "body": "flat::types::FlatFlags::with",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json. Unlike its sibling `contains`, this body NAMES the struct in its instructions -- `const struct.1017 { 0 }` and the insertfield -- so FlatFlags has a genuine first-use index (0) and this is a REAL aggregate row, not an interface-only one: the first minted STRUCT the module itself carries.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_fw_tflags` alias (`IRTy.struct_ 1017`) that `ir_fw_b0`'s const and insertfield name. The hand transcription reused the SIBLING chain's `ir_fc_tflags` alias here; the mint gives each chain its own namespace, and the two aliases are definitionally equal (both delta to `IRTy.struct_ 1017`). `ir_mint::decode` reads the table in the other direction and REFUSES an id it does not list.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print: both parameters are `struct.1017` BY VALUE, exactly as on the `contains` chain -- and here the RESULT is the same struct rebuilt, so the parameter rows plus the in-module struct row pin all three occurrences of the type to ONE canonical index.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. Reader A's record on the laneREG wc-REG dump_O3 2026-08-21 revalidation: `param_tys_erased: [\"Struct(StructId(1017))\", \"Struct(StructId(1017))\"]`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 489,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read the notes in ir_h2.tags.json. Reader A's 2026-08-21 laneREG dump says 486 with the instruction text byte-identical -- the recorded whole-crate drift class. The pin compares reader B's header against the FIXTURE-ERA 489; reader A's value is RECORDED in ir_fw.mint.json, NEVER COMPARED.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "struct#0",
+    "observed_ty": "struct.1017",
+    "rust_type": "flat::types::FlatFlags",
+    "note": "`self`, BY VALUE. Its field-0 payload is OR-ed with the other's."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "struct#0",
+    "observed_ty": "struct.1017",
+    "rust_type": "flat::types::FlatFlags",
+    "note": "`other`, BY VALUE, the SAME canonical struct -- and the same canonical index the body's const/insertfield name, which is what says the rebuilt result IS the parameter type."
+   }
+  ],
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement rather than an omission: the body contains no memory instruction at all. Reader A's `aligns_erased` is [] on the dump this migration was revalidated against.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 1017,
+   "alias": "ir_fw_tflags",
+   "rust_type": "flat::types::FlatFlags",
+   "observed_crate_id_by_producer": {
+    "laneREG-2026-08-21": 1017
+   },
+   "note": "The first minted struct row whose aggregate the MODULE ITSELF names: reader A's `crate_struct_ids_seen` is [1017] on the 2026-08-21 laneREG dump (where its sibling `contains` sees [] -- there the struct is header-only). The committed fixture also prints 1017; the id has not been observed to move yet, and the pin is still canonical-index-plus-reviewed-crate-id because the drift class is the same as every other crate table."
+  }
+ ],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `FlatFlags::with` calls NOTHING: reader A's `crate_func_ids_seen` is the single entry [3834] -- the body's own id -- and the emitted body contains no `call` instruction. `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`."
+}

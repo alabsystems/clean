@@ -65,8 +65,7 @@ fn test_fvar_proof_typechecks() {
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let value = Expr::nat_lit(7);
     let fvar_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push_let(Name::from_string("x"), nat.clone(), value.clone());
     let fvar = Expr::fvar(fvar_id);
 
@@ -146,8 +145,7 @@ fn test_proj_let_bound_fvar_proof_typechecks() {
 
     // let p : Point := Point.mk 3 4
     let fvar_id = tc
-        .ctx
-        .borrow_mut()
+        .ctx_mut()
         .push_let(Name::from_string("p"), point_type, point_val);
     let fvar = Expr::fvar(fvar_id);
 

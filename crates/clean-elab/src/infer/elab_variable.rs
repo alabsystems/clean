@@ -20,10 +20,17 @@ impl<'a> ElabCtx<'a> {
     /// Elaborate variable declaration binders for type validation.
     ///
     /// Each binder's type annotation is elaborated to verify it is well-formed.
-    /// Binders without type annotations are elaborated as fresh sort metavariables
-    /// (matching Lean 4 behavior for untyped variable binders). Earlier binders
-    /// are pushed into scope so later binders can reference them (e.g.,
-    /// `variable (α : Type) (x : α)`).
+    /// Earlier binders are pushed into scope so later binders can reference them
+    /// (e.g., `variable (α : Type) (x : α)`).
+    ///
+    /// A binder with NO type annotation reaching here is a `variable (x)` whose
+    /// `x` names nothing already declared: Lean's binder-annotation-update form
+    /// is resolved upstream by `FileContext::apply_variable_command`, which
+    /// re-binds the DECLARED variable in place and never forwards an untyped
+    /// binder for it. What is left is the genuinely-undeclared case, which Lean
+    /// accepts and types by inference — `variable (Zed)` gives `(Zed : Sort u_1)`
+    /// (measured, lean 4.33.1) — so a fresh sort metavariable is the faithful
+    /// reading of it, not a fabrication standing in for a missing lookup.
     ///
     /// # REQUIRES
     /// - `binders` are valid surface binders from the parser
@@ -63,8 +70,9 @@ impl<'a> ElabCtx<'a> {
                 let instantiated = self.metas.instantiate(&elaborated);
                 self.metas.instantiate_levels(&instantiated)
             } else {
-                // Untyped variable binder: create a fresh sort metavariable.
-                // This matches the behavior in elab_def_body for omitted annotations.
+                // Undeclared, untyped `variable (x)`: Lean infers its type as a
+                // fresh `Sort u_?`. See the note on `elab_variable_binders` —
+                // the ANNOTATION-UPDATE spelling never reaches here.
                 let binder_sort = Expr::sort(self.fresh_universe_param());
                 self.fresh_meta(binder_sort)
             };

@@ -112,7 +112,7 @@ fn shipped_from_source_system(tag: u32) -> Option<RunResult> {
         _ => return None,
     };
     Some(RunResult::EnumTag(
-        CleanMode::from_source_system(system) as u32
+        CleanMode::from_source_system(system) as u64
     ))
 }
 
@@ -173,7 +173,7 @@ pub fn chains() -> Vec<Chain> {
             arg_shape: ArgShape::ValueAggregate,
             result_kind: ResultKind::EnumTag,
             clean_module: "ir_fs_module",
-            clean_defs: clean_verify::spec::IR_FS_MODULE_DEFS,
+            clean_defs: clean_verify::spec::ir_fs_module_defs(),
             enum_model: EnumModel::Exact,
             expected_cost_offset: 0,
             // **THE CORRECTION, 2026-08-20.** This chain used to be described
@@ -219,7 +219,7 @@ pub fn chains() -> Vec<Chain> {
             arg_shape: ArgShape::PointerCell,
             result_kind: ResultKind::Int,
             clean_module: "ir_ko_module",
-            clean_defs: clean_verify::spec::IR_KO_MODULE_DEFS,
+            clean_defs: clean_verify::spec::ir_ko_module_defs(),
             enum_model: EnumModel::TagSurrogate,
             expected_cost_offset: 0,
             // The ONLY fully discriminating chain of the three: five targets,

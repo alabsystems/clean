@@ -79,19 +79,18 @@ pub(super) enum UndoRecord {
         /// Exact cursor value before the change
         old_value: u64,
     },
-    /// A level constraint was added (legacy map)
     /// A level equation was POSTPONED (pushed onto the deferred queue).
     ///
     /// On undo: pop it. The queue must not survive a rolled-back speculative
     /// branch, or a constraint from an abandoned path would be drained — and
     /// fail — against a state that never produced it.
+    ///
+    /// (A `LevelConstraint` variant sat below this one, guarding the legacy
+    /// `level_constraints` map — and the stray `/// A level constraint was
+    /// added (legacy map)` line that had drifted onto THIS variant's doc was
+    /// its. Both removed 2026-08-26 with the map: U2 stage-3 deferral 2,
+    /// `docs/analysis/u2-stage3-deferrals-2026-08-26.md`.)
     LevelPostpone,
-    LevelConstraint {
-        /// The parameter name
-        name: Name,
-        /// Previous value (None if not present)
-        old_value: Option<Level>,
-    },
     /// A level parent pointer was set (union-find)
     LevelParent {
         /// The parameter name

@@ -1292,7 +1292,17 @@ impl<'a> Lexer<'a> {
 
             // Character literals: a leading `'` begins a `Char`. Trailing primes
             // in identifiers (e.g. `x'`) are consumed inside `lex_ident`, so a
-            // `'` only reaches here at the start of a token.
+            // `'` only reaches here at the start of a token — `lex_ident`
+            // already absorbs a trailing prime (`x'`, `foo''`).
+            //
+            // A prime GLUED to a preceding notation glyph continues that
+            // glyph's symbol instead of opening a character literal: Lean's
+            // tokenizer resolves `⁻¹'` (`Set.preimage`, `infixl:80`) from its
+            // token table by maximal munch, and Clean has no token table at
+            // lex time. See [`continues_notation_symbol`].
+            '\'' if preceding_char.is_some_and(continues_notation_symbol) => {
+                TokenKind::Error(LexError::UnexpectedChar('\''))
+            }
             '\'' => self.lex_char(),
 
             // Number literals
@@ -2143,6 +2153,55 @@ fn is_ident_continue(c: char) -> bool {
     !is_modifier_letter(c) && (c.is_alphanumeric() || c == '_' || c == '\'' || c == '?' || c == '!')
 }
 
+/// Whether a `'` byte-adjacent to `prev` continues a notation SYMBOL rather
+/// than opening a character literal.
+///
+/// Lean tokenizes from a token table by maximal munch, so `⁻¹'` in
+/// `f ⁻¹' s` (`Set.preimage`, `infixl:80`, `Mathlib/Data/Set/Operations.lean`)
+/// is one token and the prime never opens a literal. Clean lexes the whole file
+/// before any notation is registered, so it cannot consult a token table; this
+/// predicate is the standing approximation, and it is deliberately narrow:
+///
+/// * `prev` must be NON-ASCII — every `'`-bearing operator Mathlib declares
+///   (`⁻¹'`, `⊕'`) is glued to a non-ASCII glyph, and requiring that keeps
+///   every ASCII context (`x='a'`, `f 'a'`, `(:='a')`) on the literal path.
+/// * `prev` must not be a bracket or separator, so `⟨'a', rfl⟩` still opens a
+///   character literal at the `⟨`.
+/// * whitespace never qualifies, so `⁻¹ 'a'` is still a literal.
+///
+/// A `'` that reaches here is never preceded by an identifier: `lex_ident`
+/// treats `'` as an identifier-continuation character and would have absorbed
+/// it (`α'`, `foo''`).
+fn continues_notation_symbol(prev: char) -> bool {
+    !prev.is_ascii()
+        && !prev.is_whitespace()
+        && !matches!(
+            prev,
+            '⟨' | '⟩'
+                | '⟦'
+                | '⟧'
+                | '⟪'
+                | '⟫'
+                | '«'
+                | '»'
+                | '‹'
+                | '›'
+                | '⌜'
+                | '⌝'
+                | '⌈'
+                | '⌉'
+                | '⌊'
+                | '⌋'
+                | '⁅'
+                | '⁆'
+                | '‖'
+                | '∥'
+                | '⦃'
+                | '⦄'
+                | '·'
+        )
+}
+
 /// Whether a `.` *immediately preceded* by `prev` may begin a leading-dot
 /// float (`.5` => `0.5`). It may only do so when the `.` is not glued to a
 /// preceding expression: not directly after an identifier/number continuation
@@ -2684,6 +2743,64 @@ mod tests {
         // `''` has no character; `'ab'` has too many.
         assert_eq!(lex("''"), vec![TokenKind::Error(LexError::InvalidChar)]);
         assert_eq!(lex("'ab'"), vec![TokenKind::Error(LexError::InvalidChar)]);
+    }
+
+    #[test]
+    fn test_prime_glued_to_a_notation_glyph_does_not_open_a_char_literal() {
+        // `⁻¹'` is `Set.preimage` (`infixl:80`,
+        // `Mathlib/Data/Set/Operations.lean`) — 786 Mathlib files. The prime
+        // used to open a character literal that swallowed the rest of the LINE,
+        // so `f ⁻¹' s` lost its right operand entirely.
+        assert_eq!(
+            lex("f ⁻¹' s"),
+            vec![
+                TokenKind::Ident("f".to_string()),
+                TokenKind::InvNotation,
+                TokenKind::Error(LexError::UnexpectedChar('\'')),
+                TokenKind::Ident("s".to_string()),
+            ],
+            "the operand after `⁻¹'` must survive lexing",
+        );
+        // The DECLARATION's symbol text lexes to the same two tokens, which is
+        // what lets the notation matcher find it at the use site.
+        assert_eq!(
+            lex(" ⁻¹' "),
+            vec![
+                TokenKind::InvNotation,
+                TokenKind::Error(LexError::UnexpectedChar('\'')),
+            ],
+        );
+        // Mathlib's other `'`-bearing operator, `⊕'` (`local infixl:1001`).
+        assert_eq!(
+            lex("a ⊕' b").len(),
+            4,
+            "`⊕'` must not swallow its right operand: {:?}",
+            lex("a ⊕' b"),
+        );
+    }
+
+    #[test]
+    fn test_prime_after_ascii_or_bracket_still_opens_a_char_literal() {
+        // Narrowness of the rule above: only a NON-ASCII, non-bracket neighbour
+        // makes a prime part of a symbol.
+        assert_eq!(lex("x='a'").last(), Some(&TokenKind::CharLit('a')));
+        assert_eq!(lex("⟨'a'").last(), Some(&TokenKind::CharLit('a')));
+        assert_eq!(lex("⁻¹ 'a'").last(), Some(&TokenKind::CharLit('a')));
+        // …and the ordinary literal forms are untouched.
+        assert_eq!(lex("'a'"), vec![TokenKind::CharLit('a')]);
+        for (src, want) in [
+            (r"'\n'", '\n'),
+            (r"'\t'", '\t'),
+            (r"'\r'", '\r'),
+            (r"'\\'", '\\'),
+            (r"'\''", '\''),
+            (r#"'\"'"#, '"'),
+            (r"'\0'", '\0'),
+            (r"'\x41'", 'A'),
+            (r"'\u{41}'", 'A'),
+        ] {
+            assert_eq!(lex(src), vec![TokenKind::CharLit(want)], "{src}");
+        }
     }
 
     #[test]

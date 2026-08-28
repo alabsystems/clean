@@ -267,7 +267,7 @@ impl<'a> Unifier<'a> {
             return if a == b {
                 UnifyResult::Success
             } else {
-                UnifyResult::Failure(format!("Nat literal mismatch: {a:?} vs {b:?}"))
+                UnifyResult::Failure(format!("Nat literal mismatch: {a} vs {b}"))
             };
         }
         if let (Some(pred_l), Some(pred_r)) = (is_nat_succ(left), is_nat_succ(right)) {
@@ -581,7 +581,7 @@ impl<'a> Unifier<'a> {
                 if l1 == l2 {
                     UnifyResult::Success
                 } else {
-                    UnifyResult::Failure(format!("literal mismatch: {l1:?} vs {l2:?}"))
+                    UnifyResult::Failure(format!("literal mismatch: {l1} vs {l2}"))
                 }
             }
 

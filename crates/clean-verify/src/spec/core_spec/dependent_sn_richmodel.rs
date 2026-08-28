@@ -660,11 +660,26 @@ impl Specification {
         // (`lift_at_amount_zero`, `lift_at_compose`, `lift_at_shift_succ_gen`,
         // `instantiate_bvar_at_eq`) and are REFERENCED, not re-ported. What is
         // genuinely NEW here is the `psubst` calculus, because `psubst`/`up`/
-        // `scons`/`upn`/`idsubst` were introduced in Batches 1-2. clean-verify's
-        // spec has NO `funext` in its reconstruction toolbox, so the guide's
-        // funext-driven proofs (psubst_comp/psubst_id/up_comp) are re-derived
-        // FUNEXT-FREE via a pointwise-congruence lemma (`psubst_pointwise`) that
-        // stands in for every `funext` use.
+        // `scons`/`upn`/`idsubst` were introduced in Batches 1-2. At the time
+        // this batch landed, clean-verify's spec had NO `funext` in its
+        // reconstruction toolbox, so the guide's funext-driven proofs
+        // (psubst_comp/psubst_id/up_comp) are re-derived FUNEXT-FREE via a
+        // pointwise-congruence lemma (`psubst_pointwise`) that stands in for
+        // every `funext` use.
+        //
+        // SUPERSEDED as a statement about the spec, 2026-08-27 (R13,
+        // `candmodel_construct_r13.rs`): `spec_funext` IS derivable here and is
+        // registered — quotient the function space by pointwise equality,
+        // extract with `Quot.lift`, push `Quot.sound` through it with
+        // `Eq.cong`; ZERO new axioms, since `Quot.sound` and the `Quot`
+        // primitives are already in the kernel's `FOUNDATIONAL_AXIOMS`. The
+        // sentence above was true of what was REGISTERED, not of what is
+        // DERIVABLE. These funext-free proofs are KEPT — they work, and they
+        // are about substitutions rather than about semantic functions, which
+        // is precisely the case where pointwise congruence does substitute.
+        // Nothing below needs revisiting; a future batch that DOES equate two
+        // functions should reach for `spec_funext` instead of working around
+        // its absence.
         //
         // This batch lands the COMPUTATIONAL BASE + the congruence engine +
         // the identity law, all zero-axiom DerivedProved (census stays 16):

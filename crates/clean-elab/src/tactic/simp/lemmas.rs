@@ -91,11 +91,21 @@ pub(super) fn collect_extra_lemmas(state: &ProofState, config: &SimpConfig) -> V
                 mk_iff_simp_lemma(&name, &decl.type_, 50, &decl.level_params)
             {
                 lemmas.push(lemma);
+            } else if let Some(eqs) =
+                super::rec_equations::synthesize_rec_def_equations(&state.env, &name)
+            {
+                // A definition compiled to a `T.rec` value gets Lean-style
+                // per-constructor equational lemmas instead of a delta-unfold
+                // (which would rewrite the goal into a stuck recursor form no
+                // IH can match — the rec-iota simp class, B7).
+                // `resolve_unfold_defs` skips exactly these names.
+                lemmas.extend(eqs);
             }
-            // If the constant is a Definition whose type is not an equality
-            // (e.g. `StateT.bind`, `Except.bind`, monadic helper definitions),
-            // it is captured by `resolve_unfold_defs` and delta-unfolded by
-            // `simp_expr`, not here as an equality rewrite lemma. See #3518.
+            // Otherwise, if the constant is a Definition whose type is not an
+            // equality (e.g. `StateT.bind`, `Except.bind`, monadic helper
+            // definitions), it is captured by `resolve_unfold_defs` and
+            // delta-unfolded by `simp_expr`, not here as an equality rewrite
+            // lemma. See #3518.
         }
     }
     lemmas
@@ -179,6 +189,15 @@ pub(crate) fn resolve_unfold_defs(
         // Theorems are also skipped: proof terms are not intended as
         // rewrite-unfold targets for `simp`.
         if matches!(decl.kind, ConstantKind::Definition) {
+            // A rec-compiled definition is served as per-constructor
+            // equational lemmas by `collect_extra_lemmas` (rec-iota simp
+            // class, B7); delta-unfolding it here would rewrite the goal into
+            // a stuck recursor form those equations (and the local IHs) can
+            // no longer match. The same synthesis call keeps the two sites
+            // agreeing exactly: any def it refuses stays on this unfold path.
+            if super::rec_equations::synthesize_rec_def_equations(&state.env, &name).is_some() {
+                continue;
+            }
             if let Some(value) = &decl.value {
                 out.insert(name, value.clone());
             }

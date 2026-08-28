@@ -2,8 +2,10 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! **Callee identity in a minted `ir_lz_module`, and what it costs
-//! `ir_lz_correct`.**
+//! **Callee identity in the minted `ir_lz_module`, and what it costs the A4
+//! statement over it.** (The model's theorem is `ir_lzm_correct`; since
+//! 2026-08-22 the minted module is REGISTERED under the chain's name and the
+//! refutation below is a kernel-checked theorem, `ir_lz_minted_refutes_a4_on_max`.)
 //!
 //! The reasoning these tests hold to account is in `level_is_zero.rs`'s header,
 //! under "the stated wall was HALF A WALL". In one line: `ir_call_exec` decides
@@ -174,7 +176,7 @@ fn minted_ir_lz_core_never_lets_the_deref_call_resolve() {
         );
         eprintln!(
             "callee identity is fixed: deref (@{deref}) is absent -> stuck no_func; \
-             self-call (@{selfcall}) resolves. `ir_lz_correct` is now REFUTED rather than \
+             self-call (@{selfcall}) resolves. the A4 sentence over the minted module is now REFUTED rather than \
              mis-executed — see this file's header."
         );
     }
@@ -182,7 +184,7 @@ fn minted_ir_lz_core_never_lets_the_deref_call_resolve() {
 
 /// **Which arms of the emitted body call out, and which do not.**
 ///
-/// This is the evidence for "`ir_lz_correct` is refuted, not merely unprovable"
+/// This is the evidence for "A4 over the minted module is refuted, not merely unprovable"
 /// over a minted module: `Max` and `IMax` reach a call to a callee that is not
 /// `is_zero`, so on those two arms the machine halts stuck where the theorem
 /// says it returns `ret (bool …)`. `Zero`, `Succ` and `Param` return a constant
@@ -233,7 +235,7 @@ fn emitted_recursive_arms_are_the_ones_that_call_out() {
             calls_in.get(&block),
             Some(&true),
             "bb{block} carries a recursive arm and MUST contain a call. It is the arm on which \
-             a minted module that omits the callee goes stuck, refuting ir_lz_correct rather \
+             a minted module that omits the callee goes stuck, refuting the A4 sentence rather \
              than leaving it unproved."
         );
     }

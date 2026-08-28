@@ -296,6 +296,19 @@ pub(crate) fn build_linarith_proof(
                         return Some(w);
                     }
                 }
+                // B7 `arith-int-bound`: general ground-shifted Int weakening —
+                // goal `a ± dl <|≤ b ± dr` from `h : a ≤ b` whenever the slack
+                // decision `dl (+1 if strict) ≤ dr` holds (e.g. `a - 1 < b + 1`).
+                // The two lanes above keep their exact shapes; this fires only
+                // when they miss. The candidate is re-checked by `close_goal`
+                // (fail closed), like every builder here.
+                if let Some(w) = super::arith_linarith_int_eq::try_prove_int_shifted_le_from_hyp(
+                    goal_target,
+                    &proof,
+                    &h_ty,
+                ) {
+                    return Some(w);
+                }
             }
             return Some(proof);
         }

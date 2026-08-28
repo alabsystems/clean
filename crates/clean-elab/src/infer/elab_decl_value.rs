@@ -114,11 +114,19 @@ pub(in crate::infer) fn normalize_equation_def(
         }
     }
 
-    // Slice 1 (single-arg equation def): conservatively keep the historical
-    // gate of *no* leading declaration binders. Single-arg defs with leading
-    // binders already elaborate through other paths; routing them here too is
-    // out of scope for this change and risks regressing them.
-    if !binders.is_empty() {
+    // Slice 1 (single-arg equation def): NON-recursive defs keep the historical
+    // gate of *no* leading declaration binders — they already elaborate through
+    // other paths, and routing them here risks regressing them. A RECURSIVE
+    // single-arg equation def with leading binders, however, has no other
+    // working path at all: without the lift no decreasing binder exists, no
+    // `RecursiveDefContext` is installed, and the self-call dies
+    // `RecursionOutsideFragment` (R100 `mixed_swap_pairs_nested`:
+    // `def swapPairs {α β : Type} : List (α × β) → List (β × α) | …`).
+    // Lift those exactly like the multiarg branch above: leading binders are
+    // prepended and stay in scope; `setup_recursion` resolves the decreasing
+    // position past them.
+    let is_recursive = !def_name.is_empty() && super::structural::body_mentions_call(val, def_name);
+    if !binders.is_empty() && !is_recursive {
         return None;
     }
 
@@ -1377,9 +1385,58 @@ impl ElabCtx<'_> {
         if metas.is_empty() && locals.is_empty() {
             return Ok(());
         }
+
+        // NAME THE INSTANCE GOALS (v7/D3: a refusal must carry the fix, with
+        // options). An unassigned instance metavariable is a synthesis
+        // FAILURE, and the goal it failed on is still in hand — it is
+        // `MetaVar.ty`, and `meta_is_instance_goal` already reads exactly that
+        // field at exactly this boundary. Reporting `?[7]` instead discarded
+        // the only actionable fact in the failure: the id is an allocation
+        // counter that names nothing, and the same `?[7]` was measured for two
+        // unrelated programs.
+        let by_raw_id: HashMap<u64, &crate::unify::MetaVar> =
+            self.metas.iter().map(|(id, m)| (id.as_u64(), m)).collect();
+        let mut instance_goals: Vec<Expr> = Vec::new();
+        let mut plain_metas: Vec<u64> = Vec::new();
+        for raw in &metas {
+            match by_raw_id.get(raw) {
+                Some(meta) if self.meta_is_instance_goal(meta) => {
+                    instance_goals.push(self.metas.instantiate(&meta.ty));
+                }
+                _ => plain_metas.push(*raw),
+            }
+        }
+
+        if let Some(goal) = instance_goals.first() {
+            let mut detail = self.instance_failure_help(goal);
+            if instance_goals.len() > 1 {
+                let rest: Vec<String> = instance_goals[1..]
+                    .iter()
+                    .map(|g| format!("`{}`", self.render_instance_goal(g)))
+                    .collect();
+                detail.push_str(&format!(
+                    "\n  {} further instance goal(s) are also unsolved: {}\n",
+                    rest.len(),
+                    rest.join(", ")
+                ));
+            }
+            if !plain_metas.is_empty() || !locals.is_empty() {
+                detail.push_str(&format!(
+                    "\n  Also unresolved in this declaration: unsolved metavariables \
+                     ?{plain_metas:?}, escaped local fvars {locals:?}\n"
+                ));
+            }
+            return Err(ElabError::UnsynthesizedInstanceGoal {
+                decl_kind: decl_kind.to_owned(),
+                name: name.to_owned(),
+                goal: self.render_instance_goal(goal),
+                detail,
+            });
+        }
+
         let mut parts = Vec::new();
-        if !metas.is_empty() {
-            parts.push(format!("unsolved metavariables ?{metas:?}"));
+        if !plain_metas.is_empty() {
+            parts.push(format!("unsolved metavariables ?{plain_metas:?}"));
         }
         if !locals.is_empty() {
             parts.push(format!("escaped local fvars {locals:?}"));
@@ -1389,6 +1446,173 @@ impl ElabCtx<'_> {
             name: name.to_owned(),
             detail: parts.join("; "),
         })
+    }
+
+    /// Render a class application as `Class Arg Arg …`, showing unassigned
+    /// metavariables as `?N` rather than the `Display` impl's raw
+    /// `fvar#FVarId(9223372036854775815)`.
+    fn render_instance_goal(&self, goal: &Expr) -> String {
+        let Some((class, args)) = crate::instances::extract_class_app(goal) else {
+            return format!("{goal}");
+        };
+        let mut out = class.to_string();
+        for arg in &args {
+            out.push(' ');
+            out.push_str(&Self::render_goal_arg(arg));
+        }
+        out
+    }
+
+    fn render_goal_arg(arg: &Expr) -> String {
+        use crate::unify::MetaState;
+        use clean_kernel::ExprKind;
+        if let ExprKind::FVar(id) = arg.kind() {
+            if let Some(mid) = MetaState::from_fvar(*id) {
+                return format!("?{}", mid.as_u64());
+            }
+        }
+        let rendered = format!("{arg}");
+        if rendered.contains(' ') {
+            format!("({rendered})")
+        } else {
+            rendered
+        }
+    }
+
+    /// The body of the refusal: what the search had, and what the reader can
+    /// do about it.
+    ///
+    /// HONESTY BOUNDARY. Everything here is read out of state that is in hand
+    /// at the reporting site — the goal (`MetaVar.ty`) and the candidate list
+    /// (`InstanceTable::get_instances`). It therefore says "none of these
+    /// inhabited the goal", NOT "no such instance can exist": the resolution
+    /// REASON is discarded one call earlier (`ElabCtx::resolve_instance`
+    /// narrows `Result<Expr, ResolutionError>` to `Option<Expr>` in
+    /// `infer/instance.rs`), so a `MaxDepthExceeded` / `MaxHeartbeatsExceeded`
+    /// outcome is indistinguishable here from a genuine absence, and a
+    /// non-existence claim would be false in those cases. Widening that return
+    /// type is the follow-on that would let this message distinguish them.
+    fn instance_failure_help(&self, goal: &Expr) -> String {
+        const MAX_LISTED: usize = 10;
+        let mut out = String::new();
+        let Some((class, args)) = crate::instances::extract_class_app(goal) else {
+            return out;
+        };
+        let goal_str = self.render_instance_goal(goal);
+
+        out.push_str(
+            "  An instance-implicit argument was left unfilled, so the declaration is incomplete.\n",
+        );
+
+        // A goal that is not fully determined is a DIFFERENT failure from a
+        // determined goal with no instance, and must not be reported as one.
+        let open: Vec<String> = args
+            .iter()
+            .map(Self::render_goal_arg)
+            .filter(|s| s.starts_with('?'))
+            .collect();
+        if !open.is_empty() {
+            out.push_str(&format!(
+                "  The goal is NOT fully determined: {} was never pinned by the enclosing\n  \
+                 declaration, so synthesis could not state what it needed.\n",
+                open.join(", ")
+            ));
+        }
+
+        let registered = self.instances.get_instances(&class);
+        if registered.is_empty() {
+            out.push_str(&format!(
+                "\n  `{class}` is a registered class, but NO instance of it is registered.\n"
+            ));
+        } else {
+            out.push_str(&format!(
+                "\n  `{class}` is a registered class. Instance synthesis had these candidates, and\n  none of them was found to inhabit the goal:\n"
+            ));
+            for inst in registered.iter().take(MAX_LISTED) {
+                out.push_str(&format!(
+                    "      {} : {}\n",
+                    inst.name,
+                    self.render_instance_goal(&inst.type_)
+                ));
+            }
+            if registered.len() > MAX_LISTED {
+                out.push_str(&format!(
+                    "      … and {} more\n",
+                    registered.len() - MAX_LISTED
+                ));
+            }
+            // Kept on ONE line on purpose: this is the sentence that bounds the
+            // claim, and a wrapped sentence is one a reader (or a test) can miss.
+            out.push_str(
+                "  That is what the search HAD available; it is not a proof that no such instance can exist.\n",
+            );
+        }
+
+        out.push_str("\n  Options:\n");
+        let carriers = Self::registered_carriers(registered);
+        if carriers.is_empty() {
+            out.push_str(&format!(
+                "    1. Register an instance of `{class}` — there is currently none.\n"
+            ));
+        } else {
+            out.push_str(&format!(
+                "    1. Compute at a carrier `{class}` is registered at: {}.\n",
+                carriers.join(", ")
+            ));
+            // Only offered when a machine carrier is actually involved — a
+            // `UInt{N}.toNat` hint against a user structure would be noise.
+            // Name the WIDTH the goal actually mentions. Hardcoding `UInt64`
+            // here told a `UInt8`/`UInt16`/`UInt32` reader to convert through
+            // the wrong type and quoted the wrong modulus — a hint that is
+            // false of the program in front of it, which is exactly what this
+            // whole diagnostic exists to stop being.
+            if let Some(width) = args
+                .iter()
+                .map(Self::render_goal_arg)
+                .find(|a| a.starts_with("UInt"))
+            {
+                let bits = match width.as_str() {
+                    "UInt8" => "8",
+                    "UInt16" => "16",
+                    "UInt32" => "32",
+                    _ => "64",
+                };
+                out.push_str(&format!(
+                    "       Convert at the boundary — `{width}.toNat x : Nat`, and back with\n       \
+                     `{width}.ofNat` (which wraps mod 2^{bits}).\n",
+                ));
+            }
+        }
+        out.push_str(&format!(
+            "    2. Supply the instance yourself:\n         \
+             instance : {goal_str} := \u{27e8}fun a b => \u{2026}\u{27e9}\n"
+        ));
+        out.push_str(
+            "    3. If this is a prelude gap rather than a mistake in this program, the missing\n       \
+             instance belongs beside the others in `Environment::with_prelude`\n       \
+             (clean-kernel `src/env/`).\n",
+        );
+        out
+    }
+
+    /// The distinct FIRST arguments of a class's registered instances — the
+    /// carriers the class is actually available at. Parametric instances (a Pi
+    /// type, so no class application at the head) contribute nothing rather
+    /// than a misleading name.
+    fn registered_carriers(registered: &[crate::instances::InstanceInfo]) -> Vec<String> {
+        let mut carriers: Vec<String> = Vec::new();
+        for inst in registered {
+            if let Some((_, args)) = crate::instances::extract_class_app(&inst.type_) {
+                if let Some(first) = args.first() {
+                    let rendered = Self::render_goal_arg(first);
+                    if !rendered.starts_with('?') && !carriers.contains(&rendered) {
+                        carriers.push(rendered);
+                    }
+                }
+            }
+        }
+        carriers.truncate(8);
+        carriers
     }
 
     /// U2 rung 4 — the `levelMVarToParam` analog, run once at declaration
@@ -1445,28 +1669,84 @@ impl ElabCtx<'_> {
         if fresh.is_empty() {
             return Ok((declared, ty, val));
         }
-        // NOTE (rung-4 scope cut): Lean treats an explicit `.{...}` list as
-        // CLOSED (leftover fresh levels error). Clean cannot yet distinguish
-        // a declared `.{u}` from `universe u`-merged params at this layer —
-        // the file-context preprocessor folds both into `universe_params`
-        // (test_issue168_param_to_param_canonical is exactly the merged
-        // case) — so enforcement waits on a real explicitness channel
-        // through preprocess.rs; until then explicit lists still
-        // auto-extend (pinned as the p21 divergence fixture).
         fresh.sort_by_key(|n| used.iter().position(|u| u == n));
-        // Rename targets are freshly MINTED param names (`fresh_universe_param`):
-        // guaranteed absent from the metas' union-find, so the decl-close
-        // canonicalize pass cannot rewrite them back into a solved mint-name.
-        // The tail is a contiguous block in first-use order (the measured
-        // divergence was mint-index GAPS like `t5.{u_0,u_2}`; 1-based
+        // U2 rung-4 explicitness channel (2026-08-25) — the scope cut that
+        // stood here is CLOSED. Lean treats an explicit `.{...}` list as
+        // exhaustive (`Lean.sortDeclLevelParams`: a used level outside a
+        // non-empty `allUserLevelNames` is an error, never an extra
+        // parameter). The blocker was never the rule; it was that
+        // `preprocess_decl_with_context` merges file-scope `universe` names
+        // into the SAME `universe_params` vector as the written list, so this
+        // layer could not tell `universe u` from `def f.{u}`
+        // (`test_issue168_param_to_param_canonical` is exactly the merged
+        // case). `ElabCtx::file_universe_params` now carries the file half,
+        // `set_decl_universe_params` subtracts it, and `Some(..)` here means
+        // the declaration genuinely wrote a list.
+        //
+        // REFUSAL SCOPE, stated so it can be checked: only a declaration that
+        // WROTE a list, only levels that are USED in the finished type/value
+        // (the `used` filter above), and only levels still UNDETERMINED after
+        // `drain_postponed_levels` + canonicalization. A written list that
+        // names every surviving level, a level hole the solver determined, and
+        // any declaration with no written list all keep auto-generalizing.
+        if let Some(explicit) = &self.decl_explicit_universes {
+            let list = explicit.join(", ");
+            let leaked = fresh
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let n = fresh.len();
+            let plural = if n == 1 { "level" } else { "levels" };
+            // The advice clause was corrected 2026-08-26b, and the mint-name
+            // reservation is what made the old one visibly wrong. It read
+            // "Either name the missing {plural} in the list, or constrain
+            // {it/them} to a level the list already names." The leaked levels
+            // are always METAVARIABLES — `fresh` is `universe_params` minus the
+            // rigid set — so "name it in the list" never worked: adding `v` to
+            // `.{u}` makes `v` rigid and leaves the `Type _` hole minting its
+            // own level, which leaks exactly as before. Now that mints are
+            // spelled `?u_N` the message was also quoting a name the user
+            // cannot write, which is what surfaced the defect. The actionable
+            // fix is to write the level AT ITS USE SITE and put that name in
+            // the list, or to drop the list and let the declaration
+            // auto-generalize.
+            return Err(ElabError::ExplicitUniverseListClosed {
+                detail: format!(
+                    "the explicit universe list `.{{{list}}}` is closed: elaboration left \
+                     {n} undetermined universe {plural} ({leaked}) that the list does not \
+                     name. Lean treats an explicit `.{{...}}` list as exhaustive, so this \
+                     declaration would register with more universe parameters than it \
+                     declares. The leaked {plural} {} a universe METAVARIABLE, so adding a \
+                     name to the list will not absorb {}: write the level explicitly where \
+                     it is used (`Type v` rather than `Type _`) and name `v` in the list, \
+                     constrain {} to a level the list already names, or drop the `.{{...}}` \
+                     list and let the declaration auto-generalize.",
+                    if n == 1 { "is" } else { "are each" },
+                    if n == 1 { "it" } else { "them" },
+                    if n == 1 { "it" } else { "them" },
+                ),
+            });
+        }
+        // Rename targets come from `fresh_generalized_universe_param`: fresh
+        // ids off the SAME monotone counter the metavariable mint draws from,
+        // so they are guaranteed absent from the metas' union-find and the
+        // decl-close canonicalize pass cannot rewrite them back into a solved
+        // mint-name. The tail is a contiguous block in first-use order (the
+        // measured divergence was mint-index GAPS like `t5.{u_0,u_2}`; 1-based
         // Lean-exact numbering is a cosmetic follow-up).
+        //
+        // THE SPELLING IS THE POINT (2026-08-26b). This is the levelMVarToParam
+        // boundary: on the far side a level stops being a metavariable and
+        // becomes part of the declaration's exported interface, so it must be
+        // named in the WRITABLE space (`u_N`) even though every mint is now
+        // named in the reserved one (`?u_N`). Because both minters share one
+        // counter, the names this hands out did not move when the reservation
+        // landed — `holeOnly` kept `u_1` at `2ce2cf2c1` and keeps `u_1` now.
         let mut subst: Vec<(Name, Level)> = Vec::new();
         let mut renamed: Vec<Name> = Vec::new();
         for f in &fresh {
-            let tname = match self.fresh_universe_param() {
-                Level::Param(n) => n,
-                _ => unreachable!("fresh_universe_param mints a Param"),
-            };
+            let tname = self.fresh_generalized_universe_param();
             subst.push((f.clone(), Level::param(tname.clone())));
             renamed.push(tname);
         }
@@ -1653,7 +1933,28 @@ impl<'a> ElabCtx<'a> {
         val: &SurfaceExpr,
         termination: &TerminationHints,
     ) -> Result<Option<(Expr, Expr)>, ElabError> {
-        let param_names: Vec<String> = binders.iter().map(|b| b.name.clone()).collect();
+        // Decreasing-argument positions live in CALL-ARGUMENT space: a surface
+        // self-call passes only the EXPLICIT binders, positionally (implicit /
+        // strict-implicit / instance binders are omitted at call sites), and
+        // the one positional consumer of `decreasing_arg_pos` — `elab_app`'s
+        // IH fast path — indexes surface call args too. Resolving detection
+        // against the FULL binder list conflated the two spaces, so any def
+        // with a leading implicit binder (`def lenM {α : Type} (xs : List α) …
+        // lenM ys`) picked the type binder as "decreasing" and the self-call
+        // died `RecursionOutsideFragment`. Detect against the explicit binders
+        // and translate back to full binder indices where binders are sliced.
+        // For all-explicit defs `explicit_positions` is the identity and
+        // behavior is unchanged.
+        let explicit_positions: Vec<usize> = binders
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| matches!(b.info, clean_parser::SurfaceBinderInfo::Explicit))
+            .map(|(i, _)| i)
+            .collect();
+        let param_names: Vec<String> = explicit_positions
+            .iter()
+            .map(|&i| binders[i].name.clone())
+            .collect();
         let mut recursion_info =
             super::structural::detect_recursion_with_params(name, val, &param_names);
 
@@ -1712,17 +2013,116 @@ impl<'a> ElabCtx<'a> {
             });
 
         // Use explicit hint if provided, otherwise use auto-detected position.
+        // Both are call-argument-space positions; the binder is found through
+        // `explicit_positions`.
         let dec_arg = explicit_dec_arg.transpose()?.flatten().or_else(|| {
-            recursion_info
-                .decreasing_arg
-                .and_then(|pos| binders.get(pos).map(|b| (pos, b.name.clone())))
+            recursion_info.decreasing_arg.and_then(|pos| {
+                explicit_positions
+                    .get(pos)
+                    .and_then(|&binder_pos| binders.get(binder_pos))
+                    .map(|b| (pos, b.name.clone()))
+            })
         });
+
+        // ROUTING (R3): an explicit `termination_by <parameter>` is a
+        // DECLARATION; `detect_recursion_with_params` is a HEURISTIC. When
+        // they name different parameters, the declaration wins and the
+        // definition is routed to the well-founded lowering.
+        //
+        // This is what `gcd` needs. `def gcd (a b : Nat) := … gcd b (a % b)`
+        // has a self-call whose FIRST argument is a bare identifier (`b`)
+        // spelled differently from the first parameter (`a`), which is
+        // exactly the shape `find_decreasing_arg`'s name-inequality rule
+        // reads as "position 0 decreases". Nothing about `b` is structurally
+        // smaller than `a`, so the structural lowering could only fail — and
+        // it failed as `UnknownIdent`/`RecursionOutsideFragment`, never
+        // reaching the well-founded path the user asked for by writing
+        // `termination_by b`.
+        //
+        // Deliberately narrow. It fires ONLY for the modern
+        // `termination_by <measure>` form (`tb.params` empty — the
+        // `termination_by x y => …` form REBINDS the parameters, so an
+        // identifier there is not a parameter reference), and only when the
+        // measure mentions EXACTLY ONE parameter. A measure that names the
+        // position the detector already picked leaves routing untouched: a
+        // structurally-recursive definition carrying `termination_by n` still
+        // lowers structurally.
+        //
+        // R5 (2026-08-25) — the spelling hole. R3 matched a BARE
+        // `SurfaceExpr::Ident` and nothing else, so the rule it established
+        // ("the declaration beats the heuristic") silently stopped applying
+        // the moment the measure was written any other way. Measured at pin
+        // `99e2128ef`: `termination_by b + 0` and `termination_by b.toNat` on
+        // an otherwise-identical `gcd` were both refused
+        // `RecursionOutsideFragment` — R3's own bug, one spelling over —
+        // while `termination_by b` elaborated. `sole_mentioned_param` closes
+        // that by asking which parameters the measure MENTIONS, which is the
+        // same "exactly one parameter" rule `elab_wf_recursion_core`'s phase
+        // 2b applies to the elaborated measure, so routing and lowering now
+        // agree instead of drifting.
+        //
+        // It answers `None` for any measure containing a binder, which is the
+        // pre-existing behaviour — so this can only ADMIT shapes that were
+        // previously refused, never redirect one that already worked. Nothing
+        // about proof authority moves: the lowering re-derives the parameter
+        // from real `FVar`s, requires a `Nat`-valued measure, and still
+        // discharges or refuses every decreasing obligation itself.
+        let wf_measure_param_pos = termination
+            .termination_by
+            .as_ref()
+            .filter(|tb| {
+                matches!(tb.kind, clean_parser::TerminationKind::WellFounded)
+                    && tb.params.is_empty()
+            })
+            .and_then(|tb| tb.measure.as_deref())
+            .and_then(|measure| {
+                super::wf_recursion::measure_params::sole_mentioned_param(measure, &param_names)
+            });
+        // R6 (2026-08-25) — the same rule, at a measure over SEVERAL
+        // parameters. A SUM measure (`termination_by a + b`) is now lowered by
+        // `wf_recursion::sum_measure`, so the declaration must beat the
+        // heuristic there too: no single structural position can be what the
+        // user asked for, and the structural path could only fail. Before
+        // this, `def gcdSub (a b : Nat) := … gcdSub (a-b) b … gcdSub a (b-a)`
+        // with `termination_by a + b` died `RecursionOutsideFragment` — the
+        // detector read the bare `a` at position 0 of the second self-call as
+        // "position 0 decreases" — and never reached the lowering at all.
+        //
+        // Narrow, on purpose and for the same reason as R3/R5: it fires only
+        // for the modern `termination_by <measure>` form, only when the
+        // measure is `+`-headed at the surface, and only when it mentions at
+        // least TWO parameters — i.e. exactly the class the lowering admits.
+        // A non-sum multi-parameter measure keeps today's routing untouched,
+        // so this can only ADMIT shapes that were previously refused.
+        let wf_measure_is_sum = termination
+            .termination_by
+            .as_ref()
+            .filter(|tb| {
+                matches!(tb.kind, clean_parser::TerminationKind::WellFounded)
+                    && tb.params.is_empty()
+            })
+            .and_then(|tb| tb.measure.as_deref())
+            .is_some_and(|measure| {
+                super::wf_recursion::measure_shape::is_surface_nat_sum(measure)
+                    && super::wf_recursion::measure_params::mentioned_params(measure, &param_names)
+                        .is_some_and(|mentioned| mentioned.len() >= 2)
+            });
+        let dec_arg = if wf_measure_is_sum {
+            None
+        } else {
+            match (&dec_arg, wf_measure_param_pos) {
+                (Some((pos, _)), Some(measure_pos)) if *pos != measure_pos => None,
+                _ => dec_arg,
+            }
+        };
 
         if let Some((dec_pos, dec_name)) = dec_arg {
             // Collect names of parameters after the decreasing argument (#1386).
             // These are folded into the motive so IHs can handle varying
-            // parameter values in recursive calls.
-            let extra_params: Vec<RecursiveExtraParam> = binders[(dec_pos + 1)..]
+            // parameter values in recursive calls. `dec_pos` is a call-space
+            // position; slicing `binders` needs the full-space index.
+            let dec_binder_pos = explicit_positions.get(dec_pos).copied().unwrap_or(dec_pos);
+            let extra_params: Vec<RecursiveExtraParam> = binders[(dec_binder_pos + 1)..]
                 .iter()
                 .map(|binder| RecursiveExtraParam {
                     name: binder.name.clone(),
@@ -1908,6 +2308,20 @@ impl<'a> ElabCtx<'a> {
         // multi-scrutinee matches keep the tuple-`casesOn` path untouched.
         let multi_scrut = normalize_multi_scrutinee_match_body(self.env, name, binders, val);
         let val: &SurfaceExpr = multi_scrut.as_ref().unwrap_or(val);
+
+        // The recursion-aware refusal quotes this declaration's parameter
+        // count, and the count that means anything is the one the recursion
+        // machinery works with — i.e. AFTER equation-form normalization has
+        // lifted binders out of the arrow type. `def gcd3 : Nat → Nat → Nat |
+        // a, 0 => a | a, b => gcd3 b (a % b)` writes no binders at all, so the
+        // surface count seeded at `elab_decl` entry would report 0 parameters
+        // for a two-parameter function. Diagnostic-only; nothing reads it
+        // unless resolution has already failed.
+        if let Some(subject) = self.self_reference.as_mut() {
+            if subject.written == name {
+                subject.params = binders.len();
+            }
+        }
 
         // Set universe params
         self.set_decl_universe_params(universe_params);

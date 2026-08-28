@@ -180,6 +180,100 @@ fn retry_add_inductive_with_local_lift(
 /// container's `All` family) as kernel-checked declarations. Declared
 /// limitations skip additively with a warning; synthesis invariant failures
 /// or kernel rejections fail the declaration (fail-closed).
+/// Post-pass for `deriving ContainerRel`: synthesize the `C.rel` FAMILY.
+///
+/// Same contract as [`generate_container_map_post_pass`] — opt-in only, loud on
+/// decline, fail-closed on an unrecognized outcome. Differs in ONE way that
+/// matters: `C.rel` is an inductive family, so it registers through
+/// `add_inductive` (re-earning positivity, universes and constructor checks)
+/// rather than `add_decl_with_kernel_check`.
+fn generate_container_rel_post_pass(
+    env: &mut clean_kernel::Environment,
+    name: &Name,
+    explicit: bool,
+) -> Result<(), ElabError> {
+    if !explicit {
+        return Ok(());
+    }
+    match env.synthesize_container_rel(name) {
+        Ok(clean_kernel::ContainerRelOutcome::OutOfScope { reason }) => {
+            Err(ElabError::Unsupported {
+                feature: format!("deriving ContainerRel for {name}: {reason}"),
+            })
+        }
+        Ok(clean_kernel::ContainerRelOutcome::Decls { families }) => {
+            for fam in families {
+                env.add_inductive(fam).map_err(|e| {
+                    kernel_registration_failed(format!("container rel family for {name}"), e)
+                })?;
+            }
+            Ok(())
+        }
+        // `#[non_exhaustive]`: an unrecognized outcome must not be read as
+        // success on a path that REGISTERS declarations.
+        Ok(other) => Err(ElabError::Unsupported {
+            feature: format!(
+                "deriving ContainerRel for {name}: unrecognized synthesis outcome \
+                 {other:?} — refusing rather than assuming success"
+            ),
+        }),
+        Err(synth) => Err(ElabError::KernelRegistrationFailed {
+            operation: format!("container rel for {name}"),
+            detail: synth.to_string(),
+        }),
+    }
+}
+
+/// Post-pass for `deriving ContainerMap`: synthesize `C.map`.
+///
+/// Mirrors [`generate_deep_induction_post_pass`], including its loudness rule —
+/// an EXPLICIT derive is never silently skipped, so a declined synthesis is an
+/// error rather than a warning. The synthesized definition goes through the
+/// ordinary CHECKED `add_decl_with_kernel_check`.
+///
+/// This is opt-in only: nothing runs without `deriving ContainerMap` on the
+/// declaration. `synthesize_container_map` was previously reachable from tests
+/// alone — real dead-code debt, since its sibling `synthesize_deep_induction`
+/// has had a production caller here all along. This is that caller.
+fn generate_container_map_post_pass(
+    env: &mut clean_kernel::Environment,
+    name: &Name,
+    explicit: bool,
+) -> Result<(), ElabError> {
+    if !explicit {
+        return Ok(());
+    }
+    match env.synthesize_container_map(name) {
+        Ok(clean_kernel::ContainerMapOutcome::OutOfScope { reason }) => {
+            Err(ElabError::Unsupported {
+                feature: format!("deriving ContainerMap for {name}: {reason}"),
+            })
+        }
+        Ok(clean_kernel::ContainerMapOutcome::Decls { definitions }) => {
+            for def in definitions {
+                let label = format!("container map for {name}");
+                add_decl_with_kernel_check(env, def, &label)?;
+            }
+            Ok(())
+        }
+        // `ContainerMapOutcome` is `#[non_exhaustive]`. A future variant must not
+        // be treated as success by default: this path REGISTERS declarations, so
+        // "outcome I do not recognize" has to mean "register nothing and say so".
+        // (The deep-induction sibling takes the opposite default, `Ok(_) => {}`;
+        // that is the weaker choice and not worth copying.)
+        Ok(other) => Err(ElabError::Unsupported {
+            feature: format!(
+                "deriving ContainerMap for {name}: unrecognized synthesis outcome \
+                 {other:?} — refusing rather than assuming success"
+            ),
+        }),
+        Err(synth) => Err(ElabError::KernelRegistrationFailed {
+            operation: format!("container map for {name}"),
+            detail: synth.to_string(),
+        }),
+    }
+}
+
 fn generate_deep_induction_post_pass(
     env: &mut clean_kernel::Environment,
     type_names: &[Name],
@@ -799,6 +893,8 @@ fn register_elab_result_in_place(
             constructors,
             derived_instances,
             wants_deep_induction,
+            wants_container_map,
+            wants_container_rel,
             modifiers,
         } => {
             use clean_kernel::{Constructor, InductiveDecl, InductiveType, KernelInstanceInfo};
@@ -827,6 +923,8 @@ fn register_elab_result_in_place(
                 std::slice::from_ref(name),
                 *wants_deep_induction,
             )?;
+            generate_container_map_post_pass(env, name, *wants_container_map)?;
+            generate_container_rel_post_pass(env, name, *wants_container_rel)?;
 
             // Register derived instances with full kernel registration. Part of
             // #1301.

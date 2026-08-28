@@ -9,7 +9,7 @@
 //! where it is negative.
 
 use clean_kernel::expr::ExprKind;
-use clean_kernel::Expr;
+use clean_kernel::{Expr, FVarId};
 
 use crate::tactic::tc_app;
 use crate::tactic::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
@@ -133,7 +133,12 @@ pub fn abs_cases_with_config(
     // 1`). Because the branches are disjoint scopes (a goal is solved before
     // the next), both `h` binders safely share one id — exactly the
     // `by_cases` / `split_ite` pattern (existential.rs / connective.rs).
-    let hyp_fvar = state.fresh_fvar();
+    // GOAL-DERIVED minting (see existential.rs by_cases).
+    let hyp_fvar = {
+        let base = state.goal_binder_base(&goal);
+        state.next_fvar = state.next_fvar.max(base + 1);
+        FVarId::new(base)
+    };
     let nonneg_fvar = hyp_fvar;
     let neg_fvar = hyp_fvar;
 

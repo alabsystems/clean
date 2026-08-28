@@ -11,7 +11,7 @@ use super::convert::{
     elides_value, infer_recursor_arg_order, proof_value_or_placeholder, ConvertedConstant,
 };
 use super::convert_expr::convert_level_params;
-use super::convert_expr_direct::read_and_convert_expr;
+use super::convert_expr_direct::{read_and_convert_expr_with_memo, RegionPtrCache};
 use super::load_parse::LoadConstant;
 use super::{ExprInternCache, ExprSharingStats, ImportError};
 use crate::module::{ConstantKind, ReducibilityHintsData};
@@ -26,25 +26,26 @@ pub(super) fn convert_load_constant(
     constant: &LoadConstant,
     region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
     elide: ProofValueElision,
 ) -> ConvertedConstant {
     let name = constant.name.clone();
     match constant.kind {
         ConstantKind::Inductive => {
-            let (result, stats) = convert_load_inductive(constant, region, intern);
+            let (result, stats) = convert_load_inductive(constant, region, intern, memo);
             ConvertedConstant::Inductive(name, result, stats)
         }
         ConstantKind::Constructor => {
-            let (result, stats) = convert_load_constructor(constant, region, intern);
+            let (result, stats) = convert_load_constructor(constant, region, intern, memo);
             ConvertedConstant::Constructor(name, result, stats)
         }
         ConstantKind::Recursor => {
-            let (result, stats) = convert_load_recursor(constant, region, intern);
+            let (result, stats) = convert_load_recursor(constant, region, intern, memo);
             ConvertedConstant::Recursor(name, result, stats)
         }
         _ => {
             let hints = constant.hints;
-            let (result, stats) = convert_load_other(constant, region, intern, elide);
+            let (result, stats) = convert_load_other(constant, region, intern, memo, elide);
             ConvertedConstant::Other(name, result.map(|d| (d, hints)), stats)
         }
     }
@@ -55,12 +56,14 @@ fn convert_type_expr(
     constant: &LoadConstant,
     region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
     stats: &mut ExprSharingStats,
 ) -> Result<Expr, ImportError> {
     if constant.type_ptr == 0 {
         return Err(ImportError::MissingType(constant.name.clone()));
     }
-    let (expr, s) = read_and_convert_expr(region, constant.type_ptr, &constant.name, intern)?;
+    let (expr, s) =
+        read_and_convert_expr_with_memo(region, constant.type_ptr, &constant.name, intern, memo)?;
     stats.merge(&s);
     Ok(expr)
 }
@@ -70,12 +73,14 @@ fn convert_value_expr(
     constant: &LoadConstant,
     region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
     stats: &mut ExprSharingStats,
 ) -> Result<Option<Expr>, ImportError> {
     if constant.value_ptr == 0 {
         return Ok(None);
     }
-    let (expr, s) = read_and_convert_expr(region, constant.value_ptr, &constant.name, intern)?;
+    let (expr, s) =
+        read_and_convert_expr_with_memo(region, constant.value_ptr, &constant.name, intern, memo)?;
     stats.merge(&s);
     Ok(Some(expr))
 }
@@ -84,10 +89,11 @@ fn convert_load_inductive(
     constant: &LoadConstant,
     region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
 ) -> (Result<InductiveVal, ImportError>, ExprSharingStats) {
     let mut stats = ExprSharingStats::default();
     let result = (|| {
-        let type_ = convert_type_expr(constant, region, intern, &mut stats)?;
+        let type_ = convert_type_expr(constant, region, intern, memo, &mut stats)?;
         let level_params: Vec<Name> = constant
             .level_params
             .iter()
@@ -122,10 +128,11 @@ fn convert_load_constructor(
     constant: &LoadConstant,
     region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
 ) -> (Result<ConstructorVal, ImportError>, ExprSharingStats) {
     let mut stats = ExprSharingStats::default();
     let result = (|| {
-        let type_ = convert_type_expr(constant, region, intern, &mut stats)?;
+        let type_ = convert_type_expr(constant, region, intern, memo, &mut stats)?;
         let level_params: Vec<Name> = constant
             .level_params
             .iter()
@@ -161,13 +168,14 @@ fn convert_load_recursor(
     constant: &LoadConstant,
     region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
 ) -> (
     Result<(RecursorVal, Vec<Name>, u32), ImportError>,
     ExprSharingStats,
 ) {
     let mut stats = ExprSharingStats::default();
     let result = (|| {
-        let type_ = convert_type_expr(constant, region, intern, &mut stats)?;
+        let type_ = convert_type_expr(constant, region, intern, memo, &mut stats)?;
         let level_params: Vec<Name> = constant
             .level_params
             .iter()
@@ -201,8 +209,13 @@ fn convert_load_recursor(
                     .iter()
                     .map(|r| {
                         let rhs = if r.rhs_ptr != 0 {
-                            let (rhs, s) =
-                                read_and_convert_expr(region, r.rhs_ptr, &constant.name, intern)?;
+                            let (rhs, s) = read_and_convert_expr_with_memo(
+                                region,
+                                r.rhs_ptr,
+                                &constant.name,
+                                intern,
+                                memo,
+                            )?;
                             stats.merge(&s);
                             rhs
                         } else {
@@ -252,11 +265,12 @@ fn convert_load_other(
     constant: &LoadConstant,
     region: &CompactedRegion<'_>,
     intern: &mut ExprInternCache,
+    memo: &mut RegionPtrCache,
     elide: ProofValueElision,
 ) -> (Result<Declaration, ImportError>, ExprSharingStats) {
     let mut stats = ExprSharingStats::default();
     let result = (|| {
-        let type_ = convert_type_expr(constant, region, intern, &mut stats)?;
+        let type_ = convert_type_expr(constant, region, intern, memo, &mut stats)?;
         // Conversion-time proof-value elision (#6 memory lever): for elided proof
         // kinds that actually HAVE a value (value_ptr != 0), skip building/interning
         // the value DAG (removing the peak); the placeholder + post-hoc null yield
@@ -267,7 +281,7 @@ fn convert_load_other(
         let value = if should_elide {
             None
         } else {
-            convert_value_expr(constant, region, intern, &mut stats)?
+            convert_value_expr(constant, region, intern, memo, &mut stats)?
         };
         let level_params = convert_level_params(&constant.level_params);
         let name = Name::interned(&constant.name);

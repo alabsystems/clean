@@ -142,7 +142,7 @@ impl OleanImportPolicy {
 
     /// The configured declaration-kind registration filter.
     #[must_use]
-    pub const fn import_kinds(self) -> ImportKinds {
+    pub(crate) const fn import_kinds(self) -> ImportKinds {
         self.import_kinds
     }
 
@@ -162,7 +162,7 @@ impl OleanImportPolicy {
     /// to a single end-of-closure pass (see
     /// [`with_deferred_global_instance_backfill`](Self::with_deferred_global_instance_backfill)).
     #[must_use]
-    pub const fn defer_global_instance_backfill(self) -> bool {
+    pub(crate) const fn defer_global_instance_backfill(self) -> bool {
         self.defer_global_instance_backfill
     }
 

@@ -16,6 +16,13 @@ assert SPEC is not None and SPEC.loader is not None
 checker = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = checker
 SPEC.loader.exec_module(checker)
+BOUNDARY_SCRIPT = ROOT / "scripts" / "check_workspace_dependency_boundary.py"
+BOUNDARY_SPEC = importlib.util.spec_from_file_location(
+    "clean_dependency_boundary", BOUNDARY_SCRIPT
+)
+assert BOUNDARY_SPEC is not None and BOUNDARY_SPEC.loader is not None
+boundary = importlib.util.module_from_spec(BOUNDARY_SPEC)
+BOUNDARY_SPEC.loader.exec_module(boundary)
 
 TEST_REV = "0123456789abcdef0123456789abcdef01234567"
 OTHER_REV = "89abcdef0123456789abcdef0123456789abcdef"
@@ -127,6 +134,24 @@ def test_rejects_resolved_fragment_drift(tmp_path: Path) -> None:
         checker.read_pin_evidence(tmp_path)
 
 
+def test_boundary_lock_inventories_match_the_pin_contract() -> None:
+    root_inventory = frozenset(checker.AY_LOCK_PACKAGE_NAMES)
+    standalone_inventory = root_inventory - {"ay-lean-bridge"}
+
+    assert boundary.AY_ROOT_LOCK_PACKAGE_NAMES == root_inventory
+    assert boundary.AY_STANDALONE_LOCK_PACKAGE_NAMES == standalone_inventory
+    assert {
+        path.relative_to(boundary.ROOT).as_posix(): inventory
+        for path, inventory in boundary.REQUIRED_AY_LOCK_INVENTORIES.items()
+    } == {
+        "Cargo.lock": root_inventory,
+        "cli-runner/Cargo.lock": standalone_inventory,
+        "bench-runner/Cargo.lock": standalone_inventory,
+        "realtelem-harness/Cargo.lock": standalone_inventory,
+        "telemetry-harness/Cargo.lock": standalone_inventory,
+    }
+
+
 def test_remote_check_queries_only_authoritative_main(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -156,3 +181,39 @@ def test_remote_check_queries_only_authoritative_main(
     ]
     assert isinstance(observed["env"], dict)
     assert observed["env"]["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_soundness_classification_covers_every_ay_crate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> object:
+        observed["command"] = command
+        return checker.subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=(
+                "crates/ay/src/lib.rs\n"
+                "crates/ay-xor/src/extension/proof.rs\n"
+                "crates/not-ay/src/lib.rs\n"
+                "docs/solver.md\n"
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(checker.subprocess, "run", fake_run)
+
+    assert checker.check_soundness_commits(
+        checker.AY_REPO_URL, TEST_REV, OTHER_REV
+    ) == [
+        "crates/ay/src/lib.rs",
+        "crates/ay-xor/src/extension/proof.rs",
+    ]
+    assert observed["command"] == [
+        "gh",
+        "api",
+        f"repos/alabsystems/ay/compare/{TEST_REV}...{OTHER_REV}",
+        "--jq",
+        ".files[].filename",
+    ]

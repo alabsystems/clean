@@ -558,7 +558,24 @@ pub fn is_trust_marker(name: &Name) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ProofQuality {
-    /// No domain-specific axiom dependencies. Genuinely proved.
+    /// No DOMAIN-SPECIFIC axiom dependencies: the transitive axiom closure is
+    /// `⊆ FOUNDATIONAL_AXIOMS`. This is exactly CLAUDE.md's "prove" rule.
+    ///
+    /// THE NAME OVERSTATES THE PREDICATE, and by a measured amount (lane
+    /// CONSTR / lane LOOSE, 2026-08-25). `Classical.choice` is a FOUNDATIONAL
+    /// axiom in this repo, so a theorem resting on classical choice — up to and
+    /// including `Classical.em`, excluded middle itself, via Diaconescu — is
+    /// classified `Constructive` here. It is not constructive in the ordinary
+    /// mathematical sense. Read this variant as "foundational-axiom-only".
+    ///
+    /// The variant keeps its name deliberately: narrowing the predicate would
+    /// contradict the documented `FOUNDATIONAL_AXIOMS` contract and silently
+    /// reclassify every downstream count, and renaming it touches 1109 sites
+    /// without making anything truer. Instead the gap is MEASURED where the
+    /// number is published: `data/constructive_ratchet.json` carries a
+    /// `classical_choice_dependents` baseline (2 of 396 at 0b3b94e5b) that
+    /// `scripts/check_constructive_ratchet.py` re-derives on every run and
+    /// reddens on any movement.
     Constructive,
     /// Depends on N domain-specific axioms. Partially proved.
     AxiomDependent {
@@ -1332,6 +1349,54 @@ impl Environment {
     ///
     /// Returns `None` if the declaration is not found.
     pub fn axiom_deps(&self, name: &Name) -> Option<HashSet<Name>> {
+        Some(
+            self.axiom_closure_all(name)?
+                .into_iter()
+                .filter(|n| !is_foundational_axiom(n))
+                .collect(),
+        )
+    }
+
+    /// Returns the **foundational** axioms reached in the transitive
+    /// dependency tree of `name` — the exact complement of
+    /// [`Environment::axiom_deps`] within the full axiom closure.
+    ///
+    /// `axiom_deps` answers "is this theorem `Constructive`?" by returning the
+    /// empty set. It deliberately says nothing about WHICH foundational
+    /// axioms the proof rests on, so an empty `axiom_deps` alone cannot
+    /// distinguish a theorem that reaches nothing from one that reaches
+    /// `Classical.choice`. This function supplies that missing half, so an
+    /// auditor adjudicating a `ProofQuality::Constructive` verdict can print
+    /// the trust actually consumed rather than infer it from the name.
+    ///
+    /// Together the two sets partition the full axiom closure:
+    ///
+    /// ```text
+    /// axiom_deps(n) ⊎ foundational_axiom_deps(n) = full axiom closure of n
+    /// ```
+    ///
+    /// Returns `None` if the declaration is not found.
+    #[must_use]
+    pub fn foundational_axiom_deps(&self, name: &Name) -> Option<HashSet<Name>> {
+        Some(
+            self.axiom_closure_all(name)?
+                .into_iter()
+                .filter(is_foundational_axiom)
+                .collect(),
+        )
+    }
+
+    /// Every axiom reached in the transitive dependency tree of `name` —
+    /// foundational and domain-specific alike.
+    ///
+    /// This is the SINGLE traversal behind both [`Environment::axiom_deps`]
+    /// and [`Environment::foundational_axiom_deps`]. Keeping one walk is the
+    /// point: an auditor who re-implements the reference walk outside this
+    /// module silently under-reports the closure the moment a new
+    /// [`ExprKind`] arm lands in [`collect_const_refs`] (the `Proj`
+    /// structure-name arm is exactly such a case — that dependency is not
+    /// wrapped in an `ExprKind::Const` node at all).
+    fn axiom_closure_all(&self, name: &Name) -> Option<HashSet<Name>> {
         let info = self.get_const(name)?;
 
         // Collect all constants referenced in the declaration
@@ -1342,7 +1407,7 @@ impl Environment {
         }
 
         // BFS/DFS through transitive axiom dependencies
-        let mut domain_axioms = HashSet::new();
+        let mut axioms = HashSet::new();
         let mut visited = HashSet::new();
         visited.insert(name.clone());
         let mut worklist: Vec<Name> = all_const_refs.into_iter().collect();
@@ -1353,13 +1418,13 @@ impl Environment {
             }
 
             if let Some(ref_info) = self.get_const(&ref_name) {
-                // Trust markers AND domain-specific axioms both land in the
-                // deps set. Only foundational axioms (propext, Quot.sound,
-                // Eq.*, etc.) are filtered out. Reaching `sorryAx` / `sorry`
-                // / `trustedArith` / `trustedAy` in the transitive closure
-                // disqualifies `ProofQuality::Constructive` (#3554).
-                if ref_info.kind == ConstantKind::Axiom && !is_foundational_axiom(&ref_name) {
-                    domain_axioms.insert(ref_name.clone());
+                // Foundational axioms, domain-specific axioms and trust
+                // markers all land here; the two public wrappers above split
+                // them. Reaching `sorryAx` / `sorry` / `trustedArith` /
+                // `trustedAy` disqualifies `ProofQuality::Constructive`
+                // because trust markers are never foundational (#3554).
+                if ref_info.kind == ConstantKind::Axiom {
+                    axioms.insert(ref_name.clone());
                 }
 
                 // Walk the type of every referenced constant (axiom or not)
@@ -1377,7 +1442,7 @@ impl Environment {
             }
         }
 
-        Some(domain_axioms)
+        Some(axioms)
     }
 
     /// Returns the subset of [`Environment::axiom_deps`] that are **trust

@@ -10,6 +10,7 @@ use crate::expr::{BinderInfo, Expr, ExprKind, FVarId, Literal};
 use crate::level::Level;
 use crate::mode::CleanMode;
 use crate::name::Name;
+use std::sync::Arc;
 
 fn empty_env() -> Environment {
     Environment::new()
@@ -754,9 +755,9 @@ mod proptest_soundness {
             // Body is Sort(l2), so body has type Sort(succ(l2))
             let cert = ProofCert::Pi {
                 binder_info: BinderInfo::Default,
-                arg_type_cert: Box::new(ProofCert::Sort { level: l1.clone() }),
+                arg_type_cert: Arc::new(ProofCert::Sort { level: l1.clone() }),
                 arg_level: Level::succ(l1.clone()),
-                body_type_cert: Box::new(ProofCert::Sort { level: l2.clone() }),
+                body_type_cert: Arc::new(ProofCert::Sort { level: l2.clone() }),
                 body_level: Level::succ(l2.clone()),
             };
 
@@ -785,8 +786,8 @@ mod proptest_soundness {
             // Certificate for identity on Sort(l)
             let cert = ProofCert::Lam {
                 binder_info: BinderInfo::Default,
-                arg_type_cert: Box::new(ProofCert::Sort { level: l.clone() }),
-                body_cert: Box::new(ProofCert::BVar {
+                arg_type_cert: Arc::new(ProofCert::Sort { level: l.clone() }),
+                body_cert: Arc::new(ProofCert::BVar {
                     idx: 0,
                     expected_type: Box::new(arg_ty.clone()),
                 }),
@@ -831,9 +832,9 @@ mod proptest_soundness {
 
             // Certificate
             let cert = ProofCert::Let {
-                type_cert: Box::new(ProofCert::Sort { level: Level::succ(l.clone()) }),
-                value_cert: Box::new(ProofCert::Sort { level: l.clone() }),
-                body_cert: Box::new(ProofCert::BVar {
+                type_cert: Arc::new(ProofCert::Sort { level: Level::succ(l.clone()) }),
+                value_cert: Arc::new(ProofCert::Sort { level: l.clone() }),
+                body_cert: Arc::new(ProofCert::BVar {
                     idx: 0,
                     expected_type: Box::new(sort_succ_l.clone()),
                 }),

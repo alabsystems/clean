@@ -32,7 +32,8 @@ OUT="$(mktemp)"; trap 'rm -f "$OUT"' EXIT
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 BIN="${CRYSTAL_BIN:?set CRYSTAL_BIN to the compiled crystal_a1_lineage test binary}"
 
-GC_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_trunc.rs"
+GC_SPEC="$REPO/crates/clean-verify/src/spec/core_spec/generated/ir_gc.defs.txt"
+GC_RS="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_trunc.rs"
 GC_FIX="$REPO/crates/clean-verify/tests/fixtures/get_char_val_trunc.trust-ir.txt"
 GC_JSON="$REPO/crates/clean-verify/tests/fixtures/get_char_val_trunc.lineage.json"
 
@@ -60,26 +61,34 @@ reason() { awk '/panicked at/{f=1} f{print "     | " $0} /^note: run with/{exit}
 # make a MUTATED run look green — the exact false negative this script exists to
 # rule out — so the helper restricts .rs edits to lines beginning `const SRC_`
 # and fails loudly when an anchor does not match exactly one of them.
-sub() { python3 - "$1" "$2" "$3" <<'PY'
+sub() { python3 - "$1" "$2" "$3" "${4:-1}" <<'PY'
 import sys
-p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+p, a, b, want = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 lines = open(p).read().split("\n")
 decl_only = p.endswith(".rs")
 hits = [i for i, l in enumerate(lines)
         if a in l and (not decl_only or l.startswith("const SRC_"))]
-assert len(hits) == 1, "anchor must match exactly one line, matched %d: %s" % (len(hits), a[:80])
-i = hits[0]
-assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
-lines[i] = lines[i].replace(a, b, 1)
+# `want` > 1 exists for ONE measured reason: the 2026-08-21 a152 rebaseline
+# (b03937e74) added a `current_source_bound_pin` stanza that RESTATES the
+# measured row's values, so those anchors now denote TWO lines that must move
+# together.  Still fail-closed: any other count aborts, naming pattern + count.
+assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+for i in hits:
+    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
   rc=$?
   # A FAILED substitution is the false negative this whole script exists to
-  # rule out: the file stays as it was, the next `expect` runs against an
-  # unchanged (or still-mutated) tree, and every case after it is
-  # meaningless. Abort loudly instead.
+  # rule out: the file stays as it was, the next `expect` would run against an
+  # unchanged (or still-mutated) tree, and every case after it would be
+  # meaningless.  Abort loudly instead — the assertion above already named the
+  # pattern and the match count.  NOTE the binding: writing `|| exit 9` after
+  # the closing brace of the function DEFINITION binds to the (always-zero)
+  # definition itself, never to the calls — that construct let failed
+  # substitutions continue silently, which is why $? is captured HERE.
   if [[ $rc -ne 0 ]]; then
-    echo "FATAL: substitution failed in $1 (anchor did not match exactly one declaration line)"
+    echo "FATAL: substitution failed in $1 (anchor: $2)"
     exit 9
   fi
 }
@@ -93,15 +102,17 @@ expect PASS "baseline: all get_char_val_trunc gates green"
 # and 32 cases ran against a still-mutated tree. The fix is the `assert` in
 # `sub`. A fix nobody exercises is a fix nobody has. This runs `sub` in a
 # SUBSHELL (so its `exit 9` does not take the script with it) against an anchor
-# that genuinely matches three declaration lines — `IRCastOp.trunc ir_vc_tu64
-# ir_br_tu32` appears in the module, in ir_gc_trunc_is_the_low_word and in
-# ir_gc_non_integer_operand_is_a_type_error — and requires the abort.
+# that genuinely matches two declaration lines — `IRCastOp.trunc ir_vc_tu64
+# ir_br_tu32` appears in ir_gc_trunc_is_the_low_word and in
+# ir_gc_non_integer_operand_is_a_type_error (the MODULE now lives in the minted
+# script at its own spelling, where the sibling anchors are unambiguous) — and
+# requires the abort.
 echo
 echo "== G0: the substitution guard ABORTS on an ambiguous anchor =="
-( sub "$GC_SPEC" "IRCastOp.trunc ir_vc_tu64 ir_br_tu32" "IRCastOp.zext ir_vc_tu64 ir_br_tu32" ) >/dev/null 2>&1
+( sub "$GC_RS" "IRCastOp.trunc ir_vc_tu64 ir_br_tu32" "IRCastOp.zext ir_vc_tu64 ir_br_tu32" ) >/dev/null 2>&1
 grc=$?
 if [[ $grc -eq 9 ]]; then
-  echo "OK   [ABORT] G0: an anchor matching 3 declaration lines is FATAL, not a silent no-op"
+  echo "OK   [ABORT] G0: an anchor matching 2 declaration lines is FATAL, not a silent no-op"
   pass=$((pass+1))
 else
   echo "BAD  [want abort rc=9, rc=$grc] G0: the substitution guard did not fire"
@@ -113,51 +124,51 @@ expect PASS "G0: the tree is untouched after the refused substitution"
 
 echo
 echo "== P1: THE OPCODE — trunc becomes zext =="
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.zext ir_vc_tu64 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.zext (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1"
 expect FAIL "P1 mutated: the proved module zero-extends where the artifact truncates — and at these widths zext is ir_width_fault, so a value becomes a fault"; reason
-sub "$GC_SPEC" "IRInst.cast IRCastOp.zext ir_vc_tu64 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.zext (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1"
 expect PASS "P1 reverted"
 
 echo
 echo "== P2: THE OPCODE — trunc becomes sext =="
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.sext ir_vc_tu64 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.sext (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1"
 expect FAIL "P2 mutated: sign extension, which is a third distinct operation on the same shape"; reason
-sub "$GC_SPEC" "IRInst.cast IRCastOp.sext ir_vc_tu64 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.sext (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1"
 expect PASS "P2 reverted"
 
 echo
 echo "== P3: THE SOURCE WIDTH, changed alone — u64 becomes u32 =="
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.trunc ir_br_tu32 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 32) (IRTy.uint_ 32) ir_d1"
 expect FAIL "P3 mutated: the source is transcribed at u32 while the artifact reads a u64"; reason
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_br_tu32 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 32) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1"
 expect PASS "P3 reverted"
 
 echo
 echo "== P4: THE DESTINATION WIDTH, changed alone — u32 becomes u8 =="
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_tU8 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ ir_d8) ir_d1"
 expect FAIL "P4 mutated: the destination is u8, so the modulus is 2^8 and the body computes a different function of the same operand"; reason
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_tU8 ir_d1" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ ir_d8) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1"
 expect PASS "P4 reverted"
 
 echo
 echo "== P5: THE DESTINATION WIDTH — u32 becomes u64, i.e. a no-op cast =="
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_vc_tu64 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 64) ir_d1"
 expect FAIL "P5 mutated: truncating u64 to u64 discards nothing, which is exactly the information-loss this chain is about"; reason
-sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_vc_tu64 ir_d1" "IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1"
+sub "$GC_SPEC" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 64) ir_d1" "IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1"
 expect PASS "P5 reverted"
 
 echo
 echo "== P6: THE OPERAND — cast the closure environment instead of the argument =="
-sub "$GC_SPEC" "ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2" "ir_vc_tu64 ir_br_tu32 ir_d0) ir_d2"
+sub "$GC_SPEC" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d2" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d0) ir_d2"
 expect FAIL "P6 mutated: the cast reads %0, the closure environment, instead of %1"; reason
-sub "$GC_SPEC" "ir_vc_tu64 ir_br_tu32 ir_d0) ir_d2" "ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2"
+sub "$GC_SPEC" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d0) ir_d2" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d2"
 expect PASS "P6 reverted"
 
 echo
 echo "== P7: THE RESULT ID the cast binds =="
-sub "$GC_SPEC" "ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2" "ir_vc_tu64 ir_br_tu32 ir_d1) ir_d3"
+sub "$GC_SPEC" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d2" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d3"
 expect FAIL "P7 mutated: the truncation is bound at %3 while the ret still reads %2"; reason
-sub "$GC_SPEC" "ir_vc_tu64 ir_br_tu32 ir_d1) ir_d3" "ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2"
+sub "$GC_SPEC" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d3" "(IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d2"
 expect PASS "P7 reverted"
 
 echo
@@ -190,18 +201,18 @@ expect PASS "P11 reverted"
 
 echo
 echo "== P12: THE CAST DELETED from the proved module =="
-sub "$GC_SPEC" "(ir_bd2 (ir_nd1 (IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2) (ir_nd (IRInst.ret (ir_nl1 ir_d2))))" "(ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d2))))"
+sub "$GC_SPEC" "(ir_bd2 (ir_nd1 (IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d2) (ir_nd (IRInst.ret (ir_nl1 ir_d2))))" "(ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d2))))"
 expect FAIL "P12 mutated: the module is a bare return. Before the casts lane existed this compared EQUAL to the artifact on every lane"; reason
-sub "$GC_SPEC" "(ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d2))))" "(ir_bd2 (ir_nd1 (IRInst.cast IRCastOp.trunc ir_vc_tu64 ir_br_tu32 ir_d1) ir_d2) (ir_nd (IRInst.ret (ir_nl1 ir_d2))))"
+sub "$GC_SPEC" "(ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d2))))" "(ir_bd2 (ir_nd1 (IRInst.cast IRCastOp.trunc (IRTy.uint_ 64) (IRTy.uint_ 32) ir_d1) ir_d2) (ir_nd (IRInst.ret (ir_nl1 ir_d2))))"
 expect PASS "P12 reverted"
 
 # ────────────────────────── the emitted FIXTURE ────────────────────────────
 
 echo
 echo "== P13: THE ARTIFACT SIDE — the cast deleted =="
-sub "$GC_FIX" "    %2 = trunc u64 %1 to u32  ; #loc: 347 120 60" "    ; #loc: 347 120 60"
+sub "$GC_FIX" "    %2 = trunc u64 %1 to u32  ; #loc: 349 120 60" "    ; #loc: 349 120 60"
 expect FAIL "P13 mutated: the emitted body has no cast"; reason
-sub "$GC_FIX" "    ; #loc: 347 120 60" "    %2 = trunc u64 %1 to u32  ; #loc: 347 120 60"
+sub "$GC_FIX" "    ; #loc: 349 120 60" "    %2 = trunc u64 %1 to u32  ; #loc: 349 120 60"
 expect PASS "P13 reverted"
 
 echo
@@ -285,16 +296,17 @@ expect PASS "P24 reverted"
 
 echo
 echo "== P25: markers_detail ZEROED (the two real marker lines) =="
-sub "$GC_JSON" '"markers_detail": "2 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"'
+# trailing 2: the a152 pin stanza RESTATES this value — two lines move together
+sub "$GC_JSON" '"markers_detail": "2 marker line(s) identical"' '"markers_detail": "0 marker line(s) identical"' 2
 expect FAIL "P25 mutated: the 2-line marker sequence becomes empty, i.e. markers_exact goes vacuous"; reason
-sub "$GC_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "2 marker line(s) identical"'
+sub "$GC_JSON" '"markers_detail": "0 marker line(s) identical"' '"markers_detail": "2 marker line(s) identical"' 2
 expect PASS "P25 reverted"
 
 echo
 echo "== P26: markers_exact itself =="
-sub "$GC_JSON" '"markers_exact": true' '"markers_exact": false'
+sub "$GC_JSON" '"markers_exact": true' '"markers_exact": false' 2
 expect FAIL "P26 mutated: the -O marker gate did not hold"; reason
-sub "$GC_JSON" '"markers_exact": false' '"markers_exact": true'
+sub "$GC_JSON" '"markers_exact": false' '"markers_exact": true' 2
 expect PASS "P26 reverted"
 
 echo
@@ -308,16 +320,16 @@ expect PASS "P27 reverted"
 
 echo
 echo "== P28: the flip event FIRED =="
-sub "$GC_JSON" '"fired": true' '"fired": false'
+sub "$GC_JSON" '"fired": true' '"fired": false' 2
 expect FAIL "P28 mutated: no codegen flip, so the derived IR is a side model"; reason
-sub "$GC_JSON" '"fired": false' '"fired": true'
+sub "$GC_JSON" '"fired": false' '"fired": true' 2
 expect PASS "P28 reverted"
 
 echo
 echo "== P29: the flip SEAM =="
-sub "$GC_JSON" '"seam": "codegen"' '"seam": "ctfe"'
+sub "$GC_JSON" '"seam": "codegen"' '"seam": "ctfe"' 2
 expect FAIL "P29 mutated: a CTFE flip is not the shipped object code"; reason
-sub "$GC_JSON" '"seam": "ctfe"' '"seam": "codegen"'
+sub "$GC_JSON" '"seam": "ctfe"' '"seam": "codegen"' 2
 expect PASS "P29 reverted"
 
 echo
@@ -329,16 +341,16 @@ expect PASS "P30 reverted"
 
 echo
 echo "== P31: the INTERPRETER differential's sample count =="
-sub "$GC_JSON" '"samples": 5' '"samples": 0'
+sub "$GC_JSON" '"samples": 5' '"samples": 0' 2
 expect FAIL "P31 mutated: \`agreed\` on zero samples is a vacuous agreement"; reason
-sub "$GC_JSON" '"samples": 0' '"samples": 5'
+sub "$GC_JSON" '"samples": 0' '"samples": 5' 2
 expect PASS "P31 reverted"
 
 echo
 echo "== P32: the CALL COUNT — bodyful reachable closure =="
-sub "$GC_JSON" '  "resolved": 0,' '  "resolved": 1,'
+sub "$GC_JSON" '  "resolved": 0,' '  "resolved": 1,' 2
 expect FAIL "P32 mutated: a resolved call reopens the closure question"; reason
-sub "$GC_JSON" '  "resolved": 1,' '  "resolved": 0,'
+sub "$GC_JSON" '  "resolved": 1,' '  "resolved": 0,' 2
 expect PASS "P32 reverted"
 
 echo
@@ -357,9 +369,9 @@ expect PASS "P34 reverted"
 
 echo
 echo "== P35: the PROVEN-NEVER-READ closure environment =="
-sub "$GC_JSON" 'proven-never-read opaque param(s) as placeholders' 'opaque param(s) as placeholders'
+sub "$GC_JSON" 'proven-never-read opaque param(s) as placeholders' 'opaque param(s) as placeholders' 2
 expect FAIL "P35 mutated: without the producer's own never-read record, quantifying over the environment with no premise is an assumption"; reason
-sub "$GC_JSON" 'opaque param(s) as placeholders' 'proven-never-read opaque param(s) as placeholders'
+sub "$GC_JSON" 'opaque param(s) as placeholders' 'proven-never-read opaque param(s) as placeholders' 2
 expect PASS "P35 reverted"
 
 # ─────────────── the census, the siblings and the semantics answer ──────────

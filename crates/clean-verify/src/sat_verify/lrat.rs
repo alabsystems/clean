@@ -169,14 +169,14 @@ impl LratChecker {
     }
 
     /// Add an original clause to the active clause database.
-    pub fn add_original(&mut self, id: ClauseId, clause: &[Lit]) -> Result<(), LratError> {
+    pub(crate) fn add_original(&mut self, id: ClauseId, clause: &[Lit]) -> Result<(), LratError> {
         self.insert_clause(id, clause)?;
         self.original_clause_count += 1;
         Ok(())
     }
 
     /// Verify and add a derived clause using hint-guided RUP.
-    pub fn add_derived(
+    pub(crate) fn add_derived(
         &mut self,
         id: ClauseId,
         clause: &[Lit],
@@ -376,7 +376,7 @@ impl ProofChecker for CheckableLratProof {
 }
 
 /// Parse text LRAT proof steps.
-pub fn parse_text_lrat(input: &str) -> Result<Vec<LratStep>, LratError> {
+pub(crate) fn parse_text_lrat(input: &str) -> Result<Vec<LratStep>, LratError> {
     let mut steps = Vec::new();
 
     for (line_idx, raw_line) in input.lines().enumerate() {

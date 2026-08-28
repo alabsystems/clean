@@ -1,0 +1,57 @@
+-- P51 — the mint namespace is RESERVED: a declaration may not write a
+-- universe name inside it. Added 2026-08-26b with the reservation that flipped
+-- p49 (U2 stage-3 deferral 1, follow-up route "reserve the mint namespace").
+--
+-- WHY THIS FIXTURE EXISTS AT ALL. The reservation's whole value is the claim
+-- "a user literally cannot write a minted name". Universe metavariables are
+-- spelled `?u_0`, `?u_1`, … (`crate::level_mint::MINT_PREFIX`), and `?` is not
+-- an identifier-start character, so the level grammar has no production for
+-- one — `Sort ?u_0` does not parse as a level parameter. That is the lexer's
+-- doing, not the elaborator's, and it is exactly the kind of property that
+-- holds by accident until someone changes a lexer.
+--
+-- It is also NOT the whole story, because there is one route into a `Name`
+-- that does not go through the identifier rules at all: a guillemet
+-- identifier passes its contents through verbatim. Measured on the release
+-- binary at `2ce2cf2c1` — before the reservation existed —
+-- `def gq (γ : Sort «my?weird») (y : γ) : γ := y` reports `1 passed,
+-- 0 failed`. So `Sort «?u_0»` would have walked straight back into the
+-- namespace the reservation exists to keep empty, and the collision class that
+-- p47 and p49 are both faces of would have had a door left open.
+--
+-- `ElabCtx::elab_level` therefore refuses any WRITTEN universe name in the
+-- `?` space outright, which is what turns "the surface cannot produce a mint
+-- name" from a lexer accident into a checked property — and what makes
+-- `crate::level_role`'s `Minted` arm unreachable from a written name rather
+-- than merely unlikely.
+--
+-- The guard sits on BOTH productions that build a `Level::Param` from a
+-- written identifier: the ordinary level-parameter arm and the ANTIQUOTATION
+-- arm (`$u`, which does not route through the first). One production guarded
+-- is not a reservation.
+--
+-- Read the second declaration honestly. The antiquotation arm is DEGENERATE in
+-- a plain `def` for every name, not just reserved ones — measured at
+-- `2ce2cf2c1`, `def antiq2 (α : Sort $u) (a : α) : α := a` fails with
+-- `Undefined universe level parameter 'u' in declaration antiq2`, because a
+-- level antiquotation names a variable in a quotation's scope and there is no
+-- quotation here. So that line is not repairing a reachable defect; it pins
+-- that the arm refuses a RESERVED name for the reserved-name reason, at the
+-- elaborator rather than at the kernel, so the arm cannot become a way in if
+-- the quotation path is ever completed. The two declarations are asserted
+-- SEPARATELY in `infer::tests::mint_name_collision` — this file's gate probe
+-- greps the whole output and could not tell them apart.
+--
+-- The refusal is scoped to names that BEGIN with `?`, not to guillemets and
+-- not to `?` anywhere in a name; `p48`'s `guillemetUniverse` is that control
+-- and must keep passing. A MUST_FAIL file cannot tell a precise refusal from
+-- an over-broad one — the same discipline p48 provides for p47, and p46 for
+-- p21.
+
+-- The mint spelling itself, smuggled in through the one door the lexer's
+-- identifier rules do not guard.
+def writesAMintName (γ : Sort «?u_0») (y : γ) : γ := y
+
+-- The same name through the ANTIQUOTATION production, which does not route
+-- through the arm above. See the note on degeneracy in the header.
+def writesAMintNameAntiquot (γ : Sort $«?u_0») (y : γ) : γ := y

@@ -53,7 +53,7 @@ use types::{ArithStats, ArithVar, Bound, LinearExpr, TableauRow};
 mod tests;
 
 /// Linear Rational Arithmetic theory solver
-pub struct ArithmeticTheory {
+pub(crate) struct ArithmeticTheory {
     /// Next variable ID — single counter for both user and slack vars (#2297)
     next_id: u32,
     /// Tableau rows (one per basic variable)
@@ -105,7 +105,7 @@ pub struct ArithmeticTheory {
 
 impl ArithmeticTheory {
     /// Create a new arithmetic theory solver
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         ArithmeticTheory {
             next_id: 0,
             tableau: Vec::new(),
@@ -358,7 +358,7 @@ impl ArithmeticTheory {
     }
 
     /// Get statistics
-    pub fn stats(&self) -> ArithStats {
+    pub(crate) fn stats(&self) -> ArithStats {
         ArithStats {
             num_vars: self.next_id as usize,
             num_rows: self.tableau.len(),

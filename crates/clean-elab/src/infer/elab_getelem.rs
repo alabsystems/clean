@@ -82,6 +82,7 @@ impl ElabCtx<'_> {
                 only: false,
                 lemmas: vec![],
                 location: SurfaceTacticLocation::Goal,
+                use_hypotheses: false,
             },
             named("trivial"),
             named("decide"),

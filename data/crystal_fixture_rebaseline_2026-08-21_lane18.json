@@ -1,0 +1,656 @@
+{
+ "schema": "clean.crystal.fixture_rebaseline/v1",
+ "measured_utc": "2026-08-21T18:29:12Z",
+ "reason": "Chain 18 (has_loose_bvars -> loose_bvar_range, the first call-bearing chain) joins the fixture set as a declared chain addition: two new fixtures pinned byte-exactly from this dump; every retained fixture is byte-identical to the same dump (strict freshness exit 0), so no fixture body moves and the reviewed a152 binding set is inherited through the authenticated successor chain. Same kernel-source digest (3be1b403) as the superseded pair; the dump producer is the local stage1 at trust c4e667ca51.",
+ "supersedes_for_current_source_scope": "data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json",
+ "provenance": {
+  "clean_source_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
+  "clean_source_tree": "12c02545d4d4c398c2668b885e439ba3557c269c",
+  "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+  "trust_worktree_rev": "c4e667ca51a4b6bd0bc3790e540cdabc707c45a1",
+  "trustc_sha256": "044fb2df5ac0c18f795139f121e15094eea62135be81396aca62142004f9ba1f",
+  "librustc_driver_sha256": "4e2a161f6e0d9f6ddf184d5d744c6f46fa9defba52028addfe31b4885fde510c",
+  "dump_binary_sha256": "ce4ac168087ab6cbd61098dcadd9f67395d1eee828d43637cc05254c9cfc40bd",
+  "dump_ir_sha256": "17cecbc305122ef58e6ddf5e3ffad6eab759da39d1452cbe1d4d2dcc4f0ab78d",
+  "coverage_sha256": "fb60c89a7c590e16493f6ee4b3716f20504c0aa70da519bff3576ed71c15f7db",
+  "pre_report": "lane18-fresh.json",
+  "pre_report_sha256": "3cd86e1bc201181e160d8133175b9839df565a40bf20a83ebd493fa7284e71fb",
+  "binding_manifest": "crystal_fixture_rebaseline_bindings_2026-08-21_lane18.json",
+  "binding_manifest_sha256": "ec0e803ceaae3f02e094eeaf947f8cb07c7976ceab032ee0e9f92c5e6eeeb8ec",
+  "measurement_driver": "scripts/trust_ir_build.sh",
+  "measurement_driver_sha256": "9e565306449c6fa7fa77f732fc07c11c20c0ed99b2b4cb5ec7408db98b829b15"
+ },
+ "complete_body_set": [
+  "bvar_in_range",
+  "expr_path_step_clone",
+  "flat_flags_contains",
+  "flat_flags_with",
+  "float_add",
+  "float_div",
+  "float_mul",
+  "float_sub",
+  "from_source_system",
+  "get_char_val_trunc",
+  "has_cubical_layer",
+  "has_loose_bvars",
+  "is_valid_char",
+  "level_is_zero",
+  "level_is_zero_deref_callee",
+  "level_kind_ord",
+  "loose_bvar_range_callee",
+  "meta_tag_shl",
+  "node_id_index",
+  "simp_priority_value",
+  "strict_monads"
+ ],
+ "chain_additions": [
+  "has_loose_bvars",
+  "loose_bvar_range_callee"
+ ],
+ "primary_body_count": 19,
+ "helper_body_count": 2,
+ "bindings": [],
+ "fixtures": {
+  "has_cubical_layer": {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "800aa4040fcb5a8afec8fe5ed5002f8f3983feb27788c1cda12736a07f2db19b",
+   "new_sha256": "800aa4040fcb5a8afec8fe5ed5002f8f3983feb27788c1cda12736a07f2db19b",
+   "old_bytes": 579,
+   "new_bytes": 579
+  },
+  "level_kind_ord": {
+   "def_path": "level::Level::kind_ord",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "48bb0520a03f39729e44d63ac35024fa39c675f57b3ded84c80a06ce5ca1f582",
+   "new_sha256": "48bb0520a03f39729e44d63ac35024fa39c675f57b3ded84c80a06ce5ca1f582",
+   "old_bytes": 725,
+   "new_bytes": 725
+  },
+  "from_source_system": {
+   "def_path": "mode::CleanMode::from_source_system",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "4ae2cec8477962ba9ba39565bf674ddd61ff79ff81f420ab3fc345376ebb703d",
+   "new_sha256": "4ae2cec8477962ba9ba39565bf674ddd61ff79ff81f420ab3fc345376ebb703d",
+   "old_bytes": 1442,
+   "new_bytes": 1442
+  },
+  "flat_flags_contains": {
+   "def_path": "flat::types::FlatFlags::contains",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "4ab0ad079e45d8a0010c283e66d03a953729106923c77215452de0e59eabc719",
+   "new_sha256": "4ab0ad079e45d8a0010c283e66d03a953729106923c77215452de0e59eabc719",
+   "old_bytes": 422,
+   "new_bytes": 422
+  },
+  "bvar_in_range": {
+   "def_path": "expr::bvar_in_range",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "e13de5e21e5fd3a5e52cbf6e6bb319202d45d39dd136604746ce9b26932e8826",
+   "new_sha256": "e13de5e21e5fd3a5e52cbf6e6bb319202d45d39dd136604746ce9b26932e8826",
+   "old_bytes": 738,
+   "new_bytes": 738
+  },
+  "is_valid_char": {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "37052aa471626a37e37ebfe33a436fb810945a331a3b1cb7d01958fd7de8fbf5",
+   "new_sha256": "37052aa471626a37e37ebfe33a436fb810945a331a3b1cb7d01958fd7de8fbf5",
+   "old_bytes": 805,
+   "new_bytes": 805
+  },
+  "expr_path_step_clone": {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "e3cf82765e4a81c3d1d1dd9b482e3235619c55a992a490e978e34ae096fc7452",
+   "new_sha256": "e3cf82765e4a81c3d1d1dd9b482e3235619c55a992a490e978e34ae096fc7452",
+   "old_bytes": 1414,
+   "new_bytes": 1414
+  },
+  "float_div": {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "83305365aab1588948537a2224944f1ba65a6cb0d0f3707e9311b4ef1f3759a6",
+   "new_sha256": "83305365aab1588948537a2224944f1ba65a6cb0d0f3707e9311b4ef1f3759a6",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "get_char_val_trunc": {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "a6057e889bc7562ab9690f5a8c30a6768b4bbc287e04e4ca3cd0989fc8806f3b",
+   "new_sha256": "a6057e889bc7562ab9690f5a8c30a6768b4bbc287e04e4ca3cd0989fc8806f3b",
+   "old_bytes": 238,
+   "new_bytes": 238
+  },
+  "meta_tag_shl": {
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "e0b1c891839276fd931ff821e212e8c48bfa8d3b71641d96ae5935147fb05629",
+   "new_sha256": "e0b1c891839276fd931ff821e212e8c48bfa8d3b71641d96ae5935147fb05629",
+   "old_bytes": 515,
+   "new_bytes": 515
+  },
+  "level_is_zero": {
+   "def_path": "level::Level::is_zero",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "eaff18d50c8b6ecbdb5771d5aa1001345baa5408ccbd9d306529bce4b719ad3a",
+   "new_sha256": "eaff18d50c8b6ecbdb5771d5aa1001345baa5408ccbd9d306529bce4b719ad3a",
+   "old_bytes": 1452,
+   "new_bytes": 1452
+  },
+  "float_add": {
+   "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "2bfd0da0328ab8b243f7d39983bd6deb20347379aef35f736732771fabb2c0fc",
+   "new_sha256": "2bfd0da0328ab8b243f7d39983bd6deb20347379aef35f736732771fabb2c0fc",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "float_sub": {
+   "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "632f07a00e57025d751026328f8ab0d0e3bd086d08db29cb506f0c2021a58bf4",
+   "new_sha256": "632f07a00e57025d751026328f8ab0d0e3bd086d08db29cb506f0c2021a58bf4",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "float_mul": {
+   "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "3be2c3118f971a3dfa197832baac9fd81e34369fe38b614b06069a60edcb0b03",
+   "new_sha256": "3be2c3118f971a3dfa197832baac9fd81e34369fe38b614b06069a60edcb0b03",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "strict_monads": {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "40caa58baa86233fa99fc7cfc5eef37a753e208579e87da3f65ac368b51bdb6c",
+   "new_sha256": "40caa58baa86233fa99fc7cfc5eef37a753e208579e87da3f65ac368b51bdb6c",
+   "old_bytes": 354,
+   "new_bytes": 354
+  },
+  "flat_flags_with": {
+   "def_path": "flat::types::FlatFlags::with",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "b37b23eb1a4fb110727991354dc0f3ab153e3f671618a9f28fea7deace22d945",
+   "new_sha256": "b37b23eb1a4fb110727991354dc0f3ab153e3f671618a9f28fea7deace22d945",
+   "old_bytes": 436,
+   "new_bytes": 436
+  },
+  "node_id_index": {
+   "def_path": "cert::builder::state::NodeId::index",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "96cb10495939dbf23ae3f368145048e8d810abd9dad6b634ad1444b832102b9e",
+   "new_sha256": "96cb10495939dbf23ae3f368145048e8d810abd9dad6b634ad1444b832102b9e",
+   "old_bytes": 254,
+   "new_bytes": 254
+  },
+  "has_loose_bvars": {
+   "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "0aac8c18fafc1ca42051e568c358a17acc351ddd6390871960423d04ea4a8227",
+   "new_sha256": "0aac8c18fafc1ca42051e568c358a17acc351ddd6390871960423d04ea4a8227",
+   "old_bytes": 300,
+   "new_bytes": 300
+  },
+  "simp_priority_value": {
+   "def_path": "env::types::SimpPriority::value",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "c47bcdab045f1640b69410600accb43172f41ed3dcd16b30fcac0eb3b19a0203",
+   "new_sha256": "c47bcdab045f1640b69410600accb43172f41ed3dcd16b30fcac0eb3b19a0203",
+   "old_bytes": 586,
+   "new_bytes": 586
+  },
+  "level_is_zero_deref_callee": {
+   "def_path": "<level::LevelArc as std::ops::Deref>::deref",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "16cbe21d8a638862a6100a9ec1ce6810a2014769a2bed27871b08fd9c8c63bac",
+   "new_sha256": "16cbe21d8a638862a6100a9ec1ce6810a2014769a2bed27871b08fd9c8c63bac",
+   "old_bytes": 424,
+   "new_bytes": 424
+  },
+  "loose_bvar_range_callee": {
+   "def_path": "expr::meta::ExprMeta::loose_bvar_range",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "693b26d4a42671d12887c063802986e4f668fbdadfa7847b4623e58f5a92970e",
+   "new_sha256": "693b26d4a42671d12887c063802986e4f668fbdadfa7847b4623e58f5a92970e",
+   "old_bytes": 524,
+   "new_bytes": 524
+  }
+ },
+ "lineage_evidence": {
+  "has_cubical_layer": {
+   "file": "crates/clean-verify/tests/fixtures/has_cubical_layer.lineage.json",
+   "old_sha256": "2c1f6c60b4a717a66b1ad40d509ce508d662b871f03ab52ae6a96119ca1f6e76",
+   "new_sha256": "da289fdee21902ba3f8db0128668c148289193454bba5dafc2a139f37130beb1",
+   "historical_top_level_lineage": "sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a",
+   "current_lineage": "sha256:08e57f6079cd842481abef2b02bc243368fda7100da75e1051f9635278c13059",
+   "historical_top_level_def_index": 17971,
+   "current_def_index": 18045,
+   "current_func_id": 4187,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "7 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "level_kind_ord": {
+   "file": "crates/clean-verify/tests/fixtures/level_kind_ord.lineage.json",
+   "old_sha256": "f1d7a21c3c40f42b803914f4d30c7d649abf4bc3b140d5af39409c9da8f8d092",
+   "new_sha256": "4c445f7bba0eefea0cc497687c338d47f660c3ca909b099adae10da1ab3e995f",
+   "historical_top_level_lineage": "sha256:c2d6ef14a416ae797875e23c48f280060ab8a0f6978f2e4fea09a5f3040a419c",
+   "current_lineage": "sha256:e670f5bf2432fe5bae5effa2adb2e5dd5b4f6960c2fc123f5e4da320f3ca6750",
+   "historical_top_level_def_index": 17084,
+   "current_def_index": 17158,
+   "current_func_id": 3908,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "10 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "from_source_system": {
+   "file": "crates/clean-verify/tests/fixtures/from_source_system.lineage.json",
+   "old_sha256": "76072a2c3697d34cd3f7213f5deb439709f36b46b43e739a6de823f43bde26f6",
+   "new_sha256": "9da066d5adf483048bd02efbb6c987701fa44b08903f9a2eed7ef26fe8047d62",
+   "historical_top_level_lineage": "sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135",
+   "current_lineage": "sha256:8bf2fd4e6bf0398207c4d83a6a758869d4ed0ec8836f34e7f8f23fa02801ba10",
+   "historical_top_level_def_index": 17966,
+   "current_def_index": 18040,
+   "current_func_id": 4185,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "17 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "flat_flags_contains": {
+   "file": "crates/clean-verify/tests/fixtures/flat_flags_contains.lineage.json",
+   "old_sha256": "8a5a54b2c2f8fb5ad892a2648f68d85d61d339b62890647dfc3ac7d80c9cec9c",
+   "new_sha256": "5c952b138af2ccafbf6f50f7fddc16feb491bd2d4a2d393595aaa2c1369509eb",
+   "historical_top_level_lineage": "sha256:1afb2dc3d56c0feb14ebdfa487474aed27ece83dabb93ef9c24f465af7f0de0f",
+   "current_lineage": "sha256:4962a1e7ca4a6ad67061f924e3e50078905204cdeb66f60ce05d211a4d6e4928",
+   "historical_top_level_def_index": 16836,
+   "current_def_index": 16910,
+   "current_func_id": 3841,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "8 marker line(s) identical"
+   }
+  },
+  "bvar_in_range": {
+   "file": "crates/clean-verify/tests/fixtures/bvar_in_range.lineage.json",
+   "old_sha256": "b029d6d07a2bb3d43364dd398ba8f5c481de543120582a5b628d1ab4d284cfeb",
+   "new_sha256": "88a59ef1ab18029b75915275f5e3cdef85a8270b5125d8551606d4bb506d7270",
+   "historical_top_level_lineage": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+   "current_lineage": "sha256:7cd1307cfb95bda0879e80329d9a6ec3f23a8d1907d01f117d491bbcbb992ee9",
+   "historical_top_level_def_index": 16566,
+   "current_def_index": 16640,
+   "current_func_id": 3759,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "10 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "21 marker line(s) identical"
+   }
+  },
+  "is_valid_char": {
+   "file": "crates/clean-verify/tests/fixtures/is_valid_char.lineage.json",
+   "old_sha256": "e90f0f230c2798de7747da9373116514c02322a960ddb4d31f38ef4dd5a1f443",
+   "new_sha256": "7b28de81c964afa429ddf03085b5f4437d0c268b2a95b5b0922d4de784e0d34f",
+   "historical_top_level_lineage": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+   "current_lineage": "sha256:15ac5d5487a424e258c9208be36cb67e43b6c357503024d9d739229ed1117e80",
+   "historical_top_level_def_index": 15081,
+   "current_def_index": 15155,
+   "current_func_id": 3353,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "8 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "12 marker line(s) identical"
+   }
+  },
+  "expr_path_step_clone": {
+   "file": "crates/clean-verify/tests/fixtures/expr_path_step_clone.lineage.json",
+   "old_sha256": "2062e7475e19e515ea8921428db64ed917249d5b0ef8340f684bf633ac4ee880",
+   "new_sha256": "e851643d5f77339377445f7e4183a5bafdc7441c110bf7268635766941dada67",
+   "historical_top_level_lineage": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+   "current_lineage": "sha256:372a0a75eab126391997f5caf0b89704983cb8ca0f488cb6076354c1f54a6fdd",
+   "historical_top_level_def_index": 35579,
+   "current_def_index": 35720,
+   "current_func_id": 6342,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "16 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "float_div": {
+   "file": "crates/clean-verify/tests/fixtures/float_div.lineage.json",
+   "old_sha256": "cc9f260f3f6c8f3f1641d7a4b73118a7477254b5e5f7a1e9a1e1313c2bc93974",
+   "new_sha256": "1ae9b104f64cd445325b719c8e4593fef752f2b2a5aced172cfe4abd039bec07",
+   "historical_top_level_lineage": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+   "current_lineage": "sha256:f67de15dd047ce20db6a02582e0cbd7787d82c6918815df5d3e8d83753852c37",
+   "historical_top_level_def_index": 15288,
+   "current_def_index": 15362,
+   "current_func_id": 3409,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "get_char_val_trunc": {
+   "file": "crates/clean-verify/tests/fixtures/get_char_val_trunc.lineage.json",
+   "old_sha256": "76dee406e815964b74665107667c440debbcee85f27594d5aec1bf0a709d674d",
+   "new_sha256": "589c8ed11b09a1a6f73acec95a84f6a182d66e7646cd6db15122529eb0993848",
+   "historical_top_level_lineage": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+   "current_lineage": "sha256:320feb3bfd463b1560183d921f4d7cc9fce7802abc353c5e171d08f985c81eb7",
+   "historical_top_level_def_index": 14930,
+   "current_def_index": 14994,
+   "current_func_id": 3296,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "meta_tag_shl": {
+   "file": "crates/clean-verify/tests/fixtures/meta_tag_shl.lineage.json",
+   "old_sha256": "d6da35ad87e483e720ad7903976470169007bea5e060629891ad4b53edffa10c",
+   "new_sha256": "1ac4ea5ddfcb15a7df9a3980622de5c9adb7d15f16b2c9897bc84cc73a35f03f",
+   "historical_top_level_lineage": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
+   "current_lineage": "sha256:a3e3d626dc0c153d6cc7ee85a75a3254e378ffd9ba85a63bf36d7b710a778656",
+   "historical_top_level_def_index": 19642,
+   "current_def_index": 19706,
+   "current_func_id": 4641,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "4 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "level_is_zero": {
+   "file": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
+   "old_sha256": "b912a036b5b115aea3e419c1bc166dd7c410578fb4cc63f8ecd54819e21c146a",
+   "new_sha256": "49958a7eb61da988311c2ac218254c600f9c317305159b342c2b11e5c0e4714d",
+   "historical_top_level_lineage": "sha256:b378d4d331a545e4e89fa617817725b05ff525a957bc1ba4eed9eb0bfae1f712",
+   "current_lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+   "historical_top_level_def_index": 17078,
+   "current_def_index": 17152,
+   "current_func_id": 3905,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "18 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "28 marker line(s) identical"
+   }
+  },
+  "float_add": {
+   "file": "crates/clean-verify/tests/fixtures/float_add.lineage.json",
+   "old_sha256": "88901e9cd55adf8a9f67c9159c1aac1105fd330fd4793fafac4e59a932542af5",
+   "new_sha256": "0801113b3e37f34592a0397ca6adf4c261b458b30d1cbd3baffd9f5c4604cbef",
+   "historical_top_level_lineage": "sha256:6bd2bc9cef88cbc0d17326d26cc4b9ca175ef6666d8053b6b10c4f2fb8857883",
+   "current_lineage": "sha256:3ac49d8998dd598b4871445e1925d1a390539863bba95c8942e21ad7aca3261b",
+   "historical_top_level_def_index": 15296,
+   "current_def_index": 15356,
+   "current_func_id": 3406,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "float_sub": {
+   "file": "crates/clean-verify/tests/fixtures/float_sub.lineage.json",
+   "old_sha256": "e01d2c899cfaf91efde0cf76f718f5d3a0db3229b12b3ea1110e90220d07fb90",
+   "new_sha256": "9d8e35c12fce8632410443fe5c23e07af9eec7afcffdd4201e3edc6f462eb4e7",
+   "historical_top_level_lineage": "sha256:daf0d0176b8b5467f5c0edf11dafbb67c49b2182533b8c617654d5d3427a7204",
+   "current_lineage": "sha256:63d736800fa0ec38b147ef4f048ac7de4e33ced6838f25ddfece0a2fd3b95b32",
+   "historical_top_level_def_index": 15298,
+   "current_def_index": 15358,
+   "current_func_id": 3407,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "float_mul": {
+   "file": "crates/clean-verify/tests/fixtures/float_mul.lineage.json",
+   "old_sha256": "218b7514534076afa4aafc7fca975704604700675a4b088fc730359f8ef26d3f",
+   "new_sha256": "f48062ebe0311e4c81a96e6315c399b4b99deabb7bff571e485b5a2bc5297601",
+   "historical_top_level_lineage": "sha256:feb0c246cba5179adbd3f6812ffff0371f00cb37c69e3655034d94f8f50ac806",
+   "current_lineage": "sha256:4c70bce37d443fcb125592fe014789e6ee183e0112f77c351d9e82f00f79da8f",
+   "historical_top_level_def_index": 15300,
+   "current_def_index": 15360,
+   "current_func_id": 3408,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "strict_monads": {
+   "file": "crates/clean-verify/tests/fixtures/strict_monads.lineage.json",
+   "old_sha256": "99ed5a5668c7789b0f38e87cc4c766a36870c31fd4d43902356c0484feb5a113",
+   "new_sha256": "2e57205b4b8b5912fdfa0ed57c88d8bf2dacedf5466e94a5547fd3b77a5eefea",
+   "historical_top_level_lineage": "sha256:7f10c087e235bd56f34cf1b5e847e201f3964899a5d2a466d20286554b5cb2fe",
+   "current_lineage": "sha256:d80d4f61a7058d0ac10eee8a4de4e0f3b2c775a0f16e22d9871b0575310049b7",
+   "historical_top_level_def_index": 15917,
+   "current_def_index": 15977,
+   "current_func_id": 3570,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "flat_flags_with": {
+   "file": "crates/clean-verify/tests/fixtures/flat_flags_with.lineage.json",
+   "old_sha256": "1b4afdf967498043afb6f5688ad589eaa036d041ca085b3887a4ffa5dad0aa87",
+   "new_sha256": "268de60f4740cc55801db0978007ed1160d6a1a3d6ffa1785b799b5c603b6b81",
+   "historical_top_level_lineage": "sha256:ad70b2ae9f56fa52a7be294ce5c324e927d1e18ce04cb608c58706b0b27998d3",
+   "current_lineage": "sha256:9bf1946ffa8f92445658de430a42ba2556c87efa78eceb45b637969058bef6ec",
+   "historical_top_level_def_index": 16851,
+   "current_def_index": 16911,
+   "current_func_id": 3842,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "6 marker line(s) identical"
+   }
+  },
+  "node_id_index": {
+   "file": "crates/clean-verify/tests/fixtures/node_id_index.lineage.json",
+   "old_sha256": "7c55b95a100e64f4228f2924d40842eb0478dcb8bcf30951e64f84bcdcb44f17",
+   "new_sha256": "ebfb247d4fc59066b178020d5d58615a4e57c98f42ad9248dc0964b30487094b",
+   "historical_top_level_lineage": "sha256:8403edf59060750d9c3299911b5b437c895b9cfee4c64ff2885c213a77e87717",
+   "current_lineage": "sha256:5ddb7ce61ff34478ce3a6a33af86dcd9c714da5801aa0238fddb0902bf1023d8",
+   "historical_top_level_def_index": 1787,
+   "current_def_index": 1787,
+   "current_func_id": 550,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "4 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "simp_priority_value": {
+   "file": "crates/clean-verify/tests/fixtures/simp_priority_value.lineage.json",
+   "old_sha256": "bebbc23dd592967346f1fe7e85f43dc3666380ac4349616633bcc92573243c35",
+   "new_sha256": "9bdc56a0b8679abb11f5659adf4e141c234c9e5c7efa6be353483acb719222d5",
+   "historical_top_level_lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71",
+   "current_lineage": "sha256:c654187f5d5a5e5abcc101791f3f36208bb5fe09ab28cc1592caff413bec668c",
+   "historical_top_level_def_index": 13411,
+   "current_def_index": 13423,
+   "current_func_id": 3018,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "7 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "has_loose_bvars": {
+   "file": "crates/clean-verify/tests/fixtures/has_loose_bvars.lineage.json",
+   "old_sha256": "c55c8fda0d8b950e160d52513ab6f07b753318ee60358d6d39654141b1ec3cbc",
+   "new_sha256": "0ae32e95982b117d8f3577924b3389869a5dd81d2049ec9237f1435061a841a7",
+   "historical_top_level_lineage": "sha256:db25d4f69a3edca7f02dd743f3e2c0156f6e686d60c10b656fdc81bfb8c7ecfb",
+   "current_lineage": "sha256:db25d4f69a3edca7f02dd743f3e2c0156f6e686d60c10b656fdc81bfb8c7ecfb",
+   "historical_top_level_def_index": 16234,
+   "current_def_index": 16234,
+   "current_func_id": 3658,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  }
+ },
+ "postcondition": "Every committed trust-ir fixture is byte-identical to its unique body in the exact live dump; crystal_fixture_freshness.py --strict must exit zero.",
+ "append_only": true,
+ "generator": "scripts/crystal_fixture_rebaseline.py"
+}

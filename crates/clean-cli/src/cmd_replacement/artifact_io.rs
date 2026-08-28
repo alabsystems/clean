@@ -6,24 +6,74 @@
 
 use super::*;
 
-pub(crate) fn repo_artifact_path(path: &'static str) -> PathBuf {
-    let cwd_path = Path::new(path);
-    if cwd_path.exists() {
-        return cwd_path.to_path_buf();
-    }
+/// Where declared repo artifacts are resolved from, and on whose authority.
+///
+/// Recorded in the scorecard output so a reader can tell which tree was scored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum RepoRootSource {
+    /// `CLEAN_REPLACEMENT_REPO_ROOT` named it. The only supported override.
+    EnvOverride,
+    /// The tree this binary was built from. The default.
+    BuildTimeRepo,
+    /// The build tree is gone (a relocated binary), so the process working
+    /// directory is the last resort. Reported, never silent.
+    WorkingDirectoryFallback,
+}
 
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(path)
+impl RepoRootSource {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::EnvOverride => "env:CLEAN_REPLACEMENT_REPO_ROOT",
+            Self::BuildTimeRepo => "build-time-repo",
+            Self::WorkingDirectoryFallback => "working-directory-fallback",
+        }
+    }
+}
+
+/// Resolve the repo root ONCE, deterministically, and say where it came from.
+///
+/// This replaces a cwd-**first** lookup with a silent fallback to the build-time
+/// repo. That order was exploitable and was measured to be: run from a `/tmp`
+/// directory holding three EMPTY files named `reports/tactic-parity-counts.json`,
+/// `reports/strict-solver-fragment-dashboard.json` and
+/// `reports/compile-runtime-smoke.json`, the informational gate scored all three
+/// rows `green/present` — three of its four effectively-green rows — off files
+/// in a directory it never named in its output.
+///
+/// A declared evidence path names a file in *this repo*; resolving it against
+/// whatever directory the process happens to sit in is not a feature. The
+/// working directory is consulted only when the build tree no longer exists,
+/// and that case is reported rather than assumed.
+pub(crate) fn repo_root_provenance() -> (PathBuf, RepoRootSource) {
+    if let Some(root) = std::env::var_os("CLEAN_REPLACEMENT_REPO_ROOT") {
+        let root = PathBuf::from(root);
+        if root.is_dir() {
+            return (root, RepoRootSource::EnvOverride);
+        }
+    }
+    let build_time_repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if build_time_repo.is_dir() {
+        return (build_time_repo, RepoRootSource::BuildTimeRepo);
+    }
+    (
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        RepoRootSource::WorkingDirectoryFallback,
+    )
+}
+
+/// The repo root every declared artifact resolves against.
+pub(crate) fn repo_root() -> PathBuf {
+    repo_root_provenance().0
+}
+
+pub(crate) fn repo_artifact_path(path: &str) -> PathBuf {
+    repo_root().join(path)
 }
 
 pub(crate) fn normalize_repo_path(path: &Path) -> String {
     if path.is_absolute() {
-        let repo_root = repo_artifact_path("Cargo.toml")
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf();
-        path.strip_prefix(repo_root)
+        path.strip_prefix(repo_root())
             .unwrap_or(path)
             .to_string_lossy()
             .replace('\\', "/")

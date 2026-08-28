@@ -273,13 +273,30 @@ impl<'a> ElabCtx<'a> {
                 let mut target_fields = Vec::with_capacity(sub_pats.len());
                 let mut prior_field_fvars: Vec<FVarId> = Vec::new();
                 for (sub_pat, raw_field_ty) in sub_pats.iter().zip(field_tys) {
+                    // `compute_ctor_field_types` returns each field's domain
+                    // TELESCOPE-RELATIVE: field `i` refers to field `i-1` as the
+                    // loose `BVar(0)`, to field `i-2` as `BVar(1)`, and so on —
+                    // the params are instantiated, the earlier fields are not.
+                    // Open those against the sibling locals just bound, exactly
+                    // as the top-level arm path does (`elaborate_ctor_arm_inner`)
+                    // — `instantiate_rev([fvar_{i-1}, …, fvar_0])` maps
+                    // `BVar(j) ↦ fvar_{i-1-j}`. Without this, the nested
+                    // `Exists.intro` of a three-leaf `⟨x, px, qx⟩` over
+                    // `∃ x, ∃ _ : p x, q x` bound its second field at
+                    // `(fun _ => q x) (BVar 0)` and the kernel met the loose
+                    // bvar in the local context: `Unbound variable index: 0`
+                    // on five `Mathlib/Logic/Basic.lean` declarations
+                    // (2026-08-21; pinned by
+                    // `tests/fixtures/pattern_lambda/anon_ctor_dependent_exists.lean`).
+                    let opened_field_ty =
+                        Self::open_field_type_with_fvars(&raw_field_ty, &prior_field_fvars);
                     // Beta-reduce a bare-predicate sub-field type against the
                     // preceding witness sub-field, so a *deeper* anonymous-tuple
                     // destructure of a nested `Exists`/`Sigma` (e.g. `⟨a, b, c⟩`
                     // on `∃ x, ∃ y, R x y`) exposes a `Const`-headed field type at
                     // every level (see `beta_reduce_predicate_field_ty`).
                     let target_field_ty =
-                        self.beta_reduce_predicate_field_ty(&raw_field_ty, &prior_field_fvars);
+                        self.beta_reduce_predicate_field_ty(&opened_field_ty, &prior_field_fvars);
                     let var_name = match sub_pat {
                         SurfacePattern::Var(name) => name.clone(),
                         _ => "_".to_string(),
@@ -556,7 +573,7 @@ impl<'a> ElabCtx<'a> {
                 .cloned()
                 .ok_or_else(|| ElabError::TypeMismatch {
                     expected: format!("inductive type for nested pattern on {type_name}"),
-                    actual: format!("{field_ty:?}"),
+                    actual: format!("{field_ty}"),
                 })?;
 
         let cases_on_name = Name::from_string(&format!("{type_name}.casesOn"));
@@ -601,7 +618,7 @@ impl<'a> ElabCtx<'a> {
             let ExprKind::Pi(_, expected_motive, _) = cases_ty.kind() else {
                 return Err(ElabError::TypeMismatch {
                     expected: "nested-pattern motive premise".to_string(),
-                    actual: format!("{cases_ty:?}"),
+                    actual: format!("{cases_ty}"),
                 });
             };
             let motive = self.constant_over_telescope(expected_motive, branch_ty.clone());
@@ -729,7 +746,7 @@ impl<'a> ElabCtx<'a> {
                     let ExprKind::Pi(_, expected_minor, _) = cases_ty.kind() else {
                         return Err(ElabError::TypeMismatch {
                             expected: format!("minor premise for {}", rule.constructor_name),
-                            actual: format!("{cases_ty:?}"),
+                            actual: format!("{cases_ty}"),
                         });
                     };
                     let fallback = self
@@ -743,7 +760,7 @@ impl<'a> ElabCtx<'a> {
                                 "{} field binders for {}",
                                 rule.num_fields, rule.constructor_name
                             ),
-                            actual: format!("{expected_minor:?}"),
+                            actual: format!("{expected_minor}"),
                         })?;
                     cases_result = Expr::app(cases_result, fallback);
                 }
@@ -809,7 +826,7 @@ impl<'a> ElabCtx<'a> {
             _ => {
                 return Err(ElabError::TypeMismatch {
                     expected: format!("fully applied inductive `{}`", info.inductive_name),
-                    actual: format!("{scrutinee_ty:?}"),
+                    actual: format!("{scrutinee_ty}"),
                 });
             }
         };

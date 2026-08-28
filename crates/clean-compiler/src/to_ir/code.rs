@@ -15,7 +15,7 @@ use super::types::expr_to_ir_type;
 use crate::error::CompilerError;
 use crate::ir::{CtorInfo, FnId, IRAlt, IRArg, IRBody, IRExpr, IRLiteral, IRType, VarId};
 use crate::lcnf::{Alt, Arg, Code, LetValue};
-use clean_kernel::{Literal, Name};
+use clean_kernel::{Expr, Literal, Name};
 
 /// Convert L5CNF Code to IRBody.
 pub fn lower_code(code: &Code, state: &mut ToIRState) -> Result<IRBody, CompilerError> {
@@ -142,6 +142,7 @@ pub(super) fn lower_const_application(
     name: &Name,
     args: &[Arg],
     state: &ToIRState,
+    declared_ty: Option<&Expr>,
 ) -> Result<(IRExpr, IRType), CompilerError> {
     // A `Const` whose name is a constructor builds an inductive value: emit a
     // `lean_alloc_ctor` allocation rather than a call to an `l_<Ctor>` runtime
@@ -177,13 +178,46 @@ pub(super) fn lower_const_application(
         }
     }
 
+    // SLICE-INDEPENDENT SCALAR TYPING (Seam A). A saturated application of a
+    // fixed-width UInt arithmetic primitive takes its LCNF-declared scalar
+    // type when the two AGREE — affirmative evidence from both the name table
+    // and the kernel type, never type grounds alone. Before this, the LCNF
+    // `LetDecl.ty` (`Const("UInt32")`) was dropped on the floor here and the
+    // intermediate was typed `Object`; the boxing pass repaired it, but ONLY
+    // by looking up the callee's in-slice signature — so any lane that drops
+    // the primitives from the slice before boxing (the trust-ir native-BinOp
+    // path's whole point) silently reverted to boxed `Ptr` intermediates and
+    // fail-closed at the emitter's `declared != bty` check. Name set mirrors
+    // `emit_trust_ir::uint_arith_binop` / `emit_wasm::wasm_arith`; the
+    // feature-gated correspondence test pins the tables against drift.
+    let ty = match (uint_arith_scalar_ty(name), declared_ty) {
+        (Some(prim), Some(decl_ty)) if expr_to_ir_type(decl_ty).is_ok_and(|d| d == prim) => prim,
+        _ => IRType::Object,
+    };
     Ok((
         IRExpr::Apply {
             fn_id,
             args: ir_args,
         },
-        IRType::Object,
+        ty,
     ))
+}
+
+/// The fixed-width UInt arithmetic primitives the backends realize natively
+/// (`UInt{8,16,32,64}.{add,sub,mul}`), mapped to their scalar result type.
+/// Mirrors `emit_trust_ir::uint_arith_binop` and `emit_wasm::wasm_arith`;
+/// kept name-only here so the default (feature-less) build can consult it.
+pub(crate) fn uint_arith_scalar_ty(name: &Name) -> Option<IRType> {
+    let s = name.to_string();
+    let (prefix, suffix) = s.rsplit_once('.')?;
+    let ty = match prefix {
+        "UInt8" => IRType::UInt8,
+        "UInt16" => IRType::UInt16,
+        "UInt32" => IRType::UInt32,
+        "UInt64" => IRType::UInt64,
+        _ => return None,
+    };
+    matches!(suffix, "add" | "sub" | "mul").then_some(ty)
 }
 
 /// Compute the correct IR projection expression for a field given its constructor's
@@ -294,6 +328,7 @@ pub(crate) fn compute_proj_expr(
 pub(super) fn lower_let_value(
     value: &LetValue,
     state: &ToIRState,
+    declared_ty: Option<&Expr>,
 ) -> Result<(IRExpr, IRType), CompilerError> {
     match value {
         LetValue::Lit(lit) => match lit {
@@ -347,7 +382,7 @@ pub(super) fn lower_let_value(
             name,
             levels: _,
             args,
-        } => lower_const_application(name, args, state),
+        } => lower_const_application(name, args, state, declared_ty),
 
         LetValue::FVar { fvar, args } => {
             // Higher-order application: dynamic closure invocation (Lean 4 `ap`).

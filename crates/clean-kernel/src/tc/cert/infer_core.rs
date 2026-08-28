@@ -19,6 +19,7 @@ use crate::tc::TypeChecker;
 use crate::TypeError;
 
 use super::convert_fvar_cert_to_bvar;
+use std::sync::Arc;
 
 impl<'env> TypeChecker<'env> {
     /// Inner implementation of type inference with certificates.
@@ -26,6 +27,32 @@ impl<'env> TypeChecker<'env> {
         &self,
         e: &Expr,
     ) -> Result<(Expr, ProofCert), TypeError> {
+        // AMBIENT DECLARATION BUDGET (task #31). This is the one `Result`-
+        // returning recursion in the kernel that does NOT tick the per-checker
+        // heartbeat — a parity gap recorded in
+        // `docs/issues/2026-08-21-cert-clone-exponential-tree-mirror.md` and
+        // left open there because closing it with a full `tick_heartbeat` is a
+        // trusted-kernel change whose effect on the 10k-test `clean-elab`
+        // suite was never measured.
+        //
+        // The ambient budget is a different animal: it is DISABLED unless a
+        // caller arms it (`limit == 0` on every thread by default), so this
+        // check cannot move any existing verdict, and without it the budget
+        // does not bound the path where the divergences actually live.
+        // Measured 2026-08-27: with the budget spent, `whnf` returns its input
+        // unreduced, the tactic layers retry, and `infer_type_with_cert_inner`
+        // recurses on — a `clean check --decl-budget 1` on `def f (n : Nat) :
+        // Nat := n` SPUN at 98% CPU instead of reporting `diverged`. A budget
+        // that can itself induce a hang is worse than no budget.
+        //
+        // Deliberately NOT `tick_heartbeat`: this neither reads nor decrements
+        // the per-checker counter, so cert-mode heartbeat accounting is
+        // byte-identical to before.
+        if !super::super::decl_budget::consume_declaration_budget() {
+            return Err(TypeError::DeclarationBudgetExhausted {
+                limit: super::super::decl_budget::declaration_budget_limit(),
+            });
+        }
         match &e.kind {
             ExprKind::BVar(idx) => {
                 // BVar should have been replaced by FVar during elaboration
@@ -158,15 +185,35 @@ impl<'env> TypeChecker<'env> {
                         let result_ty = result_type.instantiate(a);
 
                         let cert = ProofCert::App {
-                            fn_cert: Box::new(f_cert),
+                            fn_cert: Arc::new(f_cert),
                             fn_type: Box::new(f_type_whnf.clone()),
-                            arg_cert: Box::new(arg_cert),
+                            arg_cert: Arc::new(arg_cert),
                             result_type: Box::new(result_ty.clone()),
                         };
 
                         Ok((result_ty, cert))
                     }
                     _ => {
+                        // If the heartbeat was exhausted during whnf, `f_type` may
+                        // simply not have REDUCED to a Pi yet — reporting
+                        // `NotAFunction` then states that the term is ill-typed,
+                        // which is a claim about the code rather than about the
+                        // budget. Surface `HeartbeatExceeded` instead.
+                        //
+                        // Part of #3134. That guard was added to the non-cert path
+                        // (`tc/infer.rs`, the `_ =>` arm of the same App case) and
+                        // to `check_type`'s TypeMismatch, but the CERTIFICATE path
+                        // was missed — and it is the path `check_type` actually
+                        // drives under `debug_assertions`. Measured 2026-08-23 from
+                        // Trust: a kernel re-check starved to 1 heartbeat returned
+                        // `NotAFunction`, which its caller then reported as "the
+                        // kernel rejected this proof" — a false statement about the
+                        // trust root.
+                        //
+                        // `tick_heartbeat` is a no-op while budget remains, so a
+                        // genuine `NotAFunction` still reports `NotAFunction`; this
+                        // can never turn an ill-typed term into a pass.
+                        self.tick_heartbeat()?;
                         // Point at the function position of the offending App.
                         // Part of #3425.
                         self.expr_loc_push(ExprPathStep::AppFn);
@@ -226,8 +273,8 @@ impl<'env> TypeChecker<'env> {
 
                 let cert = ProofCert::Lam {
                     binder_info: bi.info,
-                    arg_type_cert: Box::new(arg_type_cert),
-                    body_cert: Box::new(body_cert),
+                    arg_type_cert: Arc::new(arg_type_cert),
+                    body_cert: Arc::new(body_cert),
                     result_type: Box::new(result_type.clone()),
                 };
 
@@ -283,9 +330,9 @@ impl<'env> TypeChecker<'env> {
 
                 let cert = ProofCert::Pi {
                     binder_info: bi.info,
-                    arg_type_cert: Box::new(arg_type_cert),
+                    arg_type_cert: Arc::new(arg_type_cert),
                     arg_level: l1,
-                    body_type_cert: Box::new(body_type_cert),
+                    body_type_cert: Arc::new(body_type_cert),
                     body_level: l2,
                 };
 
@@ -364,9 +411,9 @@ impl<'env> TypeChecker<'env> {
                 let result_type = body_type.subst_fvar(fvar_id, val);
 
                 let cert = ProofCert::Let {
-                    type_cert: Box::new(type_cert),
-                    value_cert: Box::new(value_cert),
-                    body_cert: Box::new(body_cert),
+                    type_cert: Arc::new(type_cert),
+                    value_cert: Arc::new(value_cert),
+                    body_cert: Arc::new(body_cert),
                     result_type: Box::new(result_type.clone()),
                 };
 
@@ -399,7 +446,7 @@ impl<'env> TypeChecker<'env> {
                 let cert = ProofCert::Proj {
                     struct_name: struct_name.clone(),
                     idx: *idx,
-                    expr_cert: Box::new(expr_cert),
+                    expr_cert: Arc::new(expr_cert),
                     expr_type: Box::new(expr_type),
                     field_type: Box::new(field_type.clone()),
                 };
@@ -415,7 +462,7 @@ impl<'env> TypeChecker<'env> {
                 let (inner_type, inner_cert) = inner_result?;
                 let cert = ProofCert::MData {
                     metadata: metadata.clone(),
-                    inner_cert: Box::new(inner_cert),
+                    inner_cert: Arc::new(inner_cert),
                     result_type: Box::new(inner_type.clone()),
                 };
                 Ok((inner_type, cert))

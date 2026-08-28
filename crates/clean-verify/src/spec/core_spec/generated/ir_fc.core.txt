@@ -1,0 +1,20 @@
+(module
+  (funcs
+    (func 0
+      (params 0 1)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 2) (extractfield (uint 8) 0 0))
+            (node (results 3) (extractfield (uint 8) 1 0))
+            (node (results 4) (binop and (uint 8) 2 3))
+            (node (results 5) (extractfield (uint 8) 1 0))
+            (node (results 6) (icmp eq (uint 8) 4 5))
+            (node (results) (ret (vals 6)))
+          ))
+      ))
+  )
+  (globals)
+)

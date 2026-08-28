@@ -461,7 +461,7 @@ pub fn run_tactic_script_with_snapshots(
             rendered_targets: state
                 .goals()
                 .iter()
-                .map(|goal| format!("⊢ {:?}", goal.target))
+                .map(|goal| format!("⊢ {}", goal.target))
                 .collect(),
         },
     })

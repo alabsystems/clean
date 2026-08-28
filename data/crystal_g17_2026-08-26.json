@@ -1,0 +1,418 @@
+{
+ "schema": "clean.crystal.g17_unit_chain/1",
+ "date": "2026-08-26",
+ "lane": "LANE G17 \u2014 the DEEP UNIT-CHAIN class: both `|c| c.set(c.get() + 1)` gap rows CONVERT (+2 at -O3, 0 lost, gap 17 -> 15)",
+ "question": "The residual gap's last unmodelled all-call shape is a DEPTH-3 linear call chain with a folded scalar literal and a REPEATED reference parameter, which wave-WB8 refuses on four independent lines. Does a class that models it convert the two bodies, and what is left after it?",
+ "answer": "Yes, both. +2 at -O3 (602 -> 604), 0 lost at either level, 0 verdict regressions, the residual gap 17 -> 15, and the equality O3 == O0 INTERSECT markers_exact still holds with both witness lists empty. `tc::equiv_manager::EquivManager::add_equiv` is this class's shape with a lexical `let` scope and stays refused by the wave-MF firewall \u2014 measured, not assumed.",
+ "provenance": {
+  "method": "ONE sealed subject driver from ONE detached trust worktree at ONE rev, whole-crate clean-kernel at -O3 / -O0 / -O3+noflip / -O3+uc-unit-late, against ONE PINNED clean corpus; the CONTROL is lane G21's own sealed driver (seal-SUBJ2 \u2014 the LANDED tip flip path) and its committed dumps at the SAME trust rev and the SAME corpus, re-analysed here",
+  "trust_base": "3495e42c456f489802805cd9f041c71cf38b945a (the control driver's rev, verbatim) plus lane G21's LANDED driver-side SAT registration; the flip path is origin/main's, blob for blob",
+  "clean_corpus_rev": "f21d6336bf778eca692b616258d13828b3dec6e7 (a detached worktree; `CLEAN TRACKED DIRT []` printed by every run)",
+  "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13 (METADATA_VERSION 13, sysrootcheck OK on both drivers)",
+  "drivers": {
+   "control": "$HOME/trust/scratchpad/laneG21/seal-SUBJ2 (lane G21's landed subject = the tip flip path)",
+   "subject": "$HOME/trust/scratchpad/laneG17/seal-SUBJ2 (dylib 13b1e4f79c40e5dfa83a0a12975076bc7614bcb321ebdfcc4d561de4802c12a7)"
+  },
+  "control_flip_path_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "340982431ba5baa3e00f67aeb8cc077321438fa1",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "a4e780e5a1ce00bd93ef8dab119a11481fb59896",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "aef29fc7dad206e3a9e4c53252dc9eb2a08b0b4c"
+  },
+  "subject_flip_path_blobs": {
+   "crates/trust-thir-lower/src/flip.rs": "340982431ba5baa3e00f67aeb8cc077321438fa1",
+   "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+   "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+   "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+   "crates/trust-thir-lower/src/to_mir.rs": "73d3425046e2515199d7c4833f60fbc02765804a",
+   "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+   "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "aef29fc7dad206e3a9e4c53252dc9eb2a08b0b4c"
+  },
+  "flip_path_files_that_differ_control_vs_subject": [
+   "crates/trust-thir-lower/src/to_mir.rs"
+  ],
+  "the_FROZEN_oracle": {
+   "file": "crates/trust-thir-lower/src/mir_differential.rs",
+   "blob": "13cd4f258683fdede1877d194d674910fb6366a9",
+   "identical_across_drivers": true
+  },
+  "driver_side_files_that_also_differ": {
+   "compiler/rustc_driver_impl/src/lib.rs": "registers the `uc-unit-late` SAT class",
+   "compiler/rustc_driver_impl/src/tests.rs": "the class list and the domain-error message",
+   "compiler/rustc_session/src/options.rs": "the `-Ztrust-sat-perturb` help text",
+   "why": "none of the three is on the flip path and none carries marker logic"
+  },
+  "the_seal_is_the_measured_tree": {
+   "claim": "every flip-path blob the build log recorded is byte-identical to the worktree's now \u2014 the seal did not predate a later edit",
+   "to_mir_at_build_time": "73d3425046e2515199d7c4833f60fbc02765804a",
+   "to_mir_now": "73d3425046e2515199d7c4833f60fbc02765804a"
+  },
+  "instruments": {
+   "census": "laneG17/analyze.py (laneRMX's via laneG21, unchanged)",
+   "ab": "laneG17/compare.py (laneGAP/laneS3's, unchanged)",
+   "blast radius": "laneG17/scan_uc.py (this lane's \u2014 `unit_chain_calls`' grammar re-implemented on the corpus trust-ir TEXT and run BEFORE the first driver existed)",
+   "per body": "laneG17/perbody.py (this lane's)",
+   "probes": "laneG17/probes/g17.rs, dumped through the CONTROL driver before the class was designed and through the SUBJECT after"
+  }
+ },
+ "baseline_reconciliation": {
+  "claim": "this lane's CONTROL is lane G21's committed measurement, re-derived here from its own dumps, and it reproduces the standing tip baseline exactly",
+  "standing_tip_2026-08-25": "-O3 602 + 42 ctfe, -O0 618 + 43 ctfe, bodies 13,906, agreed 1,593, markers_exact 1,576, residual gap 17",
+  "this_lane_control": {
+   "bodies": 13906,
+   "agreed": 1593,
+   "agreed_markers_exact": 1576,
+   "codegen_flips_O3": 602,
+   "codegen_flips_O0": 618,
+   "ctfe_flips_O3": 42,
+   "ctfe_flips_O0": 43,
+   "loud_fallback_events_O3": 47,
+   "loud_fallback_events_O0": 47
+  },
+  "control_gap": 17,
+  "control_invariants": {
+   "derived_mir_rows_that_move_between_O3_and_O0": 0,
+   "coverage_O3_sha256": "cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7",
+   "coverage_O0_sha256": "cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7",
+   "O0_flips_subset_of_agreed": true,
+   "O3_flips_subset_of_agreed_and_markers_exact": true,
+   "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+   "flips_lost_O3_not_O0": 0,
+   "witnesses_O0_mex_not_O3": [],
+   "witnesses_O3_not_O0": []
+  }
+ },
+ "census_subject": {
+  "bodies": 13906,
+  "agreed": 1593,
+  "agreed_markers_exact": 1578,
+  "codegen_flips_O3": 604,
+  "codegen_flips_O0": 618,
+  "ctfe_flips_O3": 42,
+  "ctfe_flips_O0": 43,
+  "loud_fallback_events_O3": 47,
+  "loud_fallback_events_O0": 47,
+  "noflip_control": {
+   "codegen": 0,
+   "ctfe": 0,
+   "fallback_events": 0
+  }
+ },
+ "subject_invariants": {
+  "derived_mir_rows_that_move_between_O3_and_O0": 0,
+  "coverage_O3_sha256": "02751008a1a219337cc8de18b8564e98862fa1f793f8c5424418837d8a25538c",
+  "coverage_O0_sha256": "02751008a1a219337cc8de18b8564e98862fa1f793f8c5424418837d8a25538c",
+  "O0_flips_subset_of_agreed": true,
+  "O3_flips_subset_of_agreed_and_markers_exact": true,
+  "O3_flips_EQUALS_O0_flips_intersect_markers_exact": true,
+  "flips_lost_O3_not_O0": 0,
+  "witnesses_O0_mex_not_O3": [],
+  "witnesses_O3_not_O0": []
+ },
+ "subject_gap": {
+  "size": 15,
+  "by_kind": {
+   "fn": 14,
+   "const-init": 1
+  },
+  "partition_by_channel": {
+   "derived-end@0": 15
+  },
+  "partition_sums_to_gap": true,
+  "shape_overlay": {
+   "other": 11,
+   "WB8-named-chain": 3,
+   "NO-TRUST-IR-BODY": 1
+  }
+ },
+ "subject_gap_names": [
+  "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq",
+  "env::origin::ConstantOrigin::is_unpinned_olean_import",
+  "env::ext_instance::PRIORITY_BYTES",
+  "env::native_reducers_bitvec::to_signed",
+  "env::native_reducers_sint::to_signed",
+  "expr::kind::arc_eq",
+  "expr::sorry::<impl expr::Expr>::sorry_scan",
+  "expr::subst::<impl expr::Expr>::has_loose_bvar",
+  "expr::types::BigNat::is_zero::{closure#0}",
+  "<level::LevelArc as std::fmt::Debug>::fmt",
+  "memory_model::MemoryRegion::new",
+  "tc::equiv_manager::EquivManager::add_equiv",
+  "tc::heartbeat_profiler::types::SourcePos::coalesced",
+  "tc::heartbeat_profiler::types::round_up_to_next",
+  "<env::ai_proof_search::AiSearchStats as std::default::Default>::default"
+ ],
+ "whole_crate_subject_vs_control": {
+  "base": "$HOME/trust/scratchpad/laneG21/wc-subj2",
+  "subject": "wc-subj2",
+  "O3": {
+   "codegen_base": 602,
+   "codegen_subject": 604,
+   "ctfe_base": 42,
+   "ctfe_subject": 42,
+   "gained": 2,
+   "lost": 0,
+   "gained_names": [
+    "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+    "sorry::accounting::record_ay_reconstruction_success::{closure#0}"
+   ],
+   "lost_names": []
+  },
+  "O0": {
+   "codegen_base": 618,
+   "codegen_subject": 618,
+   "ctfe_base": 43,
+   "ctfe_subject": 43,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": []
+  },
+  "channel_moves": {
+   "markers_exact False -> True": 2
+  },
+  "verdict_regressions": [],
+  "markers_gained": [
+   "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+   "sorry::accounting::record_ay_reconstruction_success::{closure#0}"
+  ],
+  "markers_lost": [],
+  "totals": {
+   "base_agreed": 1593,
+   "subject_agreed": 1593,
+   "base_markers_exact": 1576,
+   "subject_markers_exact": 1578
+  }
+ },
+ "per_body_marker_line_counts": {
+  "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:opaque:Ref { mutable: false, inner: Adt { name: \"core::cell::Cell\", fields: [(\"value\", Adt { name: \"core::cell::UnsafeCell\", fields: [(\"value\", Int { width: 32, signed: false })], variants: [], disc_index_safe: false, faithf` vs derived `<end>`",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "8 marker line(s) identical",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:opaque:Ref { mutable: false, inner: Adt { name: \"core::cell::Cell\", fields: [(\"value\", Adt { name: \"core::cell::UnsafeCell\", fields: [(\"value\", Int { width: 32, signed: false })], variants: [], disc_index_safe: false, faithf` vs derived `<end>`",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "8 marker line(s) identical",
+    "semantic_detail": "8 canonical line(s) identical"
+   }
+  },
+  "sorry::accounting::record_ay_reconstruction_success::{closure#0}": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "10 marker line(s) identical",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `<end>`",
+    "semantic_detail": "8 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "10 marker line(s) identical",
+    "semantic_detail": "8 canonical line(s) identical"
+   }
+  },
+  "tc::equiv_manager::EquivManager::add_equiv": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`",
+    "semantic_detail": "9 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`",
+    "semantic_detail": "9 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`",
+    "semantic_detail": "9 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": false,
+    "markers_detail": "markers differ: line 0: built `mk b0.0:live s0:u32` vs derived `<end>`",
+    "semantic_detail": "9 canonical line(s) identical"
+   }
+  },
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical",
+    "semantic_detail": "5 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical",
+    "semantic_detail": "5 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical",
+    "semantic_detail": "5 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical",
+    "semantic_detail": "5 canonical line(s) identical"
+   }
+  },
+  "env::Environment::ensure_native_reducers": {
+   "control_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "84 marker line(s) identical",
+    "semantic_detail": "25 canonical line(s) identical"
+   },
+   "subject_O3": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "84 marker line(s) identical",
+    "semantic_detail": "25 canonical line(s) identical"
+   },
+   "control_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "84 marker line(s) identical",
+    "semantic_detail": "25 canonical line(s) identical"
+   },
+   "subject_O0": {
+    "verdict": "agreed",
+    "markers_exact": true,
+    "markers_detail": "84 marker line(s) identical",
+    "semantic_detail": "25 canonical line(s) identical"
+   }
+  }
+ },
+ "blast_radius_scanned_BEFORE_ANY_DRIVER_EXISTED": {
+  "instrument": "laneG17/scan_uc.py over all 7,095 corpus trust-ir functions",
+  "bodies_scanned": 7095,
+  "exact_shape_hits": 2,
+  "hits": [
+   {
+    "def_path": "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+    "calls": 3,
+    "consts": 1,
+    "repeated_params": 1,
+    "markers_exact": false
+   },
+   {
+    "def_path": "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+    "calls": 3,
+    "consts": 1,
+    "repeated_params": 1,
+    "markers_exact": false
+   }
+  ],
+  "refusal_histogram": {
+   "refuse:ret-value": 5298,
+   "refuse:multiblock": 1303,
+   "refuse:scope": 381,
+   "refuse:empty": 69,
+   "refuse:too-few-calls": 19,
+   "refuse:final-not-unit-call": 15,
+   "refuse:other-inst": 6,
+   "ok": 2,
+   "refuse:interior-unit-call": 2
+  },
+  "reading": "TWO exact-shape hits over the whole corpus, and BOTH are gap rows. Nothing could be lost, and that was known before the first driver was built \u2014 which the measurement then confirmed: 0 lost at either level."
+ },
+ "perturbation_uc_unit_late_WHOLE_CRATE": {
+  "control_flag": "-Ztrust-sat-perturb=uc-unit-late",
+  "codegen_unperturbed": 604,
+  "codegen_perturbed": 603,
+  "ctfe_unperturbed": 42,
+  "ctfe_perturbed": 42,
+  "flips_lost_under_the_control": [
+   "sorry::accounting::record_ay_reconstruction_success::{closure#0}"
+  ],
+  "flips_gained_under_the_control": [],
+  "markers_exact_moves": [
+   {
+    "def_path": "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+    "unperturbed": true,
+    "perturbed": false,
+    "perturbed_markers_detail": "markers differ: line 0: built `mk b0.0:live s0:()` vs derived `mk b0.0:live s0:opaque:Ref { mutable: false, inner: Adt { name: \"core::cell::Cell\", fields: [(\"value\", Adt { name: \"core::cell::UnsafeCell\", fields: [(\"value"
+   }
+  ]
+ },
+ "TWO_NULL DRIVERS PRECEDED THIS ONE, AND THEY ARE THE FINDING": {
+  "claim": "the class was compiled, sealed and whole-crate measured TWICE before it fired on anything, and both runs are kept",
+  "cut_1": {
+   "to_mir": "9fa15cc86351a4515c0e0cbd0e351667e69188e2",
+   "driver": "seal-SUBJ-null (0a322ba885bab830f57a741614948c070af02057f3f967d24525c7bcd3998658)",
+   "totals": {
+    "bodies": 13906,
+    "agreed": 1593,
+    "agreed_markers_exact": 1576,
+    "codegen_flips_O3": 602,
+    "codegen_flips_O0": 618,
+    "ctfe_flips_O3": 42,
+    "ctfe_flips_O0": 43,
+    "loud_fallback_events_O3": 47,
+    "loud_fallback_events_O0": 47
+   },
+   "gap": 17,
+   "coverage_O3_sha256": "cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7",
+   "route": "the callee's declared return read by POSITION out of `Module::functions`"
+  },
+  "cut_2": {
+   "to_mir": "728ab0618dfd8aaf488973e14ab9f29163eb93f7",
+   "driver": "seal-SUBJ2 (7b42c4ee5e2f9ebb48e3ed3b5e3e5a1b56acfe990d42f0cfc8fc7c30363b2452), overwritten by cut 3",
+   "totals": {
+    "bodies": 13906,
+    "agreed": 1593,
+    "agreed_markers_exact": 1576,
+    "codegen_flips_O3": 602,
+    "codegen_flips_O0": 618,
+    "ctfe_flips_O3": 42,
+    "ctfe_flips_O0": 43,
+    "loud_fallback_events_O3": 47,
+    "loud_fallback_events_O0": 47
+   },
+   "gap": 17,
+   "coverage_O3_sha256": "cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7",
+   "route": "the same, through `Module::function_by_id` \u2014 the accessor that does not assume table order"
+  },
+  "both_were_BYTE_IDENTICAL_to_the_control": "coverage_O3 sha256 cfc450d1d4c30c257e63ec65b18c5b1a5540441ce90855830b3b388246579de7 at BOTH levels in both cuts \u2014 the control's own digest. +0 / -0: the class fired on ZERO bodies, and every unit test was green through both.",
+  "the_cause": "`MfPlans::seal` is handed the body's OWN module. Its callee DECLARATIONS get their signature at CRATE ASSEMBLY, not per body, so there is no callee return type in it to read \u2014 by position or by id. The producer records it in the LEDGER instead: `CalleeRef::ret_ty`, 'the RESULT type this crate's call sites actually bind from this callee', observed AT THE SITE and deliberately not re-derived from the callee's rustc signature \u2014 which is the independence the predicted side needs, because the emitter types its locals from that signature and `observe` reads the finished `local_decls`.",
+  "the_pin": "`unit_chain_tests::test_the_callee_result_type_comes_from_the_PRODUCER_LEDGER` \u2014 the test that would have said so in one second: it fixes a ledger, checks the lookup against an unknown entry, a poisoned entry and two disagreeing entries, and runs the whole grammar through it."
+ }
+}

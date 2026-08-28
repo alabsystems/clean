@@ -156,7 +156,7 @@ pub fn verify_rat(clauses: &[Clause], new_clause: &[Literal], pivot: Literal) ->
 /// empty clause is never derived, the proof does not establish
 /// unsatisfiability and is rejected.
 #[must_use]
-pub fn verify_proof_log(log: &ProofLog) -> ProofLogResult {
+pub(crate) fn verify_proof_log(log: &ProofLog) -> ProofLogResult {
     let mut active_clauses: Vec<Clause> = log.original_clauses.clone();
     let mut empty_clause_derived = false;
     let mut phantom_deletions = Vec::new();
@@ -209,7 +209,7 @@ pub fn verify_proof_log(log: &ProofLog) -> ProofLogResult {
 /// d -1 3 0       // delete clause {-1, 3}
 /// 0              // add empty clause (refutation)
 /// ```
-pub fn parse_drat_proof(input: &str) -> Result<Vec<ProofStep>, CdclError> {
+pub(crate) fn parse_drat_proof(input: &str) -> Result<Vec<ProofStep>, CdclError> {
     let mut steps = Vec::new();
     for line in input.lines() {
         let line = line.trim();

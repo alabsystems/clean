@@ -1,0 +1,41 @@
+{
+  "schema": "evalir-coverage/v1",
+  "covered": [
+    "br",
+    "const_",
+    "extractfield",
+    "load",
+    "ret",
+    "switch"
+  ],
+  "count": 6,
+  "total": 28,
+  "provenance": {
+    "derived_by": "scripts/evalir_coverage.py",
+    "rule": "covered = union of coverage.exercised over the artifacts below; measured rows only \u2014 authored-but-unminted battery rows never count. total = pinned constructed-Inst census, derived independently from both denominator sources, which must agree.",
+    "artifacts": [
+      {
+        "path": "data/crystal_gap2_semdiff_2026-08-20.json",
+        "sha256": "c7d40943510e391fc25043f65624ff3719e582d1e5b65f669856816d84ee7224",
+        "exercised": [
+          "br",
+          "const_",
+          "extractfield",
+          "load",
+          "ret",
+          "switch"
+        ]
+      }
+    ],
+    "denominator_sources": {
+      "census": {
+        "path": "crates/clean-verify/tests/eval_ir/census.rs",
+        "anchor": "EMITTED_INSTS"
+      },
+      "syntax": {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+        "anchor": "inductive IRInst : Type"
+      }
+    }
+  }
+}

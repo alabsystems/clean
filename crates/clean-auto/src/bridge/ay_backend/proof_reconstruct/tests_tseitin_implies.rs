@@ -10,15 +10,20 @@
 //! `mk_or` sorts its arguments canonically), so these tests build the
 //! implication with `TermStore::mk_implies` and derive the expected kernel
 //! proposition from the stored term — whichever argument order it ended up in.
-//! Every proof term is type-checked through the clean kernel; the premised
-//! rules are additionally driven through resolution to `False`.
+//! Every proof term is FULLY kernel-checked with `TypeChecker::check_type`
+//! (`infer_only = false`, as `certify_reconstruction` gates) — a plain
+//! `infer_type` + `is_def_eq` does not validate application arguments; the
+//! premised rules are additionally driven through resolution to `False`. Both
+//! literal orders of the desugared implication (`(or (not p) q)` and the
+//! sorted `(or q (not p))` that `mk_implies` actually produces) are exercised
+//! for `implies`.
 
 use super::{attempt_reconstruction, VariableMapping};
 use ay::Sort;
 use ay_core::{AletheRule, Proof, ProofId, Symbol, TermData, TermId, TermStore};
 use clean_kernel::name::Name;
 use clean_kernel::{
-    BinderInfo, Declaration, Environment, Expr, ExprKind, FVarId, Level, LocalContext, TypeChecker,
+    BinderInfo, Declaration, Environment, Expr, FVarId, Level, LocalContext, TypeChecker,
 };
 
 fn mk_env() -> Environment {
@@ -161,13 +166,9 @@ fn assert_premiseless_type_checks(
     );
 
     let tc = TypeChecker::with_context(&env, LocalContext::new());
-    let ty = tc
-        .infer_type(&proof_term)
-        .unwrap_or_else(|e| panic!("{label} proof term should type-check: {e:?}"));
-    assert!(
-        tc.is_def_eq(&ty, &expected),
-        "{label} proof type should be def-eq to the clause disjunction"
-    );
+    tc.check_type(&proof_term, &expected).unwrap_or_else(|e| {
+        panic!("{label} proof term must check_type against the clause disjunction: {e:?}")
+    });
 }
 
 /// `implies_neg1`: ⊢ {(=> p q), p}.
@@ -402,7 +403,8 @@ fn assert_refutation_type_checks(
     });
     assert_eq!(
         result.trust_subterm_count, 0,
-        "{label} proof should have no trust sub-terms"
+        "{label} proof should have no trust sub-terms; error: {:?}",
+        result.stats.error
     );
     assert!(
         result.derives_empty_clause,
@@ -420,23 +422,17 @@ fn assert_refutation_type_checks(
     }
 
     let tc = TypeChecker::with_context(&env, ctx);
-    let ty = tc
-        .infer_type(&proof_term)
-        .unwrap_or_else(|e| panic!("{label}: type-check failed: {e:?}"));
-    assert!(
-        matches!(ty.kind(), ExprKind::Const(n, _) if *n == Name::from_string("False")),
-        "{label}: expected type False, got {ty:?}"
-    );
+    tc.check_type(&proof_term, &const_("False"))
+        .unwrap_or_else(|e| panic!("{label}: check_type(_, False) failed: {e:?}"));
 }
 
-/// `implies`: (=> p q), p, ¬q ⊢ ⊥ via `implies` + two resolutions.
-#[test]
-fn test_implies_e2e_refutation_type_checks() {
-    let mut fx = mk_fixture();
-    let imp_prop = prop_of(&fx.terms, fx.imp);
-
+/// Build the `implies` refutation `(=> p q), p, ¬q ⊢ ⊥` (via `implies` + two
+/// resolutions) over an arbitrary stored implication term `imp` — either `or`
+/// argument order, or a native `=>`.
+fn implies_refutation(fx: &mut Fixture, imp: TermId, label: &str) {
+    let imp_prop = prop_of(&fx.terms, imp);
     let mut proof = Proof::new();
-    let s0 = proof.add_assume(fx.imp, None);
+    let s0 = proof.add_assume(imp, None);
     let s1 = proof.add_rule_step(AletheRule::Implies, vec![fx.not_p, fx.q], vec![s0], vec![]);
     let s2 = proof.add_assume(fx.p, None);
     let s3 = proof.add_resolution(vec![fx.q], fx.p, s1, s2);
@@ -445,12 +441,194 @@ fn test_implies_e2e_refutation_type_checks() {
 
     let neg_goal = mk_not(const_("testQ"));
     assert_refutation_type_checks(
-        &mut fx,
+        fx,
         &proof,
         &[(10, "h_imp", imp_prop), (11, "h_p", const_("testP"))],
         &neg_goal,
-        "implies e2e",
+        label,
     );
+}
+
+/// `implies` with the canonical `mk_implies` term — whichever order `mk_or`
+/// sorted it into.
+#[test]
+fn test_implies_e2e_refutation_type_checks() {
+    let mut fx = mk_fixture();
+    let imp = fx.imp;
+    implies_refutation(&mut fx, imp, "implies e2e (mk_implies order)");
+}
+
+/// `implies` with the premise stored as `(or (not p) q)` — `not` first, i.e.
+/// already in clause order (the identity path).
+#[test]
+fn test_implies_not_first_e2e_refutation_type_checks() {
+    let mut fx = mk_fixture();
+    let imp = fx
+        .terms
+        .mk_app(Symbol::named("or"), vec![fx.not_p, fx.q], Sort::Bool);
+    assert_eq!(
+        prop_of(&fx.terms, imp),
+        mk_or(mk_not(const_("testP")), const_("testQ")),
+        "fixture must store (or (not p) q) in that order"
+    );
+    implies_refutation(&mut fx, imp, "implies e2e (not first)");
+}
+
+/// `implies` with the premise stored as `(or q (not p))` — `not` second, the
+/// order `mk_implies` actually produces after `mk_or`'s TermId sort (the
+/// `Or.rec` swap path).
+#[test]
+fn test_implies_not_second_e2e_refutation_type_checks() {
+    let mut fx = mk_fixture();
+    let imp = fx
+        .terms
+        .mk_app(Symbol::named("or"), vec![fx.q, fx.not_p], Sort::Bool);
+    assert_eq!(
+        prop_of(&fx.terms, imp),
+        mk_or(const_("testQ"), mk_not(const_("testP"))),
+        "fixture must store (or q (not p)) in that order"
+    );
+    implies_refutation(&mut fx, imp, "implies e2e (not second)");
+}
+
+/// A desugared premise already in clause order is the identity on the premise
+/// proof: the step term IS the hypothesis, and it check_types against the
+/// clause disjunction.
+#[test]
+fn test_implies_clause_ordered_premise_is_identity() {
+    let env = mk_env();
+    let mut fx = mk_fixture();
+    let imp = fx
+        .terms
+        .mk_app(Symbol::named("or"), vec![fx.not_p, fx.q], Sort::Bool);
+    let premise_type = prop_of(&fx.terms, imp);
+    let clause_type = or_chain(vec![mk_not(const_("testP")), const_("testQ")]);
+    assert_eq!(premise_type, clause_type);
+
+    let h_imp = FVarId::new(10);
+    fx.map
+        .register_hypothesis("h_imp", h_imp, Expr::fvar(h_imp), premise_type.clone());
+    let mut proof = Proof::new();
+    let s0 = proof.add_assume(imp, None);
+    proof.add_rule_step(AletheRule::Implies, vec![fx.not_p, fx.q], vec![s0], vec![]);
+    let result = attempt_reconstruction(&proof, &fx.terms, &fx.map, &const_("False"));
+    let proof_term = result
+        .proof_term
+        .unwrap_or_else(|| panic!("implies should reconstruct: {:?}", result.stats.error));
+    assert_eq!(result.trust_subterm_count, 0);
+    assert_eq!(
+        proof_term,
+        Expr::fvar(h_imp),
+        "clause-ordered desugared implies must be the identity on the premise proof"
+    );
+
+    let mut ctx = LocalContext::new();
+    ctx.push_with_id(
+        h_imp,
+        Name::from_string("h_imp"),
+        premise_type,
+        BinderInfo::Default,
+    );
+    let tc = TypeChecker::with_context(&env, ctx);
+    tc.check_type(&proof_term, &clause_type)
+        .unwrap_or_else(|e| panic!("identity implies must check: {e:?}"));
+}
+
+/// NEGATIVE: for the sorted premise `Or q (Not p)`, the identity on the premise
+/// proof does NOT inhabit the clause type `Or (Not p) q` — the kernel's full
+/// `check_type` rejects it, while the reconstructed (swapped) term is accepted.
+#[test]
+fn test_implies_identity_on_swapped_premise_is_rejected_by_check_type() {
+    let env = mk_env();
+    let mut fx = mk_fixture();
+    let imp = fx
+        .terms
+        .mk_app(Symbol::named("or"), vec![fx.q, fx.not_p], Sort::Bool);
+    let premise_type = prop_of(&fx.terms, imp);
+    let clause_type = or_chain(vec![mk_not(const_("testP")), const_("testQ")]);
+    assert_ne!(premise_type, clause_type);
+
+    let h_imp = FVarId::new(10);
+    let mut ctx = LocalContext::new();
+    ctx.push_with_id(
+        h_imp,
+        Name::from_string("h_imp"),
+        premise_type,
+        BinderInfo::Default,
+    );
+    let tc = TypeChecker::with_context(&env, ctx);
+    assert!(
+        tc.check_type(&Expr::fvar(h_imp), &clause_type).is_err(),
+        "identity on `Or q (Not p)` must not check against `Or (Not p) q`"
+    );
+
+    // The reconstructed step, by contrast, checks against the clause type and
+    // is not the bare hypothesis.
+    fx.map
+        .register_hypothesis("h_imp", h_imp, Expr::fvar(h_imp), prop_of(&fx.terms, imp));
+    let mut proof = Proof::new();
+    let s0 = proof.add_assume(imp, None);
+    proof.add_rule_step(AletheRule::Implies, vec![fx.not_p, fx.q], vec![s0], vec![]);
+    let result = attempt_reconstruction(&proof, &fx.terms, &fx.map, &const_("False"));
+    let proof_term = result
+        .proof_term
+        .unwrap_or_else(|| panic!("implies should reconstruct: {:?}", result.stats.error));
+    assert_eq!(result.trust_subterm_count, 0);
+    assert_ne!(proof_term, Expr::fvar(h_imp));
+    tc.check_type(&proof_term, &clause_type)
+        .unwrap_or_else(|e| panic!("reconstructed implies must check: {e:?}"));
+}
+
+/// `implies` whose clause is not the premise's two disjuncts (in some order)
+/// fails closed (no fabricated proof). The premise's own stored order is a
+/// legitimate clause for the same disjunction and check_types as such.
+#[test]
+fn test_implies_mismatched_clause_fails_closed() {
+    let env = mk_env();
+    let mut fx = mk_fixture();
+    let imp = fx.imp;
+    let premise_type = prop_of(&fx.terms, imp);
+    let h_imp = FVarId::new(10);
+    fx.map
+        .register_hypothesis("h_imp", h_imp, Expr::fvar(h_imp), premise_type.clone());
+    for clause in [
+        vec![fx.not_q, fx.p],
+        vec![fx.p, fx.q],
+        vec![fx.not_p, fx.not_q],
+    ] {
+        let mut proof = Proof::new();
+        let s0 = proof.add_assume(imp, None);
+        proof.add_rule_step(AletheRule::Implies, clause.clone(), vec![s0], vec![]);
+        let result = attempt_reconstruction(&proof, &fx.terms, &fx.map, &const_("False"));
+        assert!(
+            result.proof_term.is_none() || result.trust_subterm_count > 0,
+            "implies with clause {clause:?} must not yield a trust-free proof"
+        );
+    }
+
+    // Clause `[q, (not p)]` — the premise's own disjuncts — reconstructs and
+    // checks against `Or q (Not p)`.
+    let mut proof = Proof::new();
+    let s0 = proof.add_assume(imp, None);
+    proof.add_rule_step(AletheRule::Implies, vec![fx.q, fx.not_p], vec![s0], vec![]);
+    let result = attempt_reconstruction(&proof, &fx.terms, &fx.map, &const_("False"));
+    let proof_term = result
+        .proof_term
+        .unwrap_or_else(|| panic!("implies should reconstruct: {:?}", result.stats.error));
+    assert_eq!(result.trust_subterm_count, 0);
+    let mut ctx = LocalContext::new();
+    ctx.push_with_id(
+        h_imp,
+        Name::from_string("h_imp"),
+        premise_type,
+        BinderInfo::Default,
+    );
+    let tc = TypeChecker::with_context(&env, ctx);
+    tc.check_type(
+        &proof_term,
+        &or_chain(vec![const_("testQ"), mk_not(const_("testP"))]),
+    )
+    .unwrap_or_else(|e| panic!("reordered-clause implies must check: {e:?}"));
 }
 
 #[test]

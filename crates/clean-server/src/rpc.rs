@@ -121,7 +121,7 @@ impl Response {
     }
 
     /// Create a success response from a serializable value
-    pub fn success_typed<T: Serialize>(
+    pub(crate) fn success_typed<T: Serialize>(
         id: RequestId,
         result: &T,
     ) -> Result<Self, serde_json::Error> {
@@ -197,7 +197,7 @@ impl RpcError {
 
     /// Invalid request
     #[must_use]
-    pub fn invalid_request(details: impl Into<String>) -> Self {
+    pub(crate) fn invalid_request(details: impl Into<String>) -> Self {
         Self::new(error_codes::INVALID_REQUEST, details)
     }
 
@@ -218,7 +218,7 @@ impl RpcError {
 
     /// Internal error
     #[must_use]
-    pub fn internal_error(details: impl Into<String>) -> Self {
+    pub(crate) fn internal_error(details: impl Into<String>) -> Self {
         Self::new(error_codes::INTERNAL_ERROR, details)
     }
 
@@ -230,13 +230,13 @@ impl RpcError {
 
     /// Parse error (Lean)
     #[must_use]
-    pub fn lean_parse_error(details: impl Into<String>) -> Self {
+    pub(crate) fn lean_parse_error(details: impl Into<String>) -> Self {
         Self::new(error_codes::LEAN_PARSE_ERROR, details)
     }
 
     /// Elaboration error
     #[must_use]
-    pub fn elaboration_error(details: impl Into<String>) -> Self {
+    pub(crate) fn elaboration_error(details: impl Into<String>) -> Self {
         Self::new(error_codes::ELABORATION_ERROR, details)
     }
 
@@ -257,7 +257,7 @@ impl RpcError {
 
     /// Per-connection request limit exceeded
     #[must_use]
-    pub fn request_limit_exceeded(limit: u64) -> Self {
+    pub(crate) fn request_limit_exceeded(limit: u64) -> Self {
         Self::new(
             error_codes::REQUEST_LIMIT_EXCEEDED,
             format!("Per-connection request limit exceeded ({limit})"),

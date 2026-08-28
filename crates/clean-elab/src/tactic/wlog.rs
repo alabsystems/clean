@@ -20,7 +20,7 @@ use crate::tactic::{
 use crate::unify::MetaState;
 use clean_kernel::expr::ExprKind;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Expr};
+use clean_kernel::{BinderInfo, Expr, FVarId};
 
 // ============================================================================
 // Additional utility tactics
@@ -50,8 +50,8 @@ fn build_em_case_split(
     target: &Expr,
     meta_pos: crate::unify::MetaId,
     meta_neg: crate::unify::MetaId,
-    fvar_pos: clean_kernel::FVarId,
-    fvar_neg: clean_kernel::FVarId,
+    fvar_pos: FVarId,
+    fvar_neg: FVarId,
 ) -> Expr {
     let em_app = Expr::app(
         Expr::const_(Name::from_string("Classical.em"), vec![]),
@@ -132,7 +132,12 @@ pub fn wlog(state: &mut ProofState, assumption_name: &str, assumption: Expr) -> 
     // binders can safely share ONE fvar id; each branch body then references
     // offset 0 at depth 1 and closes cleanly. The assembled term is still
     // kernel-rechecked by add_decl.
-    let fvar_h = state.fresh_fvar();
+    // GOAL-DERIVED minting (see existential.rs by_cases).
+    let fvar_h = {
+        let base = state.goal_binder_base(&goal);
+        state.next_fvar = state.next_fvar.max(base + 1);
+        FVarId::new(base)
+    };
     let fvar_pos = fvar_h;
     let fvar_neg = fvar_h;
 

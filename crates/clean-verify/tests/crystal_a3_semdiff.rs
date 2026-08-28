@@ -28,8 +28,15 @@
 //! `clean_verify::ir_semdiff::cost`.
 //!
 //! **Does not:** that the two `IRInst` encodings denote the same function. The
-//! bodies here exercise 6 of Clean's 28 `IRInst` constructors. The other 22 are
-//! untouched by this measurement and are reported as such.
+//! three original chains exercise 6 of Clean's 28 `IRInst` constructors; the
+//! W1 wide lane (`wide_chains.rs`, plan
+//! `docs/analysis/evalir-completion-plan-2026-08-24.md` §5 W1) adds measured
+//! rows over nine more (`icmp`, `binop`, `cast`, `condbr`, `call`, `store`,
+//! `gep`, `insertfield`, `assert`) from already-committed emitted fixtures.
+//! The remainder are untouched by this measurement and are reported as such,
+//! and the MEASURED fraction is whatever the last minted
+//! `data/crystal_gap2_semdiff_*.json` records — authored rows never count
+//! until a gate run mints them (`scripts/evalir_coverage.py`'s rule).
 //!
 //! **Does not, second and newly measured:** pin ROUTING. A value differential is
 //! blind to any permutation of target blocks that emit equal values, and
@@ -56,6 +63,53 @@ mod cost_mutations;
 /// ROUTING, which no value differential on these bodies can see.
 #[path = "crystal_a3_semdiff/routing.rs"]
 mod routing;
+
+/// The W1 wide lane: chain tables over the nine fixture-widened constructors.
+#[path = "crystal_a3_semdiff/wide_chains.rs"]
+mod wide_chains;
+
+/// E2 for the wide lane — multi-fixture modules, direct arguments, and the
+/// two per-input text harnesses.
+#[path = "crystal_a3_semdiff/wide_exec.rs"]
+mod wide_exec;
+
+/// The W2a synthetic lane: authored micro-modules over the five constructors
+/// no emitted body exercises (`select`, `undef`, `unreachable`,
+/// `extractelement`, `unop`).
+#[path = "crystal_a3_semdiff/synth_chains.rs"]
+mod synth_chains;
+
+/// The W2b synthetic lane: the memory tranche (`alloca`, `ptrdata`,
+/// `ptrmetadata`, `ptrfromparts`), reusing the W2a table structs.
+#[path = "crystal_a3_semdiff/w2b_chains.rs"]
+mod w2b_chains;
+
+/// The W2c synthetic lane: the call+module tranche (`callindirect`,
+/// `globaladdr`) — the final synthetic tranche, reusing the W2a table structs.
+#[path = "crystal_a3_semdiff/w2c_chains.rs"]
+mod w2c_chains;
+
+/// The W3 lane: the overflow value domain (`synth_overflow_u8` /
+/// `synth_overflow_i8`) — the wave that replaced the dispatch arm's tagged
+/// unmodelled outcome with real two-result semantics, reusing the W2a table
+/// structs.
+#[path = "crystal_a3_semdiff/w3_chains.rs"]
+mod w3_chains;
+
+/// The W4 lane: the float-comparison domain (`synth_fcmp`) — the wave that
+/// replaced the LAST tagged dispatch arm with real semantics, completing the
+/// battery's constructor coverage at 28/28 exercised. Reuses the W2a table
+/// structs.
+#[path = "crystal_a3_semdiff/w4_chains.rs"]
+mod w4_chains;
+
+/// The float-RESIDUE lane (`synth_fsign` / `synth_fround` / `synth_fminmax`)
+/// — the wave that gave the seven answering residue OPERATORS real semantics
+/// (constructors were already 28/28 at W4; this lane adds operator coverage
+/// inside `unop`/`binop`, so the coverage ladder's ==28 is untouched by
+/// design). Reuses the W2a table structs.
+#[path = "crystal_a3_semdiff/wfr_chains.rs"]
+mod wfr_chains;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -124,12 +178,12 @@ fn clean_probe(
             candidates.push(RunResult::Bool(false));
         }
         clean_verify::ir_semdiff::ResultKind::Int => {
-            for n in 0..=8u32 {
+            for n in 0..=8u64 {
                 candidates.push(RunResult::Int(n));
             }
         }
         clean_verify::ir_semdiff::ResultKind::EnumTag => {
-            for n in 0..=8u32 {
+            for n in 0..=8u64 {
                 candidates.push(RunResult::EnumTag(n));
             }
         }
@@ -391,18 +445,1455 @@ fn exercised_forms() -> BTreeSet<&'static str> {
     forms
 }
 
-/// Coverage is stated over a REAL denominator and never rounded up.
+/// Coverage is stated over a REAL denominator and never rounded up — and as
+/// of W4 (2026-08-25) the EXERCISED fraction is pinned COMPLETE: every one of
+/// the 28 `IRInst` forms has battery rows, so this gate now fails if a
+/// fixture edit ever silently drops a form. (Until W4 it asserted `< 28` and
+/// instructed that reaching 28 must rewrite the honesty note rather than
+/// leave it claiming partial coverage — this is that rewrite.) EXERCISED is
+/// still not MEASURED: the measured fraction is whatever the last minted
+/// artifact records.
 #[test]
 fn crystal_a3_coverage_is_reported_over_the_full_irinst_surface() {
-    let forms = exercised_forms();
-    assert!(
-        forms.len() < 28,
-        "if the covered bodies ever exercise all 28 IRInst forms, this gate's \
-         honesty note must be rewritten rather than left claiming partial coverage"
+    let narrow = exercised_forms();
+    let wide: BTreeSet<&'static str> = narrow.union(&wide_exercised_forms()).copied().collect();
+    let w2a: BTreeSet<&'static str> = wide.union(&synth_exercised_forms()).copied().collect();
+    let w2b: BTreeSet<&'static str> = w2a.union(&w2b_exercised_forms()).copied().collect();
+    let w2c: BTreeSet<&'static str> = w2b.union(&w2c_exercised_forms()).copied().collect();
+    let w3: BTreeSet<&'static str> = w2c.union(&w3_exercised_forms()).copied().collect();
+    let combined: BTreeSet<&'static str> = w3.union(&w4_exercised_forms()).copied().collect();
+    assert_eq!(
+        combined.len(),
+        28,
+        "every IRInst form has had battery rows since W4 (2026-08-25); a committed \
+         fixture stopped exercising one — the coverage ladder may only be rebuilt \
+         deliberately, never eroded. Exercised: {combined:?}"
     );
     eprintln!(
-        "GAP-2 encoding coverage: {}/28 IRInst forms exercised: {:?}",
-        forms.len(),
-        forms
+        "GAP-2 encoding coverage: {}/28 IRInst forms in the original chains {narrow:?}; \
+         {}/28 across original + W1 wide chains; {}/28 adding the W2a synthetic chains; \
+         {}/28 adding the W2b synthetic chains; {}/28 adding the W2c synthetic chains; \
+         {}/28 adding the W3 overflow chains; {}/28 adding the W4 fcmp chain — the full \
+         constructed-Inst surface is EXERCISED. The MEASURED fraction is whatever the \
+         last minted data/crystal_gap2_semdiff_*.json records — this test derives what \
+         the committed fixtures EXERCISE, which becomes measured only when a gate run \
+         mints it, and a synthetic chain's rows measure E1/E2 agreement on authored \
+         text, never a producer's body.",
+        narrow.len(),
+        wide.len(),
+        w2a.len(),
+        w2b.len(),
+        w2c.len(),
+        w3.len(),
+        combined.len(),
+    );
+}
+
+// ═══════════════════════════ the W1 wide lane ═══════════════════════════
+
+use std::collections::HashSet;
+
+use clean_verify::ir_semdiff::wide::{wide_fuel_out_obligation, wide_value_obligation};
+use wide_chains::{wide_chains, WideChain, WideInput, WideTrustInput};
+
+/// Register a wide chain's module lines, once per SOURCE across the whole
+/// gate run: `has_loose_bvars` and `loose_bvar_range` share the minted
+/// two-function `ir_hlb_module`, and re-registering a definition is a
+/// duplicate-declaration error, not a no-op.
+fn register_wide_module(
+    spec: &mut Specification,
+    chain: &WideChain,
+    registered: &mut HashSet<&'static str>,
+) {
+    for def in chain.clean_defs {
+        if registered.insert(*def) {
+            spec.add_recursive_def(def, "crystal A3 W1: the chain's registered module")
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "wide chain `{}` module def failed to register: {e}",
+                        chain.name
+                    )
+                });
+        }
+    }
+}
+
+/// The interpreter's own "outside my bounded subset" family. Only these codes
+/// downgrade an E2 answer to a recorded refusal, and only on a chain that
+/// DECLARED the lane may refuse — every other fault stays a first-class
+/// answer, because "trust-ir faulted where Clean returned" is a finding.
+fn is_unsupported_code(code: &str) -> bool {
+    code.starts_with("unsupported_")
+}
+
+/// E1 for a wide input: probe the value against kernel-checked `Eq.refl`
+/// obligations, fuel from below, candidates led by the other executors'
+/// answers so a disagreement reports what Clean actually said.
+fn wide_clean_probe(
+    spec: &mut Specification,
+    chain: &WideChain,
+    input: &WideInput,
+    idx: usize,
+    trust_answer: Option<&RunResult>,
+) -> (RunResult, Option<u32>) {
+    let mut candidates: Vec<RunResult> = Vec::new();
+    if let Some(a) = trust_answer {
+        candidates.push(a.clone());
+    }
+    if let Some(s) = &input.shipped {
+        candidates.push(s.clone());
+    }
+    candidates.push(RunResult::Unit);
+    candidates.push(RunResult::Bool(true));
+    candidates.push(RunResult::Bool(false));
+    for n in 0..=8u64 {
+        candidates.push(RunResult::Int(n));
+    }
+    candidates.dedup();
+
+    for fuel in 0..=MAX_IR_NUMERAL {
+        for (c, cand) in candidates.iter().enumerate() {
+            let Ok(src) = wide_value_obligation(
+                &format!("w1_{}_i{idx}_f{fuel}_c{c}", chain.name),
+                chain.clean_module,
+                chain.clean_fid,
+                fuel,
+                &input.clean_tail,
+                cand,
+                chain.encoding,
+            ) else {
+                continue;
+            };
+            if spec
+                .add_recursive_def(&src, "crystal A3 W1: kernel-checked value probe")
+                .is_ok()
+            {
+                return (cand.clone(), Some(fuel));
+            }
+        }
+    }
+    (
+        RunResult::Fault("clean_no_candidate_matched".to_owned()),
+        None,
+    )
+}
+
+/// The wide form of [`clean_threshold_is_tight`].
+fn wide_threshold_is_tight(
+    spec: &mut Specification,
+    chain: &WideChain,
+    input: &WideInput,
+    idx: usize,
+    threshold: u32,
+) -> bool {
+    if threshold == 0 {
+        return true;
+    }
+    let Ok(src) = wide_fuel_out_obligation(
+        &format!("w1_{}_i{idx}_tight", chain.name),
+        chain.clean_module,
+        chain.clean_fid,
+        threshold - 1,
+        &input.clean_tail,
+    ) else {
+        return false;
+    };
+    spec.add_recursive_def(&src, "crystal A3 W1: the threshold is tight from below")
+        .is_ok()
+}
+
+/// E2 for one wide input, refusal-aware.
+///
+/// Returns the trust leg (`None` = a recorded refusal on a may-refuse chain)
+/// plus any note. Panics on failures a chain did NOT declare it may have —
+/// a broken instrument must be loud, not `Insufficient`.
+fn wide_trust_leg(
+    chain: &WideChain,
+    input: &WideInput,
+    fixture_texts: &[(String, &'static str)],
+) -> (Option<(RunResult, Option<u32>)>, Vec<String>) {
+    let mut notes = Vec::new();
+    let (harness_text, overhead) = match &input.trust {
+        WideTrustInput::Args(_) => (None, 0),
+        WideTrustInput::Harness { text, overhead } => (Some(text.as_str()), *overhead),
+    };
+    let module = match wide_exec::build_wide_module(
+        fixture_texts,
+        chain.type_decls,
+        chain.func_ids,
+        &chain.sigs,
+        harness_text,
+    ) {
+        Ok(m) => m,
+        Err(e) => {
+            let Some(reason) = chain.e2_may_refuse else {
+                panic!("wide chain `{}`: E2 module build failed: {e}", chain.name);
+            };
+            notes.push(format!("E2 refused (module build): {e} — {reason}"));
+            return (None, notes);
+        }
+    };
+    let target = wide_exec::wide_target(&module, harness_text.is_some())
+        .unwrap_or_else(|e| panic!("wide chain `{}`: {e}", chain.name));
+    let args = match &input.trust {
+        WideTrustInput::Args(a) => a.clone(),
+        WideTrustInput::Harness { .. } => Vec::new(),
+    };
+    let (value, steps) = wide_exec::run_wide(&module, target, args, overhead);
+    if let RunResult::Fault(code) = &value {
+        if let Some(reason) = chain.e2_may_refuse {
+            if is_unsupported_code(code) {
+                notes.push(format!("E2 refused (interpreter): {code} — {reason}"));
+                return (None, notes);
+            }
+        }
+    }
+    (Some((value, steps)), notes)
+}
+
+/// Run one wide chain end to end.
+fn measure_wide(
+    spec: &mut Specification,
+    chain: &WideChain,
+    registered: &mut HashSet<&'static str>,
+) -> ChainReport {
+    let fixture_texts: Vec<(String, &'static str)> = chain
+        .fixtures
+        .iter()
+        .map(|(file, original)| (fixture(file), *original))
+        .collect();
+
+    register_wide_module(spec, chain, registered);
+
+    let mut rows = Vec::new();
+    for (idx, input) in chain.inputs.iter().enumerate() {
+        let (trust_leg, mut notes) = wide_trust_leg(chain, input, &fixture_texts);
+        notes.insert(0, format!("input: {}", input.label));
+
+        let trust_value = trust_leg.as_ref().map(|(v, _)| v);
+        let (cv, cthreshold) = wide_clean_probe(spec, chain, input, idx, trust_value);
+        let threshold_tight = match cthreshold {
+            Some(t) => {
+                let tight = wide_threshold_is_tight(spec, chain, input, idx, t);
+                if !tight {
+                    notes.push(format!(
+                        "clean fuel {t} was accepted but fuel {} is not `fuel_out`: the \
+                         threshold is an upper bound, not a pinned cost",
+                        t.saturating_sub(1)
+                    ));
+                }
+                tight
+            }
+            None => false,
+        };
+        if let Some(reason) = chain.shipped_absent {
+            notes.push(format!("E3 absent: {reason}"));
+        }
+
+        rows.push(DiffRow {
+            chain: chain.name.to_owned(),
+            tag: u32::try_from(idx).expect("input count fits u32"),
+            trust: trust_leg,
+            clean: Some((cv, cthreshold)),
+            threshold_tight,
+            shipped: input.shipped.clone(),
+            notes,
+        });
+    }
+
+    summarize(
+        chain.name,
+        chain.enum_model,
+        chain.total_domain,
+        chain.expected_cost_offset,
+        rows,
+    )
+}
+
+/// **The W1 gate.** Every wide chain, every input, every executor that can
+/// reach it — with recorded refusals for the two declared bounded-interpreter
+/// lanes and a hard verdict everywhere else.
+#[test]
+fn crystal_a3_semdiff_wide_measures_encoding_agreement() {
+    let mut spec = build_eval_ir_spec_with_stack();
+    let mut registered: HashSet<&'static str> = HashSet::new();
+    let mut reports = Vec::new();
+
+    for chain in wide_chains() {
+        let report = measure_wide(&mut spec, &chain, &mut registered);
+        eprintln!("\n=== W1 {} ===", report.chain);
+        for row in &report.rows {
+            eprintln!("{}", row.render());
+            for note in &row.notes {
+                eprintln!("      note: {note}");
+            }
+        }
+        eprintln!("  {}", report.summary());
+        reports.push((chain, report));
+    }
+
+    eprintln!("\n--- GAP 2 W1, measured ---");
+    for (_, r) in &reports {
+        eprintln!(
+            "{:<22} {}  cost={:?} (pinned {:+})",
+            r.chain,
+            if r.is_green() {
+                "AGREE"
+            } else {
+                "**SEE VERDICT**"
+            },
+            r.cost_verdict(),
+            r.expected_cost_offset,
+        );
+    }
+    let combined: BTreeSet<&'static str> = exercised_forms()
+        .union(&wide_exercised_forms())
+        .copied()
+        .collect();
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. Original + W1 chains exercise {}/28 \n\
+         IRInst forms; the other {} are untouched by this battery. The committed \n\
+         MEASURED fraction stays whatever the last minted \n\
+         data/crystal_gap2_semdiff_*.json records.",
+        combined.len(),
+        28 - combined.len()
+    );
+
+    // E1 is our own kernel: it must ANSWER on every row, whatever the other
+    // legs did. A no-candidate here is an instrument failure, never a shrug.
+    for (_, r) in &reports {
+        for row in &r.rows {
+            let clean_answered = matches!(
+                &row.clean,
+                Some((v, _)) if !matches!(v, RunResult::Fault(_))
+            );
+            assert!(
+                clean_answered,
+                "W1 chain `{}` row {}: Clean's kernel probe found no accepted value \
+                 ({:?}) — the E1 leg may never be silently absent",
+                r.chain, row.tag, row.clean
+            );
+        }
+    }
+
+    // Verdicts. A chain whose E2 leg answered everywhere is held to the full
+    // narrow-gate standard: value agreement AND the pinned cost offset. A
+    // chain with recorded refusals must have DECLARED the possibility, and is
+    // still held to zero disagreements on every row two executors reached —
+    // refused rows stay printed as Insufficient, never folded into agreement
+    // (the `Level::kind_ord` / GAP2 §"Insufficient" precedent).
+    for (chain, r) in &reports {
+        let refused = r.rows.iter().filter(|row| row.trust.is_none()).count();
+        assert_eq!(
+            r.disagreed,
+            0,
+            "W1 chain `{}` has {} value DISAGREEMENT(s):\n{}",
+            r.chain,
+            r.disagreed,
+            r.rows
+                .iter()
+                .filter_map(|row| match row.value_agreement() {
+                    Agreement::Agree(_) | Agreement::Insufficient => None,
+                    other => Some(format!("    input {}: {other:?}", row.tag)),
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        if refused == 0 {
+            assert!(
+                r.cost_is_pinned(),
+                "W1 chain `{}` COST failed: verdict {:?}, pinned {:+}, offsets {:?}, \
+                 loose thresholds {}",
+                r.chain,
+                r.cost_verdict(),
+                r.expected_cost_offset,
+                r.cost_offsets,
+                r.loose_thresholds
+            );
+            assert!(
+                r.is_green(),
+                "W1 chain `{}` is not green: {}",
+                r.chain,
+                r.summary()
+            );
+        } else {
+            assert!(
+                chain.e2_may_refuse.is_some(),
+                "W1 chain `{}` recorded {refused} E2 refusal(s) without declaring the \
+                 lane may refuse — an undeclared refusal is an instrument failure",
+                r.chain
+            );
+            assert_eq!(
+                r.insufficient,
+                r.rows
+                    .iter()
+                    .filter(|row| row.trust.is_none() && row.shipped.is_none())
+                    .count(),
+                "W1 chain `{}`: every Insufficient row must be exactly a recorded \
+                 E2 refusal with no shipped leg — nothing else may be silent",
+                r.chain
+            );
+        }
+    }
+}
+
+/// The `IRInst` forms the WIDE chains' committed fixtures exercise, derived
+/// from the fixture text like [`exercised_forms`] — the same never-rounded-up
+/// posture, over the widened needle set.
+fn wide_exercised_forms() -> BTreeSet<&'static str> {
+    let mut forms = BTreeSet::new();
+    for chain in wide_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for (needle, form) in [
+                (" = load ", "load"),
+                (" = extractfield ", "extractfield"),
+                ("switch ", "switch"),
+                ("br bb", "br"),
+                (" = const ", "const_"),
+                ("ret ", "ret"),
+                (" = icmp ", "icmp"),
+                (" = and ", "binop"),
+                (" = or ", "binop"),
+                (" = shl ", "binop"),
+                (" = lshr ", "binop"),
+                (" = trunc ", "cast"),
+                (" = zext ", "cast"),
+                (" = sext ", "cast"),
+                (" = bitcast ", "cast"),
+                ("condbr ", "condbr"),
+                (" = call @", "call"),
+                ("store ", "store"),
+                (" = gep ", "gep"),
+                (" = insertfield ", "insertfield"),
+                ("assert %", "assert"),
+            ] {
+                if text.contains(needle) {
+                    forms.insert(form);
+                }
+            }
+        }
+    }
+    forms
+}
+
+/// The E2 INSTRUMENT smoke for the wide lane — **no `Specification`, no
+/// kernel**: it exercises only trust-ir's parser + interpreter over the
+/// composed modules, so it is runnable on the 8 GB authoring box where spec
+/// registration is not (the plan's §5/§6 split). What it pins:
+///
+/// * every chain that did NOT declare `e2_may_refuse` gets a non-fault answer
+///   on every input (parse, signature reconstitution, callee-id fixup, direct
+///   argument construction, and the per-input harnesses all actually work);
+/// * wherever E2 and E3 both answered, they agree — the only value assertion
+///   this smoke can make without hand-writing expectations;
+/// * values and step counts are PRINTED per row, so the declared cost offsets
+///   have a measured E2 half before the first kernel run.
+///
+/// It is NOT the differential: E1 — the kernel — is absent here, so nothing in
+/// this test claims encoding agreement.
+#[test]
+fn crystal_a3_wide_e2_instrument_smoke() {
+    for chain in wide_chains() {
+        let fixture_texts: Vec<(String, &'static str)> = chain
+            .fixtures
+            .iter()
+            .map(|(file, original)| (fixture(file), *original))
+            .collect();
+        eprintln!("\n=== W1 E2 smoke: {} ===", chain.name);
+        for input in &chain.inputs {
+            let (leg, notes) = wide_trust_leg(&chain, input, &fixture_texts);
+            match &leg {
+                Some((value, steps)) => {
+                    eprintln!("  {:<32} -> {value} @{steps:?} steps", input.label);
+                    assert!(
+                        chain.e2_may_refuse.is_some() || !matches!(value, RunResult::Fault(_)),
+                        "chain `{}` input `{}`: E2 faulted ({value}) on a lane that did \
+                         not declare it may refuse",
+                        chain.name,
+                        input.label
+                    );
+                    if let Some(shipped) = &input.shipped {
+                        if !matches!(value, RunResult::Fault(_)) {
+                            assert_eq!(
+                                value, shipped,
+                                "chain `{}` input `{}`: E2 and the SHIPPED function \
+                                 disagree",
+                                chain.name, input.label
+                            );
+                        }
+                    }
+                }
+                None => {
+                    eprintln!("  {:<32} -> E2 refused", input.label);
+                    for n in &notes {
+                        eprintln!("      note: {n}");
+                    }
+                    assert!(
+                        chain.e2_may_refuse.is_some(),
+                        "chain `{}` input `{}`: an undeclared E2 refusal",
+                        chain.name,
+                        input.label
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The W1 wide lane covers exactly the nine constructors the plan names —
+/// pinned so the chain table cannot silently narrow (a dropped fixture would
+/// shrink this set) and cannot silently claim more than the fixtures carry.
+#[test]
+fn crystal_a3_wide_lane_exercises_the_nine_w1_constructors() {
+    let wide = wide_exercised_forms();
+    for expected in [
+        "icmp",
+        "binop",
+        "cast",
+        "condbr",
+        "call",
+        "store",
+        "gep",
+        "insertfield",
+        "assert",
+    ] {
+        assert!(
+            wide.contains(expected),
+            "the W1 chain fixtures no longer exercise `{expected}`; the wide lane's \
+             +9 claim would be false. Exercised: {wide:?}"
+        );
+    }
+}
+
+// ═══════ the synthetic lanes (W2a; W2b and W2c via the same machinery) ═════
+//
+// Constructors no emitted body exercises, measured over AUTHORED
+// micro-modules (`tests/fixtures/synth/`, Clean twins in
+// `eval_ir_w2a_synth.rs` / `eval_ir_w2b_synth.rs` / `eval_ir_w2c_synth.rs`).
+// Read `synth_chains.rs`'s module doc first: it records W2a's two DECLARED
+// executor deltas (`undef` has no measurable E2 leg; `extractelement`
+// out-of-bounds diverges by fault class), both measured at the pinned
+// trust-ir rev, both asserted exactly rather than smoothed. `w2b_chains.rs`'s
+// doc records the memory tranche's measured uninitialized-read fault-SITE
+// split; `w2c_chains.rs`'s doc records the null-function-pointer fault-CODE
+// split. All three lanes run through `measure_synth_lane` /
+// `synth_e2_smoke_lane` below.
+
+use clean_verify::ir_semdiff::synth::{
+    e2_fault_class, synth_outcome_obligation, OutcomeClass, SynthOutcome,
+};
+use synth_chains::{synth_chains, SynthChain, SynthExpect, SynthInput};
+
+/// The `IRInst` forms the SYNTHETIC fixtures exercise, derived from the
+/// committed fixture text like [`exercised_forms`] — same never-rounded-up
+/// posture. The bare `unreachable` terminator is matched per code line rather
+/// than by substring, because the fixture's own function name contains the
+/// word.
+fn synth_exercised_forms() -> BTreeSet<&'static str> {
+    let mut forms = BTreeSet::new();
+    for chain in synth_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for (needle, form) in [
+                ("ret ", "ret"),
+                (" = const ", "const_"),
+                ("condbr ", "condbr"),
+                (" = select ", "select"),
+                (" = undef ", "undef"),
+                (" = extractelement ", "extractelement"),
+                (" = not ", "unop"),
+                (" = ctpop ", "unop"),
+            ] {
+                if text.contains(needle) {
+                    forms.insert(form);
+                }
+            }
+            for line in text.lines() {
+                if line.split(';').next().unwrap_or("").trim() == "unreachable" {
+                    forms.insert("unreachable");
+                }
+            }
+        }
+    }
+    forms
+}
+
+/// E2 for one synthetic input: compose (once per call — the modules are
+/// three-instruction bodies), parse, execute with direct arguments. No
+/// harness exists in this lane, so nothing is subtracted from the step count.
+fn synth_trust_leg(
+    chain: &SynthChain,
+    input: &SynthInput,
+    fixture_texts: &[(String, &'static str)],
+) -> (RunResult, Option<u32>) {
+    let module = wide_exec::build_wide_module(
+        fixture_texts,
+        chain.type_decls,
+        chain.func_ids,
+        &chain.sigs,
+        None,
+    )
+    .unwrap_or_else(|e| panic!("synth chain `{}`: E2 module build failed: {e}", chain.name));
+    let target = wide_exec::wide_target(&module, false)
+        .unwrap_or_else(|e| panic!("synth chain `{}`: {e}", chain.name));
+    wide_exec::run_wide(&module, target, input.trust_args.clone(), 0)
+}
+
+/// E1 value probe for a `Ret` row: candidates led by E2's live answer, then
+/// the row's declared expectation, then the shared pool — the kernel
+/// adjudicates by reducing `ir_eval`, so the ordering only decides which
+/// question is asked first.
+fn synth_clean_probe(
+    spec: &mut Specification,
+    chain: &SynthChain,
+    input: &SynthInput,
+    idx: usize,
+    trust_answer: Option<&RunResult>,
+    declared: &RunResult,
+) -> (RunResult, Option<u32>) {
+    let mut candidates: Vec<RunResult> = Vec::new();
+    if let Some(a) = trust_answer {
+        candidates.push(a.clone());
+    }
+    candidates.push(declared.clone());
+    candidates.push(RunResult::Unit);
+    candidates.push(RunResult::Bool(true));
+    candidates.push(RunResult::Bool(false));
+    for n in 0..=8u64 {
+        candidates.push(RunResult::Int(n));
+    }
+    candidates.dedup();
+
+    for fuel in 0..=MAX_IR_NUMERAL {
+        for (c, cand) in candidates.iter().enumerate() {
+            let Ok(src) = wide_value_obligation(
+                &format!("sx_{}_i{idx}_f{fuel}_c{c}", chain.name),
+                chain.clean_module,
+                chain.clean_fid,
+                fuel,
+                &input.clean_tail,
+                cand,
+                chain.encoding,
+            ) else {
+                continue;
+            };
+            if spec
+                .add_recursive_def(&src, "crystal A3 synth lane: kernel-checked value probe")
+                .is_ok()
+            {
+                return (cand.clone(), Some(fuel));
+            }
+        }
+    }
+    (
+        RunResult::Fault("clean_no_candidate_matched".to_owned()),
+        None,
+    )
+}
+
+/// E1 outcome probe for a non-`Ret` row: the FULL `IROutcome` term is pinned
+/// (fault constructor included), fuel from below. Returns the least accepted
+/// fuel, or `None` when the kernel refuted the declared outcome at every
+/// probed fuel — which the gate treats as a loud failure, never a shrug.
+fn synth_outcome_probe(
+    spec: &mut Specification,
+    chain: &SynthChain,
+    input: &SynthInput,
+    idx: usize,
+    outcome: &SynthOutcome,
+) -> Option<u32> {
+    for fuel in 0..=MAX_IR_NUMERAL {
+        let Ok(src) = synth_outcome_obligation(
+            &format!("sx_{}_i{idx}_f{fuel}_o", chain.name),
+            chain.clean_module,
+            chain.clean_fid,
+            fuel,
+            &input.clean_tail,
+            outcome,
+            chain.encoding,
+        ) else {
+            continue;
+        };
+        if spec
+            .add_recursive_def(&src, "crystal A3 synth lane: kernel-checked outcome probe")
+            .is_ok()
+        {
+            return Some(fuel);
+        }
+    }
+    None
+}
+
+/// The wide tightness check, reused verbatim for synthetic rows: `fuel_out`
+/// kernel-accepted one below the threshold.
+fn synth_threshold_is_tight(
+    spec: &mut Specification,
+    chain: &SynthChain,
+    input: &SynthInput,
+    idx: usize,
+    threshold: u32,
+) -> bool {
+    if threshold == 0 {
+        return true;
+    }
+    let Ok(src) = wide_fuel_out_obligation(
+        &format!("sx_{}_i{idx}_tight", chain.name),
+        chain.clean_module,
+        chain.clean_fid,
+        threshold - 1,
+        &input.clean_tail,
+    ) else {
+        return false;
+    };
+    spec.add_recursive_def(
+        &src,
+        "crystal A3 synth lane: the threshold is tight from below",
+    )
+    .is_ok()
+}
+
+/// Register a synthetic chain's module lines, once per SOURCE across the gate
+/// run (the same discipline as [`register_wide_module`]).
+fn register_synth_module(
+    spec: &mut Specification,
+    chain: &SynthChain,
+    registered: &mut HashSet<&'static str>,
+) {
+    for def in chain.clean_defs {
+        if registered.insert(*def) {
+            spec.add_recursive_def(def, "crystal A3 synth lane: the chain's registered module")
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "synth chain `{}` module def failed to register: {e}",
+                        chain.name
+                    )
+                });
+        }
+    }
+}
+
+/// The shared synthetic-lane measurement (W2a and W2b run it over their own
+/// chain tables). Every chain, every input, both executors that exist for a
+/// synthetic lane — `Ret` rows held to exact value agreement and the pinned
+/// zero cost offset, `UbAgree` rows to outcome-class agreement with both
+/// exact terms pinned, and every declared delta to EXACTLY its declaration.
+/// E3 does not exist here and no row pretends otherwise.
+fn measure_synth_lane(lane: &str, lane_chains: Vec<SynthChain>) {
+    let mut spec = build_eval_ir_spec_with_stack();
+    let mut registered: HashSet<&'static str> = HashSet::new();
+
+    for chain in lane_chains {
+        let fixture_texts: Vec<(String, &'static str)> = chain
+            .fixtures
+            .iter()
+            .map(|(file, original)| (fixture(file), *original))
+            .collect();
+        register_synth_module(&mut spec, &chain, &mut registered);
+
+        let mut rows: Vec<DiffRow> = Vec::new();
+        let mut declared_deltas = 0usize;
+        for (idx, input) in chain.inputs.iter().enumerate() {
+            let (e2_value, e2_steps) = synth_trust_leg(&chain, input, &fixture_texts);
+            let mut notes = vec![format!("input: {}", input.label)];
+            let (trust_leg, clean_leg, tight) = match &input.expect {
+                SynthExpect::Ret(declared) => {
+                    let (cv, threshold) = synth_clean_probe(
+                        &mut spec,
+                        &chain,
+                        input,
+                        idx,
+                        (!matches!(e2_value, RunResult::Fault(_))).then_some(&e2_value),
+                        declared,
+                    );
+                    assert!(
+                        !matches!(cv, RunResult::Fault(_)),
+                        "{lane} chain `{}` input `{}`: Clean's kernel probe found no accepted \
+                         value — the E1 leg may never be silently absent",
+                        chain.name,
+                        input.label
+                    );
+                    let tight = threshold.is_some_and(|t| {
+                        synth_threshold_is_tight(&mut spec, &chain, input, idx, t)
+                    });
+                    (
+                        Some((e2_value.clone(), e2_steps)),
+                        Some((cv, threshold)),
+                        tight,
+                    )
+                }
+                SynthExpect::UbAgree(fault) => {
+                    let RunResult::Fault(code) = &e2_value else {
+                        panic!(
+                            "{lane} chain `{}` input `{}`: E2 returned {e2_value} where \
+                             undefined behavior was expected",
+                            chain.name, input.label
+                        );
+                    };
+                    assert_eq!(
+                        e2_fault_class(code),
+                        Some(OutcomeClass::Ub),
+                        "{lane} chain `{}` input `{}`: E2 code `{code}` is not the UB class",
+                        chain.name,
+                        input.label
+                    );
+                    let outcome = SynthOutcome::Ub(*fault);
+                    let threshold = synth_outcome_probe(&mut spec, &chain, input, idx, &outcome);
+                    assert!(
+                        threshold.is_some(),
+                        "{lane} chain `{}` input `{}`: the kernel refuted the declared outcome \
+                         `{outcome:?}` at every probed fuel",
+                        chain.name,
+                        input.label
+                    );
+                    let tight = threshold.is_some_and(|t| {
+                        synth_threshold_is_tight(&mut spec, &chain, input, idx, t)
+                    });
+                    notes.push(format!(
+                        "outcome-class agreement: clean pins {outcome:?}, e2 reported `{code}`"
+                    ));
+                    // Both legs recorded at the shared CLASS tag so the row
+                    // compares; the exact terms live in the note above and in
+                    // the kernel obligation itself.
+                    (
+                        Some((RunResult::Fault(OutcomeClass::Ub.tag().to_owned()), None)),
+                        Some((
+                            RunResult::Fault(OutcomeClass::Ub.tag().to_owned()),
+                            threshold,
+                        )),
+                        tight,
+                    )
+                }
+                SynthExpect::DeclaredDelta {
+                    clean,
+                    e2_code,
+                    why,
+                } => {
+                    declared_deltas += 1;
+                    let RunResult::Fault(code) = &e2_value else {
+                        panic!(
+                            "{lane} chain `{}` input `{}`: E2 returned {e2_value} where the \
+                             declared delta expected fault `{e2_code}`. The divergence this \
+                             row declares may have closed — re-measure before editing it.",
+                            chain.name, input.label
+                        );
+                    };
+                    assert_eq!(
+                        code, e2_code,
+                        "{lane} chain `{}` input `{}`: E2 faulted with a DIFFERENT code than \
+                         the declared delta",
+                        chain.name, input.label
+                    );
+                    let threshold = synth_outcome_probe(&mut spec, &chain, input, idx, clean);
+                    assert!(
+                        threshold.is_some(),
+                        "{lane} chain `{}` input `{}`: the kernel refuted the declared outcome \
+                         `{clean:?}` at every probed fuel",
+                        chain.name,
+                        input.label
+                    );
+                    let tight = threshold.is_some_and(|t| {
+                        synth_threshold_is_tight(&mut spec, &chain, input, idx, t)
+                    });
+                    notes.push(format!("DECLARED DELTA: {why}"));
+                    // Legs recorded verbatim and deliberately unequal, so the
+                    // row renders as the disagreement it is.
+                    (
+                        Some((RunResult::Fault((*e2_code).to_owned()), None)),
+                        Some((
+                            RunResult::Fault(format!("clean:{:?}", clean.class())),
+                            threshold,
+                        )),
+                        tight,
+                    )
+                }
+            };
+            notes.push(format!("E3 absent: {}", chain.shipped_absent));
+            rows.push(DiffRow {
+                chain: chain.name.to_owned(),
+                tag: u32::try_from(idx).expect("input count fits u32"),
+                trust: trust_leg,
+                clean: clean_leg,
+                threshold_tight: tight,
+                shipped: None,
+                notes,
+            });
+        }
+
+        let report = summarize(
+            chain.name,
+            chain.enum_model,
+            chain.total_domain,
+            chain.expected_cost_offset,
+            rows,
+        );
+        eprintln!("\n=== {lane} {} ===", report.chain);
+        for row in &report.rows {
+            eprintln!("{}", row.render());
+            for note in &row.notes {
+                eprintln!("      note: {note}");
+            }
+        }
+        eprintln!("  {}", report.summary());
+
+        // Verdicts. Disagreements must be EXACTLY the declared deltas; every
+        // threshold must be pinned from below; and every priced row must sit
+        // at the declared offset.
+        assert_eq!(
+            report.disagreed, declared_deltas,
+            "{lane} chain `{}`: {} disagreement(s) against {} declared delta(s) — an \
+             undeclared divergence (or a declared one that vanished)",
+            report.chain, report.disagreed, declared_deltas
+        );
+        assert_eq!(
+            report.loose_thresholds, 0,
+            "{lane} chain `{}`: {} loose threshold(s) — an upper bound is not a cost",
+            report.chain, report.loose_thresholds
+        );
+        for row in &report.rows {
+            // The clean-minus-trust offset, recomputed from the row's own legs
+            // (`DiffRow::cost_offset` is crate-private); a fault leg carries no
+            // step count, so fault rows are unpriced by shape and skip this.
+            let priced = match (&row.trust, &row.clean) {
+                (Some((_, Some(steps))), Some((_, Some(threshold)))) => {
+                    Some(i64::from(*threshold) - i64::from(*steps))
+                }
+                _ => None,
+            };
+            if let Some(offset) = priced {
+                assert_eq!(
+                    offset, chain.expected_cost_offset,
+                    "{lane} chain `{}` input {}: cost offset {offset:+} vs pinned {:+}",
+                    report.chain, row.tag, chain.expected_cost_offset
+                );
+            }
+        }
+    }
+}
+
+/// **The W2a gate.** The five constructors no emitted body exercises, run
+/// through [`measure_synth_lane`]'s contract (exact `Ret` agreement + pinned
+/// zero cost offset, class-compared `UbAgree`, the two declared deltas
+/// asserted exactly).
+#[test]
+fn crystal_a3_semdiff_synth_measures_encoding_agreement() {
+    measure_synth_lane("W2a", synth_chains());
+
+    let combined: BTreeSet<&'static str> = exercised_forms()
+        .union(&wide_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&synth_exercised_forms())
+        .copied()
+        .collect();
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a chains exercise \
+         {}/28 IRInst forms; the other {} are untouched by this battery. A synthetic \
+         row measures E1/E2 agreement on authored text — never a producer's body — \
+         and the committed MEASURED fraction stays whatever the last minted \
+         data/crystal_gap2_semdiff_*.json records.",
+        combined.len(),
+        28 - combined.len()
+    );
+}
+
+/// **The W2b gate.** The memory tranche — `alloca`, `ptrdata`, `ptrmetadata`,
+/// `ptrfromparts` — through the same [`measure_synth_lane`] contract. One
+/// non-`Ret` row (`alloca`'s uninitialized read) compares at outcome class;
+/// `w2b_chains.rs`'s module doc records the measured fault-SITE split it sits
+/// on.
+#[test]
+fn crystal_a3_semdiff_w2b_measures_encoding_agreement() {
+    measure_synth_lane("W2b", w2b_chains::w2b_chains());
+
+    let combined: BTreeSet<&'static str> = exercised_forms()
+        .union(&wide_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&synth_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w2b_exercised_forms())
+        .copied()
+        .collect();
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b chains \
+         exercise {}/28 IRInst forms; the other {} are untouched by this battery. A \
+         synthetic row measures E1/E2 agreement on authored text — never a producer's \
+         body — and the committed MEASURED fraction stays whatever the last minted \
+         data/crystal_gap2_semdiff_*.json records.",
+        combined.len(),
+        28 - combined.len()
+    );
+}
+
+/// **The synthetic-lane E2 instrument smoke** — no `Specification`, no
+/// kernel: trust-ir's parser + interpreter over the composed synthetic
+/// modules, runnable on the 8 GB authoring box (the plan's §5/§6 split).
+/// What it pins:
+///
+/// * every `Ret` row gets E2's exact answer — asserted against the AUTHORED
+///   expectation, which for a synthetic module is the honest comparison this
+///   smoke can make (there is no shipped function to cross-check);
+/// * every `UbAgree` row faults with the UB class;
+/// * every DECLARED delta reproduces EXACTLY — a vanished delta (an
+///   interpreter that starts executing `undef`, or reclassifies the OOB read)
+///   fails loudly instead of silently widening agreement;
+/// * values and step counts are PRINTED per row, so the declared zero cost
+///   offsets have a measured E2 half before the first kernel run.
+///
+/// It is NOT the differential: E1 is absent here, so nothing in this test
+/// claims encoding agreement. Shared by the W2a and W2b smoke tests.
+fn synth_e2_smoke_lane(lane: &str, lane_chains: Vec<SynthChain>) {
+    for chain in lane_chains {
+        let fixture_texts: Vec<(String, &'static str)> = chain
+            .fixtures
+            .iter()
+            .map(|(file, original)| (fixture(file), *original))
+            .collect();
+        eprintln!("\n=== {lane} E2 smoke: {} ===", chain.name);
+        for input in &chain.inputs {
+            let (value, steps) = synth_trust_leg(&chain, input, &fixture_texts);
+            eprintln!("  {:<34} -> {value} @{steps:?} steps", input.label);
+            match &input.expect {
+                SynthExpect::Ret(declared) => {
+                    assert_eq!(
+                        &value, declared,
+                        "chain `{}` input `{}`: E2 disagrees with the authored expectation",
+                        chain.name, input.label
+                    );
+                }
+                SynthExpect::UbAgree(_) => {
+                    let RunResult::Fault(code) = &value else {
+                        panic!(
+                            "chain `{}` input `{}`: E2 returned {value} where undefined \
+                             behavior was expected",
+                            chain.name, input.label
+                        );
+                    };
+                    assert_eq!(
+                        e2_fault_class(code),
+                        Some(OutcomeClass::Ub),
+                        "chain `{}` input `{}`: E2 code `{code}` is not the UB class",
+                        chain.name,
+                        input.label
+                    );
+                }
+                SynthExpect::DeclaredDelta { e2_code, why, .. } => {
+                    let RunResult::Fault(code) = &value else {
+                        panic!(
+                            "chain `{}` input `{}`: E2 returned {value} where the declared \
+                             delta expected fault `{e2_code}` — the divergence may have \
+                             closed; re-measure before editing the declaration",
+                            chain.name, input.label
+                        );
+                    };
+                    assert_eq!(
+                        code, e2_code,
+                        "chain `{}` input `{}`: E2 faulted with a different code than the \
+                         declared delta",
+                        chain.name, input.label
+                    );
+                    eprintln!("      declared delta: {why}");
+                }
+            }
+        }
+    }
+}
+
+/// The W2a smoke: [`synth_e2_smoke_lane`] over the W2a chain table.
+#[test]
+fn crystal_a3_synth_e2_instrument_smoke() {
+    synth_e2_smoke_lane("W2a", synth_chains());
+}
+
+/// The W2b smoke: [`synth_e2_smoke_lane`] over the memory-tranche table.
+#[test]
+fn crystal_a3_w2b_e2_instrument_smoke() {
+    synth_e2_smoke_lane("W2b", w2b_chains::w2b_chains());
+}
+
+/// The W2a synthetic lane covers exactly the five constructors the plan names
+/// — the same pin discipline as the W1 test above, over the synthetic
+/// fixtures.
+#[test]
+fn crystal_a3_synth_lane_exercises_the_five_w2a_constructors() {
+    let synth = synth_exercised_forms();
+    for expected in ["select", "undef", "unreachable", "extractelement", "unop"] {
+        assert!(
+            synth.contains(expected),
+            "the W2a synthetic fixtures no longer exercise `{expected}`; the lane's +5 \
+             claim would be false. Exercised: {synth:?}"
+        );
+    }
+}
+
+/// The `IRInst` forms the W2b synthetic fixtures exercise, derived from the
+/// committed fixture text like [`synth_exercised_forms`] — same
+/// never-rounded-up posture. Every needle carries the ` = ` binding prefix or
+/// a trailing space so a directive comment or a function name (the files are
+/// named after their constructors) cannot satisfy it.
+fn w2b_exercised_forms() -> BTreeSet<&'static str> {
+    let mut forms = BTreeSet::new();
+    for chain in w2b_chains::w2b_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for (needle, form) in [
+                (" = alloca ", "alloca"),
+                (" = ptr_data ", "ptrdata"),
+                (" = ptr_metadata ", "ptrmetadata"),
+                (" = ptr_from_parts ", "ptrfromparts"),
+                (" = load ", "load"),
+                ("store ", "store"),
+                ("condbr ", "condbr"),
+                ("ret ", "ret"),
+            ] {
+                if text.contains(needle) {
+                    forms.insert(form);
+                }
+            }
+        }
+    }
+    forms
+}
+
+/// The W2b synthetic lane covers exactly the four memory constructors the
+/// plan names (§5 W2b) — the lane's +4 pin.
+#[test]
+fn crystal_a3_w2b_lane_exercises_the_four_w2b_constructors() {
+    let w2b = w2b_exercised_forms();
+    for expected in ["alloca", "ptrdata", "ptrmetadata", "ptrfromparts"] {
+        assert!(
+            w2b.contains(expected),
+            "the W2b synthetic fixtures no longer exercise `{expected}`; the lane's +4 \
+             claim would be false. Exercised: {w2b:?}"
+        );
+    }
+}
+
+/// **The W2c gate.** The call+module tranche — `callindirect`, `globaladdr` —
+/// through the same [`measure_synth_lane`] contract. One declared delta
+/// (`callindirect`'s null-callee row diverges by fault CODE; `w2c_chains.rs`'s
+/// module doc records the measurement); every other row is exact `Ret`
+/// agreement at the pinned zero cost offset.
+#[test]
+fn crystal_a3_semdiff_w2c_measures_encoding_agreement() {
+    measure_synth_lane("W2c", w2c_chains::w2c_chains());
+
+    let combined: BTreeSet<&'static str> = exercised_forms()
+        .union(&wide_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&synth_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w2b_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w2c_exercised_forms())
+        .copied()
+        .collect();
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b + W2c chains \
+         exercise {}/28 IRInst forms; the other {} are untouched by the lanes ABOVE \
+         (overflow has its own W3 lane below since 2026-08-25; fcmp is the plan's W4 \
+         float lane). A synthetic row measures E1/E2 agreement on authored text — never \
+         a producer's body — and the committed MEASURED fraction stays whatever the last \
+         minted data/crystal_gap2_semdiff_*.json records.",
+        combined.len(),
+        28 - combined.len(),
+    );
+}
+
+/// The W2c smoke: [`synth_e2_smoke_lane`] over the call+module-tranche table.
+#[test]
+fn crystal_a3_w2c_e2_instrument_smoke() {
+    synth_e2_smoke_lane("W2c", w2c_chains::w2c_chains());
+}
+
+/// The `IRInst` forms the W2c synthetic fixtures exercise, derived from the
+/// committed fixture text like [`synth_exercised_forms`] — same
+/// never-rounded-up posture. Every needle carries the ` = ` binding prefix or
+/// a trailing space so a directive comment or a function name (the files are
+/// named after their constructors) cannot satisfy it.
+fn w2c_exercised_forms() -> BTreeSet<&'static str> {
+    let mut forms = BTreeSet::new();
+    for chain in w2c_chains::w2c_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for (needle, form) in [
+                (" = call_indirect ", "callindirect"),
+                (" = global_addr ", "globaladdr"),
+                (" = const ", "const_"),
+                (" = load ", "load"),
+                ("store ", "store"),
+                ("condbr ", "condbr"),
+                ("ret ", "ret"),
+            ] {
+                if text.contains(needle) {
+                    forms.insert(form);
+                }
+            }
+        }
+    }
+    forms
+}
+
+/// The W2c synthetic lane covers exactly the two call+module constructors the
+/// plan names (§5 W2c) — the lane's +2 pin, completing the synthetic tranches:
+/// only `overflow` (W3) and `fcmp` (W4) remain without battery rows.
+#[test]
+fn crystal_a3_w2c_lane_exercises_the_two_w2c_constructors() {
+    let w2c = w2c_exercised_forms();
+    for expected in ["callindirect", "globaladdr"] {
+        assert!(
+            w2c.contains(expected),
+            "the W2c synthetic fixtures no longer exercise `{expected}`; the lane's +2 \
+             claim would be false. Exercised: {w2c:?}"
+        );
+    }
+}
+
+/// **The W3 gate.** The overflow value domain — `synth_overflow_u8`,
+/// `synth_overflow_i8` — through the same [`measure_synth_lane`] contract.
+/// NO declared delta: every row is exact multi-value `Ret` agreement
+/// ([`RunResult::Many`], the six-value ret of three (value, flag) pairs) at
+/// the pinned zero cost offset. This is also the first battery measurement of
+/// the machine's positional multi-value return (`ir_ret_to`).
+#[test]
+fn crystal_a3_semdiff_w3_measures_encoding_agreement() {
+    measure_synth_lane("W3", w3_chains::w3_chains());
+
+    let combined: BTreeSet<&'static str> = exercised_forms()
+        .union(&wide_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&synth_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w2b_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w2c_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w3_exercised_forms())
+        .copied()
+        .collect();
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b + W2c + W3 \
+         chains exercise {}/28 IRInst forms (fcmp gained its own W4 lane below on \
+         2026-08-25). A synthetic row measures E1/E2 agreement on authored text — never \
+         a producer's body — and the committed MEASURED fraction stays whatever the last \
+         minted data/crystal_gap2_semdiff_*.json records.",
+        combined.len(),
+    );
+}
+
+/// The W3 smoke: [`synth_e2_smoke_lane`] over the overflow chain tables.
+#[test]
+fn crystal_a3_w3_e2_instrument_smoke() {
+    synth_e2_smoke_lane("W3", w3_chains::w3_chains());
+}
+
+/// The `IRInst` forms the W3 synthetic fixtures exercise, derived from the
+/// committed fixture text like [`synth_exercised_forms`] — same
+/// never-rounded-up posture. All three `OverflowOp` mnemonics map to the one
+/// `overflow` constructor, and each needle carries the ` = ` binding prefix
+/// so a directive comment or the files' own names cannot satisfy it.
+fn w3_exercised_forms() -> BTreeSet<&'static str> {
+    let mut forms = BTreeSet::new();
+    for chain in w3_chains::w3_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for (needle, form) in [
+                (" = add.overflow ", "overflow"),
+                (" = sub.overflow ", "overflow"),
+                (" = mul.overflow ", "overflow"),
+                ("ret ", "ret"),
+            ] {
+                if text.contains(needle) {
+                    forms.insert(form);
+                }
+            }
+        }
+    }
+    forms
+}
+
+/// The W3 lane covers exactly the constructor the plan names (§5 W3) — the
+/// lane's +1 pin: after it only `fcmp` lacked battery rows (its W4 lane is
+/// below), and all three checked-arithmetic operators are present in the
+/// fixtures (the needles are per-operator, so losing one would drop the
+/// form).
+#[test]
+fn crystal_a3_w3_lane_exercises_the_overflow_constructor() {
+    let w3 = w3_exercised_forms();
+    assert!(
+        w3.contains("overflow"),
+        "the W3 synthetic fixtures no longer exercise `overflow`; the lane's +1 claim \
+         would be false. Exercised: {w3:?}"
+    );
+    for chain in w3_chains::w3_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for op in ["add.overflow", "sub.overflow", "mul.overflow"] {
+                assert!(
+                    text.contains(&format!(" = {op} ")),
+                    "{file} lost its `{op}` node; the lane's all-three-operators claim \
+                     would be false"
+                );
+            }
+        }
+    }
+}
+
+/// **The W4 gate.** The float-comparison domain — `synth_fcmp` — through the
+/// same [`measure_synth_lane`] contract. NO declared delta: comparison is
+/// TOTAL on classified binary64 operands (a NaN produces an ANSWER on both
+/// executors — ordered false, unordered true), so every row is exact
+/// twelve-value `Ret` agreement ([`RunResult::Many`]) at the pinned zero
+/// cost offset. The lane completing means every `IRInst` constructor now has
+/// battery rows — the coverage test above pins 28/28 exercised.
+#[test]
+fn crystal_a3_semdiff_w4_measures_encoding_agreement() {
+    measure_synth_lane("W4", w4_chains::w4_chains());
+
+    let combined: BTreeSet<&'static str> = exercised_forms()
+        .union(&wide_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&synth_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w2b_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w2c_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w3_exercised_forms())
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .union(&w4_exercised_forms())
+        .copied()
+        .collect();
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b + W2c + W3 + W4 \
+         chains exercise {}/28 IRInst forms — the full constructed-Inst surface. A \
+         synthetic row measures E1/E2 agreement on authored text — never a producer's \
+         body — and the committed MEASURED fraction stays whatever the last minted \
+         data/crystal_gap2_semdiff_*.json records.",
+        combined.len(),
+    );
+}
+
+/// The W4 smoke: [`synth_e2_smoke_lane`] over the fcmp chain table.
+#[test]
+fn crystal_a3_w4_e2_instrument_smoke() {
+    synth_e2_smoke_lane("W4", w4_chains::w4_chains());
+}
+
+/// The `IRInst` forms the W4 synthetic fixture exercises, derived from the
+/// committed fixture text like [`synth_exercised_forms`] — same
+/// never-rounded-up posture. All twelve `FCmpOp` mnemonics map to the one
+/// `fcmp` constructor, and the needle carries the ` = fcmp ` binding prefix
+/// so a directive comment or the file's own name cannot satisfy it.
+fn w4_exercised_forms() -> BTreeSet<&'static str> {
+    let mut forms = BTreeSet::new();
+    for chain in w4_chains::w4_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for (needle, form) in [(" = fcmp ", "fcmp"), ("ret ", "ret")] {
+                if text.contains(needle) {
+                    forms.insert(form);
+                }
+            }
+        }
+    }
+    forms
+}
+
+/// The W4 lane covers exactly the constructor the plan names (§5 W4) — the
+/// final +1 pin, and all twelve comparison predicates are present in the
+/// fixture (the needles are per-operator, so losing one would break the
+/// lane's whole-split claim even though the constructor form survives).
+#[test]
+fn crystal_a3_w4_lane_exercises_the_fcmp_constructor() {
+    let w4 = w4_exercised_forms();
+    assert!(
+        w4.contains("fcmp"),
+        "the W4 synthetic fixture no longer exercises `fcmp`; the lane's +1 claim \
+         would be false. Exercised: {w4:?}"
+    );
+    for chain in w4_chains::w4_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for op in [
+                "oeq", "one", "olt", "ole", "ogt", "oge", "ueq", "une", "ult", "ule", "ugt", "uge",
+            ] {
+                assert!(
+                    text.contains(&format!(" = fcmp {op} f64 ")),
+                    "{file} lost its `fcmp {op}` node; the lane's all-twelve-predicates \
+                     claim would be false"
+                );
+            }
+        }
+    }
+}
+
+// ══════════════════════════ the float-RESIDUE lane ══════════════════════════
+
+/// **The float-residue gate.** The three residue chains — `synth_fsign`,
+/// `synth_fround`, `synth_fminmax` — through the same [`measure_synth_lane`]
+/// contract. NO declared delta IN THE ROWS: every row is exact multi-value
+/// `Ret` agreement on `RunResult::Float` bit patterns at the pinned zero
+/// cost offset. The wave's divergences are CELL-shaped (rounding-on-NaN,
+/// minmax's both-NaN and opposite-zero cells, and the whole-operator
+/// `frem`/`fsqrt`/fp-cast refusals) and deliberately have no battery row —
+/// they are kernel-witnessed refusals, PENDING-file records and adequacy-grid
+/// deltas instead (`wfr_chains.rs` module doc).
+#[test]
+fn crystal_a3_semdiff_wfr_measures_encoding_agreement() {
+    measure_synth_lane("WFR", wfr_chains::wfr_chains());
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. The float-residue chains measure the seven \
+         answering residue OPERATORS (fneg/fabs, ffloor/fceil/ftrunc, fmin/fmax) inside \
+         the already-exercised `unop`/`binop` constructors — the 28/28 constructor ladder \
+         is untouched by design, and the committed MEASURED fraction stays whatever the \
+         last minted data/crystal_gap2_semdiff_*.json records."
+    );
+}
+
+/// The float-residue smoke: [`synth_e2_smoke_lane`] over the residue chain
+/// tables — E2 only, runnable on the authoring box.
+#[test]
+fn crystal_a3_wfr_e2_instrument_smoke() {
+    synth_e2_smoke_lane("WFR", wfr_chains::wfr_chains());
+}
+
+/// The residue lane covers exactly the seven answering operators (the wave's
+/// +7 claim, at OPERATOR granularity — the needles are per-mnemonic with the
+/// ` = ` binding prefix, so a directive comment or a file name cannot
+/// satisfy them and losing any one operator fails the pin even though the
+/// `unop`/`binop` constructor forms survive).
+#[test]
+fn crystal_a3_wfr_lane_exercises_the_seven_residue_operators() {
+    let mut found: BTreeSet<&'static str> = BTreeSet::new();
+    for chain in wfr_chains::wfr_chains() {
+        for (file, _) in chain.fixtures {
+            let text = fixture(file);
+            for op in ["fneg", "fabs", "ffloor", "fceil", "ftrunc", "fmin", "fmax"] {
+                if text.contains(&format!(" = {op} f64 ")) {
+                    found.insert(op);
+                }
+            }
+        }
+    }
+    assert_eq!(
+        found.len(),
+        7,
+        "the float-residue fixtures must exercise all seven answering operators; \
+         found only {found:?}"
     );
 }

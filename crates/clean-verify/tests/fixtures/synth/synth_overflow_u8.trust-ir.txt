@@ -1,0 +1,17 @@
+fn @synth::overflow_u8_probe(functy.922) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the W3 overflow semdiff lane
+    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W3).
+    ; #synthetic: No compiler emitted this body; its registered Clean twin is
+    ; #synthetic: ir_w3_ou_module (eval_ir_w3_synth.rs). All three OverflowOps run
+    ; #synthetic: on the same u8 operands and every bound result -- three (value,
+    ; #synthetic: flag) pairs -- is returned through the six-value ret, so a row
+    ; #synthetic: observes exactly what the two-result binds produced. Width 8 is
+    ; #synthetic: the measured kernel-cost bound: ir_wrap walks its dividend, and
+    ; #synthetic: a width-32 product is the five-day class. Do not add it to any
+    ; #synthetic: emitted-fixture census.
+bb0(%0: u8, %1: u8):
+    %2, %3 = add.overflow u8 %0, %1
+    %4, %5 = sub.overflow u8 %0, %1
+    %6, %7 = mul.overflow u8 %0, %1
+    ret %2, %3, %4, %5, %6, %7
+}

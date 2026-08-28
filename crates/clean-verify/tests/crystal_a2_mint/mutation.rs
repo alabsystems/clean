@@ -449,52 +449,5 @@ fn negative_control_a_different_body_is_rejected() {
     );
 }
 
-/// **The `level_is_zero` wall, stated mechanically instead of asserted.**
-///
-/// `crystal_a1_lineage/level_is_zero.rs` asserts the emitted `is_zero` CFG and
-/// the registered `ir_lz_*` module DIFFER, and fails if they ever agree. This
-/// change does **not** make them agree: `ir_lz_module` is untouched, still hand
-/// authored, and that gate is left exactly as it was — no silent inversion.
-///
-/// What this change does add is the measurement behind the wall. Reader A
-/// projected the shipped `is_zero` body out of the same artifact binary and it
-/// is a complete, faithful core module (`generated/ir_lz.core.txt`: ten blocks,
-/// two `gep`s, four calls to two callees, a short-circuit through a second join
-/// block). So the blocker for link 2a on the designated target was never that
-/// the body could not be read. Minting it refuses for one nameable reason, and
-/// this test pins that reason so it cannot quietly become a different one.
-#[test]
-fn level_is_zero_mints_only_up_to_a_named_refusal() {
-    let core = include_str!("../../src/spec/core_spec/generated/ir_lz.core.txt");
-    let sx = ir_mint::parse(core).expect("the emitted is_zero body parses as a core module");
-    // Non-vacuity: this really is the branching, calling body.
-    //
-    // `(call 1 …)` and not `(call 0 …)`: since 2026-08-20 the function's own
-    // index and its callee indices are ONE namespace with the body at 0, so the
-    // FOREIGN deref callee sits at 1 and the recursive self-call sits at 0. The
-    // old form had the deref at 0 — colliding with the body's own id — and
-    // `crystal_a2_mint::callee_identity` carries the counterexample that closed
-    // it.
-    assert!(
-        core.contains("(call 1 (args 9))") && core.contains("(call 0 (args 12))"),
-        "is_zero calls its deref callee (foreign, index 1) and then itself (index 0):\n{core}"
-    );
-    assert!(
-        core.contains("(gep (int 8) 0 (idx 8) true)"),
-        "and geps into the payload"
-    );
-    let lz_tags = ir_mint::tags::parse(
-        r#"{"body":"t","interface":{"linkage":"external","calling_conv":"rustcc","functy":0,"producer":null,"params":[],"block_params":[],"aligns":[],"clauses":[]},"enums":[{"canonical":0,"crate_id":2,"alias":"ir_lz_tlevel"}],"structs":[],"funcs":[{"canonical":0,"crate_id":4925,"name":"level::Level::is_zero"},{"canonical":1,"crate_id":4914,"name":"<level::LevelArc as std::ops::Deref>::deref"}]}"#,
-    )
-    .expect("a one-row table");
-    let e = ir_mint::mint(&sx, "ir_lz", &lz_tags).expect_err("mint must refuse this body today");
-    let msg = format!("{e}");
-    assert!(
-        msg.contains("atom pool"),
-        "the refusal must be the ir_d0..ir_d16 numeral pool, not something else: {msg}"
-    );
-    println!("\nlevel_is_zero mint refusal: {msg}\n");
-}
-
 #[path = "mutation_cfg.rs"]
 mod cfg_lane;

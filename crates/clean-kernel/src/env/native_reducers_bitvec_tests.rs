@@ -101,6 +101,101 @@ fn test_bitvec_of_nat_non_literal() {
     assert!(reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &var]).is_none());
 }
 
+/// Read the `u128` value of a `Nat`-literal reducer result (panics if the result
+/// is missing, not a `Nat` literal, or exceeds `u128`).
+fn nat_result_u128(result: Option<Expr>) -> u128 {
+    let result = result.expect("expected reducer to produce a Nat literal");
+    match result.kind() {
+        ExprKind::Lit(Literal::Nat(n)) => {
+            let limbs = n.limbs();
+            assert!(limbs.len() <= 2, "result exceeds u128: {n:?}");
+            let lo = u128::from(limbs.first().copied().unwrap_or(0));
+            let hi = u128::from(limbs.get(1).copied().unwrap_or(0));
+            lo | (hi << 64)
+        }
+        _ => panic!("expected Nat literal, got {result:?}"),
+    }
+}
+
+#[test]
+fn test_bitvec_of_nat_peels_ofnat_wrapped_value() {
+    // The island parser spells a `Nat` numeral as
+    // `@OfNat.ofNat Nat n (instOfNatNat n)`. The reducer must read it identically
+    // to a bare literal (a targeted structural peel — pure evaluation, since
+    // `instOfNatNat n = ⟨n⟩`), so a wrapped operand no longer PARKS.
+    let wrapped = Environment::ofnat_nat_lit(42);
+    assert_nat_result(reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &wrapped]), 42);
+    // Wrapping wraps around too: OfNat 259 at width 8 → 259 % 256 = 3.
+    let wrapped259 = Environment::ofnat_nat_lit(259);
+    assert_nat_result(reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &wrapped259]), 3);
+    // An OfNat-wrapped WIDTH is also read.
+    let w = Environment::ofnat_nat_lit(8);
+    assert_nat_result(reduce_bitvec_of_nat(&[&w, &Expr::nat_lit(259)]), 3);
+}
+
+#[test]
+fn test_bitvec_of_nat_refuses_inconsistent_ofnat_wrapper() {
+    // The genuine projection reads the field stored in `instOfNatNat`. An
+    // ill-typed wrapper whose class index and stored field disagree must park,
+    // never pick either value and thereby manufacture a reduction.
+    let inconsistent = Expr::apps(
+        Expr::const_(Name::from_string("OfNat.ofNat"), vec![]),
+        [
+            Expr::const_(Name::from_string("Nat"), vec![]),
+            Expr::nat_lit(5),
+            Expr::app(
+                Expr::const_(Name::from_string("instOfNatNat"), vec![]),
+                Expr::nat_lit(6),
+            ),
+        ],
+    );
+    assert!(reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &inconsistent]).is_none());
+    assert!(reduce_bitvec_of_nat(&[&inconsistent, &Expr::nat_lit(8)]).is_none());
+}
+
+#[test]
+fn test_bitvec_of_nat_multilimb_value() {
+    // Multi-limb (≥ 2^64) values now reduce for the whole 0 ≤ N < 2^128 range
+    // instead of parking; the payload is emitted via `Expr::nat_lit_u128`.
+    // i64::MAX (fits u64) at width 128 — no truncation.
+    let i64_max = 9223372036854775807u128;
+    assert_eq!(
+        nat_result_u128(reduce_bitvec_of_nat(&[
+            &Expr::nat_lit(128),
+            &Expr::nat_lit_u128(i64_max),
+        ])),
+        i64_max
+    );
+    // i64::MIN as a 128-bit two's-complement pattern: 2^128 − 2^63 (multi-limb).
+    let i64_min_pat = 0u128.wrapping_sub(1u128 << 63); // == 2^128 - 2^63
+    assert_eq!(
+        nat_result_u128(reduce_bitvec_of_nat(&[
+            &Expr::nat_lit(128),
+            &Expr::nat_lit_u128(i64_min_pat),
+        ])),
+        i64_min_pat
+    );
+    // i128::MIN pattern: 2^127; i128::MAX: 2^127 − 1 (both multi-limb, < 2^128).
+    for v in [1u128 << 127, (1u128 << 127) - 1] {
+        assert_eq!(
+            nat_result_u128(reduce_bitvec_of_nat(&[
+                &Expr::nat_lit(128),
+                &Expr::nat_lit_u128(v),
+            ])),
+            v
+        );
+    }
+    // Multi-limb value truncates at a narrower width: (2^128 − 2^63) mod 2^64
+    // keeps the low limb = 2^63.
+    assert_eq!(
+        nat_result_u128(reduce_bitvec_of_nat(&[
+            &Expr::nat_lit(64),
+            &Expr::nat_lit_u128(i64_min_pat),
+        ])),
+        1u128 << 63
+    );
+}
+
 // --- BitVec.toNat tests ---
 
 #[test]
@@ -126,6 +221,91 @@ fn test_bitvec_to_nat_no_args() {
 fn test_bitvec_to_nat_non_literal() {
     let var = Expr::const_(Name::from_string("x"), vec![]);
     assert!(reduce_bitvec_to_nat(&[&var]).is_none());
+}
+
+#[test]
+fn test_bitvec_to_nat_multilimb_passthrough() {
+    // The u64 cap on the payload identity is lifted: a multi-limb payload
+    // (e.g. i64::MIN's 128-bit pattern, 2^128 - 2^63) passes through intact.
+    let i64_min_pat = 0u128.wrapping_sub(1u128 << 63);
+    assert_eq!(
+        nat_result_u128(reduce_bitvec_to_nat(&[
+            &Expr::nat_lit(128),
+            &Expr::nat_lit_u128(i64_min_pat),
+        ])),
+        i64_min_pat
+    );
+}
+
+#[test]
+fn test_bitvec_to_nat_peels_stuck_ofnat() {
+    // `BitVec.toNat (BitVec.ofNat w n)` now reduces to `n mod 2^w` by a
+    // STRUCTURAL peel of the stuck ofNat application — the composed
+    // definition's own value — instead of parking.
+    let of_nat = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofNat"), vec![]),
+        [Expr::nat_lit(64), Expr::nat_lit(42)],
+    );
+    assert_nat_result(reduce_bitvec_to_nat(&[&Expr::nat_lit(64), &of_nat]), 42);
+    // Truncation happens exactly as reduce_bitvec_of_nat would: 259 % 2^8 = 3.
+    let of_nat_wrap = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofNat"), vec![]),
+        [Expr::nat_lit(8), Expr::nat_lit(259)],
+    );
+    assert_nat_result(reduce_bitvec_to_nat(&[&Expr::nat_lit(8), &of_nat_wrap]), 3);
+    // Multi-limb payload at width 128: the i64::MIN pattern round-trips.
+    let i64_min_pat = 0u128.wrapping_sub(1u128 << 63);
+    let of_nat_big = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofNat"), vec![]),
+        [Expr::nat_lit(128), Expr::nat_lit_u128(i64_min_pat)],
+    );
+    assert_eq!(
+        nat_result_u128(reduce_bitvec_to_nat(&[&Expr::nat_lit(128), &of_nat_big])),
+        i64_min_pat
+    );
+    // OfNat-wrapped payload inside the stuck application is read through the
+    // hardened peel exactly as a bare literal is.
+    let of_nat_wrapped = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofNat"), vec![]),
+        [Expr::nat_lit(64), Environment::ofnat_nat_lit(42)],
+    );
+    assert_nat_result(
+        reduce_bitvec_to_nat(&[&Expr::nat_lit(64), &of_nat_wrapped]),
+        42,
+    );
+}
+
+#[test]
+fn test_bitvec_to_nat_ofnatlt_masks_to_identity() {
+    // ofNatLT's payload is proved < 2^w, so the mask is the identity on it.
+    let of_nat_lt = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofNatLT"), vec![]),
+        [
+            Expr::nat_lit(8),
+            Expr::nat_lit(200),
+            Expr::const_(Name::from_string("pf"), vec![]),
+        ],
+    );
+    assert_nat_result(reduce_bitvec_to_nat(&[&Expr::nat_lit(8), &of_nat_lt]), 200);
+}
+
+#[test]
+fn test_bitvec_to_nat_still_parks_on_other_shapes() {
+    // ofFin stays parked (its payload sits behind Fin.mk, out of this peel's
+    // scope), as does an ofNat whose payload is an open term.
+    let of_fin = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofFin"), vec![]),
+        [Expr::nat_lit(8), Expr::nat_lit(5)],
+    );
+    assert!(reduce_bitvec_to_nat(&[&Expr::nat_lit(8), &of_fin]).is_none());
+    let open_payload = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofNat"), vec![]),
+        [
+            Expr::nat_lit(8),
+            Expr::const_(Name::from_string("x"), vec![]),
+        ],
+    );
+    assert!(reduce_bitvec_to_nat(&[&Expr::nat_lit(8), &open_payload]).is_none());
 }
 
 // --- BitVec.toFin / BitVec.ofFin tests ---

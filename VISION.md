@@ -54,17 +54,27 @@ million-operation-per-second batch throughput.
 
 ## Success Criteria
 
-| Metric | Target | Current |
+| Metric | Target | Where "current" comes from |
 |--------|--------|---------|
-| Type check latency (`infer_type`) | <100ns | 230ns Sort_0 median (2026-05-25 baseline; inner-loop ops 2.6-34ns) |
-| Definitional equality | <200ns | 2.8-163ns |
-| Batch throughput | 1M ops/sec | 1M ops/sec |
-| .olean compatibility | Init + Std + Mathlib | Init + Std lanes; Mathlib via scoped real import or stub fallback |
-| Lean 4 cross-validation | Broad real-corpus parity | 2001/2001 synthetic core-calculus cases; broader frontend parity remains gated |
-| Self-verified kernel | End-to-end model, Rust checker, and binary correspondence | Nine-constructor, ten-rung reflected metatheory with zero domain/debt census; shipping checker/binary correspondence incomplete |
+| Type check latency (`infer_type`) | <100ns | Read the freshness gate, never this cell: `python3 scripts/check_benchmark_publication.py --check`, then `reports/benchmarks/publication/current.json`. A latency figure pasted here would rot the same way the last one did |
+| Definitional equality | <200ns | Same gate. No number is restated here |
+| Batch throughput | 1M ops/sec | Same gate |
+| .olean compatibility | Init + Std + Mathlib | Init + Std lanes. Mathlib is further along than "stub fallback": real `.olean` Mathlib targets kernel-verify through Clean — see `docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md` and the non-regressing pinned slice `data/mathlib_kv_ratchet.json`. Elaborating Mathlib **source** is the open frontier: `data/source_elab_ratchet.json` + the dated run in `reports/source-elab/` |
+| Lean 4 cross-validation | Broad real-corpus parity | `metrics/lean4_parity.json` — a bounded synthetic core-calculus baseline, not a corpus result; broader frontend parity remains gated |
+| Self-verified kernel | End-to-end model, Rust checker, and binary correspondence | Nine-constructor, ten-rung reflected metatheory with zero domain/debt census; shipping checker/binary correspondence incomplete. Live status: `docs/CRYSTAL_STATUS.md` |
 | Open release-impacting bugs | 0 | Volatile; use the live release-issue hygiene gate, not a frozen count |
 
-Benchmarks measured on Apple M4 Max, 128GB. Full methodology in BENCHMARKS.md.
+**Do not quote a latency or throughput number from this document.** Benchmark
+evidence is published on a 14-day freshness window and expires. Measured
+2026-08-26: the committed metadata in
+`reports/benchmarks/publication/current.json` was **past its `fresh_until`
+date** (`2026-08-24`) and carried `publication_commit: null` — exactly the
+state in which
+RELEASE_READINESS.md requires a
+public number to be removed or marked historical. Refresh through
+`./scripts/run_public_benchmarks.sh` before making any speed claim. Historical
+runs were measured on Apple M4 Max, 128GB; full methodology in
+BENCHMARKS.md.
 
 ## Phases
 
@@ -124,7 +134,7 @@ efficiency multiplier must be measured per workload.
 
 ## The End State
 
-**All of mathematics, formalized.** The Universal Proof Database (UPD) will unify theorems from every major proof assistant: Lean, Coq, Isabelle, Agda, HOL Light, HOL4, Mizar, Metamath. Cross-system proofs of the same theorem. Cross-system equivalence detection. One search interface for all of formal mathematics. The Mathverse Library (39K LOC, 1,220 tests) is the foundation — working importers for Metamath, HOL (via OpenTheory), Mizar XML, Isabelle, and 8 program verification systems, with trust tracking and axiom dependency analysis. The binary shard pipeline and cross-system type-checking are in progress.
+**All of mathematics, formalized.** The Universal Proof Database (UPD) will unify theorems from every major proof assistant: Lean, Coq, Isabelle, Agda, HOL Light, HOL4, Mizar, Metamath. Cross-system proofs of the same theorem. Cross-system equivalence detection. One search interface for all of formal mathematics. The Mathverse Library is the foundation — working importers for Metamath, HOL (via OpenTheory), Mizar XML, Isabelle, and 8 program verification systems, with trust tracking and axiom dependency analysis. The binary shard pipeline and cross-system type-checking are in progress. (The "39K LOC, 1,220 tests" that stood here was stale by roughly an order of magnitude — `crates/clean-mathverse/src` is far larger now. Source size is not a capability claim, so no replacement figure is pasted here; re-derive it from the tree if you need it, and read provenance from [`data/MATHVERSE_LIBRARIES.md`](data/MATHVERSE_LIBRARIES.md) and [`data/MATHVERSE_PROVENANCE.md`](data/MATHVERSE_PROVENANCE.md).)
 
 **One format, one verifier.** CleanDB stores everything in Clean-native representation. Proofs from other systems are translated to Clean terms during import. Single API. Sub-microsecond verification. No format proliferation.
 
@@ -158,7 +168,7 @@ Clean as the substrate. tRust as the language. ay as the decision procedure. All
 | Elaborator | Working slices | Tactics and major declarations exist; frontend parity remains gated |
 | Automation | Trust-gated | SMT/ATP integration and proof reconstruction exist; trustedAy/trustedArith boundaries remain part of the trust story |
 | Server | Functional | JSON-RPC surface exists |
-| .olean Import | Working slices | Init/Std/select lanes; full proof validation is opt-in; Mathlib uses real-import lanes or stub fallback |
+| .olean Import | Working slices | Init/Std/select lanes; full proof validation is opt-in. Real Mathlib `.olean` targets do kernel-verify through Clean (milestone, pinned slice `data/mathlib_kv_ratchet.json`); stub fallback remains a separate, explicitly-labelled lane and is never green evidence |
 | C Verification | USABLE | ACSL specifications with worked examples in `crates/clean-c-sem/src/examples.rs` |
 | Rust Semantics | BUILDING | Source ingestion, VIR lowering, NLL borrow checking, stacked-borrows evaluation, and a Lean-facing ownership proof-bundle API are implemented, with worked examples in `crates/clean-rust-sem/src/examples.rs` / `crates/clean-rust-sem/examples/`; next gaps are broader Rust spec-language / downstream proof-discharge work beyond the ownership bundle landed in #2944 |
 | Self-Verification | ACTIVE, BOUNDED | Nine-constructor reflected calculus, ten modeling rungs, three flagship theorems, zero domain-axiom/DerivedProved debt, and dated independent Lean replay. Fidelity covers selected fragments; the production recursive checker and binary remain unproved end to end. |
@@ -171,9 +181,9 @@ invoked explicitly; and trusted solver/axiom surfaces remain part of the
 printed trust story. See the current replacement audit and self-verification
 certificate for commit-pinned
 boundaries rather than relying on this vision document; the replacement audit
-is `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-23.md` in the development tree.
+is `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md` in the development tree.
 
-<sub>For current LOC and test counts, see [README.md#status](README.md#status) and verify with `clean release readiness-smoke`.</sub>
+<sub>For the current capability table see [README.md#current-state](README.md#current-state) (there is no `#status` anchor; that link was broken), and verify with `clean release readiness-smoke`. LOC and test counts are not tracked as status metrics — source size is not semantic parity.</sub>
 
 ## Non-Goals
 

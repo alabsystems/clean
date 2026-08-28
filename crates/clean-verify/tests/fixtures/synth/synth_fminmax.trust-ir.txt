@@ -1,0 +1,19 @@
+fn @synth::fminmax_probe(functy.927) {
+    ; #synthetic: SYNTHETIC MODULE -- authored for the float-residue semdiff
+    ; #synthetic: lane (data/evalir_float_residue.PENDING.md). No compiler
+    ; #synthetic: emitted this body; its registered Clean twin is
+    ; #synthetic: ir_frm_module (eval_ir_wfr_synth.rs). fmin and fmax run on
+    ; #synthetic: the SAME two f64 operands and both picks return through the
+    ; #synthetic: two-value ret, so one row shows minimum and maximum choosing
+    ; #synthetic: opposite operands. One-sided NaN rows are included (minNum
+    ; #synthetic: ignores a single NaN); the both-NaN and opposite-signed-zero
+    ; #synthetic: pairs are NOT battery rows -- Clean refuses those cells
+    ; #synthetic: because the host may return either result, and the refusals
+    ; #synthetic: are kernel-witnessed (ir_exact_fmin_nan_both_refused,
+    ; #synthetic: ir_exact_fmin_zero_pair_refused). Do not add it to any
+    ; #synthetic: emitted-fixture census.
+bb0(%0: f64, %1: f64):
+    %2 = fmin f64 %0, %1
+    %3 = fmax f64 %0, %1
+    ret %2, %3
+}

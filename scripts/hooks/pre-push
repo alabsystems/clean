@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-# Local fail-closed pre-push gate. GitHub CI is dead in this repo — this is the
-# only gate. Runs scripts/local_gate.sh --fast: soundness certificate (C1-C5+C4')
-# + golden TCB pin + false-axiom guards + CLI feature coverage + paragon ratchet,
-# each fail-closed. Install repo-wide with `just install-hooks` (sets
-# core.hooksPath); a non-zero exit blocks the push.
-exec "$(git rev-parse --show-toplevel)/scripts/local_gate.sh" --fast
+# Redirect. The installed hook set moved to `scripts/githooks/` on 2026-08-23;
+# see the long header there for why the directory name had to change (59 of 61
+# worktrees were pinned below that commit and would have been refused by the
+# gate that used to live in this file).
+#
+# This shim exists so a clone still configured with `core.hooksPath=scripts/hooks`
+# runs the current gate rather than nothing. `scripts/install-git-hooks.sh`
+# migrates such a clone on its next run.
+set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
+if [ -x "$ROOT/scripts/githooks/pre-push" ]; then
+  exec "$ROOT/scripts/githooks/pre-push" "$@"
+fi
+echo "clean pre-push: scripts/githooks/pre-push is missing; refusing to certify this push." >&2
+exit 1

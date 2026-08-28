@@ -178,15 +178,36 @@ pub(super) fn lake_check_test(
     }
 
     let tests_to_check: Vec<_> = if let Some(ref name) = target {
-        config
+        let selected: Vec<_> = config
             .tests
             .iter()
             .filter(|t| t.name == *name)
             .cloned()
-            .collect()
+            .collect();
+        // A name that matches nothing used to yield "Would run 0 test(s)" and
+        // exit 0, so a typo'd target reported success. Fail closed instead, and
+        // name what IS declared.
+        if selected.is_empty() {
+            let declared: Vec<&str> = config.tests.iter().map(|t| t.name.as_str()).collect();
+            anyhow::bail!(
+                "No test target named '{name}'. Declared test targets: {}",
+                if declared.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    declared.join(", ")
+                }
+            );
+        }
+        selected
     } else {
         config.tests.clone()
     };
+
+    // "Would pass" has to be backed by something. Elaborating the targets under
+    // `check_only` is exactly what `check-build` does, and it is what makes the
+    // answer a check rather than an inventory: a test target whose module does
+    // not elaborate cannot pass, and this reports that before anything is run.
+    check_targets_elaborate(&cwd, config, target.as_deref(), verbose)?;
 
     println!("Would run {} test(s):", tests_to_check.len());
     for test in &tests_to_check {
@@ -210,21 +231,66 @@ pub(super) fn lake_check_lint(
     }
 
     let targets: Vec<_> = if let Some(ref name) = target {
-        config
+        let selected: Vec<_> = config
             .libs
             .iter()
             .filter(|l| l.name == *name)
             .map(|l| l.name.clone())
-            .collect()
+            .collect();
+        // Same fail-open as check-test: an unknown name printed
+        // "Would lint 0 target(s)" and succeeded.
+        if selected.is_empty() {
+            let declared: Vec<&str> = config.libs.iter().map(|l| l.name.as_str()).collect();
+            anyhow::bail!(
+                "No library target named '{name}'. Declared libraries: {}",
+                if declared.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    declared.join(", ")
+                }
+            );
+        }
+        selected
     } else {
         config.libs.iter().map(|l| l.name.clone()).collect()
     };
 
+    check_targets_elaborate(&cwd, config, target.as_deref(), verbose)?;
+
     println!("Would lint {} target(s):", targets.len());
     for t in &targets {
-        println!("  - {}", t);
+        println!("  - {t}");
     }
 
+    Ok(())
+}
+
+/// Elaborate `target` (or the whole workspace) under `check_only`, so a
+/// "would pass" answer is backed by a real check rather than a target listing.
+fn check_targets_elaborate(
+    cwd: &std::path::Path,
+    config: clean_lake::LakeConfig,
+    target: Option<&str>,
+    verbose: bool,
+) -> anyhow::Result<()> {
+    use clean_lake::{BuildContext, BuildOptions, Workspace};
+
+    let ws = Workspace::from_config(cwd, config);
+    let mut ctx = BuildContext::new(ws).with_options(
+        BuildOptions::new()
+            .with_verbose(verbose)
+            .with_check_only(true),
+    );
+    let result = match target {
+        Some(name) => ctx.build_target(name)?,
+        None => ctx.build_all()?,
+    };
+    if !result.failed.is_empty() {
+        for (module, err) in &result.failed {
+            eprintln!("  Error in {module}: {err}");
+        }
+        anyhow::bail!("Check failed with {} error(s)", result.failed.len());
+    }
     Ok(())
 }
 
@@ -244,6 +310,75 @@ mod tests {
         .expect("write lakefile");
         std::fs::write(dir.path().join("Demo.lean"), source).expect("write module");
         dir
+    }
+
+    /// An unknown target name used to print "Would lint 0 target(s)" and exit
+    /// 0 — a typo reported success. Both dry-run checks must fail closed and
+    /// name what IS declared, so the mistake is visible.
+    #[test]
+    fn test_lake_check_lint_unknown_target_is_an_error() {
+        let dir = lake_project_with_module("def f (x : Nat) : Nat := x\n");
+        let err = lake_check_lint(
+            Some("Nonexistent".to_string()),
+            false,
+            Some(dir.path().to_path_buf()),
+        )
+        .expect_err("an unknown library target must not report success");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Nonexistent"),
+            "error should name the missing target: {msg}"
+        );
+        assert!(
+            msg.contains("Demo"),
+            "error should list the declared libraries: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_lake_check_test_unknown_target_is_an_error() {
+        let dir = lake_project_with_module("def f (x : Nat) : Nat := x\n");
+        // No `lean_test` is declared, so the early "No test targets defined."
+        // path would return Ok. Declare one so target selection is reached.
+        std::fs::write(
+            dir.path().join("lakefile.lean"),
+            "package demo\nlean_lib Demo\nlean_test DemoTest\n",
+        )
+        .expect("rewrite lakefile");
+
+        let err = lake_check_test(
+            Some("Nonexistent".to_string()),
+            false,
+            Some(dir.path().to_path_buf()),
+        )
+        .expect_err("an unknown test target must not report success");
+        assert!(
+            err.to_string().contains("Nonexistent"),
+            "error should name the missing target: {err}"
+        );
+    }
+
+    /// A module that does not elaborate cannot pass its tests. `check-test`
+    /// used to print "Would run N test(s)" and exit 0 regardless.
+    #[test]
+    fn test_lake_check_test_fails_when_the_module_does_not_elaborate() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("lakefile.lean"),
+            "package demo\nlean_lib Demo\nlean_test DemoTest\n",
+        )
+        .expect("write lakefile");
+        std::fs::write(
+            dir.path().join("Demo.lean"),
+            "def f : Nat := this_identifier_does_not_exist\n",
+        )
+        .expect("write module");
+
+        let result = lake_check_test(None, false, Some(dir.path().to_path_buf()));
+        assert!(
+            result.is_err(),
+            "a module that does not elaborate must not report that tests would pass: {result:?}"
+        );
     }
 
     #[test]

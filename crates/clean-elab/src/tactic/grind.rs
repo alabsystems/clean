@@ -30,8 +30,8 @@ use super::proof_term::{apply, assumption, exact, rfl};
 use super::simp::{simp, SimpConfig};
 use super::tauto::tauto;
 use super::{
-    cert_mathverse, dec_trivial, decide, match_or, omega, solve_by_elim, subst_vars, trivial, Goal,
-    ProofState, TacticError, TacticResult,
+    cert_mathverse, dec_trivial, decide, funext, match_or, omega, solve_by_elim, subst_vars,
+    trivial, Goal, ProofState, TacticError, TacticResult,
 };
 use crate::stack_safe;
 use crate::unify::MetaState;
@@ -41,6 +41,7 @@ pub use super::grind_config::GrindConfig;
 const GRIND_NO_PROGRESS: &str = "grind";
 const GRIND_MAX_DEPTH_EXHAUSTED: &str = "grind/max-depth";
 const GRIND_SPLIT_LIMIT_EXHAUSTED: &str = "grind/split-limit";
+const GRIND_FUNEXT_NO_PROGRESS: &str = "grind/funext";
 
 // ============================================================================
 // Main entry points
@@ -133,6 +134,15 @@ fn grind_preprocess(state: &mut ProofState, config: &GrindConfig) {
     // form. `apply` type-checks the term and `close_goal` re-checks it, so a
     // wrong bridge fails closed; on failure the goal is left untouched.
     let _ = try_propext_bridge(state);
+
+    // funext bridge: the same blindness one binder up. A Prop-VALUED function
+    // equality `@Eq ((x : α) → … → Prop) f g` (Logic/Basic's `xor_false`:
+    // `Xor' False = id`) never matches `@Eq Prop`, so the bridge above skips
+    // it and the closer fan still cannot see an `Iff`. Applying `funext` once
+    // per binder and THEN the propext bridge hands the fan the pointwise
+    // `Iff` — the measured hand route is `funext p; apply propext; tauto`.
+    // Fail-closed like the bridge above: any failure rolls the goal back.
+    let _ = try_funext_propext_bridge(state);
 }
 
 /// Rewrite a `@Eq Prop p q` goal to `p ↔ q` via `propext`. No-op for any
@@ -154,6 +164,73 @@ fn try_propext_bridge(state: &mut ProofState) -> TacticResult {
         state,
         Expr::const_(clean_kernel::name::Name::from_string("propext"), vec![]),
     )
+}
+
+/// Rewrite a `@Eq ((x₁ : α₁) → … → Prop) f g` goal to the pointwise
+/// `f x₁ … xₙ ↔ g x₁ … xₙ` via one `funext` per binder followed by
+/// [`try_propext_bridge`]. No-op for any other goal shape — in particular a
+/// non-Prop-valued function equality is left untouched.
+///
+/// The Pi/Prop shape check runs BEFORE the first `funext`, so the chain never
+/// starts on a goal it cannot finish with an `Iff`; each constituent step
+/// type-checks through `close_goal`, and the whole chain is speculative — on
+/// any failure the goal list and meta state roll back to the pre-bridge
+/// snapshot.
+fn try_funext_propext_bridge(state: &mut ProofState) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let target = state.metas.instantiate(&goal.target);
+    let args = target.get_app_args();
+    let head = target.get_app_fn();
+    let is_eq =
+        matches!(head.kind(), ExprKind::Const(n, _) if n.to_string() == "Eq") && args.len() == 3;
+    if !is_eq {
+        return Err(grind_no_progress(GRIND_FUNEXT_NO_PROGRESS));
+    }
+    let Some(arity) = pi_arity_into_prop(args[0]) else {
+        return Err(grind_no_progress(GRIND_FUNEXT_NO_PROGRESS));
+    };
+
+    let saved_goals = state.goals.clone();
+    state.metas_mut().push_scope();
+    match funext_chain_then_propext(state, arity) {
+        Ok(()) => {
+            state.metas_mut().commit();
+            Ok(())
+        }
+        Err(e) => {
+            state.invalidate_tc_cache();
+            state.goals = saved_goals;
+            state.metas_mut().pop_scope();
+            Err(e)
+        }
+    }
+}
+
+/// One `funext` per leading Pi binder, then [`try_propext_bridge`] on the
+/// pointwise `@Eq Prop` goal. Split out of [`try_funext_propext_bridge`] so
+/// its speculative scope wraps the whole chain as one unit.
+fn funext_chain_then_propext(state: &mut ProofState, arity: usize) -> TacticResult {
+    // `funext` intros its own binder, so each iteration sees the remaining Pi
+    // chain; per-depth names keep the generated binders distinct.
+    for i in 0..arity {
+        funext(state, &format!("x_grind_funext_{i}"))?;
+    }
+    try_propext_bridge(state)
+}
+
+/// Number of leading Pi binders on a type whose codomain chain ends in
+/// `Prop`. `Some(n ≥ 1)` only for that shape: bare `Prop` is `None` (that
+/// goal belongs to [`try_propext_bridge`], which already ran), as is any
+/// chain ending in a non-`Prop` codomain (`funext` alone would yield no
+/// `Iff` for the closer fan — leave such goals to CC/rfl).
+fn pi_arity_into_prop(ty: &Expr) -> Option<usize> {
+    let mut ty = ty;
+    let mut arity = 0usize;
+    while let ExprKind::Pi(_, _, body) = ty.kind() {
+        arity += 1;
+        ty = body.as_ref();
+    }
+    (arity > 0 && matches!(ty.kind(), ExprKind::Sort(l) if l.is_zero())).then_some(arity)
 }
 
 /// Normalize hypothesis equalities by substituting known variable equalities.
@@ -667,3 +744,7 @@ pub(crate) fn collect_eq_hypotheses(goal: &Goal, metas: &MetaState) -> Vec<(Expr
 #[cfg(test)]
 #[path = "grind_tests.rs"]
 mod grind_tests;
+
+#[cfg(test)]
+#[path = "grind_funext_tests.rs"]
+mod grind_funext_tests;

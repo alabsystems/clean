@@ -25,7 +25,7 @@ impl BigNat {
     ///
     /// Returns `(quotient, remainder)`. Returns `None` if other is zero.
     /// Uses shift-subtract long division on 64-bit limbs.
-    pub fn checked_div_rem_big(&self, other: &BigNat) -> Option<(BigNat, BigNat)> {
+    pub(crate) fn checked_div_rem_big(&self, other: &BigNat) -> Option<(BigNat, BigNat)> {
         if other.is_zero() {
             return None;
         }
@@ -88,7 +88,7 @@ impl BigNat {
     }
 
     /// Bitwise AND of two BigNats.
-    pub fn bitand_big(&self, other: &BigNat) -> BigNat {
+    pub(crate) fn bitand_big(&self, other: &BigNat) -> BigNat {
         let a = self.limbs();
         let b = other.limbs();
         let min_len = a.len().min(b.len());
@@ -101,7 +101,7 @@ impl BigNat {
     }
 
     /// Bitwise OR of two BigNats.
-    pub fn bitor_big(&self, other: &BigNat) -> BigNat {
+    pub(crate) fn bitor_big(&self, other: &BigNat) -> BigNat {
         let a = self.limbs();
         let b = other.limbs();
         let max_len = a.len().max(b.len());
@@ -115,7 +115,7 @@ impl BigNat {
     }
 
     /// Bitwise XOR of two BigNats.
-    pub fn bitxor_big(&self, other: &BigNat) -> BigNat {
+    pub(crate) fn bitxor_big(&self, other: &BigNat) -> BigNat {
         let a = self.limbs();
         let b = other.limbs();
         let max_len = a.len().max(b.len());
@@ -129,7 +129,7 @@ impl BigNat {
     }
 
     /// Left shift by `shift` bits.
-    pub fn checked_shl_big(&self, shift: usize) -> BigNat {
+    pub(crate) fn checked_shl_big(&self, shift: usize) -> BigNat {
         if self.is_zero() {
             return BigNat::Small(0);
         }
@@ -186,7 +186,7 @@ impl BigNat {
     /// gcd(0, b) = b, gcd(a, 0) = a, gcd(0, 0) = 0 — matching Lean's
     /// `Nat.gcd` (which terminates because the remainder strictly
     /// decreases). Never allocates beyond the inputs.
-    pub fn gcd_big(&self, other: &BigNat) -> BigNat {
+    pub(crate) fn gcd_big(&self, other: &BigNat) -> BigNat {
         let mut a = self.clone();
         let mut b = other.clone();
         while !b.is_zero() {

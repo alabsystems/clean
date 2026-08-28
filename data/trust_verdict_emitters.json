@@ -58,7 +58,7 @@
       "entry_point": "crates/clean-kernel/src/env/decl_add.rs :: Environment::add_decl_unchecked",
       "verdict": "accepts (pure insert)",
       "basis": "asserts-own-authority",
-      "justification": "Pure constants.insert, zero gates. Value-bearing bypass caught by C1 re-typecheck; AXIOM-shaped type bypass now caught by C1's symmetric infer_sort (G2 FIXED). Ratchet-gated: 0 production proof-minting callers (data/unchecked_decl_ratchet.json).",
+      "justification": "Pure constants.insert, zero gates. Value-bearing bypass caught by C1 re-typecheck; AXIOM-shaped type bypass now caught by C1's symmetric infer_sort (G2 FIXED). Ratchet-gated (data/unchecked_decl_ratchet.json). G6 CORRECTION (2026-08-23): this line read \"0 production proof-minting callers\" and the ratchet declared 0/0; neither was measured and the count was wrong. scripts/check_add_decl_ratchet.py re-derives the callers from crates/**/*.rs and finds exactly ONE production caller - the mm_axiom_only proof-drop arm of Environment::add_decl, registered separately here as add_decl_mm_axiom_only - now counted as add_decl_unchecked_count = 1 with its soundness argument on the ratchet row and pinned by an in-code sanctioned-site allowlist. It still mints no proof: PASS-2 re-adds every in-range theorem through the CHECKED add_decl, and mm_gate drops any verified theorem whose transitive $p closure is not itself verified.",
       "soundness_comment": true
     },
     {

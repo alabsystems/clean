@@ -85,14 +85,37 @@ pub(crate) fn render_human(
     }
     writeln!(out, "rows:")?;
     for row in &report.rows {
-        writeln!(
-            out,
-            "- {} [{}] #{} {}",
-            row.id,
-            row.status.as_str(),
-            row.issue.number,
-            row.area
-        )?;
+        // Print the evidence-derived `effective_status`, NOT the hand-declared
+        // `row.status`. The declared literal is a claim; `effective_status` is
+        // what the readiness accounting counts, what `launch_not_ready_message`
+        // names as a blocker, and what the `--json` view already emits. Printing
+        // the claim here let a row outrank its own gate *in the same output*:
+        // `fallback-denial` rendered `[green]` two lines below a
+        // `readiness_accounting` line that listed it as a launch blocker.
+        //
+        // When the two disagree, show both. The disagreement is the finding --
+        // silently substituting the effective value would hide that a row is
+        // claiming more than its evidence supports.
+        if row.effective_status == row.status {
+            writeln!(
+                out,
+                "- {} [{}] #{} {}",
+                row.id,
+                row.effective_status.as_str(),
+                row.issue.number,
+                row.area
+            )?;
+        } else {
+            writeln!(
+                out,
+                "- {} [{}] (declared: {}) #{} {}",
+                row.id,
+                row.effective_status.as_str(),
+                row.status.as_str(),
+                row.issue.number,
+                row.area
+            )?;
+        }
         writeln!(out, "  gate: {}", row.gate_command)?;
         if let Some(evidence) = replacement_row_runtime_evidence(report, row) {
             writeln!(out, "  evidence: {}", evidence)?;

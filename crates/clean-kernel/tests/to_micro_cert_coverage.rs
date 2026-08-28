@@ -197,9 +197,9 @@ fn to_micro_cert_app() {
 
     // Result type must be from_kernel-convertible — use Prop.
     let cert = ProofCert::App {
-        fn_cert: Box::new(fn_cert),
+        fn_cert: Arc::new(fn_cert),
         fn_type: Box::new(Expr::sort(Level::zero())),
-        arg_cert: Box::new(arg_cert),
+        arg_cert: Arc::new(arg_cert),
         result_type: Box::new(Expr::sort(Level::zero())),
     };
     let expr = Expr::app(
@@ -246,7 +246,7 @@ fn to_micro_cert_proj() {
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
         idx: 0,
-        expr_cert: Box::new(inner_cert),
+        expr_cert: Arc::new(inner_cert),
         expr_type: Box::new(inner_type),
         field_type: Box::new(field_type),
     };

@@ -99,29 +99,70 @@ const SRC_CLEAN_MODE_OF_TAG_TAG: &str = "def clean_mode_of_tag_tag (m : CleanMod
 
 const SRC_ENCODESSOURCESYSTEMVAL: &str = "inductive EncodesSourceSystemVal : IRScalar -> SourceSystemR -> Type\n| mk : forall (s : SourceSystemR) (fs : IRScalar), EncodesSourceSystemVal (ir_var (source_system_tag s) fs) s";
 
-const SRC_IR_FS_TMODE: &str = "def ir_fs_tmode : IRTy := IRTy.enum_ ir_d13";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_fs.core.txt` + `generated/ir_fs.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_fs.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — THIRTEEN divergent lines in TWO notation classes, printed
+/// before adoption, both definitionally equal: `ir_fs_b0`'s extractfield type
+/// inlines `(IRTy.uint_ ir_d8)` where the hand line named `ir_tU8`, and the
+/// twelve arm constants spell the raw
+/// `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_dN) IRConst.vnil))` spine
+/// where the hand lines named `ir_cvar ir_dN` (`ir_cvar tag := IRConst.aggv
+/// (ir_cs1 (IRConst.int_ tag))`). The other four lines (`ir_fs_tmode`,
+/// `ir_fs_b13`, `ir_fs_func`, `ir_fs_module`) minted byte-identical, and ONE
+/// line is minted-only: the `ir_fs_tsrc` interface alias (see its rationale).
+const MINTED_IR_FS: &str = include_str!("generated/ir_fs.defs.txt");
 
-const SRC_IR_FS_B0: &str = "def ir_fs_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.extractfield ir_tU8 ir_d0 ir_d0) ir_d2) (ir_nd (IRInst.switch ir_d2 ir_d12 ir_nl0 (ir_sc ir_d0 ir_d1 (ir_sc ir_d1 ir_d2 (ir_sc ir_d2 ir_d3 (ir_sc ir_d3 ir_d4 (ir_sc ir_d4 ir_d5 (ir_sc ir_d5 ir_d6 (ir_sc ir_d6 ir_d7 (ir_sc ir_d7 ir_d8 (ir_sc ir_d8 ir_d9 (ir_sc ir_d9 ir_d10 (ir_sc ir_d11 ir_d11 ir_sc0))))))))))) Bool.false)))";
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_FS_DOCS: &[&str] = &[
+    "ir_fs_tmode: enum.13, the CleanMode enum id the emitted body names in `const enum.13 { k }`. Unlike every earlier chain's type shorthand this one is SEMANTIC INPUT, not decoration: ir_const_agg_eval consults ir_ty_is_agg on it, so an aggregate constant at a scalar type is type_error not_agg. The particular id 13 is still not consulted. DerivedProved, zero axiom_deps.",
+    "ir_fs_tsrc: enum.178 (fixture era), the SourceSystem enum the body takes BY VALUE -- INTERFACE-ONLY, named by NOTHING in the module: the argument's discriminant is read straight off the SSA value, so the type occurs only in the header the core module cannot hold. Registered so the tag table's canonical-1 pin (the one that makes the parameter-type row producer-invariant, `enum#1`) is an elaborated term and not only a JSON row. It has already moved once (laneREG 2026-08-21 dump: 176), which is why the pin is canonical rather than verbatim. DerivedProved, zero axiom_deps.",
+    "ir_fs_b0: entry block, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fs.core.txt; reader B's copy of the same body is tests/fixtures/from_source_system.trust-ir.txt). NO LOAD -- the argument arrives by value as %0, so the body reads its discriminant directly with extractfield u8 %0, 0. ELEVEN explicit switch cases and a NON-CONTIGUOUS case list: 0..9 map to bb1..bb10, then 11 maps to bb11, and tag 10 (PVS) is the value the DEFAULT edge carries. exhaustive_enum_unreachable is Bool.false and that is the MEASURED value read off the artifact binary by reader A, the flag's one witness: the default is reached on every PVS. DerivedProved, zero axiom_deps.",
+    "ir_fs_b1: Lean4 => Constructive, materialized as the AGGREGATE CONSTANT `const enum.13 { 0 }` -- the construct that made this body unchainable until IRConst gained an aggregate form. DerivedProved, zero axiom_deps.",
+    "ir_fs_b2: Coq => Impredicative. DerivedProved, zero axiom_deps.",
+    "ir_fs_b3: Agda => Constructive. A SEPARATE block from Lean4's even though the answer is the same constant, as emitted -- the compiler does not share arms, and a module that did would be a different CFG. DerivedProved, zero axiom_deps.",
+    "ir_fs_b4: CubicalAgda => Cubical. The one arm whose mode carries the cubical layer, and the arm the A5 witnesses instantiate. DerivedProved, zero axiom_deps.",
+    "ir_fs_b5: IsabelleHOL => Classical. DerivedProved, zero axiom_deps.",
+    "ir_fs_b6: HOLLight => Classical, in its OWN block. DerivedProved, zero axiom_deps.",
+    "ir_fs_b7: HOL4 => Classical, in its OWN block. Three source-level or-patterns, three emitted blocks. DerivedProved, zero axiom_deps.",
+    "ir_fs_b8: Mizar => SetTheoretic. DerivedProved, zero axiom_deps.",
+    "ir_fs_b9: MetamathZFC => SetTheoretic. DerivedProved, zero axiom_deps.",
+    "ir_fs_b10: MetamathSet => Classical. DerivedProved, zero axiom_deps.",
+    "ir_fs_b11: ACL2 => Classical. Reached by the ONLY non-contiguous explicit case, selector 11 -- the arm a case table transcribed as 0..10 would silently misroute. DerivedProved, zero axiom_deps.",
+    "ir_fs_b12: the DEFAULT edge => Classical, i.e. PVS (tag 10). The emitted body routes the TENTH tag through the default rather than the last one, so the default is neither a trap nor the tail of the enum -- it is one specific reachable variant in the middle of the range. DerivedProved, zero axiom_deps.",
+    "ir_fs_b13: the JOIN block, taking an AGGREGATE block parameter (bb13(%1: enum.13)) and returning it. Not a Bool and not a u8: this is the first chain in the spec whose join carries a structured value, so the answer travels through the machine as an IRScalar.aggv rather than as a scalar. DerivedProved, zero axiom_deps.",
+    "ir_fs_func: CleanMode::from_source_system as EvalIR -- one parameter (the SourceSystem, by value, SSA id 0), entry block 0, FOURTEEN blocks, matching the emitted body's control-flow graph exactly. DerivedProved, zero axiom_deps.",
+    "ir_fs_module: the module for from_source_system, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text, tests/fixtures/from_source_system.trust-ir.txt) and reader C (this elaborated term) agree on it -- modulo the one-entry unwitnessed ledger, the switch's unprinted exhaustive flag; see crate::ir_mint. DerivedProved, zero axiom_deps.",
+];
 
-const SRC_IR_FS_B1: &str = "def ir_fs_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d0)) ir_d3) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d3))))";
-const SRC_IR_FS_B2: &str = "def ir_fs_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d1)) ir_d4) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d4))))";
-const SRC_IR_FS_B3: &str = "def ir_fs_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d0)) ir_d5) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d5))))";
-const SRC_IR_FS_B4: &str = "def ir_fs_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d2)) ir_d6) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d6))))";
-const SRC_IR_FS_B5: &str = "def ir_fs_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d4)) ir_d7) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d7))))";
-const SRC_IR_FS_B6: &str = "def ir_fs_b6 : IRBlock := IRBlock.mk ir_d6 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d4)) ir_d8) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d8))))";
-const SRC_IR_FS_B7: &str = "def ir_fs_b7 : IRBlock := IRBlock.mk ir_d7 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d4)) ir_d9) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d9))))";
-const SRC_IR_FS_B8: &str = "def ir_fs_b8 : IRBlock := IRBlock.mk ir_d8 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d5)) ir_d10) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d10))))";
-const SRC_IR_FS_B9: &str = "def ir_fs_b9 : IRBlock := IRBlock.mk ir_d9 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d5)) ir_d11) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d11))))";
-const SRC_IR_FS_B10: &str = "def ir_fs_b10 : IRBlock := IRBlock.mk ir_d10 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d4)) ir_d12) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d12))))";
-const SRC_IR_FS_B11: &str = "def ir_fs_b11 : IRBlock := IRBlock.mk ir_d11 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d4)) ir_d13) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d13))))";
-const SRC_IR_FS_B12: &str = "def ir_fs_b12 : IRBlock := IRBlock.mk ir_d12 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ ir_fs_tmode (ir_cvar ir_d4)) ir_d14) (ir_nd (IRInst.br ir_d13 (ir_nl1 ir_d14))))";
-const SRC_IR_FS_B13: &str = "def ir_fs_b13 : IRBlock := IRBlock.mk ir_d13 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))";
+/// The minted script's lines, in registration order — ONE source of truth for
+/// [`Specification::add_eval_ir_from_source`] and anything that must run the
+/// machine on *the registered module* rather than on a second transcription
+/// (the GAP-2 encoding differential reads these same lines).
+static MINTED_IR_FS_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_FS
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
 
-const SRC_IR_FS_FUNC: &str = "def ir_fs_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_fs_b0 (ir_blk ir_fs_b1 (ir_blk ir_fs_b2 (ir_blk ir_fs_b3 (ir_blk ir_fs_b4 (ir_blk ir_fs_b5 (ir_blk ir_fs_b6 (ir_blk ir_fs_b7 (ir_blk ir_fs_b8 (ir_blk ir_fs_b9 (ir_blk ir_fs_b10 (ir_blk ir_fs_b11 (ir_blk ir_fs_b12 (ir_blk ir_fs_b13 ir_blk0))))))))))))))";
+/// The minted `from_source_system` module definitions, in registration order.
+///
+/// Same contract as `ir_h2_module_defs`: shared by
+/// [`Specification::add_eval_ir_from_source`] and the GAP-2 encoding
+/// differential (`crate::ir_semdiff`). A FUNCTION over the minted script
+/// rather than an array of hand-written constants as of 2026-08-21.
+#[must_use]
+pub fn ir_fs_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_FS_LINES
+}
 
-const SRC_IR_FS_MODULE: &str = "def ir_fs_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_fs_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
-
-// ── execution witnesses, one per emitted arm ───────────────────────────────
 const SRC_IR_FS_ON_LEAN4: &str = "def ir_fs_on_lean4 : Eq IROutcome (ir_eval ir_d5 ir_fs_module ir_d0 (ir_vl1 (ir_var ir_d0 ir_sp0)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (ir_var ir_d0 ir_sp0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d0 ir_sp0)))";
 const SRC_IR_FS_ON_COQ: &str = "def ir_fs_on_coq : Eq IROutcome (ir_eval ir_d5 ir_fs_module ir_d0 (ir_vl1 (ir_var ir_d1 ir_sp0)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (ir_var ir_d1 ir_sp0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d1 ir_sp0)))";
 const SRC_IR_FS_ON_AGDA: &str = "def ir_fs_on_agda : Eq IROutcome (ir_eval ir_d5 ir_fs_module ir_d0 (ir_vl1 (ir_var ir_d2 ir_sp0)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (ir_var ir_d0 ir_sp0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d0 ir_sp0)))";
@@ -169,31 +210,6 @@ const SRC_IR_FS_MACHINE_SOUND_CUBICAL_WITNESS: &str = "def ir_fs_machine_sound_c
 
 const SRC_IR_FS_MACHINE_SOUND_JUNK_WITNESS: &str = "def ir_fs_machine_sound_junk_witness : Eq Nat (clean_mode_tag (clean_mode_from_source SourceSystemR.pvs)) ir_d4 := ir_fs_machine_sound ir_mem0 ir_d5 ir_d0 (ir_var ir_d10 (ir_sp2 IRScalar.undef_ IRScalar.vnil)) SourceSystemR.pvs ir_d4 (EncodesSourceSystemVal.mk SourceSystemR.pvs (ir_sp2 IRScalar.undef_ IRScalar.vnil)) (Le.refl ir_d5) (Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_var ir_d4 ir_sp0))))";
 
-/// The `CleanMode::from_source_system` chain's MODULE definitions, in
-/// registration order.
-///
-/// Same contract as `IR_H2_MODULE_DEFS`: the GAP-2 differential runs the
-/// machine on exactly the module the specification registers.
-pub const IR_FS_MODULE_DEFS: &[&str] = &[
-    SRC_IR_FS_TMODE,
-    SRC_IR_FS_B0,
-    SRC_IR_FS_B1,
-    SRC_IR_FS_B2,
-    SRC_IR_FS_B3,
-    SRC_IR_FS_B4,
-    SRC_IR_FS_B5,
-    SRC_IR_FS_B6,
-    SRC_IR_FS_B7,
-    SRC_IR_FS_B8,
-    SRC_IR_FS_B9,
-    SRC_IR_FS_B10,
-    SRC_IR_FS_B11,
-    SRC_IR_FS_B12,
-    SRC_IR_FS_B13,
-    SRC_IR_FS_FUNC,
-    SRC_IR_FS_MODULE,
-];
-
 impl Specification {
     /// Register the THIRD complete width-one chain:
     /// `mode::CleanMode::from_source_system`.
@@ -208,41 +224,21 @@ impl Specification {
         self.add_recursive_def(SRC_CLEAN_MODE_OF_TAG, "clean_mode_of_tag: a total left inverse of clean_mode_tag on 0..5, by a chain of decidable Nat equalities. Total means it must answer somewhere off the tag range: every n >= 5 answers settheoretic, which is correct AT 5 and arbitrary above it. That arbitrariness is harmless and is stated rather than hidden -- clean_mode_of_tag_tag only ever applies it to a real tag, and the A5 that uses it obtains its argument from clean_mode_tag. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_CLEAN_MODE_OF_TAG_TAG, "clean_mode_of_tag_tag: clean_mode_of_tag inverts clean_mode_tag on every CleanModeR, by CleanModeR.rec with six Eq.refl arms -- the kernel computes each tag and re-selects the mode. This is what upgrades the A5 below from a statement about a NUMBER to a statement about a MODE. DerivedProved, zero axiom_deps.")?;
         self.add_inductive(SRC_ENCODESSOURCESYSTEMVAL, "EncodesSourceSystemVal v s: the IRScalar v is the BY-VALUE representation of source system s. \n\nNo memory argument, and that is the structurally new thing about this chain: the emitted body takes its argument by value (`bb0(%0: enum.178)`) and performs NO load, so there is no heap for a representation premise to constrain. The two earlier chains both had to pin a live cell with an ir_mem_lookup equation because their argument was a reference; this one has nothing to pin, and saying so is the honest premise rather than a weaker one. \n\nPayload-agnostic on purpose: the element spine fs is universally quantified, because the body reads field 0 and nothing else -- measured, in the emitted body: one extractfield at index 0, then a switch. SourceSystem is fieldless so a real value's spine is ir_sp0, but quantifying makes the theorem hold for every spine and makes the 'reads only the tag' claim checked rather than asserted. \n\nSAME OPEN LAYOUT OBLIGATION as eval_ir_repr's, carried forward rather than laundered: these are trust-ir DECLARATION-INDEX tags, which is what the emitted body switches on; the Rust enum is niche-encoded downstream of trust-ir. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_TMODE, "ir_fs_tmode: enum.13, the CleanMode enum id the emitted body names in `const enum.13 { k }`. Unlike every earlier chain's type shorthand this one is SEMANTIC INPUT, not decoration: ir_const_agg_eval consults ir_ty_is_agg on it, so an aggregate constant at a scalar type is type_error not_agg. The particular id 13 is still not consulted. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_B0, "ir_fs_b0: entry block, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/from_source_system.trust-ir.txt). NO LOAD -- the argument arrives by value as %0, so the body reads its discriminant directly with extractfield u8 %0, 0. ELEVEN explicit switch cases and a NON-CONTIGUOUS case list: 0..9 map to bb1..bb10, then 11 maps to bb11, and tag 10 (PVS) is the value the DEFAULT edge carries. exhaustive_enum_unreachable is Bool.false and that is the honest value: the default is reached on every PVS. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_B1, "ir_fs_b1: Lean4 => Constructive, materialized as the AGGREGATE CONSTANT `const enum.13 { 0 }` -- the construct that made this body unchainable until IRConst gained an aggregate form. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(
-            SRC_IR_FS_B2,
-            "ir_fs_b2: Coq => Impredicative. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(SRC_IR_FS_B3, "ir_fs_b3: Agda => Constructive. A SEPARATE block from Lean4's even though the answer is the same constant, as emitted -- the compiler does not share arms, and a module that did would be a different CFG. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_B4, "ir_fs_b4: CubicalAgda => Cubical. The one arm whose mode carries the cubical layer, and the arm the A5 witnesses instantiate. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(
-            SRC_IR_FS_B5,
-            "ir_fs_b5: IsabelleHOL => Classical. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(
-            SRC_IR_FS_B6,
-            "ir_fs_b6: HOLLight => Classical, in its OWN block. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(SRC_IR_FS_B7, "ir_fs_b7: HOL4 => Classical, in its OWN block. Three source-level or-patterns, three emitted blocks. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(
-            SRC_IR_FS_B8,
-            "ir_fs_b8: Mizar => SetTheoretic. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(
-            SRC_IR_FS_B9,
-            "ir_fs_b9: MetamathZFC => SetTheoretic. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(
-            SRC_IR_FS_B10,
-            "ir_fs_b10: MetamathSet => Classical. DerivedProved, zero axiom_deps.",
-        )?;
-        self.add_recursive_def(SRC_IR_FS_B11, "ir_fs_b11: ACL2 => Classical. Reached by the ONLY non-contiguous explicit case, selector 11 -- the arm a case table transcribed as 0..10 would silently misroute. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_B12, "ir_fs_b12: the DEFAULT edge => Classical, i.e. PVS (tag 10). The emitted body routes the TENTH tag through the default rather than the last one, so the default is neither a trap nor the tail of the enum -- it is one specific reachable variant in the middle of the range. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_B13, "ir_fs_b13: the JOIN block, taking an AGGREGATE block parameter (bb13(%1: enum.13)) and returning it. Not a Bool and not a u8: this is the first chain in the spec whose join carries a structured value, so the answer travels through the machine as an IRScalar.aggv rather than as a scalar. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_FUNC, "ir_fs_func: CleanMode::from_source_system as EvalIR -- one parameter (the SourceSystem, by value, SSA id 0), entry block 0, FOURTEEN blocks, matching the emitted body's control-flow graph exactly. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FS_MODULE, "ir_fs_module: the module for from_source_system, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel, recorded at tests/fixtures/from_source_system.trust-ir.txt and checked graph-for-graph against this module by tests/crystal_a1_lineage.rs. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_priority.rs posture: Clean's parser and
+        // elaborator still turn the text into the term the theorems are about.
+        let minted = ir_fs_module_defs();
+        if minted.len() != MINTED_IR_FS_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_fs script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_FS_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_FS_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_FS_ON_LEAN4, "GATE WITNESS: Lean4, explicit switch case 0. Eq.refl -- the kernel runs the machine for 5 steps (2 in the entry block, 2 in an arm, 1 in the join) and compares. The answer is an AGGREGATE value, so this is also the first executed proof that ir_const_agg_eval materializes one and that the join block carries it. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(
             SRC_IR_FS_ON_COQ,
@@ -296,209 +292,10 @@ impl Specification {
 /// that drifts off the emitted CFG — are both decidable without it. The CFG
 /// gate in `tests/crystal_a1_lineage/from_source_system.rs` is the authority on
 /// the second; these are the fast pre-flight.
+// The acceptance tests moved to `eval_ir_from_source_tests.rs` on 2026-08-21
+// (the `eval_ir_float_div_tests.rs` precedent): the A2 mint migration put this
+// file at the 500-line convention that `data/paragon_ratchet.json`'s
+// `files_over_500` enforces shrink-only.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::parse_check;
-
-    const BLOCKS: &[&str] = &[
-        SRC_IR_FS_B0,
-        SRC_IR_FS_B1,
-        SRC_IR_FS_B2,
-        SRC_IR_FS_B3,
-        SRC_IR_FS_B4,
-        SRC_IR_FS_B5,
-        SRC_IR_FS_B6,
-        SRC_IR_FS_B7,
-        SRC_IR_FS_B8,
-        SRC_IR_FS_B9,
-        SRC_IR_FS_B10,
-        SRC_IR_FS_B11,
-        SRC_IR_FS_B12,
-        SRC_IR_FS_B13,
-    ];
-
-    const ALL: &[&str] = &[
-        SRC_SOURCESYSTEMR,
-        SRC_SOURCE_SYSTEM_TAG,
-        SRC_CLEAN_MODE_FROM_SOURCE,
-        SRC_CLEAN_MODE_OF_TAG,
-        SRC_CLEAN_MODE_OF_TAG_TAG,
-        SRC_ENCODESSOURCESYSTEMVAL,
-        SRC_IR_FS_TMODE,
-        SRC_IR_FS_FUNC,
-        SRC_IR_FS_MODULE,
-        SRC_IR_FS_MACH0,
-        SRC_IR_FS_EXACT,
-        SRC_IR_FS_CORRECT,
-        SRC_IR_SPINE_HEAD_NAT,
-        SRC_IR_AGG_DISC,
-        SRC_IR_VALS_HEAD_DISC,
-        SRC_IR_OUTCOME_DISC,
-        SRC_IR_FS_MACHINE_SOUND,
-        SRC_IR_FS_MACHINE_SOUND_MODE,
-        SRC_IR_FS_MACHINE_SOUND_CUBICAL,
-        SRC_IR_FS_NEVER_FAULTS,
-        SRC_IR_FS_CORRECT_WITNESS,
-        SRC_IR_FS_MACHINE_SOUND_WITNESS,
-        SRC_IR_FS_MACHINE_SOUND_MODE_WITNESS,
-        SRC_IR_FS_MACHINE_SOUND_CUBICAL_WITNESS,
-        SRC_IR_FS_MACHINE_SOUND_JUNK_WITNESS,
-    ];
-
-    #[test]
-    fn test_every_source_parses() {
-        for src in ALL.iter().chain(BLOCKS.iter()) {
-            parse_check(src).unwrap_or_else(|e| panic!("parse error in `{src}`:\n  {e}"));
-        }
-    }
-
-    #[test]
-    fn test_sources_are_ascii_and_balanced() {
-        for src in ALL.iter().chain(BLOCKS.iter()) {
-            assert!(src.is_ascii(), "non-ascii in `{src}`");
-            let open = src.chars().filter(|c| *c == '(').count();
-            let close = src.chars().filter(|c| *c == ')').count();
-            assert_eq!(open, close, "unbalanced parens in `{src}`");
-        }
-    }
-
-    /// The switch is ELEVEN explicit cases on a NON-CONTIGUOUS list, plus a
-    /// default that carries the twelfth answer. A contiguous 0..10 table would
-    /// still answer Classical for ACL2 by accident, so this is checked on the
-    /// case list itself and not only on the answers.
-    #[test]
-    fn test_switch_is_eleven_cases_with_a_hole_at_ten() {
-        assert!(SRC_IR_FS_B0.contains("(ir_sc ir_d9 ir_d10 (ir_sc ir_d11 ir_d11 ir_sc0))"));
-        assert!(
-            !SRC_IR_FS_B0.contains("ir_sc ir_d10 "),
-            "tag 10 (PVS) has NO explicit case; it is the value the default edge carries"
-        );
-        assert!(SRC_IR_FS_B0.contains("IRInst.switch ir_d2 ir_d12 ir_nl0"));
-        assert!(
-            SRC_IR_FS_B12.contains("ir_cvar ir_d4"),
-            "the default block is a real answer, not a trap"
-        );
-        for s in BLOCKS {
-            assert!(!s.contains("unreachable"), "the emitted body has no trap");
-        }
-    }
-
-    /// Every arm materializes an AGGREGATE constant. If any arm were a scalar
-    /// constant the chain would be about a body the compiler does not emit —
-    /// and it would silently stop exercising the construct this whole stage
-    /// exists to model.
-    #[test]
-    fn test_every_arm_is_an_aggregate_constant() {
-        for s in &BLOCKS[1..13] {
-            assert!(
-                s.contains("IRInst.const_ ir_fs_tmode (ir_cvar "),
-                "every arm must be `const enum.13 {{ k }}`, i.e. IRConst.aggv: {s}"
-            );
-            assert!(
-                !s.contains("IRConst.int_") && !s.contains("IRConst.bool_"),
-                "no arm materializes a scalar constant: {s}"
-            );
-        }
-    }
-
-    /// The body takes its argument BY VALUE, so nothing in this chain may load.
-    #[test]
-    fn test_no_block_performs_a_load() {
-        for s in BLOCKS {
-            assert!(
-                !s.contains("IRInst.load"),
-                "the emitted body performs no load; a module with one is a different body: {s}"
-            );
-        }
-    }
-
-    /// A5's fuel bound must match the transcribed module's cost: 2 nodes in the
-    /// entry block, 2 in an arm, 1 in the join.
-    #[test]
-    fn test_fuel_bound_matches_the_transcribed_module() {
-        for src in [
-            SRC_IR_FS_CORRECT,
-            SRC_IR_FS_MACHINE_SOUND,
-            SRC_IR_FS_MACHINE_SOUND_MODE,
-            SRC_IR_FS_MACHINE_SOUND_CUBICAL,
-            SRC_IR_FS_NEVER_FAULTS,
-        ] {
-            assert!(src.contains("Le ir_d5 fuel"), "fuel bound drifted: {src}");
-        }
-        assert!(SRC_IR_FS_EXACT.contains("ir_run ir_d5 ir_fs_module"));
-    }
-
-    /// A5 must go THROUGH A4 rather than restate it, must be hypothesised on a
-    /// machine observation, and must reach a conclusion about the reflected
-    /// function — including, at the end of the composition, the FIRST chain's
-    /// reflected predicate.
-    #[test]
-    fn test_a5_is_present_and_composes() {
-        assert!(SRC_IR_FS_MACHINE_SOUND.contains("ir_eval fuel ir_fs_module"));
-        assert!(SRC_IR_FS_MACHINE_SOUND
-            .contains(": Eq Nat (clean_mode_tag (clean_mode_from_source s)) t"));
-        assert!(SRC_IR_FS_MACHINE_SOUND.contains("ir_fs_correct mem fuel na r s henc hle"));
-        assert!(SRC_IR_FS_MACHINE_SOUND.contains("ir_outcome_disc"));
-        assert!(SRC_IR_FS_MACHINE_SOUND_MODE.contains("clean_mode_of_tag_tag"));
-        assert!(SRC_IR_FS_MACHINE_SOUND_MODE
-            .contains(": Eq CleanModeR (clean_mode_of_tag t) (clean_mode_from_source s)"));
-        assert!(
-            SRC_IR_FS_MACHINE_SOUND_CUBICAL.contains("clean_mode_has_cubical"),
-            "the cross-chain composition must reach the FIRST chain's reflected predicate"
-        );
-        assert!(SRC_IR_FS_NEVER_FAULTS.contains("ir_outcome_is_ret"));
-    }
-
-    /// Every premise of every witness is discharged concretely: no witness may
-    /// be a restatement with a free hypothesis.
-    #[test]
-    fn test_witnesses_discharge_their_premises() {
-        for src in [
-            SRC_IR_FS_CORRECT_WITNESS,
-            SRC_IR_FS_MACHINE_SOUND_WITNESS,
-            SRC_IR_FS_MACHINE_SOUND_MODE_WITNESS,
-            SRC_IR_FS_MACHINE_SOUND_CUBICAL_WITNESS,
-            SRC_IR_FS_MACHINE_SOUND_JUNK_WITNESS,
-        ] {
-            assert!(src.contains("EncodesSourceSystemVal.mk"), "no A2: {src}");
-            assert!(src.contains("Le.refl ir_d5"), "no fuel bound: {src}");
-        }
-        assert!(
-            SRC_IR_FS_MACHINE_SOUND_JUNK_WITNESS.contains("IRScalar.undef_"),
-            "the junk witness must actually carry a junk payload"
-        );
-    }
-
-    #[path = "eval_ir_from_source_uniqueness_tests.rs"]
-    mod uniqueness;
-
-    /// The reflected map is the one `mode.rs:184-196` writes: twelve systems
-    /// onto five modes.
-    #[test]
-    fn test_reflected_map_is_the_source_function() {
-        let arms: Vec<&str> = SRC_CLEAN_MODE_FROM_SOURCE
-            .split("CleanModeR.")
-            .skip(1) // the text before the first `CleanModeR.` constructor
-            .map(|s| s.split(|c: char| !c.is_alphanumeric()).next().unwrap_or(""))
-            .collect();
-        assert_eq!(
-            arms,
-            vec![
-                "constructive",
-                "impredicative",
-                "constructive",
-                "cubical",
-                "classical",
-                "classical",
-                "classical",
-                "settheoretic",
-                "settheoretic",
-                "classical",
-                "classical",
-                "classical",
-            ],
-            "the reflected map must match mode.rs's twelve arms exactly"
-        );
-    }
-}
+#[path = "eval_ir_from_source_tests.rs"]
+mod tests;

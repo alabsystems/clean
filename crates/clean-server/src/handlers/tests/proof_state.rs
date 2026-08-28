@@ -7,6 +7,7 @@ use crate::proof_state::ApplyTacticResult;
 use clean_elab::tactic::{
     convert, ProofState as InternalProofState, ProofTrustLedger, TrustedArithProvenanceLedger,
 };
+use clean_kernel::env::TrustedEnvExt;
 use clean_kernel::{Environment, Expr, Name};
 
 fn assert_empty_mathverse_candidates_json(value: &serde_json::Value, context: &str) {

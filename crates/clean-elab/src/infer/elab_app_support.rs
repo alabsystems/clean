@@ -473,17 +473,67 @@ impl<'a> ElabCtx<'a> {
                         let (deferred_result, deferred_ty, pending) = self
                             .insert_implicit_args_deferring_instances(val.clone(), &val_ty_whnf);
                         let deferred_ty_whnf = self.whnf(&self.metas.instantiate(&deferred_ty));
-                        {
+                        let expected_pinned = {
                             let ctx = self.build_local_ctx();
                             let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
-                            let _ = unifier.unify(&deferred_ty_whnf, &expected_whnf);
-                        }
+                            matches!(
+                                unifier.unify(&deferred_ty_whnf, &expected_whnf),
+                                UnifyResult::Success
+                            )
+                        };
                         if self.resolve_deferred_instances(&pending) {
                             self.metas.commit();
                             let result = self.metas.instantiate(&deferred_result);
                             return Ok(self.metas.instantiate_levels(&result));
                         }
+                        // The expected type DID determine every instance goal —
+                        // each is GROUND now — and synthesis still found
+                        // nothing. No later information can change that answer,
+                        // so re-running the search with the carrier RE-OPENED
+                        // (the eager fallback below, after `pop_scope` discards
+                        // `?a := <expected>`) can only let a candidate INVENT
+                        // the carrier and hand back a term at the wrong type.
+                        // That is precisely the reported failure: a bare
+                        // `default` against an expected `a` came back as
+                        // `@Inhabited.default <someOtherCarrier> ..` and the
+                        // declaration failed as "expected FVar(..), got
+                        // Const(..)" — a wrong DIAGNOSIS pointing away from the
+                        // real cause. Report the synthesis failure honestly
+                        // instead. Cannot lose a success: if the ground goal
+                        // `C <expected>` has no instance, no search can produce
+                        // one AT that carrier, so the eager fallback's own
+                        // closing unification against `expected` could only
+                        // fail too.
+                        //
+                        // `resolve_deferred_instances` stops at its FIRST
+                        // failure and assigns each goal it did solve, so the
+                        // first pending entry whose metavariable is still
+                        // unassigned IS the goal that could not be synthesized
+                        // — the error names that one, never a sibling that
+                        // resolved fine.
+                        let honest_failure = expected_pinned
+                            .then(|| {
+                                let (_, goal_ty) = pending.iter().find(|(meta_arg, _)| {
+                                    matches!(
+                                        self.metas.instantiate(meta_arg).kind(),
+                                        ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some()
+                                    )
+                                })?;
+                                let goal = self.metas.instantiate(goal_ty);
+                                if self.has_metavars(&goal) {
+                                    return None;
+                                }
+                                let (class_name, _) = crate::instances::extract_class_app(&goal)?;
+                                Some(ElabError::FailedToSynthesize {
+                                    class_name,
+                                    goal: format!("{goal:?}"),
+                                })
+                            })
+                            .flatten();
                         self.metas.pop_scope();
+                        if let Some(err) = honest_failure {
+                            return Err(err);
+                        }
 
                         // Fall back to eager insertion so behavior is never worse than
                         // before this refinement (the original #3396 path).
@@ -952,7 +1002,7 @@ impl<'a> ElabCtx<'a> {
                         UnifyResult::Success => coerced,
                         UnifyResult::Failure(msg) => {
                             return Err(ElabError::TypeMismatch {
-                                expected: format!("{expected_arg_ty:?}"),
+                                expected: format!("{expected_arg_ty}"),
                                 actual: msg,
                             });
                         }
@@ -971,7 +1021,7 @@ impl<'a> ElabCtx<'a> {
                                 coerced
                             } else {
                                 return Err(ElabError::TypeMismatch {
-                                    expected: format!("{expected_arg_ty:?}"),
+                                    expected: format!("{expected_arg_ty}"),
                                     actual: msg,
                                 });
                             }
@@ -998,10 +1048,9 @@ impl<'a> ElabCtx<'a> {
             } else {
                 // Function type is exhausted (not a Pi) but arguments remain.
                 // Return an error instead of silently applying (#1720).
-                return Err(ElabError::TooManyArguments {
-                    func_type: format!("{current_type:?}"),
-                    remaining_args: args.len() - idx,
-                });
+                // Naming an auto-bound head is the third mask's repair; see
+                // `over_applied_head_error`.
+                return Err(self.over_applied_head_error(&result, &current_type, args.len() - idx));
             }
         }
 
@@ -1064,7 +1113,7 @@ impl<'a> ElabCtx<'a> {
                         UnifyResult::Success => coerced,
                         UnifyResult::Failure(msg) => {
                             return Err(ElabError::TypeMismatch {
-                                expected: format!("{expected_w:?}"),
+                                expected: format!("{expected_w}"),
                                 actual: msg,
                             });
                         }
@@ -1089,7 +1138,7 @@ impl<'a> ElabCtx<'a> {
                                 coerced
                             } else {
                                 return Err(ElabError::TypeMismatch {
-                                    expected: format!("{expected_w:?}"),
+                                    expected: format!("{expected_w}"),
                                     actual: msg,
                                 });
                             }
@@ -1110,10 +1159,8 @@ impl<'a> ElabCtx<'a> {
                 current_type = new_type;
                 pending.append(&mut new_pending);
             } else {
-                return Err(ElabError::TooManyArguments {
-                    func_type: format!("{current_type:?}"),
-                    remaining_args: args.len() - idx,
-                });
+                // Third mask: name the head when auto-implicit swallowed it.
+                return Err(self.over_applied_head_error(&result, &current_type, args.len() - idx));
             }
         }
 

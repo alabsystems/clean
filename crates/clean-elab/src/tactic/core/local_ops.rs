@@ -86,8 +86,8 @@ impl ProofState {
         let value_ty = self.infer_type(&goal, &new_value)?;
         if !self.is_def_eq(&goal, &value_ty, &new_ty) {
             return Err(TacticError::TypeMismatch {
-                expected: format!("{:?}", self.metas.instantiate(&new_ty)),
-                actual: format!("{:?}", self.metas.instantiate(&value_ty)),
+                expected: format!("{}", self.metas.instantiate(&new_ty)),
+                actual: format!("{}", self.metas.instantiate(&value_ty)),
             });
         }
 

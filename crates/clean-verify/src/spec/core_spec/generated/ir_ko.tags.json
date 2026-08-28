@@ -1,0 +1,66 @@
+{
+ "chain": "ir_ko",
+ "body": "level::Level::kind_ord",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first: WHICH aggregate slot a body reads is a property of the BODY and lives in the core module as a canonical first-use index; WHICH crate table entry the artifact named is a property of the BUILD and lives here. `enum.2` is the second kind. It happens to sit INSIDE the ir_d0..ir_d16 atom pool, so unlike ir_pv's 127 the minted alias spells it `ir_d2` -- same policy, other arm.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_ko_tenum` alias (`IRTy.enum_ ir_d2`) that `ir_ko_b0` loads, so the REGISTERED term carries the crate id exactly as the 2026-08-19 load-type correction requires. `ir_mint::decode` reads it in the other direction and REFUSES an id the table does not list.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print: every parameter's TYPE, every `align` operand and the KINDS of trailing annotation clause. Read `ir_h2.tags.json`'s `interface_what` for why they are pinned here rather than in the module. On this chain the sharp slots are the receiver (`ptr` vs `Rc<enum.2>`: the entry `load` reads the discriminant through one and the refcount header through the other, and the two are ONE core module) and the join width (`bb6(%1: u8)` vs `bb6(%1: u32)`: the five materialised answers route through ir_const_int_eval's width-8 residue, and a wider join is a different program the core module alone cannot separate, because the block-parameter list carries only the SSA id).",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED, because it moves. Both were read from reader A's own record on the laneREG wc-REG dump_O3 2026-08-21 dump this migration was revalidated against: `param_tys_erased: [\"Ptr\"]`, `block_param_tys_erased: [\"bb6:U8\"]`, `aligns_erased: [\"load:None\"]`.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Both are printed by `Display for Function` only when they are not the default. Read the notes in ir_h2.tags.json.",
+  "functy": 306,
+  "functy_note": "Pinned VERBATIM and re-pinned under review: a body has one header signature, so there is nothing to intern it against, and the emitted text carries no signature table. Read the notes in ir_h2.tags.json. The producer A/B record has this index at 470/470/306 over its three dumps and reader A's 2026-08-21 laneREG dump says 305, all with the instruction text byte-identical -- the recorded whole-crate drift class, re-observed twice. The pin compares reader B's header against the FIXTURE-ERA 306; reader A's value is RECORDED in ir_ko.mint.json, NEVER COMPARED, like observed_ty.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&level::Level",
+    "note": "The receiver. The entry `load` reads the discriminant through it and NOTHING ELSE is read -- one load, one extractfield at index 0, then the switch -- which is what lets EncodesLevelKindCell stay payload-agnostic."
+   }
+  ],
+  "block_params": [
+   {
+    "block": 6,
+    "index": 0,
+    "ssa": 1,
+    "ty": "u8",
+    "observed_ty": "u8",
+    "note": "The join. All five arms funnel through it: four explicit switch cases and the default edge that carries the reachable Param answer. The WIDTH is the semantic payload of this row: the first chained join that binds an integer rather than a Bool."
+   }
+  ],
+  "aligns": [
+   "load:None"
+  ],
+  "aligns_note": "ONE entry, for the one memory instruction in the body -- the entry load of the receiver. Reader A wrote it in its own spelling (`format!(\"load:{align:?}\")`), so the two records compare directly.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 2,
+   "alias": "ir_ko_tenum",
+   "rust_type": "level::Level",
+   "observed_crate_id_by_producer": {
+    "wave-tr-fix-2026-08-12": 2,
+    "mfclose-2026-08-13": 2,
+    "lane2rv-2026-08-19": 2,
+    "laneREG-2026-08-21": 2
+   },
+   "note": "Observed at 2 on all FOUR dumps recorded for this chain: the three producers of ir_mint.producer_ab.json (where every artifact func_id moved and the core digest did not) and the 2026-08-21 laneREG wc-REG dump_O3 revalidation this migration ran (func_id 3900, functy 305 -- both moved again, enum.2 did not, core digest still 271f7d6e...). Still a pin to be re-checked, not an invariance: `expr_path_step_clone`'s enum id moved 181 -> 176 over the same three dumps with not one instruction changed."
+  }
+ ],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. `Level::kind_ord` calls NOTHING: its coverage row records calls {resolved 0, extern_decls 0, unresolved 0} (the A0 criterion `bodyful reachable closure` PASSES here and fails on level_is_zero), reader A's `crate_func_ids_seen` is the single entry [3900] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`, under which reader B reserves canonical index 0 and interns callees from 1; with no callee that is exactly reader A's numbering. `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`, so this cannot silently become the 2026-08-20 namespace collision."
+}

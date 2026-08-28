@@ -442,6 +442,26 @@ pub enum Literal {
     String(Arc<str>),
 }
 
+/// Surface syntax for a literal: a bare numeral, or a quoted-and-escaped
+/// string.
+///
+/// This exists because literals reach editors. The derived `Debug` renders
+/// `Nat(Small(1))` — Rust variant names a user has no business seeing in a
+/// goal window or a diagnostic — so every rendering path (`Display for Expr`,
+/// the kernel's type-error strings, the unifier's mismatch messages) formats
+/// through here instead.
+impl std::fmt::Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // `BigNat`'s own Display: decimal when small, `0x…` when big.
+            Literal::Nat(n) => write!(f, "{n}"),
+            // `{:?}` on a `str` is exactly Lean's string-literal syntax —
+            // quoted, with escapes — not a Rust type name.
+            Literal::String(s) => write!(f, "{s:?}"),
+        }
+    }
+}
+
 impl Literal {
     /// Create a natural number literal.
     ///

@@ -13,6 +13,7 @@ use crate::mode::CleanMode;
 use crate::name::Name;
 
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// A proof certificate witnessing a typing derivation.
 ///
@@ -21,6 +22,27 @@ use serde::{Deserialize, Serialize};
 ///
 /// Certificates are serializable for proof archives and can be verified
 /// independently by a certificate verifier.
+///
+/// # Why the recursive children are `Arc`, not `Box`
+///
+/// The expressions a certificate mirrors are DAGs: `ExprKind::App` and friends
+/// hold `Arc<Expr>`, and match lowering routinely hands the same sub-term to
+/// several parents. `infer_arc_memo` (see `tc/cert/mod.rs`) already walks such
+/// a DAG once. With `Box` children the *materialized* certificate was still the
+/// expanded TREE — every memo hit deep-cloned the memoized sub-certificate and
+/// every parent embedded its children by value — so a spine of depth `d` with
+/// sharing factor `b` cost `Θ(b^d)` nodes even though inference visited only
+/// `Θ(distinct nodes)`. `Arc` children make a certificate share exactly what
+/// the term it certifies shares: a memo hit is a refcount bump and the
+/// materialized size is `O(DAG)`. Regression:
+/// `tests/cert_share_growth.rs::cert_over_shared_arc_dag_stays_linear`.
+///
+/// This is representation only — the WIRE FORMAT IS UNCHANGED. `serde`'s `Arc`
+/// impls (the `rc` feature, already enabled by this crate) are transparent
+/// exactly like `Box`: they serialize the pointee and deserialize into a fresh
+/// allocation, so sharing is not encoded and a certificate serializes to the
+/// same bytes it did before. Note the corollary: serializing a *shared*
+/// certificate still re-expands it, so the DAG win is an in-memory one.
 #[must_use = "proof certificates should be verified or stored"]
 pub enum ProofCert {
     /// Certificate for Sort(l) : Sort(succ(l))
@@ -62,11 +84,11 @@ pub enum ProofCert {
     /// Records: function cert, arg cert, and the instantiated result type
     App {
         /// Certificate for the function expression
-        fn_cert: Box<ProofCert>,
+        fn_cert: Arc<ProofCert>,
         /// The Pi type of the function
         fn_type: Box<Expr>,
         /// Certificate for the argument expression
-        arg_cert: Box<ProofCert>,
+        arg_cert: Arc<ProofCert>,
         /// Result type after substitution: B[a/x]
         result_type: Box<Expr>,
     },
@@ -77,9 +99,9 @@ pub enum ProofCert {
         /// Binder information (implicit, explicit, etc.)
         binder_info: BinderInfo,
         /// Certificate proving A : Sort(l)
-        arg_type_cert: Box<ProofCert>,
+        arg_type_cert: Arc<ProofCert>,
         /// Certificate proving b : B in extended context
-        body_cert: Box<ProofCert>,
+        body_cert: Arc<ProofCert>,
         /// The resulting Pi type
         result_type: Box<Expr>,
     },
@@ -89,11 +111,11 @@ pub enum ProofCert {
         /// Binder information (implicit, explicit, etc.)
         binder_info: BinderInfo,
         /// Certificate proving A : Sort(l1)
-        arg_type_cert: Box<ProofCert>,
+        arg_type_cert: Arc<ProofCert>,
         /// Universe level l1 of the domain
         arg_level: Level,
         /// Certificate proving B : Sort(l2) in extended context
-        body_type_cert: Box<ProofCert>,
+        body_type_cert: Arc<ProofCert>,
         /// Universe level l2 of the codomain
         body_level: Level,
     },
@@ -101,11 +123,11 @@ pub enum ProofCert {
     /// Certificate for Let: let x : A := v in b : B[v/x]
     Let {
         /// Certificate proving A : Sort(l)
-        type_cert: Box<ProofCert>,
+        type_cert: Arc<ProofCert>,
         /// Certificate proving v : A
-        value_cert: Box<ProofCert>,
+        value_cert: Arc<ProofCert>,
         /// Certificate proving b : B in extended context
-        body_cert: Box<ProofCert>,
+        body_cert: Arc<ProofCert>,
         /// Result type after substitution: B[v/x]
         result_type: Box<Expr>,
     },
@@ -122,7 +144,7 @@ pub enum ProofCert {
     /// Used when checking e : T reduces to checking e : T' where T ≡ T'
     DefEq {
         /// Certificate for the inner expression
-        inner: Box<ProofCert>,
+        inner: Arc<ProofCert>,
         /// Expected type from context
         expected_type: Box<Expr>,
         /// Actual inferred type
@@ -137,7 +159,7 @@ pub enum ProofCert {
         /// Metadata map attached to the expression
         metadata: MDataMap,
         /// Certificate for the inner expression
-        inner_cert: Box<ProofCert>,
+        inner_cert: Arc<ProofCert>,
         /// Result type (same as inner expression's type)
         result_type: Box<Expr>,
     },
@@ -150,7 +172,7 @@ pub enum ProofCert {
         /// Field index in the structure
         idx: u32,
         /// Certificate for the expression being projected
-        expr_cert: Box<ProofCert>,
+        expr_cert: Arc<ProofCert>,
         /// Type of the expression being projected
         expr_type: Box<Expr>,
         /// Type of the projected field
@@ -175,20 +197,20 @@ pub enum ProofCert {
     /// Path A a b is a type when A : Sort(l), a : A, b : A
     CubicalPath {
         /// Certificate for the type family A
-        ty_cert: Box<ProofCert>,
+        ty_cert: Arc<ProofCert>,
         /// Universe level of the type family
         ty_level: Level,
         /// Certificate for the left endpoint a
-        left_cert: Box<ProofCert>,
+        left_cert: Arc<ProofCert>,
         /// Certificate for the right endpoint b
-        right_cert: Box<ProofCert>,
+        right_cert: Arc<ProofCert>,
     },
 
     /// Certificate for CubicalPathLam { body } : Path A (body[0/i]) (body[1/i])
     /// Path abstraction `<i> e` where i : I
     CubicalPathLam {
         /// Certificate for the path body expression
-        body_cert: Box<ProofCert>,
+        body_cert: Arc<ProofCert>,
         /// The type of the body (before abstracting interval var)
         body_type: Box<Expr>,
         /// The resulting Path type
@@ -199,9 +221,9 @@ pub enum ProofCert {
     /// Path application p @ i where p : Path A a b and i : I
     CubicalPathApp {
         /// Certificate for the path expression being applied
-        path_cert: Box<ProofCert>,
+        path_cert: Arc<ProofCert>,
         /// Certificate for the interval argument
-        arg_cert: Box<ProofCert>,
+        arg_cert: Arc<ProofCert>,
         /// The Path type of the path expression
         path_type: Box<Expr>,
         /// The result type (the type parameter A from Path A a b)
@@ -212,13 +234,13 @@ pub enum ProofCert {
     /// Homogeneous composition in Cubical type theory
     CubicalHComp {
         /// Certificate for the type parameter
-        ty_cert: Box<ProofCert>,
+        ty_cert: Arc<ProofCert>,
         /// Certificate for the face formula φ : F
-        phi_cert: Box<ProofCert>,
+        phi_cert: Arc<ProofCert>,
         /// Certificate for the partial element u : (i : I) → Partial φ A
-        u_cert: Box<ProofCert>,
+        u_cert: Arc<ProofCert>,
         /// Certificate for the base element a₀ : A
-        base_cert: Box<ProofCert>,
+        base_cert: Arc<ProofCert>,
         /// The result type A
         result_type: Box<Expr>,
     },
@@ -227,11 +249,11 @@ pub enum ProofCert {
     /// Transport along a path in Cubical type theory
     CubicalTransp {
         /// Certificate for the type family A : I → Type
-        ty_cert: Box<ProofCert>,
+        ty_cert: Arc<ProofCert>,
         /// Certificate for the face formula φ : F
-        phi_cert: Box<ProofCert>,
+        phi_cert: Arc<ProofCert>,
         /// Certificate for the base element a₀ : A(0)
-        base_cert: Box<ProofCert>,
+        base_cert: Arc<ProofCert>,
         /// The result type A(1)
         result_type: Box<Expr>,
     },
@@ -240,13 +262,13 @@ pub enum ProofCert {
     /// Generalized coercion `coe^{r→s}` in Cubical type theory
     CubicalCoe {
         /// Certificate for the type-family line A : I → Sort u
-        ty_cert: Box<ProofCert>,
+        ty_cert: Arc<ProofCert>,
         /// Certificate for the source endpoint r : I
-        r_cert: Box<ProofCert>,
+        r_cert: Arc<ProofCert>,
         /// Certificate for the target endpoint s : I
-        s_cert: Box<ProofCert>,
+        s_cert: Arc<ProofCert>,
         /// Certificate for the base element base : A r
-        base_cert: Box<ProofCert>,
+        base_cert: Arc<ProofCert>,
         /// The result type A s
         result_type: Box<Expr>,
     },
@@ -264,18 +286,18 @@ pub enum ProofCert {
     /// Set membership ∈
     ZFCMem {
         /// Certificate for the element expression
-        elem_cert: Box<ProofCert>,
+        elem_cert: Arc<ProofCert>,
         /// Certificate for the set expression
-        set_cert: Box<ProofCert>,
+        set_cert: Arc<ProofCert>,
     },
 
     /// Certificate for ZFCComprehension { var_ty, pred } : Set
     /// Set comprehension { x : A | P(x) }
     ZFCComprehension {
         /// Certificate for the variable type A
-        var_ty_cert: Box<ProofCert>,
+        var_ty_cert: Arc<ProofCert>,
         /// Certificate for the predicate P : A → Prop
-        pred_cert: Box<ProofCert>,
+        pred_cert: Arc<ProofCert>,
         /// The result type Set
         result_type: Box<Expr>,
     },
@@ -291,7 +313,7 @@ pub enum ProofCert {
     /// Squash (propositional truncation) - all proofs are definitionally equal
     Squash {
         /// Certificate for the inner type being squashed
-        inner_cert: Box<ProofCert>,
+        inner_cert: Arc<ProofCert>,
     },
 }
 
@@ -882,7 +904,7 @@ type BorrowedProofCertWire<'a> = ProofCertWire<
 >;
 
 type OwnedProofCertWire = ProofCertWire<
-    Box<ProofCert>,
+    Arc<ProofCert>,
     Box<Expr>,
     Level,
     Vec<Level>,
@@ -1289,13 +1311,16 @@ impl<'de> Deserialize<'de> for ProofCert {
     }
 }
 
-// Do not derive `Clone` for this recursive certificate tree. A certificate can
-// be cloned while type inference is already deep in a protected stack segment
-// (notably by the Arc-identity memo), and the derived implementation performs
-// its whole recursive descent without another `stack_safe` boundary. On the
-// default Rust test-thread stack that can cross the guard page and abort the
-// entire process. Every recursive child clone re-enters this implementation, so
-// guarding here keeps both direct clones and all existing call sites stack-safe.
+// Hand-written so the clone stays SHALLOW and the `stack_safe` boundary is
+// explicit. Since the recursive children became `Arc<ProofCert>` (see the type
+// doc), cloning a certificate copies one node and bumps refcounts — it no
+// longer descends the tree, which is precisely what removed the `Θ(b^d)`
+// clone cost on shared-`Arc` DAGs. The `stack_safe` wrapper is retained as
+// defence in depth: a certificate is still cloned while type inference is deep
+// in a protected stack segment (notably by the Arc-identity memo), and the
+// non-recursive `Box<Expr>` field clones must not be the frame that crosses
+// the guard page. Do not replace this with a derived `Clone` without keeping
+// that boundary.
 impl Clone for ProofCert {
     fn clone(&self) -> Self {
         crate::expr::stack_safe(|| match self {
@@ -1773,7 +1798,7 @@ impl Drop for ProofCert {
         // red zone, detach only the next recursive children and destroy them
         // on a grown stack segment. Replacement allocations therefore occur
         // at segment transitions rather than at every node in a deep tree.
-        let leaf = || Box::new(ProofCert::SProp);
+        let leaf = || Arc::new(ProofCert::SProp);
         let mut cert_children = Vec::with_capacity(4);
         let mut def_eq_steps = None;
         let mut zfc_kind = None;
@@ -1946,31 +1971,31 @@ pub enum ZFCSetCertKind {
     /// Empty set ∅
     Empty,
     /// Singleton {a}
-    Singleton(Box<ProofCert>),
+    Singleton(Arc<ProofCert>),
     /// Unordered pair {a, b}
-    Pair(Box<ProofCert>, Box<ProofCert>),
+    Pair(Arc<ProofCert>, Arc<ProofCert>),
     /// Union ⋃A
-    Union(Box<ProofCert>),
+    Union(Arc<ProofCert>),
     /// Power set P(A)
-    PowerSet(Box<ProofCert>),
+    PowerSet(Arc<ProofCert>),
     /// Separation {x ∈ A | φ(x)}
     Separation {
         /// Certificate for the base set A
-        set_cert: Box<ProofCert>,
+        set_cert: Arc<ProofCert>,
         /// Certificate for the predicate φ
-        pred_cert: Box<ProofCert>,
+        pred_cert: Arc<ProofCert>,
     },
     /// Replacement {F(x) | x ∈ A}
     Replacement {
         /// Certificate for the base set A
-        set_cert: Box<ProofCert>,
+        set_cert: Arc<ProofCert>,
         /// Certificate for the function F
-        func_cert: Box<ProofCert>,
+        func_cert: Arc<ProofCert>,
     },
     /// Infinity ω
     Infinity,
     /// Choice (AC)
-    Choice(Box<ProofCert>),
+    Choice(Arc<ProofCert>),
 }
 
 /// A step in a definitional equality proof.

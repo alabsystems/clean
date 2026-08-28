@@ -38,6 +38,82 @@ const FRONTEND_OLEAN_IMPORT_MODULE_LIMIT: usize = 16_384;
 // fallback in `init_prelude_for_module`). The frontend remains bounded via
 // `FRONTEND_OLEAN_IMPORT_MODULE_LIMIT`.
 
+/// What the import path does with a module it cannot resolve to anything real.
+///
+/// # Why this exists
+///
+/// Until 2026-08-26 there was no policy: [`finish_import_module`] fell through
+/// to `prelude_providers::init_prelude_for_module` unconditionally, discarded
+/// its `bool`, and returned `Ok(())`. Two silent-substitution holes followed
+/// from that, and both were reproduced on the shipped binary before this type
+/// was written:
+///
+/// ```text
+/// $ printf 'import Mathlib.Utterly.Fake.Nonsense\ntheorem t3 (R : Type) [Ring R] (a : R) : a = a := rfl\n' > fake.lean
+/// $ clean check fake.lean
+///   1 passed, 0 failed          # exit 0 — `Ring` came from a hand-written stub
+/// $ printf 'import Totally.Fake.Module\ntheorem t4 : 1 = 1 := rfl\n' > fake2.lean
+/// $ clean check fake2.lean
+///   1 passed, 0 failed          # exit 0 — nothing at all served the import
+/// ```
+///
+/// A `PASS` on such a file is meaningless: every declaration in it elaborated
+/// against something the source did not ask for, so no whole-project run
+/// through this path could be distinguished from a run against ~30 hand-written
+/// structures. The same discipline already existed one crate over —
+/// `clean-lake`'s builder has been fail-closed-by-default with an explicit
+/// `--permissive-imports` opt-out — and was simply never extended here.
+///
+/// # What still counts as resolved
+///
+/// [`ImportPolicy::FailClosed`] refuses **fabrication**, not every stand-in:
+///
+/// * a real `.olean` load — resolved;
+/// * an intra-project `.lean` source file this run already elaborated (the
+///   caller records it via [`crate::FileContext::mark_import_satisfied_from_source`]) —
+///   resolved, because the declarations really are in `env`;
+/// * a module named verbatim by a Clean prelude provider, or the `Lean` /
+///   `Lean.*` metaprogramming shim ([`crate::prelude_providers::has_declared_prelude`])
+///   — a *declared* substitution, accepted but logged at `warn`;
+/// * anything else — including the `Mathlib.*` prefix wildcard, which accepts
+///   every name that has ever been typed — is **unresolved** and is an error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImportPolicy {
+    /// Default. An `import` that resolves to no `.olean`, no already-elaborated
+    /// project source, and no *named* Clean prelude provider fails the
+    /// declaration with [`ElabError::UnresolvedImport`].
+    #[default]
+    FailClosed,
+    /// Legacy warn-and-continue: fabricate a prelude for the unresolved module
+    /// and let elaboration proceed. Reached only through an explicit opt-in
+    /// (`clean check --permissive-imports`), and every fabrication is logged at
+    /// `warn` so the substitution is never silent even here.
+    Permissive,
+}
+
+/// Per-file inputs the unresolved-import decision needs, beyond the module name.
+#[derive(Debug, Clone, Copy)]
+struct ImportResolution<'a> {
+    policy: ImportPolicy,
+    /// Modules whose declarations are already in `env` because this run
+    /// elaborated their intra-project `.lean` source. Such an import is
+    /// resolved even though no `.olean` exists for it.
+    satisfied_from_source: &'a HashSet<String>,
+}
+
+impl ImportResolution<'_> {
+    fn is_satisfied_from_source(&self, module: &str) -> bool {
+        self.satisfied_from_source.contains(module)
+    }
+}
+
+/// Empty borrow used by the entry points that have no per-file source-resolution
+/// record of their own.
+fn no_source_resolved() -> &'static HashSet<String> {
+    static EMPTY: std::sync::OnceLock<HashSet<String>> = std::sync::OnceLock::new();
+    EMPTY.get_or_init(HashSet::new)
+}
+
 /// Process import statements and load modules
 ///
 /// Tries to load modules from .olean files first (real Mathlib), falling back
@@ -45,8 +121,9 @@ const FRONTEND_OLEAN_IMPORT_MODULE_LIMIT: usize = 16_384;
 ///
 /// # Priority
 /// 1. Real .olean loading via clean_olean (requires MATHLIB_PATH/LEAN_PATH or elan)
-/// 2. Fallback to stub initializers for known modules
-/// 3. Unknown imports are silently ignored
+/// 2. Fallback to stub initializers for modules a provider names verbatim
+/// 3. Anything else is an [`ElabError::UnresolvedImport`] under the default
+///    [`ImportPolicy::FailClosed`]
 ///
 /// # Environment Variables
 /// - `MATHLIB_PATH`: Colon-separated paths to Mathlib .olean directories
@@ -58,15 +135,23 @@ const FRONTEND_OLEAN_IMPORT_MODULE_LIMIT: usize = 16_384;
 /// initialize Clean's built-in module preludes, but external Lean / Lake /
 /// Mathlib `.olean` artifacts are not consulted as semantic evidence.
 ///
-/// Modules that have no built-in Clean prelude are silently ignored, mirroring
-/// the unknown-module behavior of [`process_imports`].
+/// Under [`ImportPolicy::FailClosed`] a module with no built-in Clean prelude is
+/// an error, matching the unknown-module behavior of [`process_imports`].
 pub fn process_imports_clean_native(
     env: &mut clean_kernel::Environment,
     paths: &[Vec<String>],
+    policy: ImportPolicy,
 ) -> Result<(), ElabError> {
+    let resolution = ImportResolution {
+        policy,
+        satisfied_from_source: no_source_resolved(),
+    };
     for path in paths {
         let module = path.join(".");
-        let _ = crate::prelude_providers::init_prelude_for_module(env, &module)?;
+        if serve_from_prelude(env, &module, resolution)? {
+            continue;
+        }
+        unresolved_import(&module, "no Clean-native prelude provides it", resolution)?;
     }
     Ok(())
 }
@@ -78,6 +163,15 @@ pub fn process_imports(
     process_imports_with_search_paths(env, paths, &[])
 }
 
+/// [`process_imports`] with an explicit [`ImportPolicy`].
+pub fn process_imports_with_policy(
+    env: &mut clean_kernel::Environment,
+    paths: &[Vec<String>],
+    policy: ImportPolicy,
+) -> Result<(), ElabError> {
+    process_imports_with_search_paths_and_policy(env, paths, &[], policy)
+}
+
 /// Process import statements with additional file/project-local `.olean` paths.
 ///
 /// The extra paths are searched before environment/toolchain defaults so a Lake
@@ -87,7 +181,26 @@ pub fn process_imports_with_search_paths(
     paths: &[Vec<String>],
     extra_search_paths: &[PathBuf],
 ) -> Result<(), ElabError> {
+    process_imports_with_search_paths_and_policy(
+        env,
+        paths,
+        extra_search_paths,
+        ImportPolicy::default(),
+    )
+}
+
+/// [`process_imports_with_search_paths`] with an explicit [`ImportPolicy`].
+pub fn process_imports_with_search_paths_and_policy(
+    env: &mut clean_kernel::Environment,
+    paths: &[Vec<String>],
+    extra_search_paths: &[PathBuf],
+    policy: ImportPolicy,
+) -> Result<(), ElabError> {
     let search_paths = import_search_paths(extra_search_paths);
+    let resolution = ImportResolution {
+        policy,
+        satisfied_from_source: no_source_resolved(),
+    };
 
     for path in paths {
         let module = path.join(".");
@@ -107,7 +220,7 @@ pub fn process_imports_with_search_paths(
                 FRONTEND_OLEAN_IMPORT_MODULE_LIMIT,
             ))
         };
-        finish_import_module(env, &module, outcome)?;
+        finish_import_module(env, &module, outcome, resolution)?;
     }
     Ok(())
 }
@@ -134,6 +247,25 @@ pub fn process_imports_with_search_paths_shared(
     extra_search_paths: &[PathBuf],
     visited: &mut hashbrown::HashSet<String>,
 ) -> Result<(), ElabError> {
+    process_imports_shared_inner(
+        env,
+        paths,
+        extra_search_paths,
+        visited,
+        ImportResolution {
+            policy: ImportPolicy::default(),
+            satisfied_from_source: no_source_resolved(),
+        },
+    )
+}
+
+fn process_imports_shared_inner(
+    env: &mut clean_kernel::Environment,
+    paths: &[Vec<String>],
+    extra_search_paths: &[PathBuf],
+    visited: &mut hashbrown::HashSet<String>,
+    resolution: ImportResolution<'_>,
+) -> Result<(), ElabError> {
     let search_paths = import_search_paths(extra_search_paths);
 
     for path in paths {
@@ -150,9 +282,41 @@ pub fn process_imports_with_search_paths_shared(
                 visited,
             ))
         };
-        finish_import_module(env, &module, outcome)?;
+        finish_import_module(env, &module, outcome, resolution)?;
     }
     Ok(())
+}
+
+/// The file-driven entry point: process one `import` declaration's module list
+/// against the search paths, `visited` memo, [`ImportPolicy`] and
+/// already-elaborated-from-source record that [`crate::FileContext`] carries.
+///
+/// This is what `clean check` and the LSP document path reach. It is the only
+/// entry point that can see the intra-project source resolution the CLI
+/// performs in its first pass, so it is the only one that can tell
+/// "`import Foo` whose `Foo.lean` this run already elaborated" (resolved) apart
+/// from "`import Foo` that names nothing at all" (unresolved).
+pub fn process_imports_for_file(
+    env: &mut clean_kernel::Environment,
+    paths: &[Vec<String>],
+    file_ctx: &mut crate::FileContext,
+) -> Result<(), ElabError> {
+    // Clone the (small — one PathBuf per Lake search root) path list so the
+    // immutable borrow of `file_ctx` does not conflict with the mutable borrow
+    // of its `visited` memo below.
+    let extra_search_paths = file_ctx.import_search_paths().to_vec();
+    let policy = file_ctx.import_policy();
+    let (visited, satisfied_from_source) = file_ctx.import_loader_state_mut();
+    process_imports_shared_inner(
+        env,
+        paths,
+        &extra_search_paths,
+        visited,
+        ImportResolution {
+            policy,
+            satisfied_from_source,
+        },
+    )
 }
 
 /// One-shot batch variant of [`process_imports_with_search_paths_shared`] that
@@ -174,14 +338,21 @@ pub fn process_import_batch_with_search_paths(
 
 /// Apply the shared per-import outcome policy: register the surface prelude on
 /// a successful `.olean` load, honor the `UnsupportedModule` → built-in prelude
-/// fallback, and otherwise (load error, or `None` = no search paths) fall back
-/// to the hand-written stub prelude. `outcome` is `None` when search paths were
-/// empty (skip the `.olean` attempt entirely) and `Some(result)` once a load
-/// has been attempted.
+/// fallback, and otherwise (load error, or `None` = no search paths) decide,
+/// under `resolution`, whether a hand-written stand-in may serve the module at
+/// all. `outcome` is `None` when search paths were empty (skip the `.olean`
+/// attempt entirely) and `Some(result)` once a load has been attempted.
+///
+/// The last arm used to be `let _ = init_prelude_for_module(env, module)?;
+/// Ok(())` — it discarded the "was anything actually registered?" bool and
+/// reported success either way. That is the line that made every `clean check`
+/// verdict on a file with an unresolvable import meaningless; see
+/// [`ImportPolicy`] for the two reproductions.
 fn finish_import_module(
     env: &mut clean_kernel::Environment,
     module: &str,
     outcome: Option<Result<Vec<clean_olean::LoadSummary>, clean_olean::ImportError>>,
+    resolution: ImportResolution<'_>,
 ) -> Result<(), ElabError> {
     if let Some(result) = outcome {
         match result {
@@ -199,7 +370,7 @@ fn finish_import_module(
                 return Ok(()); // Successfully loaded, skip stub fallback
             }
             Err(clean_olean::ImportError::UnsupportedModule { module, reason }) => {
-                if crate::prelude_providers::init_prelude_for_module(env, &module)? {
+                if serve_from_prelude(env, &module, resolution)? {
                     return Ok(());
                 }
                 return Err(ElabError::Unsupported {
@@ -212,14 +383,101 @@ fn finish_import_module(
                     error = %e,
                     "Failed to load .olean, trying stub fallback"
                 );
-                // Fall through to stub logic below
+                // Fall through to the stand-in decision below, carrying the
+                // loader's own reason so a fail-closed refusal can name it.
+                return finish_unresolved(env, module, &e.to_string(), resolution);
             }
         }
     }
 
-    // Stub fallback for known modules
-    let _ = crate::prelude_providers::init_prelude_for_module(env, module)?;
-    Ok(())
+    finish_unresolved(
+        env,
+        module,
+        "no `.olean` search path was available (set LEAN_PATH / MATHLIB_PATH, \
+         or build the project with `lake build`)",
+        resolution,
+    )
+}
+
+/// No real `.olean` served `module`. Accept an already-elaborated project source
+/// file or a *declared* Clean prelude; otherwise apply `resolution.policy`.
+fn finish_unresolved(
+    env: &mut clean_kernel::Environment,
+    module: &str,
+    reason: &str,
+    resolution: ImportResolution<'_>,
+) -> Result<(), ElabError> {
+    if resolution.is_satisfied_from_source(module) {
+        // The caller elaborated this module's own `.lean` in an earlier pass,
+        // so its declarations really are in `env`. Absence of a compiled
+        // artifact is expected here, not a gap.
+        tracing::debug!(
+            module = %module,
+            "Import satisfied by intra-project source elaborated earlier this run"
+        );
+        return Ok(());
+    }
+    if serve_from_prelude(env, module, resolution)? {
+        return Ok(());
+    }
+    unresolved_import(module, reason, resolution)
+}
+
+/// Register a hand-written stand-in for `module`, if policy allows one.
+///
+/// Under [`ImportPolicy::FailClosed`] only a module a provider names *verbatim*
+/// (or the `Lean` / `Lean.*` shim) may be served, and the substitution is logged
+/// at `warn`. Under [`ImportPolicy::Permissive`] the `Mathlib.*` prefix wildcard
+/// is allowed to fabricate one too — also at `warn`, never silently.
+fn serve_from_prelude(
+    env: &mut clean_kernel::Environment,
+    module: &str,
+    resolution: ImportResolution<'_>,
+) -> Result<bool, ElabError> {
+    let declared = crate::prelude_providers::has_declared_prelude(module);
+    if resolution.policy == ImportPolicy::FailClosed && !declared {
+        return Ok(false);
+    }
+    if !crate::prelude_providers::init_prelude_for_module(env, module)? {
+        return Ok(false);
+    }
+    if declared {
+        tracing::warn!(
+            module = %module,
+            "import served by Clean's hand-written prelude for this module, not by a real \
+             `.olean` — declarations checked against it are NOT checked against the real module"
+        );
+    } else {
+        tracing::warn!(
+            module = %module,
+            "--permissive-imports: FABRICATING a prelude for an import that resolves to \
+             nothing real; any verdict on this file is meaningless"
+        );
+    }
+    Ok(true)
+}
+
+/// Nothing real and nothing declared serves `module`.
+fn unresolved_import(
+    module: &str,
+    reason: &str,
+    resolution: ImportResolution<'_>,
+) -> Result<(), ElabError> {
+    match resolution.policy {
+        ImportPolicy::Permissive => {
+            tracing::warn!(
+                module = %module,
+                reason = %reason,
+                "--permissive-imports: unresolved import ignored; \
+                 any verdict on this file is meaningless"
+            );
+            Ok(())
+        }
+        ImportPolicy::FailClosed => Err(ElabError::UnresolvedImport {
+            module: module.to_string(),
+            reason: reason.to_string(),
+        }),
+    }
 }
 
 fn import_search_paths(extra_search_paths: &[PathBuf]) -> Vec<PathBuf> {
@@ -407,7 +665,7 @@ fn package_dir_candidates(head: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        lake_import_search_paths_for_file, nearest_lake_root_for_file,
+        lake_import_search_paths_for_file, nearest_lake_root_for_file, ElabError,
         FRONTEND_OLEAN_IMPORT_MODULE_LIMIT,
     };
     use std::fs;
@@ -479,28 +737,158 @@ mod tests {
         );
     }
 
-    /// An unknown module with no stub and no `.olean` must be silently ignored
-    /// regardless of the (now larger) import-graph bound.
+    fn module_path(module: &str) -> Vec<Vec<String>> {
+        vec![module.split('.').map(String::from).collect()]
+    }
+
+    /// An unknown module with no stub and no `.olean` must FAIL, not be ignored.
+    ///
+    /// This test asserted the opposite until 2026-08-26 ("unknown imports must
+    /// be silently ignored"). Silently ignoring it is what let a file whose
+    /// import names nothing at all report `1 passed, 0 failed` with exit 0.
     #[test]
-    fn process_imports_unknown_module_is_ignored_under_new_bound() {
+    fn process_imports_unknown_module_fails_closed() {
         use clean_kernel::Environment;
 
         let empty = tempfile::tempdir().expect("tempdir");
         let mut env = Environment::new();
-        let paths = vec![vec!["Totally", "Unknown", "Module", "Name"]
-            .into_iter()
-            .map(String::from)
-            .collect()];
+        let paths = module_path("Totally.Unknown.Module.Name");
 
-        let result = super::process_imports_with_search_paths(
+        let err = super::process_imports_with_search_paths(
             &mut env,
             &paths,
             &[empty.path().to_path_buf()],
-        );
+        )
+        .expect_err("an import that resolves to nothing must not succeed");
+        let ElabError::UnresolvedImport { module, .. } = &err else {
+            panic!("expected UnresolvedImport, got {err:?}");
+        };
+        assert_eq!(module, "Totally.Unknown.Module.Name");
+    }
+
+    /// The `Mathlib.` PREFIX WILDCARD in `prelude_providers` accepts every name
+    /// ever typed. Under the default policy that must no longer resolve an
+    /// import: a nonexistent `Mathlib.*` module is exactly as unresolvable as
+    /// any other nonexistent module.
+    ///
+    /// Reproduction this pins (measured at `84129fce7`, release binary):
+    /// `clean check` on a file importing this module reported `1 passed,
+    /// 0 failed`, exit 0, in 0.34 s, with a hand-written `Ring` substituted.
+    #[test]
+    fn process_imports_nonexistent_mathlib_module_fails_closed() {
+        use clean_kernel::{Environment, Name};
+
+        let empty = tempfile::tempdir().expect("tempdir");
+        let mut env = Environment::new();
+        let paths = module_path("Mathlib.Utterly.Fake.Nonsense");
+
+        let err = super::process_imports_with_search_paths(
+            &mut env,
+            &paths,
+            &[empty.path().to_path_buf()],
+        )
+        .expect_err("a nonexistent Mathlib module must not be served by the prefix wildcard");
+        let ElabError::UnresolvedImport { module, .. } = &err else {
+            panic!("expected UnresolvedImport, got {err:?}");
+        };
+        assert_eq!(module, "Mathlib.Utterly.Fake.Nonsense");
         assert!(
-            result.is_ok(),
-            "unknown imports must be silently ignored, got {result:?}",
+            env.get_const(&Name::from_string("Ring")).is_none(),
+            "the refused import must not have registered the full Mathlib stub set anyway",
         );
+    }
+
+    /// The rule the refusal above rests on, pinned directly: a provider names a
+    /// module VERBATIM or it does not, and the `Mathlib.` prefix wildcard is not
+    /// a name. Pure function, no environment, no global state.
+    #[test]
+    fn declared_prelude_covers_named_modules_and_not_the_mathlib_wildcard() {
+        use crate::prelude_providers::has_declared_prelude;
+
+        assert!(has_declared_prelude("Mathlib.Data.Real.Basic"));
+        assert!(has_declared_prelude("Mathlib"));
+        assert!(has_declared_prelude("Lean"));
+        assert!(has_declared_prelude("Lean.Elab.Tactic"));
+
+        assert!(!has_declared_prelude("Mathlib.Utterly.Fake.Nonsense"));
+        assert!(!has_declared_prelude("Mathlib.Data.Nat.Basic"));
+        assert!(!has_declared_prelude("Totally.Fake.Module"));
+        assert!(!has_declared_prelude("Init"));
+    }
+
+    /// `--permissive-imports` keeps the legacy warn-and-continue behavior.
+    ///
+    /// It deliberately uses a NON-`Mathlib` module. The permissive `Mathlib.*`
+    /// path calls `init_full_mathlib`, which latches the process-global
+    /// `MATHLIB_INIT` flag while environments are per-test — so asserting on it
+    /// here poisons every later test that needs a declared Mathlib provider to
+    /// actually register something. That is not hypothetical: the first draft of
+    /// this test did exactly that and turned
+    /// `process_imports_falls_back_to_stub_when_no_olean_found` and
+    /// `test_process_imports_euclidean_geometry` red. The end-to-end proof that
+    /// permissive mode still fabricates the Mathlib stub set is the release
+    /// binary, one process per run:
+    /// `clean check --permissive-imports fake.lean` → `1 passed, 0 failed`.
+    #[test]
+    fn permissive_policy_accepts_an_unresolvable_module() {
+        use clean_kernel::Environment;
+
+        let empty = tempfile::tempdir().expect("tempdir");
+        let mut env = Environment::new();
+        let paths = module_path("Totally.Fake.Module");
+
+        super::process_imports_with_search_paths_and_policy(
+            &mut env,
+            &paths,
+            &[empty.path().to_path_buf()],
+            super::ImportPolicy::Permissive,
+        )
+        .expect("--permissive-imports must keep the legacy warn-and-continue behavior");
+    }
+
+    /// An import satisfied by intra-project `.lean` SOURCE this run already
+    /// elaborated is RESOLVED, even though a source-only project has no
+    /// `.olean` for it and never will. Without this, every ordinary multi-file
+    /// project would fail closed on its own internal imports.
+    #[test]
+    fn import_satisfied_from_source_is_not_refused() {
+        use clean_kernel::Environment;
+
+        let empty = tempfile::tempdir().expect("tempdir");
+        let mut env = Environment::new();
+        let mut file_ctx = crate::FileContext::new();
+        file_ctx.set_import_search_paths(vec![empty.path().to_path_buf()]);
+
+        let paths = module_path("MyProject.Internal.Helpers");
+        super::process_imports_for_file(&mut env, &paths, &mut file_ctx)
+            .expect_err("control: without the source record this import is unresolvable");
+
+        file_ctx.mark_import_satisfied_from_source("MyProject.Internal.Helpers");
+        super::process_imports_for_file(&mut env, &paths, &mut file_ctx)
+            .expect("an import whose source this run elaborated must be treated as resolved");
+    }
+
+    /// The `Lean` / `Lean.*` metaprogramming shim is a DECLARED provider, so it
+    /// stays resolvable under the fail-closed default (plan decision 1).
+    #[test]
+    fn clean_native_lean_shim_survives_fail_closed() {
+        use clean_kernel::Environment;
+
+        let mut env = Environment::new();
+        super::process_imports_clean_native(
+            &mut env,
+            &module_path("Lean.Elab.Tactic"),
+            super::ImportPolicy::FailClosed,
+        )
+        .expect("the Lean.* shim is a declared provider and must remain resolvable");
+
+        let err = super::process_imports_clean_native(
+            &mut env,
+            &module_path("Totally.Unknown.Module.Name"),
+            super::ImportPolicy::FailClosed,
+        )
+        .expect_err("a module no Clean-native prelude provides must fail closed");
+        assert!(matches!(err, ElabError::UnresolvedImport { .. }));
     }
 
     #[test]

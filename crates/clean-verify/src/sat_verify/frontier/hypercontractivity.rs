@@ -85,7 +85,7 @@ pub fn noise_operator_fourier(coefficients: &[f64], rho: f64) -> Vec<f64> {
 ///
 /// Reference: O'Donnell, *Analysis of Boolean Functions*, Definition 1.14.
 #[must_use]
-pub fn level_k_weight(coefficients: &[f64], n: usize, k: usize) -> f64 {
+pub(crate) fn level_k_weight(coefficients: &[f64], n: usize, k: usize) -> f64 {
     if k > n {
         return 0.0;
     }

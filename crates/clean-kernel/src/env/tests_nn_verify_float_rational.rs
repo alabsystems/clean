@@ -12,6 +12,103 @@ use crate::expr::{Expr, ExprKind, Literal};
 use crate::name::Name;
 use crate::tc::TypeChecker;
 
+/// Every `Rat.mk (Int.ofNat n) d` in a term, as (numerator, denominator) Debug
+/// spellings of the two literals.
+///
+/// Structural on purpose: the SHAPE comes from the term and only the literal
+/// values are compared as text, so this survives any change to how expressions
+/// are rendered. The previous form matched whole-expression substrings against
+/// `Display`, which broke the moment `Display` improved.
+fn rat_literals(e: &Expr) -> Vec<(String, String)> {
+    fn lit_debug(e: &Expr) -> Option<String> {
+        match e.kind() {
+            ExprKind::Lit(Literal::Nat(n)) => Some(format!("{n:?}")),
+            _ => None,
+        }
+    }
+    fn head_is(e: &Expr, name: &str) -> bool {
+        matches!(e.kind(), ExprKind::Const(n, _) if n.to_string() == name)
+    }
+    let mut out = Vec::new();
+    fn walk(e: &Expr, out: &mut Vec<(String, String)>) {
+        if let ExprKind::App(f, den) = e.kind() {
+            if let ExprKind::App(mk, num_app) = f.kind() {
+                if head_is(mk, "Rat.mk") {
+                    if let ExprKind::App(of_nat, num) = num_app.kind() {
+                        if head_is(of_nat, "Int.ofNat") {
+                            if let (Some(n), Some(d)) = (lit_debug(num), lit_debug(den)) {
+                                out.push((n, d));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        match e.kind() {
+            ExprKind::App(f, a) => {
+                walk(f, out);
+                walk(a, out);
+            }
+            ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
+                walk(t, out);
+                walk(b, out);
+            }
+            ExprKind::Let(_, t, v, b, _) => {
+                walk(t, out);
+                walk(v, out);
+                walk(b, out);
+            }
+            ExprKind::Proj(_, _, sub) => walk(sub, out),
+            _ => {}
+        }
+    }
+    walk(e, &mut out);
+    out
+}
+
+/// Structural search for a `Nat` literal by value.
+///
+/// This used to assert `format!("{}", ty).contains("Small(1074)")` — matching
+/// `BigNat::Small`'s *Debug* spelling through the `Display` impl. That held only
+/// while `Display for Expr` fell back to `Debug`; once it learned Lean notation
+/// in 6d1663115 a literal renders as `1074` and the substring vanished. The
+/// exponent being pinned is a property of the TERM, so ask the term.
+fn mentions_nat_lit(e: &Expr, value: u64) -> bool {
+    match e.kind() {
+        ExprKind::Lit(Literal::Nat(n)) => n.to_u64() == Some(value),
+        ExprKind::App(f, a) => mentions_nat_lit(f, value) || mentions_nat_lit(a, value),
+        ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
+            mentions_nat_lit(t, value) || mentions_nat_lit(b, value)
+        }
+        ExprKind::Let(_, t, v, b, _) => {
+            mentions_nat_lit(t, value) || mentions_nat_lit(v, value) || mentions_nat_lit(b, value)
+        }
+        ExprKind::Proj(_, _, sub) => mentions_nat_lit(sub, value),
+        _ => false,
+    }
+}
+
+/// Structural search for a `Const` by name.
+///
+/// This shape assertion used to string-match the pretty-printer
+/// (`s.contains("And ")`). That broke the moment `Display for Expr` learned
+/// Lean notation in 6d1663115 and began printing `∧` — a test asserting a
+/// term's SHAPE should not depend on how it is rendered, so it asks the term.
+fn mentions_const(e: &Expr, name: &str) -> bool {
+    match e.kind() {
+        ExprKind::Const(n, _) => n.to_string() == name,
+        ExprKind::App(f, a) => mentions_const(f, name) || mentions_const(a, name),
+        ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
+            mentions_const(t, name) || mentions_const(b, name)
+        }
+        ExprKind::Let(_, t, v, b, _) => {
+            mentions_const(t, name) || mentions_const(v, name) || mentions_const(b, name)
+        }
+        ExprKind::Proj(_, _, sub) => mentions_const(sub, name),
+        _ => false,
+    }
+}
+
 fn make_env() -> Environment {
     let mut env = Environment::new();
     env.init_nn_verify_float_rational()
@@ -608,7 +705,7 @@ fn test_half_ulp_universal_and_denormal_axiom_free() {
             .unwrap_or_else(|e| panic!("{n} must type-check: {e:?}"));
         let s = format!("{ty}");
         // Two-sided half-step bound shape over the round + power-of-two grid.
-        assert!(s.contains("And "), "{n}: missing And: {s}");
+        assert!(mentions_const(&ty, "And"), "{n}: missing And: {s}");
         assert!(
             s.contains("Nat.roundHalfEvenMod"),
             "{n}: missing round: {s}"
@@ -644,8 +741,9 @@ fn test_half_ulp_universal_and_denormal_axiom_free() {
         ))
         .unwrap();
     assert!(
-        format!("{}", den.type_).contains("Small(1074)"),
-        "denormal instance must pin the floored exponent 1074"
+        mentions_nat_lit(&den.type_, 1074),
+        "denormal instance must pin the floored exponent 1074: {}",
+        den.type_
     );
 }
 
@@ -721,23 +819,32 @@ fn test_rounding_error_bound_discharges_axiom_free() {
     // since 1074 = 16·64 + 50), so the den is `Big([...0, 1125899906842624])`.
     // This LITERAL reduces in-kernel (the `Nat.pred` + arbitrary-precision `Int`
     // reducers close the Rat-blowup wall) — `tc.infer_type` below type-checks it.
+    // (tag, LHS numerator/denominator, RHS numerator/denominator) as the
+    // `Rat.mk (Int.ofNat n) d` values the bound must pin. The denominator is a
+    // FRAGMENT of the literal's Debug spelling so the 17-limb subnormal `Big`
+    // can be matched by its top limb without writing 2^1074 out.
+    //
+    // This was a table of whole-expression substrings
+    // (`"Nat(Small(2))) Nat(Small(16))"`) matched against `format!("{}", ty)`.
+    // Those markers encoded the OLD `Display`, a hybrid that printed
+    // applications Lean-style but literals in Debug spelling. Once Display
+    // learned real Lean notation in 6d1663115 the markers could match nothing —
+    // and `{:?}` does not restore them either, because Debug separates
+    // application arguments with `, ` where the old Display used a space. The
+    // values being pinned are properties of the TERM, so read them off it.
     let cases = [
         (
             "normal",
-            "Nat(Small(2))) Nat(Small(16))",
-            "Nat(Small(1))) Nat(Small(4))",
-        ),
-        ("subnormal", "Nat(Small(1))) Nat(Big(", "1125899906842624"),
-        (
-            "tie",
-            "Nat(Small(2))) Nat(Small(4))",
-            "Nat(Small(1))) Nat(Small(2))",
+            ("Small(2)", "Small(16)"),
+            ("Small(1)", "Small(4)"),
         ),
         (
-            "exact",
-            "Nat(Small(0))) Nat(Small(4))",
-            "Nat(Small(1))) Nat(Small(4))",
+            "subnormal",
+            ("Small(1)", "1125899906842624"),
+            ("Small(1)", "1125899906842624"),
         ),
+        ("tie", ("Small(2)", "Small(4)"), ("Small(1)", "Small(2)")),
+        ("exact", ("Small(0)", "Small(4)"), ("Small(1)", "Small(4)")),
     ];
     for (tag, lhs_marker, rhs_marker) in cases {
         let bound = Name::from_string(&format!(
@@ -768,14 +875,19 @@ fn test_rounding_error_bound_discharges_axiom_free() {
             assert!(ds.is_empty(), "{name:?} closure must be empty; got {ds:?}");
         }
         // The bound's stated type is `LHS ≤ RHS` with the expected operands.
-        let bty = format!("{}", env.get_const(&bound).unwrap().type_);
-        assert!(
-            bty.contains(lhs_marker),
-            "{tag}: bound LHS {lhs_marker} not in {bty}"
-        );
-        assert!(
-            bty.contains(rhs_marker),
-            "{tag}: bound RHS {rhs_marker} not in {bty}"
-        );
+        // These markers are `BigNat`/`Literal` DEBUG spellings
+        // (`Nat(Small(16))`, `Nat(Big(`). They matched only while
+        // `Display for Expr` fell back to `Debug`; since 6d1663115 Display
+        // speaks Lean notation and a literal renders as `16`. Ask for `{:?}`
+        // explicitly, which is what this table always meant — rather than
+        // rewriting the exact rational values it pins.
+        let bty = &env.get_const(&bound).unwrap().type_;
+        let found = rat_literals(bty);
+        for (side, (num, den)) in [("LHS", lhs_marker), ("RHS", rhs_marker)] {
+            assert!(
+                found.iter().any(|(n, d)| n == num && d.contains(den)),
+                "{tag}: bound {side} Rat.mk {num}/{den} not among {found:?}"
+            );
+        }
     }
 }

@@ -1,0 +1,63 @@
+{
+ "chain": "ir_sm",
+ "body": "env::Environment::set_lean4_core_strict_monads",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Same split as ir_h2.tags.json, and read that file's `why` first. This chain's struct row is REAL like ir_fw's: the module itself names the Environment struct in all three of its memory instructions (load, insertfield, store), so the alias is a minted line the blocks use, not an interface-only pin.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to emit the `ir_sm_tenv` alias (`IRTy.struct_ 441`) the load/insertfield/store name; `ir_mint::decode` reads it in the other direction and REFUSES an id the table does not list. The insertfield's FIELD INDEX 81 is not in this table at all: it is a position within the TYPE (`Arg::Data` since 2026-08-22), rendered as the bare literal the hand transcription already proved against.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Read ir_h2.tags.json's interface_what. The sharp slots here: the TWO align rows (the first chain with a store, so the first whose write-side alignment erasure is recorded), and the &mut receiver arriving as a plain ptr.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 404,
+  "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The committed fixture says 404, reader A's 2026-08-21 laneREG dump says 401 — the recorded whole-crate signature-index drift class. The pin compares reader B's header against the FIXTURE-ERA 404; reader A's value is RECORDED in ir_sm.mint.json, never compared.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&mut env::Environment",
+    "note": "The receiver. The load reads the WHOLE Environment through it and the store writes the whole updated value back — a read-modify-write of a 100+-field struct for one bool."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "bool",
+    "observed_ty": "bool",
+    "rust_type": "strict: bool",
+    "note": "The value written into field 81."
+   }
+  ],
+  "block_params": [],
+  "aligns": [
+   "load:None",
+   "store:None"
+  ],
+  "aligns_note": "TWO entries, for the two memory instructions in program order — the whole-struct read and the whole-struct write-back. Reader A wrote both in its own spelling, so the two records compare directly; this is the first chain to exercise the store half of that lane.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 441,
+   "alias": "ir_sm_tenv",
+   "rust_type": "env::Environment",
+   "observed_crate_id_by_producer": {
+    "laneREG-2026-08-21": 441
+   },
+   "note": "REAL row (the ir_fw posture): the module's three memory instructions all name it, and reader A's crate_struct_ids_seen is [441] where the COMMITTED fixture also prints struct.441. Like ir_fc's 1017 this id has not been observed to move yet; the drift class is the same as ir_ep's enum, so the module identity carries canonical 0 and this row carries the build fact."
+  }
+ ],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission: the emitted body contains no `call`, and reader A's crate_func_ids_seen is the single entry [3562] — the body's own id. An empty lane means SelfFunc::Unpinned; mint::check_func_namespace accepts an empty lane ONLY for a module with no call."
+}

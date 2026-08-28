@@ -51,9 +51,15 @@ fn test_elab_by_tactic_unfold_preserves_proof_chain() {
 ///
 /// Registers `myId : Nat := (fun x : Nat => x) Nat.zero`, then:
 /// Target: `myId = Nat.zero`
-/// Tactic: `by unfold myId; dsimp; rfl`
-/// unfold replaces `myId` with `(fun x => x) Nat.zero`, dsimp beta-reduces,
-/// rfl closes. Two chained `replace_target_def_eq` calls must compose.
+/// Tactic: `by unfold myId; dsimp`
+/// unfold replaces `myId` with `(fun x => x) Nat.zero`; dsimp beta-reduces and
+/// closes the now-reflexive goal. Two chained `replace_target_def_eq` calls
+/// must still compose.
+///
+/// The trailing `rfl` was dropped on 2026-08-26 when `dsimp` gained Lean's
+/// finisher: leanprover/lean4 v4.30.0-rc2 answers `No goals to be solved` for
+/// `by dsimp; rfl` on a goal dsimp closes, so the old spelling pinned a
+/// divergence from Lean rather than extra coverage.
 #[test]
 fn test_elab_by_tactic_chained_unfold_dsimp_preserves_proof_chain() {
     let mut env = Environment::new();
@@ -85,8 +91,8 @@ fn test_elab_by_tactic_chained_unfold_dsimp_preserves_proof_chain() {
     assert_tactic_preserves_target(
         &env,
         target,
-        "by unfold myId; dsimp; rfl",
-        "chained unfold + dsimp + rfl should elaborate successfully through elab_by_tactic",
+        "by unfold myId; dsimp",
+        "chained unfold + dsimp should elaborate successfully through elab_by_tactic",
         "chained unfold+dsimp proof should be closed",
         "chained unfold+dsimp proof type should match original target",
     );

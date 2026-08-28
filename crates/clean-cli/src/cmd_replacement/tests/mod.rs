@@ -22,3 +22,7 @@ mod part_12;
 mod part_13;
 mod part_14;
 mod part_15;
+mod part_16;
+mod part_17;
+mod part_18;
+mod part_19;

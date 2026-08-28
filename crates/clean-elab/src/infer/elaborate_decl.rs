@@ -15,9 +15,13 @@
 //!
 //! Extracted from mod.rs to reduce file size (#760).
 
+use crate::macro_integration::quotation_category_head;
 use crate::tactic::{TacticArgPattern, TacticEntry, TacticError};
 use crate::ElabError;
-use clean_parser::{DoElem, SurfaceArg, SurfaceDecl, SurfaceExpr, SurfaceLit, SyntaxPatternItem};
+use clean_parser::{
+    DoElem, MacroArm, SurfaceArg, SurfaceDecl, SurfaceExpr, SurfaceLit, SurfaceTactic,
+    SurfaceTacticLocation, SyntaxPatternItem,
+};
 use std::sync::Arc;
 
 use super::{ElabCtx, ElabResult};
@@ -97,6 +101,7 @@ impl<'a> ElabCtx<'a> {
         // prepend the USED closure to each subsequent declaration, truncate
         // on every exit path so the variables die with the namespace.
         let saved_section_binders = self.section_binder_stack.len();
+        let saved_included = self.included_var_stack.clone();
         let mut results = Vec::new();
         for inner in decls {
             let processed = if matches!(inner, SurfaceDecl::Variable { .. }) {
@@ -114,8 +119,12 @@ impl<'a> ElabCtx<'a> {
                     ))
                 }
             } else {
-                let used =
-                    used_section_binders(&self.section_binder_stack, inner, Some(&self.macro_ctx));
+                let used = used_section_binders(
+                    &self.section_binder_stack,
+                    inner,
+                    Some(&self.macro_ctx),
+                    &self.included_var_stack,
+                );
                 if used.is_empty() {
                     None
                 } else {
@@ -130,6 +139,7 @@ impl<'a> ElabCtx<'a> {
                 Ok(r) => r,
                 Err(e) => {
                     self.section_binder_stack.truncate(saved_section_binders);
+                    self.included_var_stack = saved_included;
                     self.namespace_state.pop_scope();
                     self.namespace_state.exit_namespace();
                     self.namespace_prefix = prev_prefix;
@@ -141,11 +151,13 @@ impl<'a> ElabCtx<'a> {
             if let SurfaceDecl::Variable { binders, .. } = inner {
                 self.section_binder_stack.extend(binders.iter().cloned());
             }
+            apply_include_omit(&mut self.included_var_stack, inner);
             if !matches!(result, ElabResult::Skipped) {
                 results.push(result);
             }
         }
         self.section_binder_stack.truncate(saved_section_binders);
+        self.included_var_stack = saved_included;
         self.namespace_state.pop_scope();
         self.namespace_state.exit_namespace();
         self.namespace_prefix = prev_prefix;
@@ -171,6 +183,7 @@ impl<'a> ElabCtx<'a> {
         // truncated on exit so the variables go out of scope with the
         // section; nested sections inherit the outer stack through recursion.
         let saved_section_binders = self.section_binder_stack.len();
+        let saved_included = self.included_var_stack.clone();
         // SOUNDNESS (#section-drops-all-but-last): this used to keep only `last_result`, so in a
         // section with several declarations ONLY THE LAST was returned — and since registration
         // happens on the returned `ElabResult`, every non-final declaration silently vanished
@@ -179,8 +192,12 @@ impl<'a> ElabCtx<'a> {
         // exactly how `elab_namespace` (above) already reports its inner declarations.
         let mut results: Vec<ElabResult> = Vec::new();
         for decl in decls {
-            let used =
-                used_section_binders(&self.section_binder_stack, decl, Some(&self.macro_ctx));
+            let used = used_section_binders(
+                &self.section_binder_stack,
+                decl,
+                Some(&self.macro_ctx),
+                &self.included_var_stack,
+            );
             let processed = if used.is_empty() {
                 None
             } else {
@@ -215,10 +232,12 @@ impl<'a> ElabCtx<'a> {
             if let SurfaceDecl::Variable { binders, .. } = decl {
                 self.section_binder_stack.extend(binders.iter().cloned());
             }
+            apply_include_omit(&mut self.included_var_stack, decl);
         }
         self.local_options = saved_options;
         self.macro_ctx = saved_macro_ctx;
         self.section_binder_stack.truncate(saved_section_binders);
+        self.included_var_stack = saved_included;
         self.namespace_state.pop_scope();
         // Preserve the historical shape for degenerate sections (empty / commands-only → Skipped;
         // exactly one declaration → that declaration) so downstream matchers keep working; the
@@ -316,6 +335,288 @@ impl<'a> ElabCtx<'a> {
         Ok(ElabResult::Skipped)
     }
 
+    /// Tactic-position `macro` command: `macro "kw" … : tactic => `(tactic| …)`.
+    ///
+    /// The Syntax-level macro expander cannot fire at tactic position (`by`
+    /// blocks cross the surface↔Syntax bridge as opaque nodes — see
+    /// `macro_integration::to_syntax`), so a tactic-category macro whose RHS
+    /// is a `(tactic| …)` quotation registers through the SAME
+    /// substitute-and-delegate bridge as `elab … : tactic` (`user_tactic`):
+    /// the quotation body is parsed ONCE here into a `by` tactic sequence
+    /// (pattern antiquotation references `$x` rewritten to their bound names)
+    /// and handed to [`Self::elab_tactic_elab_decl`], whose compound handler
+    /// binds call-site args and delegates to the existing tactic evaluator.
+    /// Soundness: delegation only — no new way to close a goal; every produced
+    /// proof still passes `verify_tactic_proof`/`add_decl`.
+    ///
+    /// Returns `Ok(None)` for shapes this route does not own (a non-tactic /
+    /// non-conv category, or a tactic-category RHS that is not a
+    /// category-headed quotation): the caller falls through to the
+    /// Syntax-level path unchanged. A conv-category macro is routed to
+    /// [`Self::try_register_conv_macro`], which owns it end-to-end. Shapes
+    /// this route DOES own reject loudly when unsupported (a `conv` head on a
+    /// TACTIC-category macro, an antiquotation the pattern does not bind, a
+    /// body the tactic grammar cannot parse) — never a silent registration
+    /// whose use site could mis-expand.
+    fn try_register_tactic_macro(
+        &mut self,
+        pattern: &[SyntaxPatternItem],
+        category: &str,
+        expansion: &SurfaceExpr,
+    ) -> Result<Option<ElabResult>, ElabError> {
+        if category == "conv" {
+            // Conv-position macros register through the conv bridge — the same
+            // substitute-and-delegate architecture as the tactic route below,
+            // delegating into the conv body sequencer (`run_conv_body`). The
+            // route OWNS the whole category: unsupported shapes reject loudly
+            // (the Syntax-level expander can never fire at conv position, so
+            // falling through would register a silently-dead macro).
+            return self.try_register_conv_macro(pattern, expansion).map(Some);
+        }
+        if category != "tactic" {
+            return Ok(None);
+        }
+        let SurfaceExpr::SyntaxQuote(_, content) = expansion else {
+            return Ok(None);
+        };
+        let Some((head, body)) = quotation_category_head(content) else {
+            return Ok(None);
+        };
+        match head {
+            "tactic" => {}
+            "conv" => {
+                return Err(ElabError::MacroError(
+                    "a tactic macro's expansion must be a `(tactic| …)` quotation, got \
+                     `(conv| …)` — declare the macro `: conv` to expand at conv position"
+                        .to_string(),
+                ));
+            }
+            other => {
+                return Err(ElabError::MacroError(format!(
+                    "a tactic macro's expansion must be a `(tactic| …)` quotation, got \
+                     `({other}| …)`"
+                )));
+            }
+        }
+        let bound: Vec<&str> = pattern
+            .iter()
+            .filter_map(|item| match item {
+                SyntaxPatternItem::Variable { name, .. } => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        let Some(body) = rewrite_bound_antiquots(body, &bound) else {
+            return Err(ElabError::MacroError(format!(
+                "tactic macro expansion `(tactic| {body})` uses an antiquotation the \
+                 pattern does not bind"
+            )));
+        };
+        let patterns = self.tactic_registry.tactic_patterns();
+        let by_expr = clean_parser::parse_expr_with_tactics(&format!("by {body}"), &patterns)
+            .map_err(|e| {
+                ElabError::MacroError(format!(
+                    "tactic macro expansion `(tactic| {body})` does not parse as a tactic \
+                     sequence: {e}"
+                ))
+            })?;
+        if !matches!(by_expr, SurfaceExpr::ByTactic(..)) {
+            return Err(ElabError::MacroError(format!(
+                "tactic macro expansion `(tactic| {body})` did not produce a tactic block"
+            )));
+        }
+        self.elab_tactic_elab_decl(pattern, "tactic", &by_expr)
+            .map(Some)
+    }
+
+    /// One tactic- or conv-position `macro_rules` arm:
+    /// `` macro_rules | `(tactic| kw $a …) => `(tactic| …) `` or
+    /// `` macro_rules | `(conv| kw $a …) => `(conv| …) ``.
+    ///
+    /// Returns `Ok(false)` for arms this route does not own (no recognized
+    /// category head, or a term/command head): those stay on the Syntax-level
+    /// path byte-for-byte. A tactic- or conv-headed arm IS owned: it either
+    /// registers through the matching bridge or rejects loudly (fail closed),
+    /// because the Syntax-level registration can never fire at tactic/conv
+    /// position and would leave a silently-dead arm.
+    fn try_register_tactic_macro_rules_arm(&mut self, arm: &MacroArm) -> Result<bool, ElabError> {
+        let SurfaceExpr::SyntaxQuote(_, content) = arm.pattern.as_ref() else {
+            return Ok(false);
+        };
+        let Some((head, pat_body)) = quotation_category_head(content) else {
+            return Ok(false);
+        };
+        let items = match head {
+            "tactic" | "conv" => macro_rules_arm_pattern_items(pat_body, head)?,
+            _ => return Ok(false),
+        };
+        if head == "conv" {
+            // Conv-headed arm: the conv bridge owns it end-to-end (registers
+            // or rejects loudly — see `try_register_conv_macro`).
+            self.try_register_conv_macro(&items, arm.expansion.as_ref())?;
+            return Ok(true);
+        }
+        // The expansion side reuses the macro-command route (tactic-head
+        // check, antiquotation rewrite, body parse, bridge registration).
+        match self.try_register_tactic_macro(&items, "tactic", arm.expansion.as_ref())? {
+            Some(_) => Ok(true),
+            None => Err(ElabError::MacroError(
+                "tactic macro_rules expansion must be a `(tactic| …)` quotation (fail closed)"
+                    .to_string(),
+            )),
+        }
+    }
+
+    /// Conv-position `macro` command: `macro "kw" … : conv => `(conv| …)`
+    /// (also reached by conv-headed `macro_rules` arms via
+    /// [`Self::try_register_tactic_macro_rules_arm`]).
+    ///
+    /// Registers through the conv substitute-and-delegate bridge
+    /// (`infer::user_conv`): the quotation body is parsed ONCE here into a
+    /// conv tactic script (pattern antiquotation references `$x` rewritten to
+    /// their bound names) and a compound handler is registered that binds the
+    /// call-site args, substitutes them into the script, and delegates to the
+    /// conv body sequencer (`run_conv_body`). The handler refuses to run
+    /// outside a conv body (`ProofState::in_conv_body`). Soundness: delegation
+    /// only — the conv boundary (`eval_conv_goal`/`eval_conv_hyps`) still
+    /// rebuilds and kernel-checks the whole-target equality exactly as for an
+    /// inline conv script; the macro adds no way to change a focus or close a
+    /// goal.
+    ///
+    /// This route OWNS the entire conv category: every unsupported shape is a
+    /// loud rejection (fail closed), never a fall-through to the Syntax-level
+    /// registration (which can never fire at conv position — the macro would
+    /// be silently dead). Rejected shapes: a non-`(conv| …)` expansion, an
+    /// intractable pattern, repetition/optional binders, an antiquotation the
+    /// pattern does not bind, an unparseable script, a keyword colliding with
+    /// a registered tactic (the registry is category-flat), and an
+    /// argument-taking macro whose script contains tactics substitution
+    /// cannot be shown to reach (`user_conv::substitution_reaches`).
+    fn try_register_conv_macro(
+        &mut self,
+        pattern: &[SyntaxPatternItem],
+        expansion: &SurfaceExpr,
+    ) -> Result<ElabResult, ElabError> {
+        let SurfaceExpr::SyntaxQuote(_, content) = expansion else {
+            return Err(ElabError::MacroError(
+                "a conv macro's expansion must be a `(conv| …)` quotation; other body \
+                 shapes are rejected (fail closed) rather than registered as a macro \
+                 that can never fire at conv position"
+                    .to_string(),
+            ));
+        };
+        let Some((head, body)) = quotation_category_head(content) else {
+            return Err(ElabError::MacroError(
+                "a conv macro's expansion must be a `(conv| …)`-headed quotation (fail closed)"
+                    .to_string(),
+            ));
+        };
+        if head != "conv" {
+            return Err(ElabError::MacroError(format!(
+                "a conv macro's expansion must be a `(conv| …)` quotation, got `({head}| …)`"
+            )));
+        }
+        let Some(parsed) = parse_tactic_elab_pattern(pattern) else {
+            return Err(ElabError::MacroError(
+                "unsupported conv macro pattern shape (supported: a leading keyword \
+                 literal followed by plain antiquotation variables) (fail closed)"
+                    .to_string(),
+            ));
+        };
+        let TacticElabPattern {
+            name,
+            bound_vars,
+            repetition,
+        } = parsed;
+        if repetition.is_some() {
+            return Err(ElabError::MacroError(format!(
+                "conv macro `{name}`: repetition variables are not supported yet (fail closed)"
+            )));
+        }
+        if bound_vars
+            .iter()
+            .any(|v| category_is_optional(v.category.as_ref()))
+        {
+            return Err(ElabError::MacroError(format!(
+                "conv macro `{name}`: optional binders are not supported yet (fail closed)"
+            )));
+        }
+        // The registry is category-flat: the conv keyword dispatches through
+        // the same `Named` route as ordinary tactics, so an existing name
+        // (simple OR compound entry) would be silently replaced — reject.
+        if self.tactic_registry.is_registered(&name)
+            || self.tactic_registry.get_compound(&name).is_some()
+        {
+            return Err(ElabError::MacroError(format!(
+                "conv macro `{name}` collides with an already-registered tactic name; \
+                 Clean's tactic registry is category-flat, so the declaration is \
+                 rejected (fail closed) rather than shadowing the tactic"
+            )));
+        }
+        let bound: Vec<&str> = bound_vars.iter().map(|v| v.name.as_str()).collect();
+        let Some(script_src) = rewrite_bound_antiquots(body, &bound) else {
+            return Err(ElabError::MacroError(format!(
+                "conv macro expansion `(conv| {body})` uses an antiquotation the \
+                 pattern does not bind"
+            )));
+        };
+        let patterns = self.tactic_registry.tactic_patterns();
+        let by_expr =
+            clean_parser::parse_expr_with_tactics(&format!("by conv => {script_src}"), &patterns)
+                .map_err(|e| {
+                ElabError::MacroError(format!(
+                    "conv macro expansion `(conv| {script_src})` does not parse as a \
+                         conv script: {e}"
+                ))
+            })?;
+        let SurfaceExpr::ByTactic(_, tactics) = by_expr else {
+            return Err(ElabError::MacroError(format!(
+                "conv macro expansion `(conv| {script_src})` did not produce a tactic block"
+            )));
+        };
+        let script = match tactics.as_slice() {
+            [SurfaceTactic::Conv(_, SurfaceTacticLocation::Goal, script)] if !script.is_empty() => {
+                script.clone()
+            }
+            _ => {
+                return Err(ElabError::MacroError(format!(
+                    "conv macro expansion `(conv| {script_src})` did not parse as a single \
+                     non-empty conv script (fail closed)"
+                )));
+            }
+        };
+        let bound_names: Vec<String> = bound_vars.iter().map(|v| v.name.clone()).collect();
+        if !bound_names.is_empty() {
+            if let Some(offender) = script
+                .iter()
+                .find(|t| !super::user_conv::substitution_reaches(t, &bound_names))
+            {
+                return Err(ElabError::MacroError(format!(
+                    "conv macro `{name}` binds arguments, but its expansion contains {} — \
+                     argument substitution cannot be shown to reach it, so the declaration \
+                     is rejected (fail closed) rather than registered as a macro that \
+                     could silently mis-expand",
+                    super::user_conv::conv_tactic_shape(offender)
+                )));
+            }
+        }
+        // The simple entry teaches the parser the keyword + argument pattern
+        // (`tactic_patterns()`); dispatch always prefers the compound entry
+        // registered next, so the simple handler is an honest-error backstop.
+        let arg_pattern = arg_pattern_for_bound_vars(&bound_vars, None);
+        self.tactic_registry.register(TacticEntry {
+            name: name.clone(),
+            pattern: arg_pattern,
+            handler: super::user_conv::conv_macro_simple_handler(name.clone()),
+        });
+        self.tactic_registry
+            .register_compound(super::user_conv::build_user_conv_handler(
+                name,
+                bound_names,
+                script,
+            ));
+        Ok(ElabResult::Skipped)
+    }
+
     /// Register a user-defined term-category elaborator
     /// (`elab "kw" e:term ... : term => <body>`).
     ///
@@ -395,6 +696,21 @@ impl<'a> ElabCtx<'a> {
         let prev_in_decl_context = self.in_decl_context;
         self.in_decl_context = true;
 
+        // Name the declaration whose body is about to be elaborated, so an
+        // identifier that turns out to be its OWN name is refused as a
+        // recursive definition rather than guessed at by name distance
+        // (`ElabError::RecursionOutsideFragment`).
+        //
+        // Written here, at the single per-declaration entry point, and
+        // UNCONDITIONALLY — `None` is assigned for every shape that has no
+        // self-reference question — so a subject can never survive into the
+        // next declaration and mislabel a genuine typo there. `elab_decl` is
+        // re-entered for generated/nested declarations, which correctly
+        // rebinds the subject for their extent; the previous value is put back
+        // on the way out, alongside `in_decl_context`.
+        let previous_self_reference =
+            std::mem::replace(&mut self.self_reference, Self::self_reference_subject(decl));
+
         let result = self
             .elab_decl_inner(decl)
             .map(|result| self.canonicalize_levels_in_elab_result(result))
@@ -406,7 +722,30 @@ impl<'a> ElabCtx<'a> {
 
         // Restore context state after elaboration
         self.in_decl_context = prev_in_decl_context;
+        self.self_reference = previous_self_reference;
         result
+    }
+
+    /// The declaration `decl` defines, when a reference to its own name inside
+    /// it would be a recursive definition rather than a missing name.
+    ///
+    /// `None` for every other shape — a `axiom`/`opaque`/`inductive` has no
+    /// body that could self-refer, and a `mutual` block, `example` or command
+    /// has no single subject — which is what keeps the refusal from firing
+    /// where it does not apply. The parameter count is the SURFACE binder
+    /// count here; `elab_definition_inner` refines it once equation-form
+    /// normalization has lifted binders out of an arrow type.
+    fn self_reference_subject(decl: &SurfaceDecl) -> Option<super::SelfReferenceSubject> {
+        let (name, binders) = match decl {
+            SurfaceDecl::Def { name, binders, .. } | SurfaceDecl::Theorem { name, binders, .. } => {
+                (name, binders)
+            }
+            _ => return None,
+        };
+        Some(super::SelfReferenceSubject {
+            written: name.clone(),
+            params: binders.len(),
+        })
     }
 
     /// Inner implementation of declaration elaboration
@@ -681,15 +1020,74 @@ impl<'a> ElabCtx<'a> {
                 expansion,
                 ..
             } => {
+                // Tactic-position macros (`macro "kw" … : tactic =>
+                // `(tactic| …)`) register through the tactic bridge — the
+                // Syntax-level expander cannot fire at tactic position (`by`
+                // blocks cross the surface↔Syntax bridge as opaque nodes).
+                // `Some` means the route owned the declaration (registered, or
+                // rejected loudly); `None` falls through to the Syntax-level
+                // registration unchanged.
+                let routed = self.try_register_tactic_macro(pattern, category, expansion)?;
+                if let Some(result) = routed {
+                    return Ok(result);
+                }
+                // Unknown-category gate (fail closed): the Syntax-level
+                // registration below ignores the category entirely, so a
+                // macro declared with a category Clean does not know — a
+                // typo (`: tatic`) or an unimplemented Lean category
+                // (`: calc`) — used to register silently and never fire at
+                // any position: the declaration vanished without a trace.
+                // Reject it loudly at the declaration, naming the category.
+                // Scope, precisely:
+                //   - `tactic` / `conv` were routed by the bridges above
+                //     (`conv` never reaches this gate; a tactic-category
+                //     macro whose RHS is not a category-headed quotation
+                //     does, and `tactic` is a registered built-in category,
+                //     so its Syntax-level fall-through is unchanged);
+                //   - `term` / `command` are registered built-in categories
+                //     and keep the Syntax-level registration;
+                //   - `attr` / `doElem` are registered built-in categories
+                //     Mathlib declares load-bearing macros in (`simps?` /
+                //     `continuity` / `to_additive?` at attr; `haveI'` /
+                //     `letI'` at doElem) — NEEDS-SUPPORT, kept on the
+                //     current skip path rather than rejected (survey
+                //     2026-08-22 over the mathlib4 checkout);
+                //   - a category declared with `declare_syntax_cat` is
+                //     legitimate and keeps the current path.
+                if !self.macro_ctx.has_syntax_category(category) {
+                    return Err(ElabError::MacroError(format!(
+                        "macro category `{category}` is not a known syntax category, \
+                         so this macro could never fire; it is rejected (fail \
+                         closed) rather than silently skipped — supported \
+                         categories are `term`, `tactic`, `conv`, and `command` \
+                         (`attr` and `doElem` register but do not expand yet); \
+                         declare a custom category first with \
+                         `declare_syntax_cat {category}`"
+                    )));
+                }
                 self.macro_ctx
                     .register_macro(pattern, category, expansion)
                     .map_err(|e| ElabError::MacroError(e.to_string()))?;
                 Ok(ElabResult::Skipped)
             }
             SurfaceDecl::MacroRules { name, arms, .. } => {
-                self.macro_ctx
-                    .register_macro_rules(name.as_deref(), arms)
-                    .map_err(|e| ElabError::MacroError(e.to_string()))?;
+                // Tactic-position arms (`` `(tactic| kw …) => `(tactic| …) ``)
+                // register through the tactic bridge — the Syntax-level
+                // expander cannot fire at tactic position. Remaining arms keep
+                // the Syntax-level registration unchanged.
+                let syntax_level_arms = arms
+                    .iter()
+                    .filter_map(|arm| match self.try_register_tactic_macro_rules_arm(arm) {
+                        Ok(true) => None,
+                        Ok(false) => Some(Ok(arm.clone())),
+                        Err(e) => Some(Err(e)),
+                    })
+                    .collect::<Result<Vec<MacroArm>, ElabError>>()?;
+                if !syntax_level_arms.is_empty() {
+                    self.macro_ctx
+                        .register_macro_rules(name.as_deref(), &syntax_level_arms)
+                        .map_err(|e| ElabError::MacroError(e.to_string()))?;
+                }
                 Ok(ElabResult::Skipped)
             }
             SurfaceDecl::Notation {
@@ -952,6 +1350,13 @@ impl<'a> ElabCtx<'a> {
                 body,
                 ..
             } => self.elab_tactic_elab_decl(pattern, category, body),
+            // `include` / `omit` register nothing themselves — they steer which
+            // section variables the FOLLOWING declarations receive, which the
+            // section/namespace drivers and `preprocess_decl_with_context`
+            // apply from the file context.
+            SurfaceDecl::IncludeVars { .. } | SurfaceDecl::OmitVars { .. } => {
+                Ok(ElabResult::Skipped)
+            }
             SurfaceDecl::Import { .. }
             | SurfaceDecl::UniverseDecl { .. }
             | SurfaceDecl::DerivingInstance { .. }
@@ -1138,10 +1543,38 @@ fn decl_free_surface_idents(
 /// their TYPE mentions an included variable (so `variable {α} [Add α]` adds
 /// `[Add α]` to any decl that uses `α`). A decl binder with the same name
 /// shadows the section variable.
+/// Apply an `include` / `omit` command to a block's forced-in variable names.
+///
+/// Neither command can name a variable into existence — the name must already
+/// be a section `variable` for [`used_section_binders`] to have anything to
+/// include.
+fn apply_include_omit(included: &mut Vec<String>, decl: &SurfaceDecl) {
+    match decl {
+        SurfaceDecl::IncludeVars { names, .. } => {
+            for name in names {
+                if !included.iter().any(|n| n == name) {
+                    included.push(name.clone());
+                }
+            }
+        }
+        SurfaceDecl::OmitVars { names, .. } => {
+            included.retain(|n| !names.contains(n));
+        }
+        _ => {}
+    }
+}
+
+/// `forced` names section variables an `include` command put in scope: they are
+/// treated as USED whether the declaration mentions them or not, and the
+/// dependency fixpoint below then drags in whatever their types need (so
+/// `include h` with `h : Involutive f` also pulls `f`, and `f : α → α` pulls
+/// `α`). A declaration binder of the same name still shadows, exactly as it
+/// does for a mentioned variable.
 pub(crate) fn used_section_binders(
     section_binders: &[clean_parser::SurfaceBinder],
     decl: &SurfaceDecl,
     macro_ctx: Option<&crate::macro_integration::MacroCtx>,
+    forced: &[String],
 ) -> Vec<clean_parser::SurfaceBinder> {
     use crate::where_desugar_ext::collect_free_idents;
     if section_binders.is_empty() {
@@ -1179,6 +1612,13 @@ pub(crate) fn used_section_binders(
     }
     for name in &own_binders {
         used.remove(name);
+    }
+    // `include`d variables count as used. Applied AFTER own-binder shadowing so
+    // a declaration that binds its own `h` keeps its own.
+    for name in forced {
+        if !own_binders.iter().any(|b| b == name) {
+            used.insert(name.clone());
+        }
     }
 
     let mut include = vec![false; section_binders.len()];
@@ -1218,6 +1658,85 @@ pub(crate) fn used_section_binders(
         .filter(|&(_, inc)| inc)
         .map(|(binder, _)| binder.clone())
         .collect()
+}
+
+/// Rewrite the pattern-bound antiquotation references of a tactic-quotation
+/// body (`$x` → `x`) so the body parses with the plain tactic grammar; the
+/// bound name is then substituted with the call-site argument by the
+/// user-tactic bridge (`build_user_tactic_handler`). Any antiquotation that is
+/// NOT pattern-bound — including `$(…)` splices — returns `None` so the caller
+/// rejects loudly rather than registering a macro that would mis-expand.
+fn rewrite_bound_antiquots(body: &str, bound: &[&str]) -> Option<String> {
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    while let Some(pos) = rest.find('$') {
+        out.push_str(&rest[..pos]);
+        let after = &rest[pos + 1..];
+        let ident_len = after
+            .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '\''))
+            .unwrap_or(after.len());
+        let name = &after[..ident_len];
+        if name.is_empty() || !bound.contains(&name) {
+            return None;
+        }
+        out.push_str(name);
+        rest = &after[ident_len..];
+    }
+    out.push_str(rest);
+    Some(out)
+}
+
+/// Decompose a category-headed `macro_rules` arm pattern body (`kw $a …`)
+/// into `SyntaxPatternItem`s: a leading keyword literal, then only plain
+/// antiquotations. Anything richer (interspersed literals, `$(…)` splices,
+/// nested syntax) needs a custom-grammar re-parse that is not yet available —
+/// reject loudly rather than registering a dead arm. Shared by the tactic and
+/// conv arm routes; `category` ("tactic" / "conv") appears only in
+/// diagnostics.
+fn macro_rules_arm_pattern_items(
+    pat_body: &str,
+    category: &str,
+) -> Result<Vec<SyntaxPatternItem>, ElabError> {
+    let mut tokens = pat_body.split_whitespace();
+    let Some(keyword) = tokens.next() else {
+        return Err(ElabError::MacroError(format!(
+            "{category} macro_rules pattern `({category}| …)` has no keyword"
+        )));
+    };
+    let keyword_starts_ident = keyword
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_');
+    let keyword_is_ident = keyword_starts_ident
+        && keyword
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '\'' | '!' | '?'));
+    if !keyword_is_ident {
+        return Err(ElabError::MacroError(format!(
+            "{category} macro_rules pattern must start with a keyword identifier, got \
+             `{keyword}` (supported shape: `({category}| kw $a …)`)"
+        )));
+    }
+    let mut items = vec![SyntaxPatternItem::Literal(keyword.to_string())];
+    for token in tokens {
+        let antiquot = token.strip_prefix('$').filter(|name| {
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || matches!(c, '_' | '\''))
+        });
+        let Some(name) = antiquot else {
+            return Err(ElabError::MacroError(format!(
+                "{category} macro_rules pattern argument `{token}` is not a plain \
+                 antiquotation (supported shape: `({category}| kw $a …)`)"
+            )));
+        };
+        items.push(SyntaxPatternItem::Variable {
+            name: name.to_string(),
+            category: None,
+        });
+    }
+    Ok(items)
 }
 
 /// Build the simple-entry handler for a tactic elaborator.
@@ -1470,7 +1989,7 @@ fn find_throw_error_message(expr: &SurfaceExpr) -> Option<String> {
         // the wrapped term tactics so a static `throwError` message still
         // surfaces in the deferred-handler diagnostic.
         SurfaceExpr::ByTactic(_, tactics) => tactics.iter().find_map(|tac| match tac {
-            clean_parser::SurfaceTactic::Term(_, inner) => find_throw_error_message(inner),
+            SurfaceTactic::Term(_, inner) => find_throw_error_message(inner),
             _ => None,
         }),
         _ => None,

@@ -877,6 +877,300 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: false,
     },
+    // Stratified Hurkens/Girard BLOCK (stratified_hurkens_block.rs): port of
+    // the corpus rung Stratified/Blocking.lean to the reflected CONV-FREE
+    // TypingCtx — Hurkens' powerful universe U0 exists one (semantic) level up
+    // (typingctx_U0_formable + hk_level_val pins) and can NEVER be small
+    // (typingctx_U0_not_small), by structural rule inversion + Level-literal
+    // no-confusion (the pi rule's conclusion carries a literal Level.imax,
+    // never Level.zero; level_imax_ne_zero). Consumes only earlier stages:
+    // foundation types (Eq/Nat/Empty/OptionType/ListType/Name), expr_model
+    // (KExpr/Level/lift_at/instantiate), typing_universe_levels
+    // (imax_nat/sort_universe_consistency), whnf_progress (ConstFreeUnit) and
+    // TypingCtx/ctx_lookup (add_dependent_sn_richmodel, directly above). The
+    // TypingCtxConv variant is NOT covered — it needs the DefEq-level sort
+    // no-confusion (def_eq_joinable + par_cd_sort_injectivity under a
+    // RedEnvFaithful discharge), which registers at later stages. Census-
+    // NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_stratified_hurkens_block,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R0 (candmodel_construct_r0.rs): the
+    // candidate-SET interface IsCandSet (AndType-packaged cr1/cr2/cr3 over an
+    // arbitrary S : KExpr -> Type), its base instance isCand_whnfAcc (the
+    // whole-SN set), the floor cand_var_mem (every variable in every candidate
+    // set), and the two hand-registered discriminating witnesses of
+    // designs/2026-08-23-spec-candmodel-port.md §6.1 — cand_var_witness
+    // (whnf_acc (bvar 0) THROUGH the cr3 face) and cand_excludes_omega (no
+    // candidate set contains the untyped self-application loop omegaLoop,
+    // which beta-steps to itself; cr1 genuinely excludes). Port of
+    // Stratified/Cand.lean IsCand/isCand_SN/IsCand.var_mem (rung
+    // stratified-sn). NOT a CandModel instance and no claim on the M
+    // hypothesis: IsCandSet deliberately has no red_sort/pi_elim/... faces.
+    // Consumes only earlier stages: foundation types (Eq/Nat/Empty/AndType),
+    // expr_model (KExpr/Level/instantiate), whnf_reduction
+    // (beta_reduces/whnf_step/whnf_acc), whnf_progress (ConstFreeUnit) and
+    // Neutral/no_whnf_step_bvar (add_dependent_sn_richmodel). Census-NEUTRAL:
+    // every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r0,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R1 (candmodel_construct_r1.rs): the Tait
+    // head-expansion ENGINE layer. The beta engine candExp_beta — any
+    // candidate set is closed under beta-expansion at the (Neutral) redex
+    // app (lam ty b) a, with the contractum-family premise of
+    // CandModel.redAbstraction extended over betaStar developments of the
+    // body (the honest R1 interface: the corpus's single-contractum spelling
+    // needs iota-under-psubst substitution transport over the real env, an
+    // R2+ build item) — plus the zeta engine whnfAcc_zeta_expand at the base
+    // whole-SN set, the app-/lam-/let-headed CPS step inversions they run on
+    // (15-arm beta_reduces.rec + whnf_step.rec wrappers; head-iota/delta arms
+    // killed computationally via kexpr_const_name (kapp_fn ..) = none), the
+    // betaStar/whnfStar closures, and the §6.1 discriminating witnesses:
+    // candExp_beta_base_witness (a concrete redex through the engine),
+    // appOmega_arg_acc_necessary (contractum acc, redex NOT acc — the
+    // argument premise is load-bearing), and zeta_expansion_not_generic (the
+    // let_-headed engine of candExp_beta's EXACT shape is REFUTED via the
+    // reachability-complement candidate set zetaGuardSet — Neutral (let_) =
+    // Empty is a real loss, not a spelling choice). Port of Stratified/
+    // Cand.lean candExp + LetDeltaSN reducible_letE_expand (design §5 R1).
+    // Consumes only earlier stages: R0 (IsCandSet/whnfAcc_inv_step/omega),
+    // dependent_sn_richmodel (Neutral/no_whnf_step_bvar/whnfAcc_sort),
+    // discrimination + inj lemmas, iota/delta bridges + head-none absurdities,
+    // lift_at_amount_zero, whnf_reduction, whnf_progress, expr_model.
+    // Census-NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r1,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R2 (candmodel_construct_r2.rs): the
+    // delta/const head-expansion engine candExp_delta — any candidate set
+    // absorbs a bare const whose the_red_env delta-unfolding lands in the set
+    // (cr3 at the NEUTRAL const + the complete reduct classification
+    // constRedex_whnf_inv: a bare const's only whnf_step IS the deterministic
+    // root delta, since a bare const never beta/zeta/iota-fires and delta has
+    // no congruence) — rank-free by structure, with the corpus konst_red_aux
+    // WfEnv/EnvAcyclic rank recursion honestly deferred to the iterated
+    // env-closure capstone (R5/R6-era; rank as explicit premise, nothing
+    // registered today). Plus the SUBSTITUTION-TRANSPORT UNLOCK
+    // betaRed_inst_transport (one full beta_reduces step — iota arm included,
+    // via iota_subst_commutes under the CARRIED RecEnvClosed premise —
+    // commutes with instantiate_at), its whnf-level wrapper (delta leg via
+    // delta_subst_commutes under carried DefEnvClosed), and the DERIVED
+    // corpus-spelling single-contractum engine candExp_beta_subst (from R1's
+    // candExp_beta by composition through betaStar_inst_transport +
+    // candSet_betaStar_closed). Witnesses: candExp_delta_witness (whnf_acc of
+    // the REAL reflected constant def_env_lift_closed_b THROUGH the engine,
+    // consuming the Guard-4 step witness), constAcc_body_acc (the body
+    // premise is FORCED), betaRed_inst_witness (a transported step computing
+    // by refl). Local re-mints r2_const_ne_let/proj + r2_const_no_beta_reduces
+    // (natrec's originals live outside this bundle). Consumes only earlier
+    // stages: R0/R1, par_reduces_d_diamond discriminators + delta Type
+    // substrate, par_reduces_p_topdev (iota_reduct_const_none), par_reduces_c
+    // (option_none_ne_some_type + iota absurdity), iota_core/delta_subst
+    // commutations, iota/delta bridges, whnf_lemmas unfoldings,
+    // substitution_commutation_nested, rec_env_closed, kernel_core_red_env +
+    // the_red_env witnesses. Census-NEUTRAL: every constant value-bearing,
+    // ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r2,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R3 (candmodel_construct_r3.rs): the APPLIED
+    // const spine. (A) The applied-DELTA transport delta_app_lift — delta
+    // genuinely fires under an application spine, because delta_reduct looks
+    // the definition name up at kapp_fn e (the SPINE HEAD) and re-applies
+    // kapp_args e; R2's "delta fires only at the ROOT" means only that delta
+    // has no congruence into a NON-spine subterm. Proved by OptionType.rec
+    // case analysis on defval_for, generic in the DefEnv, and consumed by the
+    // engine candExp_delta_app (cr3 at the Neutral spine + one Acc induction
+    // on the argument + the complete one-argument classification
+    // constApp1_beta_inv/constApp1_whnf_inv, whose delta leg is LIVE and whose
+    // iota leg is a carried deadness premise since a generic head may be a
+    // recursor). (B) The IOTA ENGINE candExp_iota_natrec_zero for the REAL
+    // reflected Nat.rec at the canonical Nat.zero major: a triple nested Acc
+    // induction over motive and both minors, running on the four-argument
+    // spine classification natRecSpine1..4_beta_inv / natRecSpine4_whnf_inv
+    // (short spines kill iota computationally — the major slot is none below
+    // arity 4; arity 4 keeps it LIVE; the delta leg dies by the refl fact
+    // natRecSpine4_delta_none, since Nat.rec has no defval_for entry), with
+    // the fire natRecZ_iota_fires one Eq.refl over the real env, generic in
+    // all three arguments, and its contractum RHS PROJECTED out of the
+    // generated Guard-4 reduct rather than hand-copied. Also lands the
+    // successor-major FIRE (natRecS_iota_fires + the numeral instance
+    // natRecSuccZero_iota_fires) but not its engine (the successor major
+    // itself steps — a fourth Acc layer, R4). §6.1 witnesses: the
+    // UNCONDITIONAL natRecStuck_cand_mem / natRecStuck_witness (a real
+    // four-argument Nat.rec spine in every candidate set through the CR3-
+    // NEUTRAL route, with the iota continuation REFUTED by natRecV_iota_none —
+    // a stuck major does not fire), the forced-premise guards
+    // natRecZ_contract_acc_necessary and appConstAcc_reduct_acc, the real-env
+    // applied-delta step r3_appliedDelta_witness, and the two CONDITIONAL
+    // concrete engine runs (natRecZ_engine_concrete, r3_deltaApp_concrete)
+    // whose single carried hypothesis is SN of the contractum — a
+    // fundamental-theorem obligation of design rungs R5/R6, stated not hidden.
+    // Consumes only earlier stages: R0/R1/R2 (IsCandSet + projections,
+    // betaStar + betaStar_bvar_collapse + cand_var_witness,
+    // r2_const_no_beta_reduces + delta_step_to_reduces/delta_reduces_to_step),
+    // the app/lam/pi/let/proj discrimination + injectivity lemmas, iota/delta
+    // bridges, delta_step_deterministic, option_some_inj /
+    // option_none_ne_some_type, kernel_core_red_env + the_red_env witnesses.
+    // No new inductives and no new plain defs, so the measured
+    // uniform-leading-argument recursor-promotion hazard cannot fire.
+    // Census-NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r3,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // CandModel construction ladder R4 (candmodel_construct_r4.rs): ONE
+    // four-argument const-spine iota engine (candExp_iota_spine4) — generic in
+    // the head constant, in the contractum FAMILY and in all four arguments —
+    // proved over four plain whnf_acc.rec layers on a GENERIC-HEAD reduct
+    // classification (constSpine2/3/4_beta_inv + constSpine4_whnf_inv, R3's
+    // 15-arm scaffold lifted off the concrete kcre_name_27 head, with the
+    // shorter spines' iota-deadness entering as hypotheses because a generic
+    // head's real-env metadata is unknown, and a LIVE delta leg because a
+    // generic head may be defined). Two instantiations: (A) the SUCCESSOR-major
+    // Nat.rec engine candExp_iota_natrec_succ — R3's promised fourth Acc layer,
+    // over the MAJOR (matching the CandModel fields' whnf_acc t), consuming
+    // R3's natRecS_iota_fires through the development-shape lemma
+    // succApp_betaStar_shape; and (B) the GENERIC-RECURSOR direction
+    // candExp_iota_genRec2, redRecGen's conclusion for a candidate-set-valued
+    // Red at two-minor signature families (genRecApp IS a four-argument const
+    // spine by rfl). B is NOT a discharge of the redRecGen FIELD, and R4
+    // registers the reason mechanically: r4_genFresh_empty (the freshness
+    // premise holds at DefEnv.empty for EVERY fam/sig, so it constrains
+    // nothing about the fixed env) plus the two aliasing witnesses
+    // r4_genRecName_aliases_deltaHead / r4_genRecHead_delta_live and
+    // r4_genRecName_aliases_natRec / r4_genRecC_iota_fires_natRec (the schema
+    // name Name.str fam (sigLength sig) collides with the reflected atoms
+    // Name.str Name.anonymous k, so a family the field accepts can have a
+    // recursor constant that is delta-LIVE, or that fires the REAL Nat.rec
+    // rule, in the_red_env). §6.1 witnesses: natRecS_engine_concrete (one
+    // conditional numeral run), the necessity guards
+    // natRecS_major_acc_necessary — with the measured note that the same
+    // statement for the NUMERAL is unprovable, delta having no congruence —
+    // and natRecS_contract_acc_necessary, and the non-degeneracy cross-check
+    // r4_natrecZ_via_spine4 (R3's zero engine re-derived through the generic
+    // one at the LIVE reflected Nat.rec). Consumes only earlier stages: R0-R3,
+    // the schema OBJECT layer (genRecApp/genRecC/genRecName/GenFresh, all
+    // add_snschema_objects, substitution-bundle), DefEnv/Name/delta+iota
+    // bridges and the_red_env witnesses. No new inductives and no new plain
+    // defs. Census-NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r4,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R5 (candmodel_construct_r5.rs) — the PAYOFF
+    // rung: (A) the Pi-CANDIDATE PiSet over reflected KExpr (corpus
+    // Stratified/Cand.lean PiSet/isCand_piSet) with cr1/cr2 UNRESTRICTED and
+    // cr3 at the HEAD-FREE face, packaged as isCandHF_piSet over the weakened
+    // interface IsCandHF (cr1 + cr2 + candCr3HF, whose cr3 additionally
+    // assumes kexpr_const_name (kapp_fn e) = none). The restriction is forced
+    // and the forcing is REGISTERED, not asserted:
+    // piSet_cr3_headFree_necessary exhibits Nat.rec (bvar 0) (bvar 0) (bvar 0)
+    // over the REAL reflected env as Neutral, NOT head-free, taking NO
+    // whnf_step at all (so cr3's premise is satisfied vacuously) and yet
+    // iota-firing once applied to Nat.zero — so an unrestricted cr3 for PiSet
+    // would have to produce membership of the real Nat.rec zero contractum
+    // from nothing. Structural cause: spec eliminators are const-headed
+    // SPINES, so applying a neutral can create a fresh redex, where corpus
+    // eliminators are saturated constructors and cannot. New infrastructure:
+    // r5_spine_snoc, deltaReduct_app_gen + deltaStep_app_gen (a delta step
+    // lifts under ANY application — R3's delta_app_lift generalized off the
+    // bare-const head), whnfStep_app_left (beta AND delta legs) and
+    // whnfAcc_app_left (the corpus sn_app_left). (B) The type interpretation
+    // candInterp by KExpr.rec — every non-pi former to the top candidate
+    // (red_sort definitional), pi A B to PiSet (candInterp A) (fun _ =>
+    // candInterp B) — with candInterp_isCandHF at EVERY untyped T (the corpus
+    // isCand_cval needs CWK); NON-DEPENDENT codomain, stated as the scope
+    // limit. (C) The shaped fragment judgment FragTy (sortMem/var/app/lam),
+    // its fundamental theorem fragTy_interp and the UNCONDITIONAL capstone
+    // fragTy_sn : FragTy T e -> whnf_acc e — no CandModel, no RecEnvClosed, no
+    // carried premise of any kind (the lam rule takes R1's development-family
+    // premise precisely so R2's corpus-spelling engine's RecEnvClosed is not
+    // imported). candExpHF_beta is R1's Tait engine at the weaker interface,
+    // derived by textual weakening of R1's own builder. (D) Witnesses:
+    // fragTy_sn_witness (a beta redex whose SN comes THROUGH the capstone),
+    // r5_interp_pi_proper + fragTy_not_total (the interpretation and the
+    // judgment are PROPER subsets of the top set — the micro_has_type trap
+    // guard), and the necessity guard above. HONESTY: fragTy_sn is SN for
+    // FragTy, NOT for TypingCtx; nothing here discharges or advances
+    // M : CandModel tenv. Consumes only earlier stages: R0-R4,
+    // dependent_sn_richmodel, whnf_reduction, iota_step/delta_step cores and
+    // bridges, expr_model. Census-NEUTRAL: every constant value-bearing, ZERO
+    // new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r5,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R6 (candmodel_construct_r6.rs) — the
+    // SYNTACTIC rung. R5's fragTy_sn was unconditional but over a
+    // SEMANTIC-PREMISE judgment (FragTy's app/lam rules mention candInterp).
+    // R6 lands a real context-indexed typing judgment SynTy : ListType KExpr
+    // -> KExpr -> KExpr -> Type whose four rules — var by ctx_lookup, sort at
+    // the successor universe, app by pi-elim, lam by pi-intro in the extended
+    // context — mention NO candInterp at all (pinned by a shape guard), the
+    // closing-substitution interface SubstOK with its nil/idsubst/extend
+    // builders, and the Tait fundamental theorem over it. The tower is the
+    // guide's own Models / fundamental_* / fundamental_general development
+    // (dependent_sn_richmodel.rs:3283/4052) re-run with candInterp in place of
+    // cm_Red tenv M and R5's landed THEOREMS in place of the CandModel LAW
+    // PROJECTIONS — which is the point: there the laws are fields of the
+    // hypothesis M, here every one is proved. Capstones: synTy_fundamental,
+    // synTy_sn_subst (SN of EVERY closing instance — content R5 had no
+    // analogue for), synTy_sn (SN at an ARBITRARY context, since idsubst
+    // models every context via candInterp_var) and the closed-term corollary
+    // synTy_sn_closed. All UNCONDITIONAL: no CandModel, no RecEnvClosed, no
+    // DefEnvClosed, no acyclicity (premise-freedom shape guard).
+    // TWO SYNTACTIC SIDE CONDITIONS ON THE LAM RULE, stated honestly and
+    // guarded: (1) SimpleTy A — the syntactic sort/pi type class, whose
+    // psubst-inertness (simpleTy_psubst) makes R5's NON-DEPENDENT Pi clause
+    // EXACT rather than approximate (on a closed codomain instantiate B a = B,
+    // so the dependent and non-dependent readings coincide and no
+    // psubst_instantiate reshaping appears anywhere in the tower); (2) the
+    // development-closure premise `forall s b2, betaStar (psubst (up s) b) b2
+    // -> SynTy (cons A G) b2 B`. (2) is the HOISTED form of the two facts the
+    // Tait engine needs and that are BLOCKED at this stage position:
+    // substitution transport for beta_reduces (R2's betaRed_inst_transport
+    // carries RecEnvClosed (red_rec the_red_env)) and lift transport for
+    // whnf_acc (RecEnvLiftClosed) — whose checker discharges register only in
+    // add_the_red_env_faithful_discharge, AFTER the whole candmodel ladder.
+    // Hoisting it into the RULE is what keeps the capstones premise-free;
+    // r6_subst_creates_redex proves the weaker spelling (developments of b
+    // alone) is strictly insufficient, and r6_lam_body_acc_necessary proves
+    // the body's SN obligation is real. B (the dependent Pi clause) is
+    // OBSTRUCTED and the obstruction is PROVED, not described:
+    // r6_dependent_pi_self_argument + r6_dependent_pi_self_reachable exhibit
+    // T := pi (sort 0) (bvar 0), for which the dependent clause's recursive
+    // call at the REACHABLE domain member a := T is candInterp T itself —
+    // non-terminating on any recursion measured by the type, which is why the
+    // corpus needs the shape/denotation split (Shapes.lean Sk/VD/Val/cval).
+    // Witnesses: synTy_id, synTy_app_
+    // witness (a genuine beta redex), synTy_sn_witness (SN obtained THROUGH
+    // the capstone), synTy_not_total + simpleTy_not_total (the micro_has_type
+    // trap guards). HONESTY: synTy_sn is SN for SynTy, NOT for TypingCtx —
+    // SynTy has no const, no let_, no pi formation, simple types only, plus
+    // the two lam side conditions; nothing here discharges or advances
+    // M : CandModel tenv. Consumes only earlier stages: R0-R5,
+    // dependent_sn_richmodel (ctx_lookup, the psubst calculus, whnfAcc_sort,
+    // whnfAcc_pi, option_some_inj), whnf_reduction, par_reduces_c
+    // (option_none_ne_some_type) and expr_model. Census-NEUTRAL: every
+    // constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r6,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
     // Nat.rec spec port (task #30): the concrete Nat recursor + iota-fire fidelity
     // + the Nat.rec reduction relation (natStep/natSteps) + the beta-chain
     // (natRecContract_steps via betaReduces_psubst). Placed AFTER
@@ -1022,6 +1316,727 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: false,
     },
+    // Candidate-model construction R7 (candmodel_construct_r7.rs) — the
+    // TEXTBOOK rung, and the ONE stage of the ladder that is deliberately NOT
+    // adjacent to the others. R6 landed synTy_sn unconditionally but paid for
+    // it in the RULE: SynTy.lam carries the hoisted development-closure
+    // premise `forall s b2, betaStar (psubst (up s) b) b2 -> SynTy (cons A G)
+    // b2 B`, because the Tait engine's development family needs the
+    // substitution transport `beta_reduces b' b2 -> beta_reduces (instantiate
+    // b' a) (instantiate b2 a)` and the only spec-side transport — R2's
+    // betaRed_inst_transport / betaStar_inst_transport — CARRIES RecEnvClosed
+    // (red_rec the_red_env) through its iota arm. That premise's discharge,
+    // the_red_env_rec_closed_via_checker_b2, is registered by the PREVIOUS
+    // stage. So R7 sits HERE, nine stages after the ladder's R0-R6 block,
+    // precisely so it may APPLY the discharge instead of hoisting its
+    // consequence: betaRed_inst_transport_env / betaStar_inst_transport_env
+    // are R2's transports with the argument supplied and therefore carry
+    // NOTHING, candInterp_betaStar_closed lifts R5's isCandHF_cr2 along a
+    // development, and the two together turn R6's premise into the THEOREM
+    // r7_dev_family_derived. SynTyT is then the ordinary judgment — var by
+    // ctx_lookup, sort at the successor universe, app by pi-elim, and lam by
+    // pi-intro with a SINGLE sub-derivation SynTyT (cons A G) b B; the shape
+    // guard refuses `betaStar`, `psubst` and `up ` anywhere in its source.
+    // Capstones synTyT_fundamental / synTyT_sn_subst / synTyT_sn (arbitrary
+    // context) / synTyT_sn_closed stay UNCONDITIONAL — no CandModel, no
+    // RecEnvClosed, no RecEnvLiftClosed, no DefEnvClosed, no acyclicity — and
+    // a second guard REQUIRES that the discharged witness is consumed in the
+    // unlock's proof values, so the premise cannot silently return to the rule.
+    // RecEnvLiftClosed, the other blocker R6 named, is NOT needed: the body's
+    // SN comes from the IH at the fresh variable (scons (bvar 0) s, closed by
+    // substOK_extend on candInterp_var) reshaped by psubst_scons_instantiate
+    // and unwound by whnfAcc_of_instantiate_bvar0 — the landed fundamental_pi
+    // idiom — so R7 never lifts. BRIDGE: synTy_to_synTyT subsumes R6 (its lam
+    // premise at s := idsubst and the reflexive development, collapsed by
+    // psubst_up_idsubst), and synTy_sn_via_synTyT re-derives R6's own capstone
+    // through R7's. The CONVERSE is not claimed: it would need subject
+    // reduction for SynTyT plus substitution stability, and SynTyT is
+    // genuinely wider. Witnesses: synTyT_id / synTyT_sort_witness /
+    // synTyT_app_witness (also the premise-satisfiability supply for SynTyT,
+    // which constructors do not provide), synTyT_lam_redex_witness +
+    // r7_redex_body_fires + r7_textbook_admits_redex_body (a lambda whose BODY
+    // IS A LIVE BETA REDEX — one SynTyT.lam here, an inversion over the
+    // developments of a firing body under R6's rule), synTyT_sn_witness (SN of
+    // a redex UNDER A BINDER, obtained THROUGH the capstone) and
+    // synTyT_not_total (the micro_has_type trap guard: widening the lam rule
+    // did not widen the judgment to the total relation). HONESTY: synTyT_sn is
+    // SN for SynTyT, NOT for TypingCtx — no const, no let_, no pi formation,
+    // SimpleTy domains only; nothing here discharges or advances M : CandModel
+    // tenv. SimpleTy A stays on the lam rule and is NOT a stage-position
+    // artifact: R5's candInterp has a non-dependent Pi clause and the
+    // dependent one is proved non-portable (r6_dependent_pi_self_reachable).
+    // Census-NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r7,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R8 (candmodel_construct_r8.rs) — the
+    // CONVERGENCE rung, registered immediately after R7 because it consumes
+    // R7's already-discharged substitution transport. R7's own closing list of
+    // what separated SynTyT from the spec's TypingCtx was: no const rule, no
+    // let_ rule, no pi FORMATION rule, SimpleTy domains only, and a var rule
+    // that does NOT lift where TypingCtx.var concludes at lift_at A 0 (i+1).
+    // R8 closes the var gap and the pi gap outright and the let_ gap at a named
+    // fragment. THE VAR GAP, and a measured correction: R7 predicted it needs
+    // RecEnvLiftClosed. It does not. That discharge is what a TERM lift needs
+    // (whnf_acc e -> whnf_acc (lift_at e 0 1), blocked at its iota arm); the
+    // var gap is a TYPE lift, where the term is unmoved, and R5's candInterp
+    // reads nothing of a type but its Pi-skeleton — which lift_at preserves.
+    // So the whole gap is candInterp_lift_eq : candInterp (lift_at T d k) =
+    // candInterp T, one KExpr.rec whose ten arms are eight Eq.refls (both sides
+    // are the top candidate), a two-case Nat.rec in the bvar arm (lift_bvar_at
+    // is stuck on Nat.sub d i) and two Eq.congs through PiSet in the pi arm. It
+    // is an equality of the two KExpr -> Type PREDICATES on purpose: PiSet is
+    // contravariant in its domain, so implications would have to be carried
+    // both ways at once, whereas function equality congruences in one step and
+    // needs no funext. RecEnvLiftClosed therefore stays untouched by the whole
+    // ladder, now for a stated reason. Because R6's SubstOK is reused
+    // UNCHANGED, R8 adds NO substitution infrastructure: the lift is paid in
+    // the var ARM of the fundamental theorem, for an arbitrary looked-up type.
+    // THE PI ARM is the landed fundamental_pi with the CandModel law
+    // projections swapped for R5 theorems (red_sort -> candInterp_sort_mem, CR1
+    // -> candInterp_cr1, red_var -> candInterp_var, models_extend ->
+    // substOK_extend), and the rule carries TypingCtx.pi's LITERAL raw
+    // Level.imax. THE LETTY ARM is R1's base-set whnfAcc_zeta_expand — which is
+    // exactly what candInterp at a sort IS — with the contractum family built
+    // from the body IH at scons v2 s (closable only because candInterp (sort n)
+    // v2 reduces to whnf_acc v2, which is why the annotation must be a literal
+    // sort) and carried along the development by R7's DISCHARGED
+    // betaStar_inst_transport_env. The Pi-typed zeta clause is NOT landed and
+    // its obstruction is PROVED and LOCATED: r8_let_not_neutral (cr3 is
+    // inapplicable at the redex, Neutral (let_ ..) = Empty) beside
+    // r8_zeta_spine_is_neutral (cr3 IS applicable one layer out, at the app
+    // spine where PiSet membership actually lives), so the missing engine is
+    // named — a five-fold nested Acc induction over the reducts of an
+    // app-headed zeta redex, which R1 PROVED cannot be obtained
+    // per-candidate-set. Capstones synTyL_fundamental / synTyL_sn_subst /
+    // synTyL_sn (arbitrary context) / synTyL_sn_closed stay UNCONDITIONAL —
+    // no CandModel, no RecEnvClosed, no RecEnvLiftClosed, no DefEnvClosed, no
+    // acyclicity — and the shape guard pins both the premise freedom and the
+    // consumption of the discharge. BRIDGE: synTyT_to_synTyL subsumes R7 over
+    // SIMPLE contexts (CtxSimple G), the hypothesis being the honest price of
+    // the faithful var rule — the two judgments assign genuinely different
+    // types to the same variable, and simpleTy_lift is what reconciles them
+    // where the entry is closed. The CONVERSE is FALSE and is proved so:
+    // synTyT_no_pi_formation shows no SynTyT derivation concludes at a pi
+    // expression in any context at any type, while synTyL_pi_formation_witness
+    // is one. Witnesses: synTyL_id / synTyL_sort_witness (premise
+    // satisfiability, which constructors do not supply),
+    // synTyL_var_lift_witness (bvar 1 typed at bvar 2 in [sort 0 ; bvar 0] —
+    // the lift made VISIBLE, stated literally so the kernel must compute it),
+    // synTyL_pi_formation_witness + synTyL_sn_witness (SN of a pi EXPRESSION
+    // through the capstone), synTyL_let_witness + r8_let_body_fires +
+    // synTyL_let_sn_witness (SN of a LIVE zeta redex through the capstone), and
+    // synTyL_not_total (the micro_has_type trap guard). HONESTY: synTyL_sn is
+    // SN for SynTyL, NOT for TypingCtx. What still separates them after this
+    // rung: no const rule (the delta/redConst rung, needing the WfEnv/EnvAcyclic
+    // rank witness for the real reflected env), a NON-DEPENDENT app and a
+    // SimpleTy lam domain (both forced by R5's non-dependent Pi clause, whose
+    // dependent version is PROVED non-portable), the sort-annotated-only let_,
+    // and no conversion rule. Census-NEUTRAL: every constant value-bearing,
+    // ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r8,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R9 (candmodel_construct_r9.rs) — the DELTA
+    // rung, registered immediately after R8 because SynTyC is SynTyL plus two
+    // rules and the bridge synTyL_to_synTyC consumes SynTyL.rec directly.
+    //
+    // BUILD ITEM B3, LANDED AND *COMPUTED*. R2, R4, R7 and R8 each closed with
+    // the same sentence — the delta/redConst rung "needs a WfEnv/EnvAcyclic rank
+    // witness for the real reflected env" — and R2 specified the shape it would
+    // have to be CARRIED in: delta_step (red_def the_red_env) (const c us) body
+    // -> const_occurs c2 body -> Lt (rk c2) (rk c). It does not have to be
+    // carried. the_red_env is kernel_core_red_env: a concrete, fixed, finite
+    // reflected environment, so the rank is computable for the ACTUAL
+    // environment and the decrease provable by kernel computation, exactly the
+    // way R3/R4 proved iota- and delta-deadness at concrete heads. Measured on
+    // the generated env: the DefEnv is a 50-entry addDef chain over 127 interned
+    // names, its delta graph has 67 edges, it is ACYCLIC, and its longest chain
+    // is 7 — and it is acyclic for a structural reason worth recording, that the
+    // reflection compiles every recursive kernel definition through the matching
+    // .rec, so not one of the 50 bodies mentions its own name. The route is the
+    // established one-rfl checker pattern rather than a 50-way case analysis:
+    // rk (a 127-entry rank TABLE indexed by the interned numeral, a list walk
+    // rather than a name_eqb cascade because the checker evaluates rk once per
+    // const occurrence and there are 963 of them), const_occurs (the corpus's
+    // Tm.mentions, which no core_spec module had — occurs_in is about de Bruijn
+    // self-reference, not const names), rank_dominates_b, def_env_ranked_b, and
+    // the_red_env_ranked : def_env_ranked_b (red_def the_red_env) = true by ONE
+    // Eq.refl. Two generic soundness lemmas (def_env_ranked_b_sound by
+    // DefEnv.rec — def_env_closed_b_sound's shape plus a name transport, because
+    // the per-entry test mentions the entry's OWN name — and
+    // rank_dominates_occurs by KExpr.rec) plus the bare-const inversion
+    // delta_step_defval_inv compose that into
+    // the_red_env_delta_rank_decrease: R2's statement character for character,
+    // DISCHARGED. the_red_env_no_delta_cycle is what it buys — EnvAcyclic for
+    // the real kernel foundation core, proved.
+    //
+    // THE CONST RULE, AND THE BLOCKER THAT WAS NEVER THE RANK. The engine lands:
+    // candInterp_delta_expand_sort is R2's candExp_delta at a SORT-typed slot,
+    // legitimate for exactly R8's candInterp_zeta_expand_sort reason (candInterp
+    // at a sort REDUCES to whnf_acc, the base whole-SN set, which IS an
+    // IsCandSet). At a PI-typed slot it is BLOCKED, and not by acyclicity: R5's
+    // interpretation is only IsCandHF, whose cr3 additionally demands HeadFree,
+    // and R5 already PROVED that restriction necessary at the real env
+    // (piSet_cr3_headFree_necessary, a stuck Nat.rec counterexample). A bare
+    // const is the canonical non-head-free term — r9_const_is_neutral shows
+    // unrestricted cr3 would apply, r9_const_headfree_absurd shows the head-free
+    // face does not, r9_const_obstruction_located pairs them. So SynTyC carries
+    // the const rule in two clauses: konstDead types const c us at any sort when
+    // defval_for (red_def the_red_env) c = none — such a const is whnf-STUCK
+    // (whnfAcc_const_dead over R2's complete constRedex_whnf_inv
+    // classification), and over the real env that is every name outside the 50
+    // entries, i.e. every reflected inductive type, constructor and recursor —
+    // while konstDelta types it from a derivation of its real unfolding.
+    // konstDelta is SOUND and is the deliverable four rungs asked for, and it is
+    // VACUOUS over THIS environment, PROVED rather than asserted: all 50 real
+    // definition bodies are KExpr.lam (r9_the_red_env_all_lam, one Eq.refl) and
+    // the judgment types no lam at a sort (synTyC_no_lam_at_sort), which compose
+    // into r9_konstDelta_no_real_instance. That is the design's section 6.3
+    // labeled by-design vacuity, measured in the wf/ac tradition. The two
+    // obstructions are the same wall from two sides: reaching a real defined
+    // constant means typing its body, a lambda, hence at a PI type, where the
+    // const clause cannot go.
+    //
+    // Capstones synTyC_fundamental / synTyC_sn_subst / synTyC_sn (arbitrary
+    // context) / synTyC_sn_closed stay UNCONDITIONAL — no CandModel, no
+    // RecEnvClosed, no RecEnvLiftClosed, no DefEnvClosed and, the one that
+    // matters here, NO EnvAcyclic: the acyclicity B3 establishes is a discharged
+    // theorem about a fixed environment, never a hypothesis. The shape guard
+    // refuses all of those names in the statements and in SynTyC's own source,
+    // and additionally refuses rank_dominates_b / def_env_ranked_b there, so the
+    // rank cannot creep back in as a rule premise. SynTyC does mention
+    // the_red_env, through defval_for and delta_step, and that is unavoidable
+    // rather than sloppy — delta is env-relative — with both side conditions
+    // discharged per-constant by Eq.refl.
+    //
+    // BRIDGE: synTyL_to_synTyC subsumes R8 with NO hypothesis (R8's own bridge
+    // needed CtxSimple because R8 CHANGED a rule; R9 changes none, it only
+    // adds), and synTyL_sn_via_synTyC re-derives R8's capstone through R9's. The
+    // CONVERSE IS FALSE and proved: synTyL_no_const shows no SynTyL derivation
+    // concludes at a const EXPRESSION in any context at any type, which is the
+    // precise sense in which "no const rule" was the ladder's outstanding gap.
+    // Witnesses: synTyC_id / synTyC_sort_witness (premise satisfiability, which
+    // constructors do not supply), synTyC_konst_dead_witness (the REAL reflected
+    // name kcre_name_12 typed, over a kernel-COMPUTED lookup — the first time
+    // the ladder's judgment reaches a KExpr.const at all) + synTyC_sn_konst_
+    // witness (its SN THROUGH the capstone), r9_rank_decrease_witness and
+    // r9_rank_decrease_witness_undefined (the decrease at a real kcre_* pair,
+    // obtained THROUGH the theorem and reusing R2's Guard-4 delta step),
+    // r9_konstDead_premise_necessary + r9_live_const_not_dead (the side
+    // condition's necessity, at a live redex), and synTyC_not_total (the
+    // micro_has_type trap guard). HONESTY: synTyC_sn is SN for SynTyC, NOT for
+    // TypingCtx. What still separates them: TypingCtx.const reads a DECLARED
+    // type off a tenv at ANY type, Pi types included, while SynTyC has no tenv
+    // and reaches a const only at a SORT and only when it is delta-DEAD (plus a
+    // delta clause vacuous over this env); app is NON-DEPENDENT and lam carries
+    // SimpleTy A; the let_ rule is the sort-annotated fragment; there is no
+    // conversion rule; and — named for the first time here — no rule reaches a
+    // const at a PI type at all, which is the same head-free wall rather than a
+    // rank problem. Census-NEUTRAL: every constant value-bearing, ZERO new
+    // axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r9,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R10 (candmodel_construct_r10.rs) — the
+    // KEYSTONE rung, registered immediately after R9 because it consumes R9's
+    // const machinery (whnfAcc_const_dead, r9_const_delta_dead,
+    // r9_const_headfree_absurd) and closes the gap R9 named last.
+    //
+    // THE SETTLEMENT. R5 proved the head-free restriction on the Pi-candidate's
+    // cr3 NECESSARY for its own proof and left the full law open, suggesting it
+    // be supplied from outside cr3 once the fundamental theorem gives SN of
+    // real-env iota contracta; R1, R8 and R9 all recorded the same wall from
+    // other sides, and R9's computed delta rank was expected to be the tool that
+    // broke the apparent circularity. It is not a circularity.
+    // r10_piSet_cr3_unrestricted_refuted proves the UNRESTRICTED cr3 face FALSE
+    // at the real reflected environment: instantiate CA := whnf_acc and
+    // CB := fun _ => candInterp (pi (sort 0) (sort 0)) — every side condition
+    // isCandHF_piSet asks for holds — at the Neutral, STEP-FREE three-argument
+    // spine Nat.rec (bvar 0) omegaLam (bvar 0), so cr3's reduct premise is
+    // vacuous and free; then applying it to the real Nat.zero fires the real
+    // zero rule, and one more argument diverges (r10_appStuck_not_whnfAcc walks
+    // the five-step chain to app omegaLam omegaLam). The SN of real-env iota
+    // contracta is therefore not merely unavailable early in the dependency
+    // order, it is NOT A THEOREM, and no stratification supplies it. Membership
+    // of an iota contractum must come from an iota-EXPANSION engine (R2/R3's
+    // candExp_iota_natrec_zero shape), never from cr3. Three structural facts
+    // came out of it and are worth keeping: the DELTA leg was never the problem
+    // (R5's deltaReduct_app_gen already factors it through the head), the ZERO
+    // rule alone is harmless (its contractum is a subterm of a step-free spine)
+    // and only becomes fatal because PiSet is a set of FUNCTIONS so the minor
+    // may be applied, and the rank plays no part because there is no delta
+    // anywhere in the counterexample.
+    //
+    // THE HONEST STRONGEST FORM. HeadInert is a two-constructor Type-valued
+    // inductive — head-free, or a spine head that is a constant with neither a
+    // definitional value nor recursor metadata in the real environment — and it
+    // is HEREDITARY under application for the same definitional reason
+    // head-freeness is (kapp_fn (app e a) reduces to kapp_fn e), which is what
+    // lets piSet_cr3HI_aux be R5's proof weakened through hi_weaken rather than
+    // retyped — with ONE non-textual site, measured 2026-08-27: HeadFree is a
+    // def unfolding to an Eq about kapp_fn, so HeadFree e and HeadFree (app e a)
+    // are the same type and R5 passes hhf straight through, while HeadInert is
+    // an inductive FAMILY and needs headInert_app applied. It is STRICTLY weaker
+    // than HeadFree
+    // (r10_headInert_strictly_weaker, at a real reflected constant) and the
+    // widening is TIGHT: r10_natRec3_not_headInert shows every three-argument
+    // Nat.rec spine — R5's own exhibit and this rung's counterexample alike — is
+    // excluded, by feeding the real zero-rule fire to
+    // iota_step_no_recmeta_absurd without ever naming the recursor metadata.
+    // The payoff is R9's item 5: r10_interp_const_pi_witness puts a REAL
+    // reflected constant in candInterp (pi (sort 0) (sort 0)), the first time
+    // the ladder reaches a const at a PI type, and r10_const_unlock_proper pins
+    // that the interpretation did not become total (omegaLam is still out).
+    // Census-NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r10,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R11 (candmodel_construct_r11.rs) — the rung
+    // that WIRES R10's semantic const-at-a-Pi-type into the judgment and SETTLES
+    // the conversion rule. Registered immediately after R10 because the const
+    // rule's fundamental-theorem arm IS r10_deadConst_cand_mem at
+    // candInterp_isCandHI, and therefore after R0-R9; it additionally needs
+    // DefEq (add_typing_def_eq, far earlier) for the conversion counterexample.
+    //
+    // THE DELIVERABLE. SynTyP is R9's SynTyC with all eight rules textually
+    // unchanged plus konstInert — a constant that the REAL reflected
+    // environment gives neither a definitional value nor recursor metadata is
+    // typed at ANY A, Pi types included, which is TypingCtx.const's shape minus
+    // the tenv lookup. R10 reached that constant SEMANTICALLY and named wiring
+    // it in as R11's job; synTyP_konst_pi_witness is the derivation and
+    // synTyP_sn_konst_pi_witness takes its SN THROUGH the capstone. The
+    // capstone chain (synTyP_fundamental / synTyP_sn_subst / synTyP_sn /
+    // synTyP_sn_closed) carries ZERO premises, guarded exactly as R6-R10 guard
+    // theirs, and the fundamental theorem is R9's own recursor term with the
+    // judgment renamed and two minors spliced in front of the indices, so the
+    // eight shared arms cannot drift.
+    //
+    // THE CONVERSION SETTLEMENT. TypingCtxConv.conv converts along DefEq, which
+    // for this ladder would need DefEq A B -> candInterp A e -> candInterp B e.
+    // It is FALSE, and the counterexample is one type-level beta redex:
+    // candInterp is defined by KExpr.rec ON THE TYPE, every non-Pi former goes
+    // to the top candidate and only pi produces a PiSet, so at
+    // A := app (lam (sort 0) (bvar 0)) (pi (sort 0) (sort 0)) and its
+    // contractum B := pi (sort 0) (sort 0) the interpretation collapses from
+    // the top candidate to a proper subset while DefEq.beta relates them.
+    // r11_candInterp_conv_refuted, its equality form
+    // r11_candInterp_conv_eq_refuted (the shape R8 needed for lifting, since
+    // PiSet is contravariant in its domain) and the sharpest form
+    // r11_candInterp_step_conv_refuted — not even ONE whnf_step of the type may
+    // be transported — pin it. The abstract statement
+    // r11_conv_top_proper_incompatible carries it at an ARBITRARY
+    // I : KExpr -> KExpr -> Type, so this is not an anecdote about one
+    // definition; the candInterp result is registered as its INSTANCE. SCOPE,
+    // stated because two different claims are in play: this refutes
+    // conversion-invariance of candInterp, NOT the corpus's general
+    // impossibility (no_conv_invariant_substitutive_interpretation,
+    // Stratified/SubstConvWall.lean), whose hypotheses — environment indexing, a
+    // variable clause, lambda-body uniformity, a substitution law — candInterp
+    // does not satisfy. The two are independent.
+    //
+    // THE ACT ON THE REFUTATION. SynTyP.convI converts along equality of the two
+    // types' INTERPRETATIONS instead, sound by one Eq.substType
+    // (r11_interpEq_conv) and NOT Eq.refl decoration: R8's candInterp_lift_eq
+    // holds at an arbitrary type, so r11_synTyP_unlift_type /
+    // r11_synTyP_lift_type make the judgment closed under lifting the TYPE both
+    // ways — the conversion TypingCtx.var's lifted conclusion needs.
+    // The bridge synTyC_to_synTyP is hypothesis-free and STRICT:
+    // synTyC_no_const_at_pi proves no SynTyC derivation concludes at a const
+    // expression with a pi type, in any context at any A B.
+    // Census-NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r11,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Candidate-model construction R12 (candmodel_construct_r12.rs) — THE SHAPE
+    // / DENOTATION SPLIT, the rung R6's and R11's walls both point at.
+    // Registered immediately after R11 because the conversion contrast carries
+    // r11_candInterp_step_conv_refuted itself, and therefore after R0-R10; it
+    // additionally needs R10's IsCandHI interface (isCandHI_intro/_cr1/_cr2/
+    // _cr3/isCandHI_whnfAcc/isCandHI_piSet/isCandHI_weaken), R5's PiSet,
+    // candHF_var_mem, r5_omegaLam, r5_whnfAcc_omegaLam and
+    // r5_omegaV_not_whnfAcc.
+    //
+    // A — THE SHAPE DOMAIN. Sk (ty / kd s / arr d c), domSk, piShape, and the
+    // large elimination VD : Sk -> Type 1 with VD (arr d c) = VD d -> VD c —
+    // the definition that makes a SEMANTIC FUNCTION representable at all, since
+    // an inductive SVal | fn : (SVal -> SVal) -> SVal is not strictly positive.
+    // vcarD reads the candidate out, mkTyD packages one at a Pi-shape
+    // (vcarD_mkTyD), junkD/goodD_junkD make GoodD inhabited at every shape, and
+    // Val/valS/valD/valCar/valGood are the corpus's packaged Sigma s : Sk, VD s.
+    // GoodSet is a one-line Type 1 lift of IsCandHI (no new inductive), forced
+    // because GoodD's arr clause quantifies over VD d : Type 1 and the kernel is
+    // NON-CUMULATIVE. The dependent valuation VEnvD D := forall i, VD (D i)
+    // deletes MatchEnv, coeD and the decidable equality on Sk that the corpus's
+    // total interpretation needs.
+    //
+    // B — THE INTERPRETATION. WK is the corpus's shape typing on KExpr/Level
+    // (levels semantically INERT: every sort gets kd ty, which is why Level's
+    // param/max/imax trees cost this route nothing). sval recurses on the SHAPE
+    // DERIVATION; lam denotes a semantic function and app semantic application.
+    // (i) candidate-hood: sval_good, through R10's LANDED isCandHI_piSet with
+    // candStepInv discharged by the identity. (ii) CONVERSION-INVARIANCE
+    // ACHIEVED: r12_sval_beta is Eq.refl at every shape-typed redex and every
+    // valuation, and r12_sval_beta_contractum states it at the SYNTACTIC
+    // contractum. r12_conv_contrast pairs r11_candInterp_step_conv_refuted with
+    // the same whnf_step transported through sval, in ONE kernel-checked
+    // constant — same calculus, same real environment, one interpretation
+    // refuted and the other proved.
+    //
+    // C — THE DEPENDENT PI CLAUSE, what R6 proved non-portable for candInterp:
+    // wkPiDep interprets the codomain in the valuation EXTENDED BY THE
+    // ARGUMENT'S OWN VALUE, so R6's unmeasurable candInterp (instantiate B a)
+    // becomes an environment extension on the structurally smaller B.
+    // isCandHI_wkPiDep proves it a candidate and wkPiDep_elim is the DEPENDENT
+    // elimination. It is a construction ON TOP of sval and not a clause of
+    // sval's own recursion, forced by two PROVED obstructions: the UNIVERSE horn
+    // (piCandV, the corpus's value-quantified clause, is registered at its true
+    // KExpr -> Type 1 — one above VD Sk.ty — because Type is PREDICATIVE where
+    // the corpus's Prop is impredicative, and shifting does not close it; the
+    // kernel refuses the same clause at KExpr -> Type) and the RECURSION horn
+    // (the Type-0 derivation-indexed replacement calls sval at derivations of
+    // unrelated terms, so it is not structural).
+    //
+    // HONESTY: no SN capstone — WK is a SHAPE system and sval_good gives
+    // candidate-hood, not whnf_acc of the term. No semantic substitution lemma
+    // and no general one-step invariance: both are funext applications in the
+    // corpus (val_psub/val_lift/piVal_congr/lamVal_congr) and the spec has NO
+    // funext by design. [SUPERSEDED 2026-08-27 by the R13 stage immediately
+    // below: funext IS derivable here, is registered as spec_funext with zero
+    // new axioms, and the congruence lemmas have landed. What blocks
+    // val_psub/val_lift now is the absence of a substitution/weakening
+    // OPERATION on WK derivations.] sval is PARTIAL where candInterp is total — R11's own
+    // redex is not shape-typed — so nothing here advances
+    // whnf_terminates_well_typed_dependent or discharges M : CandModel tenv.
+    // Non-degeneracy: r12_sval_pi_proper (r5_omegaLam is OUT) paired with
+    // r12_sval_pi_var_witness (bvar 0 is IN).
+    // Census-NEUTRAL: every constant value-bearing, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r12,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R13 — funext, DERIVED, and R12's wall comes down.
+    //
+    // R12 recorded "the spec has NO funext — by design", citing
+    // dependent_sn_richmodel.rs:664. That was true of what was REGISTERED and
+    // false of what is DERIVABLE. spec_fneq quotients the dependent function
+    // space by pointwise equality, spec_fnapp extracts an application map with
+    // Quot.lift (its respect obligation at the point x IS the pointwise
+    // hypothesis at x), and spec_funext pushes Quot.sound through that map with
+    // the spec's explicit-argument Eq.cong; both sides reduce back to the
+    // functions by quotient iota (quot.rs:598, wired at tc/whnf.rs:712), beta
+    // and function eta (tc/eta.rs). Lean 4 core's proof, in the spec's own
+    // source language.
+    //
+    // It survives a Type-valued candidate calculus because Quot's relation
+    // argument is fixed at Prop and the spec's Eq is Prop-valued at EVERY
+    // domain sort, so `forall (x : A), Eq (B x) (f x) (g x)` lands in
+    // Sort (imax u 0) = Prop however big u is. Nothing asks a Type to be a
+    // Prop — which is exactly what propext would have required, and why R12 was
+    // right that propext is unusable here.
+    //
+    // This stage calls Environment::init_funext FIRST. The Substitution bundle
+    // starts from a bare Environment::new() and reaches init_quot only in the
+    // FULL bundle, transitively through add_boolean_analysis_spec -> init_rat
+    // (the live Rat IS a quotient), a stage that is in_substitution: false;
+    // init_quot itself is pub(crate) to clean-kernel and init_funext is the
+    // public entry point that reaches it. It is idempotent, so the later
+    // init_rat is a no-op on the quotient side.
+    //
+    // CENSUS-NEUTRAL: Quot.sound and the Quot/Quot.mk/Quot.lift/Quot.ind
+    // formers are already five of the live census's eleven entries and all sit
+    // in the kernel's FOUNDATIONAL_AXIOMS (env/axiom_audit.rs:32-75), so
+    // Environment::axiom_deps filters them and computed_axiom_closure is EMPTY
+    // for every R13 constant. `funext` itself is a value-bearing
+    // Declaration::Theorem — axiom_audit.rs:57-67 records its demotion OUT of
+    // FOUNDATIONAL_AXIOMS when it stopped being an axiom — and never was a
+    // census entry. ZERO new axioms.
+    //
+    // PART B, what it knocks out: r13_vd_arr_funext (semantic functions at an
+    // arrow shape), r13_venvD_funext (valuations; VEnvD D is a DEPENDENT
+    // function space so this needs dependent funext), r13_sval_env_congr (the
+    // payoff — the interpretation respects pointwise-equal valuations at every
+    // shape environment, term, shape and derivation), r13_vconsD_env_congr,
+    // r13_piCandDep_fn_congr and r13_wkPiDep_env_congr (the piB congruence
+    // cases, which need no propext at all: the congruence is one Eq.cong in the
+    // FUNCTION argument, never a biimplication between two Types).
+    //
+    // HONESTY: R12's TWO HORNS are untouched and still stand — HORN 1 is
+    // predicativity (piCandV lands one universe above the candidates, offset
+    // invariant under shifting) and HORN 2 is that the derivation-indexed
+    // clause calls sval at derivations of unrelated terms, so it is not
+    // structural. Extensionality is neither. val_psub / val_lift are still NOT
+    // registered and the reason CHANGED: R12 built no substitution or weakening
+    // OPERATION on WK derivations and the corpus lemmas are statements about
+    // one — R13 lands the congruence engine those proofs consume, not the
+    // proofs. No SN capstone, sval is still PARTIAL, nothing here advances
+    // whnf_terminates_well_typed_dependent or discharges M : CandModel tenv.
+    // Non-degeneracy is a MEASUREMENT: spec_funext_witness equates
+    // `fun n => Nat.add Nat.zero n` with `fun n => n` (not definitionally
+    // equal — Nat.add recurses on its SECOND argument) and two refusal tests
+    // assert the kernel REJECTS Eq.refl at that statement and at the general
+    // one with the pointwise hypothesis in hand.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r13,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // CANDIDATE-MODEL LADDER R14 (`candmodel_construct_r14.rs`): THE WEAKENING
+    // AND SUBSTITUTION OPERATIONS ON `WK` DERIVATIONS, and the semantic lemmas
+    // they exist for. MUST follow add_candmodel_construct_r12 (Sk / skcons / WK
+    // / sval / VD / VEnvD / vconsD / junkD / domSk / piShape / mkTyD / vcarD /
+    // PiSet / r12_piEnv / r12_beta_contractum_is_arg) and
+    // add_candmodel_construct_r13 (r13_venvD_funext, r13_vd_arr_funext — every
+    // valuation law and both lam cases run on them). Also consumes
+    // add_expr_model (lift_at / lift_bvar_at / instantiate),
+    // add_dependent_sn_richmodel (psubst / up / scons / idsubst /
+    // instantiate_eq_psubst), add_whnf_reduction (whnf_step / beta_reduces) and
+    // add_foundation_arith_lemmas (nat_sub_zero_left / nat_sub_succ_succ).
+    //
+    // R13 named the binding constraint exactly: "R12 built no substitution or
+    // weakening OPERATION on WK derivations, and the corpus lemmas are
+    // statements about one." This is that operation pair — wk_lift (corpus
+    // FWK.lean:109) with wk_lift0, wk_up and wk_psub (FWK.lean:149) with
+    // wk_inst — and then val_lift / val_psub / val_inst / val_beta, the four
+    // constants R13 recorded as not registered.
+    //
+    // The design decision that pays for the rung: `skins` recurses on the
+    // CUTOFF, not on a decidable comparison, so skins (succ c) t (skcons s D)
+    // is DEFINITIONALLY skcons s (skins c t D) and every binder case of wk_lift
+    // is transport-free. The whole rung has three transport sites, and
+    // r14_skins_zero / r14_skins_succ are Eq.refl GUARDS over that.
+    //
+    // Two pieces of machinery are new: r14_sval_cast_term / r14_sval_cast_shape
+    // (sval recurses on the DERIVATION, so a transported derivation does not
+    // reduce; both are based Eq.rec with a PROOF-DEPENDENT motive) and
+    // r14_vdCast_refl / r14_vdCast_irrel / r14_cast_idx. Two elaborator facts
+    // were MEASURED building them: Eq.substType does NOT delta-unfold, so every
+    // transport a later proof must reduce through goes through a def over a
+    // bare Eq.rec (r14_wkCastT / r14_wkCastS / r14_vdCast); and a proof-
+    // irrelevance step must be a STANDALONE constant the proof term applies,
+    // because the elaborator's unifier refused the identical step written
+    // inline as an Eq.rec minor (fvar mismatch between the proof binders) while
+    // the kernel accepts it as its own declaration. r14_vdCast_refl separately
+    // records that a cast along a stuck REFLEXIVE proof computes at all, which
+    // is K-like reduction of Eq and not irrelevance.
+    //
+    // 47 constants: 16 add_recursive_def and 31 value-bearing theorems.
+    //
+    // HONESTY: this is NOT val_step and NOT val_conv. R14 lands val_step's BETA
+    // arm at the real whnf_step (r14_beta_step + r14_val_beta +
+    // r14_sval_transports_real_beta) plus the congruence COMBINATORS its other
+    // arms consume; the arms themselves need wk_step (subject reduction for
+    // shapes), which needs inversion of the spec's NINE-constructor whnf_step —
+    // delta, iota, zeta, let_, proj, forall_ — not the corpus's five-
+    // constructor Step. R12's two horns (predicativity, structural recursion)
+    // and R10/R11's refutations are untouched. No SN capstone; sval is still
+    // PARTIAL; nothing here discharges M : CandModel tenv. Zero new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r14,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // CANDIDATE-MODEL LADDER R15 (`candmodel_construct_r15.rs`): SUBJECT
+    // REDUCTION FOR SHAPES (`wk_step`) and the `val_step` arms it unlocks. MUST
+    // follow add_candmodel_construct_r12 (Sk / skcons / WK / sval / VD / VEnvD /
+    // vconsD / junkD / domSk / piShape / mkTyD / vcarD / r12_betaEnv /
+    // r12_betaRedex / r12_betaDeriv / r12_betaJunkEnv / r12_candInterpStepConv),
+    // add_candmodel_construct_r13 (r13_vd_arr_funext) and
+    // add_candmodel_construct_r14 (wk_inst, r14_wkCastT, r14_sval_cast_term,
+    // r14_sval_pi_congr, r14_vapply_congr, r14_val_inst, r14_val_beta,
+    // r14_beta_step). Also consumes add_candmodel_construct_r1 (whnfStar),
+    // add_candmodel_construct_r5 (HeadFree / headFree_app),
+    // add_candmodel_construct_r11 (r11_candInterp_step_conv_refuted),
+    // add_dependent_sn_richmodel (ConstFreeUnit), add_whnf_reduction
+    // (whnf_step / beta_reduces), add_par_reduces_c
+    // (iota_step_head_none_absurd_type) and add_par_reduces_d_diamond
+    // (delta_step_head_none_absurd_type).
+    //
+    // R14 named the single remaining gap exactly: "the piA/piB/lamA/lamB/appL/
+    // appR arms of val_step, and val_conv. They need wk_step (subject reduction
+    // for shapes), which needs inversion of the spec's whnf_step over delta /
+    // iota / zeta / let_ / proj / forall_ across NINE KExpr constructors." This
+    // is that rung. wk_step : WK D e s -> whnf_step e e2 -> WK D e2 s,
+    // unconditional and total, registered as a def so a later rung can reduce
+    // through it.
+    //
+    // THE IDIOM THAT PAID FOR IT: every inversion is a COMPUTED MOTIVE — a
+    // KExpr.rec on the SUBJECT (nested with an Sk.rec on the shape where
+    // needed) that maps each head constructor to the continuation-passing
+    // statement it deserves and every other head to ConstFreeUnit. That is
+    // R12's Neutral read as an inversion principle, and it deletes the whole
+    // X_ne_Y / X_inj_* scaffold R1/R3/R5's beta_inv_body needs: fourteen of
+    // beta_reduces' fifteen arms are ONE token (ConstFreeUnit.triv for the
+    // let_/proj heads, one continuation call with Eq.refl for the live ones).
+    // The iota arm is the only one whose subject is a variable and so the only
+    // one computation cannot discharge; r15_headFree_wk kills it and whnf_step's
+    // delta leg with the same fact — WK has no const constructor, so no
+    // shape-typed term is a delta or iota redex.
+    //
+    // PART B: the six named val_step arms at given derivations
+    // (r15_val_step_piA/piB/lamA/lamB/appL/appR — lamA needs NO hypothesis, the
+    // annotation is semantically inert), then r15_val_step_sem, the FUSED
+    // theorem carrying subject reduction and semantic invariance in one WK.rec,
+    // r15_val_star_sem over whole reduction sequences, and
+    // r15_sval_transports_any_step / r15_sval_transports_congr_step /
+    // r15_conv_contrast — R11's refutation paired with a transport across a REAL
+    // congruence step, which is the class R14 could not touch.
+    //
+    // HONESTY: the FORALL-form of val_step and val_conv are NOT claimed. Both
+    // need sval DERIVATION IRRELEVANCE, and r15_val_conv_from_irrel proves
+    // kernel-checked that it is the ONLY missing ingredient (confluence is not
+    // additionally needed for the joinable form). R12's two horns and R10/R11's
+    // refutations are untouched; no SN capstone; sval is still PARTIAL. Zero new
+    // axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r15,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // CANDIDATE-MODEL LADDER R16 (`candmodel_construct_r16.rs`): SVAL DERIVATION
+    // IRRELEVANCE — the single ingredient R15 proved val_conv and the FORALL-form
+    // of val_step were missing — and the two payoffs it unlocks. MUST follow
+    // add_candmodel_construct_r12 (Sk / skcons / WK / sval / VD / VEnvD / domSk /
+    // piShape / vcarD / r12_betaEnv / r12_betaRedex / r12_betaDeriv /
+    // r12_betaJunkEnv / r12_candInterpStepConv), add_candmodel_construct_r14
+    // (r14_beta_step) and add_candmodel_construct_r15 (r15_val_step_sem,
+    // r15_val_star_sem, r15_val_conv_from_irrel, r15_instDeriv,
+    // r15_wk_step_witness, r15_wk_step_sort). Also consumes
+    // add_candmodel_construct_r1 (whnfStar), add_candmodel_construct_r11
+    // (r11_candInterp_step_conv_refuted), add_whnf_reduction (whnf_step /
+    // beta_reduces) and the foundation's Eq / Eq.rec / AndType / Empty.
+    //
+    // R15 named the gap as a kernel-checked constant rather than as prose:
+    // r15_val_conv_from_irrel proves val_conv follows from
+    // `forall (h1 h2 : WK D e s) r, sval h1 r = sval h2 r` and from nothing else.
+    // This rung discharges it — and lands a STRONGER statement than R15's route
+    // asked for, because shape uniqueness makes it reachable:
+    // r16_wk_deriv_unique says WK IS A SUBSINGLETON (any two derivations of one
+    // term at one shape are EQUAL, since shape assignment is syntax-directed and
+    // its shapes are unique), after which r16_sval_irrel is ONE Eq.cong. R15
+    // budgeted five sval-valued inversions; ONE derivation inversion sufficed,
+    // and R13's funext / R14's sval congruences were not needed at all.
+    //
+    // THE IDIOM IS R15's, CARRIED FORWARD: r16_wkT is a computed motive — a
+    // KExpr.rec on the SUBJECT sending each head to the CPS case analysis its WK
+    // rule deserves and const/let_/proj/lit to r16_propUnit, so those four arms
+    // die by COMPUTATION. Every live arm of r16_wk_inv hands its own constructor
+    // fields to the continuation with Eq.refl and the reflexive shape cast
+    // computes away by plain iota, so THE INVERSION ITSELF USES NO K. Shape
+    // uniqueness goes through a term-recursive r16_shapeOf rather than through
+    // five CPS inversions, and Sk.arr's second-component injectivity is one
+    // Eq.cong through the computed r16_arrCod — no discrimination lemma anywhere.
+    //
+    // THE ONE K STEP IS QUARANTINED. After the based path inductions in
+    // r16_pi_align / r16_lam_align the leftover shape equation is REFLEXIVE but
+    // is a variable proof, so plain iota does not fire; Eq is K-like in this
+    // kernel, so the cast computes away. That reliance lives in exactly one
+    // constant, r16_wkCastS_refl, never inlined as a recursor minor, and it is a
+    // kernel REDUCTION RULE rather than an axiom — computed_axiom_closure is
+    // empty for all 22 headline constants. r16_app_align needs neither a J pair
+    // nor a cast: WK.app carries the codomain shape as a bare index.
+    //
+    // PAYOFF: r16_val_conv (val_conv UNCONDITIONALLY), r16_val_step /
+    // r16_val_step_star (the FORALL-form of val_step, R15's obstruction 2, closed
+    // — PropBox is the non-cumulativity bridge, since R15's fused theorems
+    // quantify over C : Type and an Eq is a Prop), and r16_conv_contrast: R11's
+    // refutation paired with unconditional conversion-invariance for sval at a
+    // pair that CONVERTS without either side reducing to the other. R12's two
+    // horns and R10/R11's refutations are untouched; no SN capstone; sval is
+    // still PARTIAL. Zero new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r16,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // CANDIDATE-MODEL LADDER R17 (`candmodel_construct_r17.rs`): THE CONSTRUCTOR
+    // GAP — `const` and `let_` land on the WK/sval lineage, with every operation
+    // R14-R16 built extended to them, and the conversion-rule question SETTLED.
+    // MUST follow add_candmodel_construct_r12 (Sk / skcons / domSk / piShape /
+    // VD / VEnvD / vconsD / vcarD / mkTyD / PiSet / junkD / r12_piEnv /
+    // r12_betaEnv / r12_junkEnv / r12_betaJunkEnv), add_candmodel_construct_r14
+    // (skins / r14_wkpos / r14_skins_idx / r14_lift_at_bvar_wkpos),
+    // add_candmodel_construct_r15 (r15_whnf_stepT_inv, r15_instDeriv) and
+    // add_candmodel_construct_r16 (r16_arrCod, r16_propUnit, r16_shapeOf,
+    // r16_shape_correct, PropBox / r16_propBox_intro). Also consumes
+    // add_candmodel_construct_r1 (letRedex_whnf_inv),
+    // add_candmodel_construct_r2 (constRedex_whnf_inv),
+    // add_candmodel_construct_r10 (HeadInert / headInert_app /
+    // inertConst_headInert), add_the_red_env (the_red_env_delta_nonvacuous,
+    // kcre_name_12, kcre_witness_delta_head / _value),
+    // add_par_reduces_iota_delta (delta_reduct_eq_none_of_defval_none),
+    // add_whnf_reduction (whnf_step / beta_reduces / whnf_acc) and the
+    // foundation's Eq / Eq.rec / AndType / Empty / ConstFreeUnit.
+    //
+    // R16 closed with a verdict rather than a handoff: "the next question is the
+    // four missing constructors and the conversion rule themselves, not another
+    // WK metatheorem." This rung moves TWO of the four onto the lineage that has
+    // the metatheory, and carries the metatheory with them.
+    //
+    // WKC is R12's WK verbatim in its five landed constructors plus konst (an
+    // INERT constant — R10's two side conditions, spelled as Eq's so proof
+    // irrelevance keeps the system a subsingleton — at Sk.ty) and let_ (three
+    // premises, binder slot carrying the shape of the VALUE). xval is the
+    // seven-clause interpretation. Both restrictions are PROVED rather than
+    // argued: r17_unrestricted_konst_refuted pairs a REAL delta step out of a
+    // REAL reflected constant (the_red_env_delta_nonvacuous, whose target is a
+    // lam — R9's finding about every real body in the_red_env) with
+    // r17_lam_never_ty, so a Sk.ty-valued rule at a delta-ACTIVE constant loses
+    // subject reduction outright.
+    //
+    // LANDED, at seven constructors: wkc_lift / wkc_lift0 / wkc_up / wkc_psub /
+    // wkc_inst (R14's five), wkc_step (R15's subject reduction),
+    // r17_shape_correct / r17_wkc_shape_unique / r17_wkc_deriv_unique /
+    // r17_xval_irrel (R16's stack). THE SUBSINGLETON SURVIVES — both new rules
+    // are keyed by the subject's head constructor, konst's only freedom is in
+    // Prop, and let_'s two existential shapes are pinned by shape uniqueness —
+    // so r17_xval_irrel is still ONE Eq.cong.
+    //
+    // THE STRUCTURAL FACT that kept subject reduction cheap:
+    // r17_headFree_wkc_arr. Adding const re-opens delta and iota, which R15 had
+    // closed by proving WK never types a const-headed spine; the replacement is
+    // that WKC never types one AT AN ARROW SHAPE (WKC.konst concludes at Sk.ty
+    // and nowhere else, and WKC.app's function premise is at an arrow).
+    // Consequence: R15's r15_whnf_stepT_inv is reused VERBATIM in five of
+    // wkc_step's seven arms, R1's letRedex_whnf_inv covers the sixth and
+    // r17_const_no_step refutes the seventh — R10's HeadInert INVERSION
+    // machinery is not needed by subject reduction at all. r17_headInert_wkc is
+    // registered anyway, because that is where the konst rule's SECOND premise
+    // earns its place.
+    //
+    // r17_xval_zeta is Eq.refl: SEMANTIC ZETA IS DEFINITIONAL, the analogue of
+    // R12's r12_sval_beta. R1's refutation of the generic per-set zeta ENGINE
+    // does NOT transfer — R1 is about candidate SETS closing under expansion for
+    // an arbitrary S, xval is an INTERPRETATION reading a valuation.
+    //
+    // THE CONVERSION RULE IS SETTLED AND DELIBERATELY NOT BUILT. On WKV (two
+    // leaf rules plus conv at the FINEST possible relation, Eq Sk):
+    // r17_conv_shape_unique proves shape assignment SURVIVES, and
+    // r17_conv_breaks_subsingleton proves derivation uniqueness does NOT.
+    // r17_conv_verdict pairs them. So adding conv to WKC would keep the shapes
+    // and lose R16's one-line route to interpretation irrelevance.
+    //
+    // NOT LANDED: proj and lit (r17_wkcT's dead arms drop 4 -> 2 and those two
+    // are what is left), and no xval-side re-derivation of R14/R15's SEMANTIC
+    // lemmas — what transfers today is r17_wk_wkc and r17_shapeOf_agrees_on_wk.
+    // R10's cr3 refutation, R11's candInterp conversion refutation and R12's two
+    // horns are untouched; no SN capstone. Zero new axioms.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r17,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
     // REAL-ENV CONFLUENCE DISCHARGE: the hypothesis-free Church-Rosser corollaries
     // (par_reduces_c_star_diamond_faithful / par_reduces_p_star_diamond_faithful) —
     // the generic star-diamonds (add_par_reduces_p_topdev) instantiated at
@@ -1136,6 +2151,26 @@ const STAGES: &[CoreSpecStage] = &[
         apply: Specification::add_micro_soundness,
         in_substitution: false,
         in_impl_soundness: true,
+    },
+    // Faithful micro-checker verification relation, Brick 1
+    // (micro_verifies_r0.rs): the FRESH-NAME context-indexed MicroVerifies
+    // (sort + bvar arms ONLY, arm-for-arm with micro/checker.rs::verify_impl),
+    // the ctx_lookup/translation commutation, the per-arm kernel agreement
+    // theorems (bvar via the already-proved kernel_to_micro_lift_commute),
+    // ground positive witnesses, a lift-arithmetic pin, and the empty-context
+    // bvar REJECTION witness. Never re-points any existing producer (the
+    // Brick-6 fresh-names constraint, micro_soundness.rs:33-38). FULL-ONLY:
+    // it consumes the micro band (add_micro_checker / add_micro_soundness,
+    // directly above — ImplementationSoundness-only) AND ctx_lookup /
+    // option_none_ne_some_type-side vocabulary whose home stage
+    // add_dependent_sn_richmodel is Substitution-only, so the only bundle
+    // containing its whole dependency closure is Full — same pattern as
+    // add_closedness_bundle. Census-NEUTRAL: one genuine inductive, four
+    // value-bearing defs, seven kernel-checked theorems, ZERO new axioms.
+    CoreSpecStage {
+        apply: Specification::add_micro_verifies_r0,
+        in_substitution: false,
+        in_impl_soundness: false,
     },
     CoreSpecStage {
         apply: Specification::add_env_extensions,
@@ -1465,6 +2500,17 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // Option B's exact step counts for the designated target. AFTER
+    // add_eval_ir_steps and for the same reason as in EVAL_IR_STAGE_APPLY:
+    // `ir_steps` is registered there, and `add_eval_ir_lzb_module` (which
+    // registers the module these cost) runs inside add_eval_ir, well before it.
+    // Placed with the module, the missing head surfaces as a BOGUS ARITY ERROR
+    // rather than an unknown identifier -- the trap this file warns about above.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzb_steps,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     CoreSpecStage {
         apply: Specification::add_eval_ir_cost,
         in_substitution: false,
@@ -1472,6 +2518,13 @@ const STAGES: &[CoreSpecStage] = &[
     },
     CoreSpecStage {
         apply: Specification::add_eval_ir_activation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Option B's activation lemmas and the three recursive segment lemmas.
+    // AFTER add_eval_ir_activation, for the names given above.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzb_activation,
         in_substitution: false,
         in_impl_soundness: false,
     },
@@ -1629,6 +2682,27 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The designated target's MINTED module is registered inside add_eval_ir
+    // (EvalIr bundle, `eval_ir_level_minted.rs`); THIS stage is the theorem
+    // that A4 is FALSE over it, which needs `level_is_zero`, `ir_lzm_cost`,
+    // `EncodesLiveLevelRef` and `ir_outcome_is_ret` -- hence AFTER
+    // add_eval_ir_correct, and Full-only for the same reason the cost stage is.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_level_minted_refutation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Option B: A4 and A5 for the designated target over the emitted body plus
+    // a labelled deref model. Deliberately AFTER the refutation, so the three
+    // stages read in the order the argument runs: the hand model's A4/A5, the
+    // kernel-checked fact that the same sentence is FALSE over the minted
+    // module, and then the sentence that IS true once the one callee the
+    // artifact cannot carry a body for is supplied as a stated assumption.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzb_correct,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // The width-one chain retargeted to CleanMode::has_cubical_layer, a SHIPPED
     // kernel function already in the class the compiler flips.
     //
@@ -1757,6 +2831,96 @@ const STAGES: &[CoreSpecStage] = &[
     // place in STAGES after the add_eval_ir_priority stage (bundles.rs ~line 1924) — any point after add_eval_ir_contains satisfies the dependencies
     CoreSpecStage {
         apply: Specification::add_eval_ir_bvar_range,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // W2a — the synthetic micro-module lane (select / undef / unreachable /
+    // extractelement / unop; plan §5 W2a). Reuses ONLY `add_eval_ir` names —
+    // the IR syntax families, the ir_d numerals, the ir_nd/ir_bd/ir_blk/ir_nl/
+    // ir_vl1 builders, ir_mem0, and the machine (`ir_eval`, IROutcome,
+    // IRFault) — deliberately nothing from any chain stage, so the semdiff
+    // battery can register the same module lines standalone into the minimal
+    // EvalIr-bundle spec (`ir_w2a_*_module_defs` re-exports). Any point after
+    // add_eval_ir therefore satisfies the dependencies; placed here with the
+    // other post-chain EvalIR stages.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_w2a_synth,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // W2b — the synthetic lane's MEMORY tranche (alloca / ptrdata /
+    // ptrmetadata / ptrfromparts; plan §5 W2b). Same dependency posture as
+    // W2a: reuses ONLY `add_eval_ir` names (syntax families, ir_d numerals,
+    // builders, ir_mem0, the memory lane's evaluators and the machine), so
+    // the semdiff battery can register the `ir_w2b_*_module_defs` lines
+    // standalone into the minimal EvalIr-bundle spec. Any point after
+    // add_eval_ir satisfies the dependencies; placed beside W2a.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_w2b_synth,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // W2c — the synthetic lane's CALL+MODULE tranche (callindirect /
+    // globaladdr; plan §5 W2c — the FINAL synthetic tranche: after it only
+    // `overflow` (W3) and `fcmp` (W4) lack battery rows). Same dependency
+    // posture as W2a/W2b: reuses ONLY `add_eval_ir` names (syntax families
+    // incl. IRGlobal/IRConst, ir_d numerals, builders, ir_mem0,
+    // ir_globaladdr_eval and the machine), so the semdiff battery can register
+    // the `ir_w2c_*_module_defs` lines standalone into the minimal
+    // EvalIr-bundle spec. Any point after add_eval_ir satisfies the
+    // dependencies; placed beside W2a/W2b.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_w2c_synth,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // W3 — the OVERFLOW value domain's synthetic lane (plan §5 W3,
+    // 2026-08-25). Unlike W2a-c this wave changed the semantics itself: the
+    // overflow dispatch arm computes (ir_overflow_exec, two-result bind
+    // through ir_bind2) where it was the tagged unmodelled outcome, so only
+    // `fcmp` (W4) remained tagged — until the W4 stage below retired it the
+    // same day. Same dependency posture as the W2 tranches:
+    // reuses ONLY `add_eval_ir` names (syntax families incl. IROverflowOp,
+    // ir_d numerals, builders, ir_mem0, ir_overflow_exec and the machine), so
+    // the semdiff battery can register the `ir_w3_*_module_defs` lines
+    // standalone into the minimal EvalIr-bundle spec. Any point after
+    // add_eval_ir satisfies the dependencies; placed beside the W2 stages.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_w3_synth,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // W4 — the FLOAT-COMPARISON lane (plan §5 W4, 2026-08-25) — the LAST
+    // lane: with it every one of the 28 IRInst constructors has battery rows.
+    // Like W3 this wave changed the semantics itself: the fcmp dispatch arm
+    // computes (ir_fcmp_eval, 12 real predicates over the classified binary64
+    // substrate — eval_ir_fcmp.rs, registered inside add_eval_ir_ops), so
+    // ZERO ir_exec arms remain tagged unmodelled. Same dependency posture as
+    // the W2/W3 tranches: reuses ONLY `add_eval_ir` names (syntax families
+    // incl. IRFCmpOp, ir_d numerals, builders, ir_mem0, ir_fcmp_eval and the
+    // machine), so the semdiff battery can register the `ir_w4_fc_module_defs`
+    // lines standalone into the minimal EvalIr-bundle spec. Any point after
+    // add_eval_ir satisfies the dependencies; placed beside the other
+    // synthetic stages.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_w4_synth,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The FLOAT-RESIDUE synthetic lane (evalir_w4.PENDING.md delta 5's wave,
+    // 2026-08-25): three micro-modules putting the seven newly-answering
+    // residue operators (fneg/fabs, ffloor/fceil/ftrunc, fmin/fmax) under
+    // battery measurement. Like W3/W4 the wave changed the semantics itself —
+    // ir_unop_eval/ir_binop_eval's residue arms now dispatch into
+    // eval_ir_float_res's tables (registered inside add_eval_ir_ops), with
+    // frem/fsqrt/the fp casts/fdiv-finite staying as DATED refusals carried
+    // by universal kernel witnesses. Same dependency posture as the other
+    // synthetic stages: reuses ONLY `add_eval_ir` names, so the semdiff
+    // battery can register the `ir_fr*_module_defs` lines standalone into the
+    // minimal EvalIr-bundle spec. Any point after add_eval_ir satisfies the
+    // dependencies; placed beside the other synthetic stages.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_wfr_synth,
         in_substitution: false,
         in_impl_soundness: false,
     },
@@ -1991,6 +3155,28 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The CALL chain, 2026-08-21: `expr::meta::ExprMeta::has_loose_bvars`
+    // CALLING `expr::meta::ExprMeta::loose_bvar_range` — the first chain over
+    // a body with a `call`, the first two-function module, and the first A4
+    // composed across the call boundary (split at the call step, frame-generic
+    // callee activation, seam lemma abstracted over the callee's answer).
+    // Caller evidence: agreed + markers_exact over 4 real lines + flip with
+    // lineage == coverage row, deferred_to_seam=true recorded; callee: shim-
+    // refused differential, evidence is the pinned IR + the reflected lemma.
+    //
+    // AFTER add_eval_ir_priority, and load-bearing rather than alphabetical:
+    // this stage REUSES ir_br_tu32/ir_d32 (fifth chain), ir_vc_tu64/ir_d64
+    // (sixth), ir_mt_bd9 and ir_ret_int_inj (tenth), ir_bd3 (crystal),
+    // ir_run_le_ret (add_eval_ir_fuel), ir_run_steps_split / ir_run_of_steps /
+    // ir_config_outcome (add_eval_ir_steps), ir_outcome_bool /
+    // ir_outcome_is_ret (add_eval_ir_correct) and ir_outcome_nat
+    // (add_eval_ir_kind_ord). Re-declaring any of them is the eighth chain's
+    // recorded error, which only the full Specification::new() catches.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_has_loose_bvars,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // ── premise-satisfiability witnesses ────────────────────────────────
     // GENUINELY LAST, and it has to be: these witness predicates from four
     // lanes (EvalIR syntax/state, the eval_ir MODE lane, the ImplInfer mode
@@ -2027,7 +3213,14 @@ const EVAL_IR_STAGE_APPLY: &[CoreSpecStageApply] = &[
     // full spec's time. `add_eval_ir_repr` and `add_eval_ir_cost` stay
     // Full-only: they need `Level` and `level_is_zero` respectively.
     Specification::add_eval_ir_steps,
+    // MUST follow add_eval_ir_steps: these are the designated target's exact
+    // step counts and they are the only lzb declarations naming `ir_steps`.
+    Specification::add_eval_ir_lzb_steps,
     Specification::add_eval_ir_activation,
+    // MUST follow add_eval_ir_activation: the segment lemmas name
+    // `ir_frames_tail` / `ir_config_frames` from that stage, and `ir_steps_add`
+    // from add_eval_ir_steps.
+    Specification::add_eval_ir_lzb_activation,
 ];
 
 /// Apply the ordered stages for the requested bundle to the specification.

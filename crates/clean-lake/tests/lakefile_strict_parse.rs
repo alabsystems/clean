@@ -4,8 +4,15 @@
 
 //! Strict-mode `lakefile.lean` parsing with skipped-construct accounting
 //! (Lean 4 drop-in roadmap, Lake pillar): a Mathlib-style lakefile lists its
-//! exact skipped top-level constructs, strict mode rejects a custom `target`
-//! declaration, and fully-modeled lakefiles carry zero diagnostics.
+//! exact skipped constructs, strict mode rejects a custom `target` declaration,
+//! and fully-modeled lakefiles carry zero diagnostics.
+//!
+//! Accounting covers `where`-block FIELDS as well as top-level constructs. The
+//! field parsers were if/else-if chains with no final `else`, so an unmodelled
+//! `testDriver` / `leanOptions` / `supportInterpreter` / `weakLinkArgs` was
+//! dropped in silence and the lakefile looked fully understood — which is how a
+//! Mathlib-shaped project could report "No test targets defined in
+//! lakefile.lean" while its config parsed without a single diagnostic.
 
 use clean_lake::{LakeConfig, LakeError, LakefileParseMode};
 
@@ -23,17 +30,26 @@ fn test_mathlib_style_lakefile_lists_exact_skipped_constructs() {
     let lib_names: Vec<_> = config.libs.iter().map(|lib| lib.name.as_str()).collect();
     assert!(lib_names.contains(&"Mathlib") && lib_names.contains(&"Cache"));
 
-    // ...and the skipped top-level constructs are accounted for EXACTLY: the
-    // two `abbrev` declarations, at their exact source lines. Doc/block
-    // comments, indented continuation lines, and the dangling `]` closing the
-    // first abbrev's array literal must not appear.
-    let expected: Vec<(usize, &str)> = MATHLIB_STYLE
+    // ...and the skipped constructs are accounted for EXACTLY: the two `abbrev`
+    // declarations plus the two unmodelled `where`-block fields, at their exact
+    // source lines. Doc/block comments, indented continuation lines, and the
+    // dangling `]` closing the first abbrev's array literal must not appear.
+    let mut expected: Vec<(usize, &str)> = MATHLIB_STYLE
         .lines()
         .enumerate()
         .filter(|(_, line)| line.starts_with("abbrev "))
         .map(|(idx, _)| (idx + 1, "abbrev"))
         .collect();
     assert_eq!(expected.len(), 2, "fixture declares exactly two abbrevs");
+    for (idx, line) in MATHLIB_STYLE.lines().enumerate() {
+        let trimmed = line.trim();
+        for field in ["testDriver", "leanOptions"] {
+            if trimmed.starts_with(field) {
+                expected.push((idx + 1, field));
+            }
+        }
+    }
+    expected.sort_unstable();
     let actual: Vec<(usize, &str)> = config
         .diagnostics
         .iter()
@@ -41,7 +57,7 @@ fn test_mathlib_style_lakefile_lists_exact_skipped_constructs() {
         .collect();
     assert_eq!(
         actual, expected,
-        "diagnostics must list exactly the skipped abbrev declarations"
+        "diagnostics must list the skipped abbrevs AND the unmodelled fields"
     );
 }
 
@@ -82,9 +98,12 @@ fn test_lenient_mode_records_custom_target_diagnostic() {
 }
 
 #[test]
-fn test_strict_mode_accepts_mathlib_declarative_subset_minus_abbrevs() {
-    // Removing the two abbrev declarations (the only unmodeled constructs)
-    // makes the Mathlib-style fixture strict-clean.
+fn test_strict_mode_accepts_mathlib_declarative_subset_minus_unmodelled() {
+    // Removing every unmodelled construct — the two abbrev declarations AND the
+    // `where`-block fields the declarative subset does not carry — makes the
+    // Mathlib-style fixture strict-clean. `testDriver` and `leanOptions` belong
+    // in that list: they are exactly as unmodelled as an `abbrev`, they were
+    // simply invisible before the field parsers reported what they reject.
     let stripped: String = {
         let mut out = String::new();
         let mut skipping_abbrev = false;
@@ -98,6 +117,10 @@ fn test_strict_mode_accepts_mathlib_declarative_subset_minus_abbrevs() {
                 if line.trim() == "]" {
                     skipping_abbrev = false;
                 }
+                continue;
+            }
+            let trimmed = line.trim();
+            if trimmed.starts_with("testDriver") || trimmed.starts_with("leanOptions") {
                 continue;
             }
             out.push_str(line);

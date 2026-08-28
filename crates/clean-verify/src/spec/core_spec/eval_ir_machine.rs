@@ -39,7 +39,14 @@ impl Specification {
         self.add_eval_ir_memory()?;
         self.add_eval_ir_aggregates()?;
         self.add_eval_ir_control()?;
-        self.add_eval_ir_dispatch()
+        self.add_eval_ir_overflow()?;
+        self.add_eval_ir_dispatch()?;
+        // W5 (2026-08-25): the adequacy grid's theorem band — the seventeen
+        // remaining dropped-operand irrelevance theorems, appended LAST so
+        // every pre-existing def keeps its registration position (the W4
+        // precedent). See `eval_ir_adequacy.rs` and
+        // `data/evalir_adequacy_grid.json`.
+        self.add_eval_ir_adequacy()
     }
 
     /// Field projections and SSA lookup.
@@ -198,6 +205,21 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
+            r"def ir_frame_bind2 (f : IRFrame) (rs : IRList Nat) (v : IRScalar) (u : IRScalar) : IRFrame := match f with
+| IRFrame.mk fnid bl pc loc ds => IRFrame.mk fnid bl (Nat.succ pc) (ir_bind_params rs (IRList.cons IRScalar v (IRList.cons IRScalar u (IRList.nil IRScalar))) loc) ds",
+            "Bind a TWO-result instruction's values positionally to the ids the node declares, \
+             and advance past it — the same ir_bind_params multi-bind the return path uses \
+             (ir_frame_set_many), plus the advance an instruction needs and a return does not. \
+             Added 2026-08-25 (plan W3) for Overflow, whose trust-ir node declares two results \
+             (a value and a flag) bound positionally (a4e81b6 interpret.rs:637-644). The \
+             length-mismatch posture is ir_bind_params's own: a node declaring fewer ids binds \
+             the prefix — arity is producer-side well-formedness — where the reference \
+             interpreter's bind_results rejects the mismatch as malformed_instruction \
+             (interpret.rs:5339-5361); on producer modules the arities agree and the split is \
+             junk-module-only, recorded here rather than smoothed.",
+        )?;
+
+        self.add_recursive_def(
             r"def ir_frame_set_many (f : IRFrame) (rs : IRList Nat) (vs : IRList IRScalar) : IRFrame := match f with
 | IRFrame.mk fnid bl pc loc ds => IRFrame.mk fnid bl pc (ir_bind_params rs vs loc) ds",
             "Bind several values WITHOUT advancing: the return path. The caller's program counter \
@@ -241,6 +263,22 @@ impl Specification {
                 "(fun (o : IROutcome) => IRConfig.halted o) r",
             ),
             "Bind a value-level evaluator's result, or halt on its fault.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_bind2 (s : IRMachine) (rs : IRList Nat) (v : IRScalar) (u : IRScalar) : IRConfig := ",
+                "IRMachine.rec (fun (_ : IRMachine) => IRConfig) ",
+                "(fun (fs : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) => ",
+                "IRList.rec IRFrame (fun (_ : IRList IRFrame) => IRConfig) ",
+                "(IRConfig.halted (IROutcome.stuck IRFault.no_frame)) ",
+                "(fun (f : IRFrame) (rest : IRList IRFrame) (_ : IRConfig) => ",
+                "IRConfig.running (IRMachine.mk ",
+                "(IRList.cons IRFrame (ir_frame_bind2 f rs v u) rest) mem na)) ",
+                "fs) s",
+            ),
+            "Bind a two-result instruction's pair at the ids the current node declares, and \
+             advance — ir_bind's shape with ir_frame_bind2 in place of ir_frame_bind.",
         )?;
 
         self.add_recursive_def(
@@ -907,15 +945,78 @@ impl Specification {
         Ok(())
     }
 
+    /// Overflow — the checked-arithmetic instruction's two-result execution
+    /// (plan W3, 2026-08-25). The value math lives in
+    /// [`super::eval_ir_ops`] (`ir_overflow_value` / `ir_overflow_flag`);
+    /// this layer coerces the operands, dispatches the type's signedness, and
+    /// binds the pair through `ir_bind2` — the config-level pattern
+    /// (`ir_store_exec` / `ir_alloca_exec`), which is how the plan's
+    /// recommended design α (two results bound positionally through the
+    /// existing `ir_bind_params` multi-bind, the `ir_ret_to` precedent) lands
+    /// WITHOUT a new `IRStepResult2` inductive: `IRStepResult` stays
+    /// single-valued, the vacuity firewall's family list stays untouched by
+    /// construction, and the success continuation produces the configuration
+    /// directly.
+    fn add_eval_ir_overflow(&mut self) -> Result<(), SpecError> {
+        self.add_recursive_def(
+            concat!(
+                "def ir_overflow_ints (s : IRMachine) (rs : IRList Nat) (op : IROverflowOp) ",
+                "(sgn : Bool) (w : Nat) (x : Nat) (y : Nat) : IRConfig := ",
+                "ir_bind2 s rs ",
+                "(IRScalar.int_ (ir_overflow_value op w (ir_wrap w x) (ir_wrap w y))) ",
+                "(IRScalar.bool_ (ir_overflow_flag op sgn w (ir_wrap w x) (ir_wrap w y)))",
+            ),
+            "Overflow on decided integers: bind (wrapped value, flag) at the node's two \
+             declared result ids. Operands are wrapped to canonical width-w residues ONCE \
+             here — the ir_uint2 / ir_int2_width_result discipline — so a junk over-wide \
+             int_ cannot leak a wrong flag; trust-ir's InterpretInt.raw is always masked, so \
+             on every reachable value the wrap is the identity. The result pair is exactly \
+             a4e81b6 interpret.rs:640-642's [result, InterpretValue::bool(overflow)].",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_overflow_vals (s : IRMachine) (rs : IRList Nat) (op : IROverflowOp) ",
+                "(sgn : Bool) (w : Nat) (a : IRScalar) (b : IRScalar) : IRConfig := ",
+                "IROption.rec Nat (fun (_ : IROption Nat) => IRConfig) ",
+                "(IRConfig.halted (IROutcome.type_error IRFault.not_int)) ",
+                "(fun (x : Nat) => IROption.rec Nat (fun (_ : IROption Nat) => IRConfig) ",
+                "(IRConfig.halted (IROutcome.type_error IRFault.not_int)) ",
+                "(fun (y : Nat) => ir_overflow_ints s rs op sgn w x y) (ir_as_int b)) ",
+                "(ir_as_int a)",
+            ),
+            "Overflow's operand coercion — ir_int2's shape at config level: any non-integer \
+             operand (undef_, a Bool, a pointer, an aggregate) fails closed with type_error \
+             not_int, the same CLASS the reference interpreter's expect_int_value reports \
+             (a4e81b6 interpret.rs:5429-5434, which rejects Bool too — i1 checked arithmetic \
+             does not exist on either side).",
+        )?;
+
+        self.add_recursive_def(
+            r"def ir_overflow_exec (s : IRMachine) (rs : IRList Nat) (op : IROverflowOp) (t : IRTy) (a : IRScalar) (b : IRScalar) : IRConfig := match t with
+| IRTy.int_ w => ir_overflow_vals s rs op Bool.true w a b
+| IRTy.uint_ w => ir_overflow_vals s rs op Bool.false w a b
+| _ => IRConfig.halted (IROutcome.type_error IRFault.not_int)",
+            "Overflow: the type dispatch. int_ selects the signed flag, uint_ the unsigned \
+             one — the signedness the constructor choice encodes is SEMANTIC input here, \
+             exactly as trust-ir dispatches eval_int_overflow on InterpretInt.signed \
+             (a4e81b6 interpret.rs:5872-5876). Every other type — bool_ included — fails \
+             closed with type_error not_int, matching the interpreter's expect_ty + \
+             expect_int_value rejections at class.",
+        )?;
+
+        Ok(())
+    }
+
     /// The 28-arm dispatch, the fetch step, and the fuel-driven driver.
     fn add_eval_ir_dispatch(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             r"def ir_exec (m : IRModule) (i : IRInst) (rs : IRList Nat) (s : IRMachine) : IRConfig := match i with
 | IRInst.binop op t a b => ir_bind_result s rs (ir_binop_eval op t (ir_getd s a) (ir_getd s b))
 | IRInst.unop op t a => ir_bind_result s rs (ir_unop_eval op t (ir_getd s a))
-| IRInst.overflow op t a b => IRConfig.halted (IROutcome.unmodelled IRFault.width_bounded)
+| IRInst.overflow op t a b => ir_overflow_exec s rs op t (ir_getd s a) (ir_getd s b)
 | IRInst.icmp op t a b => ir_bind_result s rs (ir_icmp_eval op t (ir_getd s a) (ir_getd s b))
-| IRInst.fcmp op t a b => ir_bind_result s rs (ir_fcmp_eval op (ir_getd s a) (ir_getd s b))
+| IRInst.fcmp op t a b => ir_bind_result s rs (ir_fcmp_eval op t (ir_getd s a) (ir_getd s b))
 | IRInst.cast op sr ds a => ir_bind_result s rs (ir_cast_eval op sr ds (ir_getd s a))
 | IRInst.load t p vol => ir_bind_result s rs (ir_load_eval s (ir_getd s p))
 | IRInst.store t p v vol => ir_store_exec s (ir_getd s p) (ir_getd s v)
@@ -939,15 +1040,33 @@ impl Specification {
 | IRInst.assert c => ir_assert_exec s (ir_getd s c)
 | IRInst.unreachable => IRConfig.halted (IROutcome.ub IRFault.unreachable)
 | IRInst.select t c a b => ir_bind_result s rs (ir_select_eval (ir_getd s c) (ir_getd s a) (ir_getd s b))",
-            "THE COVERAGE CLAIM: 28 arms, one per constructed trust_ir::Inst variant. Exactly two \
-             arms are the tagged unmodelled outcome by design (overflow needs a width-bounded \
-             value domain; fcmp needs a float domain) — every other arm is real semantics. No arm \
-             is a catch-all and none is missing, so the fraction is checkable constructor by \
+            "THE COVERAGE CLAIM: 28 arms, one per constructed trust_ir::Inst variant. ZERO \
+             arms are the tagged unmodelled outcome: every arm is real semantics on its \
+             declared fragment (the residue is operator/fragment-level and stays tagged \
+             fail-closed inside the evaluators — the eval_ir_state exclusion table is the \
+             list). This sentence has been counted down in the open: \"exactly two\" until \
+             2026-08-25 (overflow's arm, replaced by the W3 wave with ir_overflow_exec's \
+             two-result semantics — value + flag bound positionally through ir_bind2), then \
+             \"exactly one\" for fcmp, replaced the same day by the W4 wave with \
+             ir_fcmp_eval's 12 real predicates over the classified binary64 substrate — \
+             note the arm now PASSES `t`, which the pre-W4 dispatch dropped: the fcmp type \
+             is semantic input (the width gate), exactly as in the binop arm. No arm is a \
+             catch-all and none is missing, so the fraction is checkable constructor by \
              constructor.",
         )?;
 
         // ===================================================================
         // THE THREE OPERANDS THE DISPATCH DROPS, PROVED INERT.
+        //
+        // DATED CORRECTION (2026-08-25, plan W5): "exactly three" below was
+        // the operand-audit-era reading. The mechanical derivation over the
+        // whole dispatch (`scripts/evalir_adequacy_grid.py`, gated by
+        // `tests/eval_ir/adequacy_grid.rs`) counts TWENTY bound-and-dropped
+        // fields; these three theorems are the precedent, and the other
+        // seventeen — the type annotations, volatility flags and
+        // `gep.inbounds` — live in `eval_ir_adequacy.rs`, registered at the
+        // end of this stage, same `Eq.refl` mechanism. The full
+        // per-constructor account is `data/evalir_adequacy_grid.json`.
         //
         // `ir_exec` above drops exactly three operands of the instructions it
         // executes: `Switch.exhaustive_enum_unreachable`, and

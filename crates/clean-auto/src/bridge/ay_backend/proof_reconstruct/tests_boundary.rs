@@ -56,19 +56,59 @@ fn proof_reconstruct_dir() -> PathBuf {
     manifest.join("src/bridge/ay_backend/proof_reconstruct")
 }
 
+/// Count raw ay proof-payload type mentions in the PRODUCTION CODE of `source`.
+///
+/// LEXED, not raw lines (lane LOOSE, 2026-08-25). This used to skip only lines
+/// whose `trim()` STARTS with `//` and then count on the RAW line, which is
+/// wrong twice over against a baseline of literal 0:
+///
+/// * a TRAILING `// ...` comment naming one of these types counted, as did a
+///   block comment and a string literal. The prose that explains why a file
+///   does NOT reach for a raw ay type is exactly what the ratchet then
+///   punished, and the cheapest green is to delete the explanation;
+/// * `starts_with("///")` was dead — every `///` line already starts with `//`.
+///
+/// Measured over-count in production scope at 0b3b94e5b: 0 (PRE 0, LEXED 0) —
+/// the wrong direction to be dangerous, and no evidence at all about the day a
+/// justification gets written. `blank_noncode` blanks line and NESTING block
+/// comments and string, raw-string and char-literal bodies.
 fn count_raw_ay_mentions(source: &str) -> usize {
-    let mut count = 0;
-    for line in source.lines() {
-        let trimmed = line.trim();
-        // Skip comments and test-only code markers
-        if trimmed.starts_with("//") || trimmed.starts_with("///") {
-            continue;
-        }
-        for pattern in RAW_AY_TYPES {
-            count += line.matches(pattern).count();
-        }
-    }
-    count
+    let code = crate::test_support::source_scan::blank_noncode(source);
+    code.lines()
+        .map(|line| {
+            RAW_AY_TYPES
+                .iter()
+                .map(|pattern| line.matches(pattern).count())
+                .sum::<usize>()
+        })
+        .sum()
+}
+
+/// Lane LOOSE two-way proof, over synthetic source so it cannot drift.
+#[test]
+fn test_count_raw_ay_mentions_counts_code_not_prose() {
+    let prose = concat!(
+        "// SOUNDNESS: this layer must not name ProofStep or TermData.\n",
+        "/// It used to match AletheRule here.\n",
+        "/* and TheoryLemmaKind in a block comment */\n",
+        "fn ok() -> &'static str { \"ProofStep is adapter-only\" }\n",
+        "fn ok2() {} // trailing comment naming TermData\n",
+    );
+    assert_eq!(
+        count_raw_ay_mentions(prose),
+        0,
+        "comments and string literals naming a raw ay type are not mentions"
+    );
+
+    let code = concat!(
+        "fn real(s: ProofStep) -> TermData { convert(s) }\n",
+        "fn after_url() { let u = \"https://x.invalid\"; let _: AletheRule = r(u); }\n",
+    );
+    assert_eq!(
+        count_raw_ay_mentions(code),
+        3,
+        "real mentions still count, including one after a string containing `//`"
+    );
 }
 
 /// Ratchet test: raw ay proof payload types must be zero in all production files.

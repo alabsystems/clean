@@ -130,6 +130,149 @@ fn brick2_neg_below_pow_right_operand_is_loud() {
 }
 
 // ---------------------------------------------------------------------------
+// There is NO prefix `+` in Lean, and pretending otherwise silently rewrites
+// Mathlib's `→+`.
+//
+// `neg_expr` used to carry a `TokenKind::Plus` arm commented "unary plus is a
+// no-op": it consumed the `+` and returned the operand unchanged. That is not
+// a harmless leniency. The pinned v4.30.0-rc2 toolchain declares no
+// `prefix "+"` anywhere in `Init` and rejects every row below at PARSE time
+// with `unexpected token '+'; expected term`, so accepting `+e ≡ e` makes
+// `A →+ B` — Mathlib's `AddMonoidHom` notation, **996 lines across 285 files**
+// of mathlib4 `43ad0e9d2` — parse as `A → (+ B)` ≡ `A → B`, a plain function
+// arrow. The resulting term is well-formed, elaborates, and is ACCEPTED by the
+// kernel, so a theorem stated about a bundled monoid hom gets kernel-verified
+// against a different proposition with no diagnostic anywhere. Every sibling in
+// the family (`→+*`, `→*`, `→₀`, `→ₗ`, `→ₐ`, `≃o`, `≃*`, `≃+`) already failed
+// loudly; `→+` was silent only because `+` alone had a prefix rule.
+//
+// `offending` is the fragment Clean's diagnostic must name, so a future
+// "recovery" that swallows the `+` again cannot pass this test quietly.
+// ---------------------------------------------------------------------------
+const NO_PREFIX_PLUS: &[(&str, &str, &str)] = &[
+    (
+        "+ B",
+        "+",
+        "lean 4.30.0-rc2: `#check + B` -> error: unexpected token '+'; expected term",
+    ),
+    (
+        "+3",
+        "+",
+        "lean 4.30.0-rc2: `#check +3` -> error: unexpected token '+'; expected term",
+    ),
+    (
+        "1 + + 2",
+        "+",
+        "lean 4.30.0-rc2: `#check 1 + + 2` -> error: unexpected token '+'; expected term",
+    ),
+    (
+        // The reason this arm mattered: the hom-arrow family.
+        "A →+ B",
+        "+",
+        "lean 4.30.0-rc2: `#check (A →+ B)` -> error: unexpected token '+'; expected term",
+    ),
+    (
+        "(A →+ B) = (A → B)",
+        "+",
+        "lean 4.30.0-rc2: same rejection inside an equation",
+    ),
+];
+
+#[test]
+fn no_prefix_plus_hom_arrow_is_loud() {
+    for (input, offending, oracle) in NO_PREFIX_PLUS {
+        match parse_expr(input) {
+            Err(e) => {
+                let rendered = e.to_string();
+                assert!(
+                    rendered.contains(offending),
+                    "`{input}` must name `{offending}` in its diagnostic \
+                     (Lean oracle: {oracle}), got: {rendered}"
+                );
+            }
+            Ok(tree) => panic!(
+                "`{input}` must be a loud ParseError — Lean has no prefix `+` \
+                 ({oracle}); accepting it silently degrades `→+` to `→`. Got: {}",
+                render(&tree)
+            ),
+        }
+    }
+}
+
+/// Control: deleting the prefix-`+` arm must not touch BINARY `+`, nor the
+/// prefix `-` that shares `neg_expr`, nor `++`.
+#[test]
+fn no_prefix_plus_controls_unchanged() {
+    for (input, expected) in [
+        ("a + b", "(HAdd.hAdd a b)"),
+        ("a + -b", "(HAdd.hAdd a (Neg.neg b))"),
+        ("-a + b", "(HAdd.hAdd (Neg.neg a) b)"),
+        ("a * b + c", "(HAdd.hAdd (HMul.hMul a b) c)"),
+        ("xs ++ ys", "(HAppend.hAppend xs ys)"),
+        ("a → b", "(-> a b)"),
+    ] {
+        assert_eq!(
+            render_parsed(input),
+            expected,
+            "control `{input}` regressed when the prefix-`+` arm was deleted"
+        );
+    }
+}
+
+/// Lean's tactic `optConfig` — `simp +contextual`, `simp +arith only [h]`,
+/// `decide +kernel` — owns its own `+`, and must keep working now that the
+/// term grammar rejects one.
+///
+/// Measured on mathlib4 `43ad0e9d2`: **832 sites** (767 `simp`, 38 `decide`,
+/// 19 `grind`, 8 `simp_all`). They used to reach the TERM grammar, where the
+/// no-op prefix `+` quietly turned `+contextual` into the term `contextual`;
+/// deleting that prefix without giving the tactic grammar its own rule turned
+/// all 832 into recovery diagnostics (caught by re-running the 40-module
+/// Mathlib parse sweep, which lost `Mathlib.Topology.Constructions`'s
+/// `simp +unfoldPartialApp [...]` at line 882).
+#[test]
+fn tactic_config_options_survive_the_prefix_plus_deletion() {
+    use clean_parser::parse_file;
+    for src in [
+        "theorem t (a : Nat) : a = a := by simp +contextual\n",
+        "theorem t (a : Nat) : a = a := by simp +arith only [Nat.add_comm]\n",
+        "theorem t (a : Nat) : a = a := by simp +contextual +instances [Nat.le_refl]\n",
+        "theorem t (a : Nat) : a = a := by simp +unfoldPartialApp [Nat.le_refl]\n",
+        "theorem t (a : Nat) : a = a := by decide +kernel\n",
+        "theorem t (a : Nat) : a = a := by simp_all +contextual\n",
+    ] {
+        let decls = parse_file(src).unwrap_or_else(|e| panic!("`{src}` should parse, got: {e}"));
+        assert!(
+            !decls
+                .iter()
+                .any(|d| matches!(d, clean_parser::SurfaceDecl::RawDecl { .. })),
+            "tactic config in `{src}` must not degrade to error recovery: {decls:#?}"
+        );
+    }
+}
+
+/// Control: the config rule must not swallow a `+` that is NOT a config
+/// option. `simp [a + b]` and `omega` after a `+` term are untouched, and a
+/// bare `+` with no option name is still the loud term-position error.
+#[test]
+fn tactic_config_rule_does_not_eat_arithmetic() {
+    use clean_parser::parse_file;
+    let src = "theorem t (a b : Nat) : a + b = b + a := by simp [Nat.add_comm a b]\n";
+    let decls = parse_file(src).expect("ordinary simp lemma list should parse");
+    assert!(
+        !decls
+            .iter()
+            .any(|d| matches!(d, clean_parser::SurfaceDecl::RawDecl { .. })),
+        "an ordinary `simp [..]` must be unaffected: {decls:#?}"
+    );
+    // `+ 3` is not `+ident`, so it stays a term-position error.
+    assert!(
+        parse_expr("+ 3").is_err(),
+        "the config rule is tactic-local; `+ 3` in a term must still be loud"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // P0-5 — non-associative comparison/equality chains (all `infix:50`).
 //
 // Each row is a chain Lean v4.30 REJECTS with "unexpected token '<op>'; expected

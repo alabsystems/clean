@@ -132,7 +132,20 @@ pub enum ExprKind {
     /// Sort (Type u or Prop)
     Sort(Level),
     /// Constant with universe level instantiation
-    Const(Name, LevelVec),
+    ///
+    /// The `LevelVec` field routes its serde encoding through
+    /// [`crate::expr::level_vec_serde`] rather than through `smallvec`'s own
+    /// optional `serde` impl. This is the ONLY serde-derived `SmallVec` in the
+    /// tree, so that adapter is what lets the workspace drop
+    /// `smallvec/serde` — one of the third-party edges holding `serde` in
+    /// Trust's shipping closure. The adapter is a verbatim transcription of the
+    /// impl it replaces and is gated on byte-identity against it; the encoding
+    /// is persisted (`env::snapshot`, `cert::bundle`, `Environment::to_bincode`),
+    /// so a framing change here silently invalidates artifacts on disk.
+    Const(
+        Name,
+        #[serde(with = "crate::expr::level_vec_serde")] LevelVec,
+    ),
     /// Function application
     App(Arc<Expr>, Arc<Expr>),
     /// Lambda abstraction: λ (x : A), body

@@ -104,8 +104,8 @@ impl ProofState {
         let target = self.metas.instantiate(&goal.target);
         if !self.is_def_eq(goal, &proof_ty, &target) {
             return Err(TacticError::TypeMismatch {
-                expected: format!("{target:?}"),
-                actual: format!("{proof_ty:?}"),
+                expected: format!("{target}"),
+                actual: format!("{proof_ty}"),
             });
         }
 
@@ -160,8 +160,8 @@ impl ProofState {
         let target = self.metas.instantiate(&goal.target);
         if !self.is_def_eq(goal, &proof_ty, &target) {
             return Err(TacticError::TypeMismatch {
-                expected: format!("{target:?}"),
-                actual: format!("{proof_ty:?}"),
+                expected: format!("{target}"),
+                actual: format!("{proof_ty}"),
             });
         }
         // checked: def-eq target match above + strict verify_tactic_proof later
@@ -400,8 +400,8 @@ impl ProofState {
         })?;
         if !self.is_def_eq(&goal, &inferred_proof_ty, &expected_eq_ty) {
             return Err(TacticError::TypeMismatch {
-                expected: format!("{expected_eq_ty:?}"),
-                actual: format!("{inferred_proof_ty:?}"),
+                expected: format!("{expected_eq_ty}"),
+                actual: format!("{inferred_proof_ty}"),
             });
         }
 
@@ -571,7 +571,7 @@ impl ProofState {
             next_fvar,
             instances: self.instances.clone(),
             universe_params: self.universe_params.clone(),
-            next_universe: self.next_universe,
+            level_mint: self.level_mint.clone(),
             tc_cache: std::sync::Mutex::new(None),
             elab_locals: self.elab_locals.clone(),
             fvar_base: self.fvar_base,
@@ -580,6 +580,9 @@ impl ProofState {
             conv_focus_witness: None,
             conv_focus_tree: None,
             conv_congr_cursor: None,
+            // A focused/nested goal is NOT a conv body by construction; the
+            // conv boundaries stamp the flag explicitly on their sub-state.
+            in_conv_body: false,
             options: self.options.clone(),
             namespace_state: self.namespace_state.clone(),
         }
@@ -632,7 +635,7 @@ impl ProofState {
             next_fvar: self.next_fvar.max(goal_fvar_floor),
             instances: self.instances.clone(),
             universe_params: self.universe_params.clone(),
-            next_universe: self.next_universe,
+            level_mint: self.level_mint.clone(),
             tc_cache: std::sync::Mutex::new(None),
             elab_locals: self.elab_locals.clone(),
             fvar_base: self.fvar_base,
@@ -641,6 +644,9 @@ impl ProofState {
             conv_focus_witness: None,
             conv_focus_tree: None,
             conv_congr_cursor: None,
+            // A focused/nested goal is NOT a conv body by construction; the
+            // conv boundaries stamp the flag explicitly on their sub-state.
+            in_conv_body: false,
             options: self.options.clone(),
             namespace_state: self.namespace_state.clone(),
         }

@@ -58,7 +58,7 @@ impl Transcript {
     }
 
     /// Append a domain separator
-    pub fn append_domain_separator(&mut self, sep: DomainSeparator) {
+    pub(crate) fn append_domain_separator(&mut self, sep: DomainSeparator) {
         self.hasher.update(sep.as_bytes());
         self.hasher.update([0u8]); // null terminator
     }
@@ -77,7 +77,7 @@ impl Transcript {
     }
 
     /// Append multiple scalars to the transcript
-    pub fn append_scalars(&mut self, label: &[u8], scalars: &[Scalar]) {
+    pub(crate) fn append_scalars(&mut self, label: &[u8], scalars: &[Scalar]) {
         self.hasher.update(label);
         self.hasher.update((scalars.len() as u64).to_le_bytes());
         for s in scalars {
@@ -87,7 +87,7 @@ impl Transcript {
     }
 
     /// Append a point (in compressed form) to the transcript
-    pub fn append_point<P: CanonicalSerialize>(&mut self, label: &[u8], point: &P) {
+    pub(crate) fn append_point<P: CanonicalSerialize>(&mut self, label: &[u8], point: &P) {
         let mut bytes = Vec::new();
         point
             .serialize_compressed(&mut bytes)

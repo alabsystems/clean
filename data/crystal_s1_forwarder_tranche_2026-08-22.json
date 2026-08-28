@@ -1,0 +1,1880 @@
+{
+ "schema": "clean.crystal.s1_forwarder_tranche/1",
+ "date": "2026-08-22",
+ "lane": "LANE S1F \u2014 the S1 FORWARDER tranche: the 32 single-call `call ret` bodies the call-forward plan refused, by receiver class, each class emitted fail-closed against its measured built model",
+ "question": "GAP2 ranked the residual -O0/-O3 gap: 32/90 are single-call S1 forwarders, refused receiver types &HashMap 9 (+2 hashbrown), &Vec 8, unit-result 6, &u64/&u8 4, &Level 2, &BuilderResources 1. Which clause refuses each class, what does built spell, and how many convert at BOTH levels against the lane's own sealed control?",
+ "provenance": {
+  "control": {
+   "rev": "a04ec948d851b4a9dbc582f360ec2f042bae5b9d",
+   "tree": "clean",
+   "sha256": "61c26ec2e78c0bb1c5f1fbd615c5db8bf711be174be6a8b34a11b2ddfee864c2  $HOME/trust/scratchpad/laneS1F/seal-base/librustc_driver_base.dylib",
+   "sysrootcheck": "OK",
+   "perturb_classes": [
+    "enum-reshape",
+    "enum-case-value",
+    "enum-ctor",
+    "enum-disc-index",
+    "switch-map",
+    "enum-payload",
+    "marker-order",
+    "marker-drop",
+    "agg-field-order",
+    "marker-arm",
+    "payload-tramp",
+    "dr-tramp",
+    "dr-retire",
+    "mc-plan",
+    "cf-lit-order",
+    "chain-ret-order"
+   ],
+   "flip_path_blobs": {
+    "crates/trust-thir-lower/src/flip.rs": "557d94406b33156b0e131f9d7d2f57b01a9dab3a",
+    "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+    "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+    "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+    "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+    "crates/trust-thir-lower/src/to_mir.rs": "297522020deeea87a0e52dc000112789de0d763a",
+    "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+    "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+   }
+  },
+  "subject": {
+   "rev": "a04ec948d851b4a9dbc582f360ec2f042bae5b9d",
+   "tree": "dirty",
+   "sha256": "4f70794006cc0167245a8e610eafcd6cc081f90767d720184e4d4f6e5e7afcff  $HOME/trust/scratchpad/laneS1F/seal-subj/librustc_driver_subj.dylib",
+   "sysrootcheck": "OK",
+   "perturb_classes": [
+    "enum-reshape",
+    "enum-case-value",
+    "enum-ctor",
+    "enum-disc-index",
+    "switch-map",
+    "enum-payload",
+    "marker-order",
+    "marker-drop",
+    "agg-field-order",
+    "marker-arm",
+    "payload-tramp",
+    "dr-tramp",
+    "dr-retire",
+    "mc-plan",
+    "cf-lit-order",
+    "chain-ret-order",
+    "cf-field-drop",
+    "cf-unit-late",
+    "cf-pair-order",
+    "cf-ret-late"
+   ],
+   "flip_path_blobs": {
+    "crates/trust-thir-lower/src/flip.rs": "32a3c6dc5ae1707b828cf8e1a2986fe790ebae11",
+    "crates/trust-thir-lower/src/flip_registry.rs": "771cd9ec0b53cb98c342f16beb5fd35cdb015cc9",
+    "crates/trust-thir-lower/src/mir_differential.rs": "13cd4f258683fdede1877d194d674910fb6366a9",
+    "crates/trust-thir-lower/src/crate_module.rs": "e9d7223bf81225c3021e0423248b41737bf02765",
+    "crates/trust-thir-lower/src/differential.rs": "3652c58c420ab065a071ee64f8f93ef81f09901a",
+    "crates/trust-thir-lower/src/to_mir.rs": "d9ec402ba862ee6fde657176372a7bf04e3edf54",
+    "crates/trust-thir-lower/src/lineage.rs": "db0caaf2120095e6447343780e5e7a353df74cd0",
+    "compiler/rustc_mir_transform/src/trust_ir_flip.rs": "7c5a9d563a5e67c655cd26193ae7341863635ceb"
+   }
+  },
+  "trust_base_rev": "a04ec948d8 = origin/main tip 11a8e1877a5dc4be1d9aae3cd07ea187a03a1aff + the ONE file the tip forgot (crates/trust-clean-origin/src/reflect_rec.rs, restored by the local commit a04ec948d8 fix(clean-origin): restore reflect_rec, not on origin/main at lane start). origin/main at 11a8e1877a is --locked lock-CONSISTENT (cargo metadata --locked PASSES) but does NOT COMPILE: a613e62eb0 added `pub mod reflect_rec;` without the file (measured: the control build at 11a8e1877a failed with E0583). The flip path is byte-identical between 11a8e1877a and a04ec948d8 (git diff --stat: only reflect_rec.rs)",
+  "clean_corpus_rev": "b4808f00c845e13eaf6de572ad4f3f1643dbfd0e (the first-party/clean pin; clean-kernel tree byte-identical to GAP2's)",
+  "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13",
+  "method": "two detached trust worktrees at 11a8e1877a (laneS1F/wt subject, laneS1F/wt-base control, pristine); each built --locked with the stage0 toolchain, sealed, tc-wrapped on sysroot-v13 with the 4-fact sysrootcheck; whole-crate clean-kernel at -O3 / -O0 / -O3+noflip on each; four perturbation runs at -O3 on the subject; rows joined by def_path",
+  "built_models": "probes/s1f.rs dumped with -Zdump-mir=built through the sealed GAP2 g2 driver (acb08e7616) at --edition 2021 and --edition 2024 (mirdump-g2-s1f, mirdump-g2-s1f24)",
+  "sysrootcheck_note": "scripts/seal_driver.sh sysrootcheck's fact-4 probe `cd`s into scratch and then exec's a RELATIVE driver path, so a relative <sealed-dir> argument reads REFUSING with no error text; absolute paths pass \u2014 the lane's mktc.sh passes absolute paths"
+ },
+ "whole_crate_subject_vs_control": {
+  "O3": {
+   "codegen_control": 529,
+   "codegen_subject": 561,
+   "ctfe_control": 41,
+   "ctfe_subject": 41,
+   "gained": 32,
+   "lost": 0,
+   "gained_names": [
+    "cache::TypeCheckCache::len",
+    "cache::TypeCheckCache::is_empty",
+    "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+    "cert::compression::dict::CertDictionary::size",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+    "env::ext_simp::SimpExtState::contains",
+    "env::ext_simp::SimpExtState::len",
+    "env::ext_simp::SimpExtState::is_empty",
+    "env::ext_instance::InstanceExtState::is_empty",
+    "env::ext_attr::AttrExtState::is_empty",
+    "flat::builder::FlatBuilder::expr_count",
+    "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+    "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+    "micro::env::MicroEnv::len",
+    "micro::env::MicroEnv::is_empty",
+    "tc::branch_sharing::BranchSharingCache::contains",
+    "tc::branch_sharing::BranchSharingCache::len",
+    "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+    "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context",
+    "tc::local_context::LocalContext::len",
+    "tc::local_context::LocalContext::is_empty",
+    "tc::reduction::cofib::Cofib::is_bot",
+    "<expr::types::FVarId as std::cmp::Ord>::cmp",
+    "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+    "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+    "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp",
+    "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq"
+   ],
+   "lost_names": [],
+   "channel_moves": {
+    "markers_exact False -> True": 32
+   },
+   "verdict_regressions": [],
+   "markers_gained": [
+    "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+    "<expr::types::FVarId as std::cmp::Ord>::cmp",
+    "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+    "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+    "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+    "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+    "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp",
+    "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq",
+    "cache::TypeCheckCache::is_empty",
+    "cache::TypeCheckCache::len",
+    "cert::compression::dict::CertDictionary::size",
+    "env::ext_attr::AttrExtState::is_empty",
+    "env::ext_instance::InstanceExtState::is_empty",
+    "env::ext_simp::SimpExtState::contains",
+    "env::ext_simp::SimpExtState::is_empty",
+    "env::ext_simp::SimpExtState::len",
+    "flat::builder::FlatBuilder::expr_count",
+    "micro::env::MicroEnv::is_empty",
+    "micro::env::MicroEnv::len",
+    "tc::branch_sharing::BranchSharingCache::contains",
+    "tc::branch_sharing::BranchSharingCache::len",
+    "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+    "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context",
+    "tc::local_context::LocalContext::is_empty",
+    "tc::local_context::LocalContext::len",
+    "tc::reduction::cofib::Cofib::is_bot"
+   ],
+   "markers_lost": [],
+   "agreed_control": 1559,
+   "agreed_subject": 1559,
+   "markers_exact_control": 1473,
+   "markers_exact_subject": 1505,
+   "fallback_reasons_control": {
+    "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "shim: abi rederive: generic fn signature": 43,
+    "shim: abi rederive: generic closure": 2
+   },
+   "fallback_reasons_subject": {
+    "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "shim: abi rederive: generic fn signature": 43,
+    "shim: abi rederive: generic closure": 2
+   },
+   "fallback_reason_delta": {}
+  },
+  "O0": {
+   "codegen_control": 614,
+   "codegen_subject": 614,
+   "ctfe_control": 42,
+   "ctfe_subject": 42,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": [],
+   "channel_moves": {
+    "markers_exact False -> True": 32
+   },
+   "verdict_regressions": [],
+   "markers_gained": [
+    "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+    "<expr::types::FVarId as std::cmp::Ord>::cmp",
+    "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+    "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+    "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+    "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+    "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp",
+    "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq",
+    "cache::TypeCheckCache::is_empty",
+    "cache::TypeCheckCache::len",
+    "cert::compression::dict::CertDictionary::size",
+    "env::ext_attr::AttrExtState::is_empty",
+    "env::ext_instance::InstanceExtState::is_empty",
+    "env::ext_simp::SimpExtState::contains",
+    "env::ext_simp::SimpExtState::is_empty",
+    "env::ext_simp::SimpExtState::len",
+    "flat::builder::FlatBuilder::expr_count",
+    "micro::env::MicroEnv::is_empty",
+    "micro::env::MicroEnv::len",
+    "tc::branch_sharing::BranchSharingCache::contains",
+    "tc::branch_sharing::BranchSharingCache::len",
+    "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+    "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context",
+    "tc::local_context::LocalContext::is_empty",
+    "tc::local_context::LocalContext::len",
+    "tc::reduction::cofib::Cofib::is_bot"
+   ],
+   "markers_lost": [],
+   "agreed_control": 1559,
+   "agreed_subject": 1559,
+   "markers_exact_control": 1473,
+   "markers_exact_subject": 1505,
+   "fallback_reasons_control": {
+    "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "shim: abi rederive: generic fn signature": 43,
+    "shim: abi rederive: generic closure": 2
+   },
+   "fallback_reasons_subject": {
+    "const-const checked arithmetic (KnownPanicsLint would re-fire on the derived body)": 2,
+    "shim: abi rederive: generic fn signature": 43,
+    "shim: abi rederive: generic closure": 2
+   },
+   "fallback_reason_delta": {}
+  },
+  "O3_noflip": {
+   "codegen_control": 0,
+   "codegen_subject": 0,
+   "ctfe_control": 0,
+   "ctfe_subject": 0,
+   "gained": 0,
+   "lost": 0,
+   "gained_names": [],
+   "lost_names": [],
+   "channel_moves": {
+    "markers_exact False -> True": 32
+   },
+   "verdict_regressions": [],
+   "markers_gained": [
+    "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+    "<expr::types::FVarId as std::cmp::Ord>::cmp",
+    "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+    "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+    "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+    "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+    "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp",
+    "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq",
+    "cache::TypeCheckCache::is_empty",
+    "cache::TypeCheckCache::len",
+    "cert::compression::dict::CertDictionary::size",
+    "env::ext_attr::AttrExtState::is_empty",
+    "env::ext_instance::InstanceExtState::is_empty",
+    "env::ext_simp::SimpExtState::contains",
+    "env::ext_simp::SimpExtState::is_empty",
+    "env::ext_simp::SimpExtState::len",
+    "flat::builder::FlatBuilder::expr_count",
+    "micro::env::MicroEnv::is_empty",
+    "micro::env::MicroEnv::len",
+    "tc::branch_sharing::BranchSharingCache::contains",
+    "tc::branch_sharing::BranchSharingCache::len",
+    "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+    "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context",
+    "tc::local_context::LocalContext::is_empty",
+    "tc::local_context::LocalContext::len",
+    "tc::reduction::cofib::Cofib::is_bot"
+   ],
+   "markers_lost": [],
+   "agreed_control": 1559,
+   "agreed_subject": 1559,
+   "markers_exact_control": 1473,
+   "markers_exact_subject": 1505,
+   "fallback_reasons_control": {},
+   "fallback_reasons_subject": {},
+   "fallback_reason_delta": {}
+  }
+ },
+ "s1_conversion_by_class": {
+  "A1 &HashMap field receiver (11)": {
+   "bodies": 11,
+   "O3_flip_subject": 11,
+   "O0_flip_subject": 11,
+   "O3_flip_control": 0,
+   "O0_flip_control": 11,
+   "markers_exact_subject_O3": 11,
+   "refused": []
+  },
+  "C &BuilderResources reborrowed return (1)": {
+   "bodies": 1,
+   "O3_flip_subject": 1,
+   "O0_flip_subject": 1,
+   "O3_flip_control": 0,
+   "O0_flip_control": 1,
+   "markers_exact_subject_O3": 1,
+   "refused": []
+  },
+  "A2 &Vec field receiver (5)": {
+   "bodies": 5,
+   "O3_flip_subject": 5,
+   "O0_flip_subject": 5,
+   "O3_flip_control": 0,
+   "O0_flip_control": 5,
+   "markers_exact_subject_O3": 5,
+   "refused": []
+  },
+  "B unit statement call `{ f(self); }` (6)": {
+   "bodies": 6,
+   "O3_flip_subject": 6,
+   "O0_flip_subject": 6,
+   "O3_flip_control": 0,
+   "O0_flip_control": 6,
+   "markers_exact_subject_O3": 6,
+   "refused": []
+  },
+  "D &Level overloaded-Deref coercion of `self` (2)": {
+   "bodies": 2,
+   "O3_flip_subject": 2,
+   "O0_flip_subject": 2,
+   "O3_flip_control": 0,
+   "O0_flip_control": 2,
+   "markers_exact_subject_O3": 2,
+   "refused": []
+  },
+  "E &u64/&u8 derived Ord `cmp(&self.0, &other.0)` pairs (4)": {
+   "bodies": 4,
+   "O3_flip_subject": 4,
+   "O0_flip_subject": 4,
+   "O3_flip_control": 0,
+   "O0_flip_control": 4,
+   "markers_exact_subject_O3": 4,
+   "refused": []
+  },
+  "A3 &Vec derived PartialEq `self.f == other.f` (3)": {
+   "bodies": 3,
+   "O3_flip_subject": 3,
+   "O0_flip_subject": 3,
+   "O3_flip_control": 0,
+   "O0_flip_control": 3,
+   "markers_exact_subject_O3": 3,
+   "refused": []
+  }
+ },
+ "s1_conversion_summary": {
+  "O3 flip / O0 flip": 32
+ },
+ "s1_remaining_refusals_ranked": [],
+ "perturbations": {
+  "cf-field-drop": {
+   "applications_total": 19,
+   "bodies_applied": 19,
+   "applied_names": [
+    "cache::TypeCheckCache::len",
+    "cache::TypeCheckCache::is_empty",
+    "cert::compression::dict::CertDictionary::size",
+    "env::ext_simp::SimpExtState::contains",
+    "env::ext_simp::SimpExtState::len",
+    "env::ext_simp::SimpExtState::is_empty",
+    "env::ext_instance::InstanceExtState::is_empty",
+    "env::ext_attr::AttrExtState::is_empty",
+    "flat::builder::FlatBuilder::expr_count",
+    "micro::env::MicroEnv::len",
+    "micro::env::MicroEnv::is_empty",
+    "tc::branch_sharing::BranchSharingCache::contains",
+    "tc::branch_sharing::BranchSharingCache::len",
+    "tc::local_context::LocalContext::len",
+    "tc::local_context::LocalContext::is_empty",
+    "tc::reduction::cofib::Cofib::is_bot",
+    "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq"
+   ],
+   "codegen_flips": 542,
+   "flips_lost_vs_subject": [
+    "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+    "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq",
+    "cache::TypeCheckCache::is_empty",
+    "cache::TypeCheckCache::len",
+    "cert::compression::dict::CertDictionary::size",
+    "env::ext_attr::AttrExtState::is_empty",
+    "env::ext_instance::InstanceExtState::is_empty",
+    "env::ext_simp::SimpExtState::contains",
+    "env::ext_simp::SimpExtState::is_empty",
+    "env::ext_simp::SimpExtState::len",
+    "flat::builder::FlatBuilder::expr_count",
+    "micro::env::MicroEnv::is_empty",
+    "micro::env::MicroEnv::len",
+    "tc::branch_sharing::BranchSharingCache::contains",
+    "tc::branch_sharing::BranchSharingCache::len",
+    "tc::local_context::LocalContext::is_empty",
+    "tc::local_context::LocalContext::len",
+    "tc::reduction::cofib::Cofib::is_bot"
+   ],
+   "flips_gained_vs_subject": [],
+   "markers_exact_false_among_applied": 19,
+   "agreed_among_applied": 19
+  },
+  "cf-unit-late": {
+   "applications_total": 6,
+   "bodies_applied": 6,
+   "applied_names": [
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+    "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+    "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context"
+   ],
+   "codegen_flips": 555,
+   "flips_lost_vs_subject": [
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+    "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+    "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+    "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context"
+   ],
+   "flips_gained_vs_subject": [],
+   "markers_exact_false_among_applied": 6,
+   "agreed_among_applied": 6
+  },
+  "cf-pair-order": {
+   "applications_total": 4,
+   "bodies_applied": 4,
+   "applied_names": [
+    "<expr::types::FVarId as std::cmp::Ord>::cmp",
+    "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+    "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+    "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp"
+   ],
+   "codegen_flips": 557,
+   "flips_lost_vs_subject": [
+    "<expr::types::FVarId as std::cmp::Ord>::cmp",
+    "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+    "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+    "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp"
+   ],
+   "flips_gained_vs_subject": [],
+   "markers_exact_false_among_applied": 4,
+   "agreed_among_applied": 4
+  },
+  "cf-ret-late": {
+   "applications_total": 3,
+   "bodies_applied": 3,
+   "applied_names": [
+    "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+    "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+    "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow"
+   ],
+   "codegen_flips": 558,
+   "flips_lost_vs_subject": [
+    "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+    "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+    "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref"
+   ],
+   "flips_gained_vs_subject": [],
+   "markers_exact_false_among_applied": 3,
+   "agreed_among_applied": 3
+  }
+ },
+ "s1_rows": [
+  {
+   "def_path": "cache::TypeCheckCache::len",
+   "census_def_index": 681,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "cache::TypeCheckCache::is_empty",
+   "census_def_index": 682,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+   "census_def_index": 1847,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "cert::compression::dict::CertDictionary::size",
+   "census_def_index": 2029,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+   "census_def_index": 3406,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+   "census_def_index": 3435,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+   "census_def_index": 3436,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+   "census_def_index": 3437,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "env::ext_simp::SimpExtState::contains",
+   "census_def_index": 13576,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "env::ext_simp::SimpExtState::len",
+   "census_def_index": 13580,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "env::ext_simp::SimpExtState::is_empty",
+   "census_def_index": 13581,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "env::ext_instance::InstanceExtState::is_empty",
+   "census_def_index": 13623,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "env::ext_attr::AttrExtState::is_empty",
+   "census_def_index": 13664,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "flat::builder::FlatBuilder::expr_count",
+   "census_def_index": 16667,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+   "census_def_index": 17047,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+   "census_def_index": 17049,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "micro::env::MicroEnv::len",
+   "census_def_index": 17666,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "micro::env::MicroEnv::is_empty",
+   "census_def_index": 17667,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "tc::branch_sharing::BranchSharingCache::contains",
+   "census_def_index": 18921,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "tc::branch_sharing::BranchSharingCache::len",
+   "census_def_index": 18924,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+   "census_def_index": 19082,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context",
+   "census_def_index": 19113,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "tc::local_context::LocalContext::len",
+   "census_def_index": 19649,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "tc::local_context::LocalContext::is_empty",
+   "census_def_index": 19650,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "tc::reduction::cofib::Cofib::is_bot",
+   "census_def_index": 19740,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 2,
+     "detail": "2 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<expr::types::FVarId as std::cmp::Ord>::cmp",
+   "census_def_index": 33492,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+   "census_def_index": 34378,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+   "census_def_index": 35318,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp",
+   "census_def_index": 35361,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 8,
+     "detail": "8 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+   "census_def_index": 35827,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+   "census_def_index": 36185,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  },
+  {
+   "def_path": "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq",
+   "census_def_index": 36243,
+   "O3": {
+    "control": {
+     "flip": false,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   },
+   "O0": {
+    "control": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": false,
+     "marker_lines": null
+    },
+    "subject": {
+     "flip": true,
+     "verdict": "agreed",
+     "markers_exact": true,
+     "marker_lines": 4,
+     "detail": "4 marker line(s) identical"
+    }
+   }
+  }
+ ],
+ "net": {
+  "O3": {
+   "gained": 32,
+   "lost": 0,
+   "lost_names": [],
+   "verdict_regressions": []
+  },
+  "O0": {
+   "gained": 0,
+   "lost": 0,
+   "lost_names": [],
+   "verdict_regressions": []
+  }
+ },
+ "unit_tests": {
+  "trust-thir-lower --lib (s1f_field_tests cf_lit_tests w3_regression_tests plan_exclusivity_tests marker_law_tests)": "47 passed, 0 failed (test-thir2.log)",
+  "rustc_driver_impl --lib trust_option": "1 passed, 0 failed (test-drv.log)"
+ },
+ "residual_gap_after": {
+  "remaining_gap_subject": 53,
+  "by_shape": {
+   "other": 47,
+   "WB8-named-chain": 4,
+   "chain-forward (all-calls, unnamed)": 2
+  },
+  "rows": [
+   {
+    "shape": "other",
+    "built_first_type": "u8",
+    "def_path": "cert::cross_project::hex_digit"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "cert::def_eq::<impl cert::expr_eq::CertExprEqContext for cert::verifier::CertVerifier<'env>>::try_type_directed_eq"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "cert::types::proof_cert_has_recursive_children"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "usize",
+    "def_path": "cert::builder::cache::WhnfCache::is_empty"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u32",
+    "def_path": "env::decl_add::mm_two_pass_active::{closure#0}"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "Ref { mutable: false, inner: Adt { name: \"core::cell::Cell\"",
+    "def_path": "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}"
+   },
+   {
+    "shape": "WB8-named-chain",
+    "built_first_type": "bool",
+    "def_path": "env::origin::ConstantOrigin::is_unpinned_olean_import"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "env::sorry_summary::DeclarationTrustSummary::is_fully_verified"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "()",
+    "def_path": "env::native_reducers_bitvec::to_signed"
+   },
+   {
+    "shape": "chain-forward (all-calls, unnamed)",
+    "built_first_type": "()",
+    "def_path": "env::native_reducers_bitvec::<impl env::Environment>::init_bitvec_native_reducers"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "marker channel(built): storage marker in",
+    "def_path": "env::native_reducers_bool_ext::nat_gcd"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "()",
+    "def_path": "env::native_reducers_sint::to_signed"
+   },
+   {
+    "shape": "chain-forward (all-calls, unnamed)",
+    "built_first_type": "()",
+    "def_path": "env::Environment::ensure_native_reducers"
+   },
+   {
+    "shape": "WB8-named-chain",
+    "built_first_type": "bool",
+    "def_path": "expr::kind::arc_eq"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "adt:clean_kernel::expr::sorry::SorryFlags",
+    "def_path": "expr::sorry::<impl expr::Expr>::has_sorry"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "adt:clean_kernel::expr::sorry::SorryFlags",
+    "def_path": "expr::sorry::<impl expr::Expr>::has_synthetic_sorry"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "adt:clean_kernel::expr::sorry::SorryFlags",
+    "def_path": "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "adt:clean_kernel::expr::sorry::SorryFlags",
+    "def_path": "expr::sorry::<impl expr::Expr>::sorry_scan"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "()",
+    "def_path": "expr::subst::<impl expr::Expr>::has_loose_bvar"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u64",
+    "def_path": "expr::types::BigNat::is_zero::{closure#0}"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine"
+   },
+   {
+    "shape": "WB8-named-chain",
+    "built_first_type": "Ref { mutable: false, inner: Datatype",
+    "def_path": "<level::LevelArc as std::fmt::Debug>::fmt"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "adt:clean_kernel::memory_model::AllocationId",
+    "def_path": "memory_model::MemoryRegion::new"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "mode::CleanMode::allows_large_elimination"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "usize",
+    "def_path": "name::NameInterner::is_empty"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "()",
+    "def_path": "sorry::accounting::record_ay_reconstruction_success::{closure#0}"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u32",
+    "def_path": "tc::equiv_manager::EquivManager::add_equiv"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u32",
+    "def_path": "tc::heartbeat_profiler::types::SourcePos::coalesced"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "()",
+    "def_path": "tc::heartbeat_profiler::types::round_up_to_next"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "tc::heartbeat_profiler::types::clamp_u32"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u32",
+    "def_path": "tc::reduction::cofib::CofibAtom::var"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u64",
+    "def_path": "<cache::TypeCheckCacheStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "usize",
+    "def_path": "<cert::batch::build_types::BatchBuildStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "usize",
+    "def_path": "<cert::batch::verify::BatchVerifyStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u64",
+    "def_path": "<cert::builder_pool::PoolStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "usize",
+    "def_path": "<env::proof_elision::ProofElisionStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "<env::sorry_summary::DeclarationTrustSummary as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "<env::sorry_summary::SorrySummary as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "usize",
+    "def_path": "<env::ai_proof_search::AiSearchStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "<expr::sorry::SorryFlags as std::default::Default>::default"
+   },
+   {
+    "shape": "WB8-named-chain",
+    "built_first_type": "enum:clean_kernel::expr::types::BinderInfo",
+    "def_path": "<expr::types::BinderData as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u8",
+    "def_path": "<flat::types::FlatFlags as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u64",
+    "def_path": "<memory_model::AllocationId as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u64",
+    "def_path": "<sem_memory_model::Address as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u8",
+    "def_path": "<sem_memory_model::MemoryValue as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "usize",
+    "def_path": "<tc::batch::BatchCheckStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "bool",
+    "def_path": "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u64",
+    "def_path": "<tc::sliding_cache::SlidingCacheStats as std::default::Default>::default"
+   },
+   {
+    "shape": "other",
+    "built_first_type": "u64",
+    "def_path": "<tc::sliding_equiv_manager::SlidingEquivStats as std::default::Default>::default"
+   }
+  ]
+ },
+ "trust_landed_commit": "d24dea87d576657d35d312d69f4e3d4c597b9a34 (trust origin/main, parent 3ed546cead; the six landed paths are byte-identical between the measured base a04ec948d8 and 3ed546cead \u2014 verified path-by-path at landing; to_mir.rs landed at blob 02864ec10e, which differs from the sealed subject driver's d9ec402ba8 ONLY in the two test-expectation hunks of s1f_field_tests)",
+ "gap2_equality_on_both_drivers": {
+  "control": "O3 529 == O0 614 INTERSECT markers_exact 529: True",
+  "subject": "O3 561 == O0 614 INTERSECT markers_exact 561: True",
+  "gap_O0_minus_O3": {
+   "control": 85,
+   "subject": 53
+  }
+ }
+}

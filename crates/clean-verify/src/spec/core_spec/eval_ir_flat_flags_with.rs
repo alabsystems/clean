@@ -103,13 +103,47 @@ use crate::spec::Specification;
 const SRC_FLAT_FLAGS_WITH: &str = "def flat_flags_with (a : FlatFlagsR) (b : FlatFlagsR) : FlatFlagsR := FlatFlagsR.mk (ir_nat_bitop Bool.or ir_d8 (flat_flags_bits a) (flat_flags_bits b))";
 
 // ── the emitted module, transcribed ───────────────────────────────────
-const SRC_IR_FW_B0: &str = "def ir_fw_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd6 (ir_nd1 (IRInst.extractfield ir_tU8 ir_d0 ir_d0) ir_d2) (ir_nd1 (IRInst.extractfield ir_tU8 ir_d1 ir_d0) ir_d3) (ir_nd1 (IRInst.binop IRBinOp.or_ ir_tU8 ir_d2 ir_d3) ir_d4) (ir_nd1 (IRInst.const_ ir_fc_tflags (ir_cvar ir_d0)) ir_d5) (ir_nd1 (IRInst.insertfield ir_fc_tflags ir_d5 ir_d0 ir_d4) ir_d6) (ir_nd (IRInst.ret (ir_nl1 ir_d6))))";
+// ── the emitted module, MINTED ────────────────────────────────────────
+/// The MINTED module script, generated from the emitted artifact by
+/// `ir_mint_gen` over `generated/ir_fw.core.txt` + `generated/ir_fw.tags.json`
+/// (crystal A2). `tests/crystal_a2_mint_fw.rs` fails closed if this committed
+/// script is not what minting the committed core module produces.
+///
+/// The 2026-08-21 migration off the hand transcription found NO semantic
+/// divergence — ONE divergent line of the four, THREE notation classes in it,
+/// printed before adoption, all definitionally equal: `ir_fw_b0` inlines
+/// `(IRTy.uint_ ir_d8)` where the hand line named `ir_tU8` (three slots),
+/// spells the template as the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_
+/// ir_d0) IRConst.vnil))` spine where the hand line named `ir_cvar ir_d0`, and
+/// names its OWN `ir_fw_tflags` alias where the hand line borrowed the sibling
+/// chain's `ir_fc_tflags` (both delta to `IRTy.struct_ 1017`). `ir_fw_func`
+/// and `ir_fw_module` minted byte-identical; `ir_fw_tflags` is minted-only.
+const MINTED_IR_FW: &str = include_str!("generated/ir_fw.defs.txt");
 
-const SRC_IR_FW_FUNC: &str = "def ir_fw_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_fw_b0 ir_blk0)";
+/// Registration rationales, one per minted line, in script order.
+const MINTED_IR_FW_DOCS: &[&str] = &[
+    "ir_fw_tflags: struct.1017 (FlatFlags), the aggregate this body's const and insertfield name -- the first minted STRUCT the module itself carries. The hand transcription reused the sibling chain's ir_fc_tflags alias here; the mint gives each chain its own namespace, and the two are definitionally equal (both delta to IRTy.struct_ 1017). The crate-level id lives in generated/ir_fw.tags.json, exactly as the 2026-08-19 load-type correction requires of every aggregate the registered term names. DerivedProved, zero axiom_deps.",
+    "ir_fw_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fw.core.txt; reader B's copy of the same body is tests/fixtures/flat_flags_with.trust-ir.txt). Read self.0 into %2, read other.0 into %3, OR them into %4, materialize the one-field TEMPLATE struct.1017 { 0 } into %5, write %4 into field 0 of %5 giving %6, return %6. \n\nThe template-then-write shape is the compiler's, not a stylistic choice here: a transcription that skipped the const and 'constructed' the result directly would be a shorter body than the shipped artifact, and the agg_consts + insertfields lanes of tests/crystal_a1_lineage/flat_flags_with.rs are what make it fail. The insertfield's FIELD INDEX and its source/value operands are compared by the write lane that landed ahead of this chain (lane_matrix_writes.rs carries its discrimination proof). DerivedProved, zero axiom_deps.",
+    "ir_fw_func: FlatFlags::with as EvalIR -- TWO parameters (self at SSA id 0, other at 1), entry block 0, a single block. Same signature shape as the sibling ir_fc_func. DerivedProved, zero axiom_deps.",
+    "ir_fw_module: the module for FlatFlags::with, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger; see crate::ir_mint. Originally transcribed from measured output -- the verbatim trust-ir trustc emitted for the shipped kernel (irdump2, trustc 10130575c, 2026-08-20; three clean non-incremental builds, byte-identical coverage.json), recorded at tests/fixtures/flat_flags_with.trust-ir.txt and checked graph-for-graph AND instruction-for-instruction, including the NEW insertfields write lane, by tests/crystal_a1_lineage/flat_flags_with.rs. \n\nEVIDENCE BOUNDARY, stated where it can be quoted: the producer's interpreter differential is NOT-RUN on this body (0 samples, recorded in the lineage fixture). The chain's evidence is derived-MIR agreed + markers_exact + flip-lineage equality + the kernel-executed witnesses below -- NOT an interpreter differential, and nothing in this module claims one. DerivedProved, zero axiom_deps.",
+];
 
-const SRC_IR_FW_MODULE: &str = "def ir_fw_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_fw_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+/// The minted script's lines, in registration order.
+static MINTED_IR_FW_LINES: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| {
+        MINTED_IR_FW
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
 
-// ── the machine and the symbolic execution ────────────────────────────
+/// The minted `FlatFlags::with` module definitions, in registration order.
+#[must_use]
+pub fn ir_fw_module_defs() -> &'static [&'static str] {
+    &MINTED_IR_FW_LINES
+}
+
 const SRC_IR_FW_MACH0: &str = "def ir_fw_mach0 (u : IRScalar) (v : IRScalar) (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 u v) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
 
 const SRC_IR_FW_EXACT: &str = "def ir_fw_exact (mem : IRList IRMemSlot) (na : Nat) (x : Nat) (y : Nat) (px : IRScalar) (py : IRScalar) : Eq IROutcome (ir_run ir_d6 ir_fw_module (IRConfig.running (ir_fw_mach0 (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) px)) (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ y) py)) mem na))) (IROutcome.ret (ir_vl1 (ir_fc_val (flat_flags_bits (flat_flags_with (FlatFlagsR.mk x) (FlatFlagsR.mk y)))))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_fc_val (flat_flags_bits (flat_flags_with (FlatFlagsR.mk x) (FlatFlagsR.mk y))))))";
@@ -159,9 +193,20 @@ impl Specification {
     /// kernel-check.
     pub(super) fn add_eval_ir_flat_flags_with(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(SRC_FLAT_FLAGS_WITH, "flat_flags_with: the reflected FlatFlags::with (flat/types.rs) -- `FlatFlags(self.0 | other.0)` at u8, stated in the machine's own width-8 vocabulary: ir_nat_bitop Bool.or ir_d8 is the exact bitwise OR on width-8 residues, exactly as the sibling flat_flags_contains states its AND. The same LIMITATION applies and is named rather than hidden: this is the u8-level specification of the emitted body, not an abstract set-union operation, and no theorem here converts it into one. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FW_B0, "ir_fw_b0: THE WHOLE BODY, TRANSCRIBED FROM THE EMITTED IR (tests/fixtures/flat_flags_with.trust-ir.txt). Read self.0 into %2, read other.0 into %3, OR them into %4, materialize the one-field TEMPLATE struct.1017 { 0 } into %5, write %4 into field 0 of %5 giving %6, return %6. \n\nThe template-then-write shape is the compiler's, not a stylistic choice here: a transcription that skipped the const and 'constructed' the result directly would be a shorter body than the shipped artifact, and the agg_consts + insertfields lanes of tests/crystal_a1_lineage/flat_flags_with.rs are what make it fail. The insertfield's FIELD INDEX and its source/value operands are compared by the write lane that landed ahead of this chain (lane_matrix_writes.rs carries its discrimination proof). DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FW_FUNC, "ir_fw_func: FlatFlags::with as EvalIR -- TWO parameters (self at SSA id 0, other at 1), entry block 0, a single block. Same signature shape as the sibling ir_fc_func. DerivedProved, zero axiom_deps.")?;
-        self.add_recursive_def(SRC_IR_FW_MODULE, "ir_fw_module: the module for FlatFlags::with, TRANSCRIBED FROM MEASURED OUTPUT -- the verbatim trust-ir trustc emitted for the shipped kernel (irdump2, trustc 10130575c, 2026-08-20; three clean non-incremental builds, byte-identical coverage.json), recorded at tests/fixtures/flat_flags_with.trust-ir.txt and checked graph-for-graph AND instruction-for-instruction, including the NEW insertfields write lane, by tests/crystal_a1_lineage/flat_flags_with.rs. \n\nEVIDENCE BOUNDARY, stated where it can be quoted: the producer's interpreter differential is NOT-RUN on this body (0 samples, recorded in the lineage fixture). The chain's evidence is derived-MIR agreed + markers_exact + flip-lineage equality + the kernel-executed witnesses below -- NOT an interpreter differential, and nothing in this module claims one. DerivedProved, zero axiom_deps.")?;
+        // The module is REPLAYED from the minted script, line for line — the
+        // eval_ir_mode.rs / eval_ir_priority.rs posture.
+        let minted = ir_fw_module_defs();
+        if minted.len() != MINTED_IR_FW_DOCS.len() {
+            return Err(SpecError::EnvError(format!(
+                "the minted ir_fw script has {} definitions but {} rationales are declared; \
+                 regenerate the docs table with the script rather than reusing it",
+                minted.len(),
+                MINTED_IR_FW_DOCS.len()
+            )));
+        }
+        for (line, doc) in minted.iter().zip(MINTED_IR_FW_DOCS) {
+            self.add_recursive_def(line, doc)?;
+        }
         self.add_recursive_def(SRC_IR_FW_MACH0, "ir_fw_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds TWO parameters positionally, exactly as the sibling ir_fc_mach0 does. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FW_EXACT, "ir_fw_exact: the machine agrees with the reflected `with` at EXACTLY 6 steps, for ARBITRARY bytes x and y and ARBITRARY payload tails. Eq.refl -- and that it is Eq.refl at SYMBOLIC x and y is the measured fact that gives this chain the float_div-strength A5 rather than the float_add split: ir_int2, ir_ef_at, ir_const_eval and ir_insert_field destructure SCALAR CONSTRUCTORS, never the Nat payloads, so the or's answer rides through the insertfield as a stuck ir_nat_bitop term and the whole body computes symbolically with no case split anywhere. The returned spine is the TEMPLATE's (ir_sp0-tailed), whatever the argument tails were. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_FW_CORRECT, "ir_fw_correct: *** A4, THE EQUALITY THEOREM, OVER THE EMITTED SHAPE, FOR A BODY THAT BUILDS ITS ANSWER. *** For every pair of flag sets, every pair of values representing them, every heap, every next-address counter and every fuel at or above 6, ir_eval on ir_fw_module returns exactly IROutcome.ret [aggv [int (flat_flags_bits (flat_flags_with a b))]] -- the one-field aggregate carrying the width-8 OR. \n\nProved by EncodesFlatFlags.rec TWICE, nested, one per parameter, exactly as the sibling chain's A4 -- the conclusion differs: contains returns a SCALAR the icmp computed, this returns an AGGREGATE the insertfield BUILT, which is what carries the or / const-struct / insertfield lanes into a chained theorem for the first time. \n\nA0 is measured on the SHIPPED kernel (fixture flat_flags_with.lineage.json): lowered, spliced, unsupported [], derived_mir agreed (5 canonical lines identical), markers_exact TRUE over SIX REAL MARKER LINES, zero calls, codegen flip with flip-lineage == coverage-row lineage, three byte-identical clean builds. The interpreter differential is NOT-RUN (0 samples) and is NOT part of this claim. A1 is gated by tests/crystal_a1_lineage/flat_flags_with.rs. DerivedProved, zero axiom_deps.")?;
@@ -188,30 +233,44 @@ impl Specification {
 mod tests {
     use super::*;
 
+    /// The minted `def` line for one name, from the committed script.
+    fn minted_line(name: &str) -> &'static str {
+        let prefix = format!("def {name} ");
+        ir_fw_module_defs()
+            .iter()
+            .find(|l| l.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("the minted script must define {name}"))
+    }
+
     /// The answer is BUILT: a template constant plus a field write, not a
     /// materialized result and not a scalar return.
     #[test]
     fn test_the_answer_is_built_not_materialized() {
-        assert!(SRC_IR_FW_B0.contains("IRInst.binop IRBinOp.or_ ir_tU8 ir_d2 ir_d3"));
+        assert!(minted_line("ir_fw_b0")
+            .contains("IRInst.binop IRBinOp.or_ (IRTy.uint_ ir_d8) ir_d2 ir_d3"));
         assert!(
-            SRC_IR_FW_B0.contains("IRInst.const_ ir_fc_tflags (ir_cvar ir_d0)"),
+            minted_line("ir_fw_b0").contains(
+                "IRInst.const_ ir_fw_tflags (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d0) IRConst.vnil))"
+            ),
             "the TEMPLATE: const struct.1017 {{ 0 }}, transcribed as the aggregate constant it is"
         );
         assert!(
-            SRC_IR_FW_B0.contains("IRInst.insertfield ir_fc_tflags ir_d5 ir_d0 ir_d4"),
+            minted_line("ir_fw_b0").contains("IRInst.insertfield ir_fw_tflags ir_d5 ir_d0 ir_d4"),
             "the WRITE: field 0 of the template %5 receives the computed %4"
         );
         assert!(
-            SRC_IR_FW_B0.contains("IRInst.ret (ir_nl1 ir_d6)"),
+            minted_line("ir_fw_b0").contains("IRInst.ret (ir_nl1 ir_d6)"),
             "the body returns the WRITTEN aggregate %6, not the template %5 and not the or %4"
         );
         assert!(
-            !SRC_IR_FW_B0.contains("IRInst.icmp") && !SRC_IR_FW_B0.contains("IRInst.load"),
+            !minted_line("ir_fw_b0").contains("IRInst.icmp")
+                && !minted_line("ir_fw_b0").contains("IRInst.load"),
             "no comparison and no load: this is the sibling's graph with the read half swapped \
              for a write half"
         );
         assert!(
-            !SRC_IR_FW_B0.contains("IRInst.switch") && !SRC_IR_FW_B0.contains("IRInst.condbr"),
+            !minted_line("ir_fw_b0").contains("IRInst.switch")
+                && !minted_line("ir_fw_b0").contains("IRInst.condbr"),
             "straight line: one block, no dispatch"
         );
     }
@@ -221,12 +280,14 @@ mod tests {
     #[test]
     fn test_both_field_reads_are_transcribed() {
         assert_eq!(
-            SRC_IR_FW_B0.matches("IRInst.extractfield ir_tU8").count(),
+            minted_line("ir_fw_b0")
+                .matches("IRInst.extractfield (IRTy.uint_ ir_d8)")
+                .count(),
             2,
             "self.0 and other.0, one read each"
         );
-        assert!(SRC_IR_FW_B0.contains("ir_d0 ir_d0) ir_d2)"));
-        assert!(SRC_IR_FW_B0.contains("ir_d1 ir_d0) ir_d3)"));
+        assert!(minted_line("ir_fw_b0").contains("ir_d0 ir_d0) ir_d2)"));
+        assert!(minted_line("ir_fw_b0").contains("ir_d1 ir_d0) ir_d3)"));
     }
 
     /// A4 stays universally quantified over both flag sets, both values, the
@@ -327,7 +388,8 @@ mod tests {
     #[test]
     fn test_no_interpreter_claim_is_registered() {
         assert!(
-            !SRC_IR_FW_CORRECT.contains("interpreter") && !SRC_IR_FW_MODULE.contains("interpreter"),
+            !SRC_IR_FW_CORRECT.contains("interpreter")
+                && !minted_line("ir_fw_module").contains("interpreter"),
             "the registered SOURCES never mention the interpreter; the NOT-RUN record lives in \
              the lineage fixture and the registration descriptions state it as a boundary"
         );

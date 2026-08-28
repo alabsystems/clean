@@ -1,0 +1,46 @@
+-- P21 — an explicit `.{...}` universe list is CLOSED (Lean parity).
+--
+-- FLIPPED 2026-08-25 from a PASS pin to a FAIL pin (U2 rung-4 explicitness
+-- channel). Renamed from `p21_explicit_list_autoextends.lean`: it no longer
+-- auto-extends, and a battery fixture's name is read as its claim.
+--
+-- WHAT WAS SILENTLY ACCEPTED (measured on the release binary at `d549a50bf`,
+-- `clean check --prelude builtin`): this file reported `2 passed, 0 failed`.
+-- `leak` declares ONE universe parameter and registered with TWO — the second
+-- generalized out of the `Type _` hole in its body and appended to the list
+-- its author closed. The declaration's universe signature therefore disagreed
+-- with its own source, and nothing on the declaration said so. The proof is
+-- the arity control, same binary, same prelude:
+--
+--   def useLeak1 : Nat := @leak.{0} Nat Nat.zero Nat Nat.zero
+--   ✗ useLeak1: UniverseLevelMismatch { name: "leak", expected: 2, actual: 1 }
+--
+-- i.e. writing the arity `leak`'s own source declares was the error, reported
+-- at the CALLER, at a distance, blaming the wrong line. That is the whole
+-- cost of the divergence: it is not that a wrong term is accepted (the kernel
+-- re-check is untouched and this term is well-typed at arity 2), it is that
+-- the declared interface is not the registered one.
+--
+-- WHAT LEAN DOES: `Lean.sortDeclLevelParams` — when the user level list is
+-- non-empty, a used level outside it is an error, never an extra parameter.
+-- The list is exhaustive. Clean now refuses at the declaration, with the
+-- fragment `scripts/u2_battery.sh` pins:
+--
+--   the explicit universe list `.{u}` is closed
+--
+-- REFUSAL SCOPE, and its companion. Only a WRITTEN list closes: file-scope
+-- `universe u` is merged into the same parameter vector by
+-- `preprocess_decl_with_context` and closes nothing, which is exactly why the
+-- rung-4 enforcement was cut in 2026-08-09 (`elab_decl_value.rs`). The
+-- neighbouring legitimate shapes — a complete written list, a determined
+-- `Type _` hole under a written list, a declaration with no written list, and
+-- a `universe`-merged declaration with no written list — are pinned PASSING
+-- in `p46_explicit_list_complete.lean`. A refusal with no companion is how
+-- over-refusal hides.
+def leak.{u} (A : Type u) (a : A) := fun (B : Type _) (b : B) => b
+
+-- Kept as the use site the old acceptance made legal. It now fails as a
+-- CONSEQUENCE (`leak` never registers), not as a second cause — if this file
+-- ever reports `2 passed` again, the refusal has regressed and this line
+-- records what acceptance meant: arity 2 from a `.{u}` declaration.
+def useLeak : Nat := @leak.{0, 0} Nat Nat.zero Nat Nat.zero

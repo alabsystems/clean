@@ -195,10 +195,17 @@ impl Interface {
 pub struct Projection {
     /// The core module. Unchanged by this module — its digest did not move.
     pub core: Sx,
-    /// The crate-level ids the body named.
+    /// The crate-level ids the ROOT body named.
     pub tags: ObservedTags,
-    /// The interface, CANONICALIZED against the chain's tag table.
+    /// The ROOT body's interface, CANONICALIZED against the chain's tag table.
     pub interface: Interface,
+    /// EVERY body's interface, in module order — `interfaces[0]` is
+    /// [`interface`](Self::interface). One entry for a one-body chain, which is
+    /// every chain before `has_loose_bvars`.
+    pub interfaces: Vec<Interface>,
+    /// EVERY body's observed crate-level ids, in module order — `bodies[0]` is
+    /// [`tags`](Self::tags).
+    pub bodies: Vec<ObservedTags>,
 }
 
 /// Read an emitted body and accept it only if it is the body the chain's tag
@@ -212,13 +219,116 @@ pub struct Projection {
 /// Returns [`InterfaceError::Read`] when the text is not readable at all, and
 /// one of the interface variants when the artifact does not match the pin.
 pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
-    let (core, observed) = super::emitted::read_with_self(text, tags.self_func())?;
-    let interface = observed.interface.canonicalize(tags);
+    // The chain's bodies, in MODULE ORDER. One for every chain before
+    // `has_loose_bvars`, in which case this is exactly the previous read.
+    let declared = tags.body_canonicals();
+    let chunks = super::emitted::split_bodies(text, declared.len())?;
+    // The namespace the tag table already accounts for: every body of this
+    // module at its canonical index, so a call to a SIBLING reads as that
+    // sibling and not as a fresh foreign callee.
+    //
+    // The ROOT may be [`SelfFunc::Unpinned`] — that is the honest reading for a
+    // body whose `funcs` lane is empty because it calls nothing, which is
+    // twelve of the eighteen chains — and then it contributes no namespace
+    // entry and index 0 stays reserved, exactly as before this lane. An EXTRA
+    // body must be pinned: its canonical index is a numeral the module's
+    // `(func N …)` carries, and an unpinned one would stand for nothing.
+    let mut namespace = std::collections::BTreeMap::new();
+    let mut selves = Vec::with_capacity(declared.len());
+    for canonical in &declared {
+        let sf = if *canonical == super::SELF_FUNC_INDEX {
+            tags.self_func()
+        } else {
+            let (crate_id, _) = tags
+                .func_pin(*canonical)
+                .map_err(|e| InterfaceError::Unpinned(format!("{e}")))?;
+            super::SelfFunc::Pinned(*crate_id)
+        };
+        if let super::SelfFunc::Pinned(id) = sf {
+            namespace.insert(id, *canonical);
+        }
+        selves.push(sf);
+    }
+    let mut cores = Vec::new();
+    let mut interfaces = Vec::new();
+    let mut bodies = Vec::new();
+    let mut usize_seen = 0u32;
+    for ((chunk, canonical), sf) in chunks.iter().zip(&declared).zip(&selves) {
+        let (core, observed) = super::emitted::read_body(
+            chunk,
+            *sf,
+            *canonical,
+            &namespace,
+            tags.usize_pin.map(|u| u.bits),
+        )?;
+        let pinned = tags
+            .body_interface(*canonical)
+            .map_err(|e| InterfaceError::Unpinned(format!("{e}")))?;
+        let interface = observed.interface.canonicalize(tags);
+        check_body(&interface, pinned, &observed, tags)?;
+        usize_seen = usize_seen.saturating_add(observed.usize_seen);
+        // The one function reader B just read, lifted out of its one-function
+        // wrapper so the chain's functions can be spliced into ONE module.
+        let one = core
+            .tagged("module")
+            .and_then(|m| m[0].tagged("funcs"))
+            .map_err(|e| InterfaceError::Unpinned(format!("{e}")))?
+            .first()
+            .cloned()
+            .ok_or_else(|| {
+                InterfaceError::Unpinned("reader B produced a module with no function".into())
+            })?;
+        cores.push(one);
+        interfaces.push(interface);
+        bodies.push(observed);
+    }
+    let core = Sx::tag(
+        "module",
+        vec![Sx::tag("funcs", cores), Sx::tag("globals", vec![])],
+    );
+    let observed = bodies
+        .first()
+        .cloned()
+        .ok_or_else(|| InterfaceError::Unpinned("a chain declares at least one body".into()))?;
+    let interface = interfaces
+        .first()
+        .cloned()
+        .unwrap_or_else(|| observed.interface.canonicalize(tags));
+    // The `usize` site count, summed over the chain's bodies. When the lane is
+    // pinned, the chain must contain EXACTLY the pinned number of `usize`
+    // tokens: the resolved core text spells each site as the plain fixed-width
+    // integer, so this count — not the core — is what refuses a body whose
+    // `usize` became a literal `u64` (or the reverse). When the lane is absent
+    // the reader has already refused any `usize`, so the count is zero.
+    let pinned_usize = tags.usize_pin.map_or(0, |u| u.sites);
+    if usize_seen != pinned_usize {
+        return Err(InterfaceError::Mismatch {
+            slot: "usize sites".into(),
+            pinned: format!("{pinned_usize} `usize` site(s)"),
+            found: format!("{usize_seen} `usize` site(s)"),
+        });
+    }
+    Ok(Projection {
+        core,
+        tags: observed,
+        interface,
+        interfaces,
+        bodies,
+    })
+}
 
-    if interface.function_name != tags.body {
+/// Every per-body check: the header, the parameters, the alignments, the
+/// annotation kinds and the callee namespace.
+fn check_body(
+    interface: &Interface,
+    pinned_iface: &Interface,
+    observed: &ObservedTags,
+    tags: &Tags,
+) -> Result<(), InterfaceError> {
+    if interface.function_name != pinned_iface.function_name {
         return Err(InterfaceError::FunctionName {
-            pinned: tags.body.clone(),
-            found: interface.function_name,
+            pinned: pinned_iface.function_name.clone(),
+            found: interface.function_name.clone(),
         });
     }
     // Linkage, calling convention and the signature index. All three are in
@@ -226,11 +336,11 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
     // were unread until 2026-08-20 — the first two by a literal-prefix match
     // that could not name what it refused, the third not at all.
     for (slot, found, pinned) in [
-        ("linkage", &interface.linkage, &tags.interface.linkage),
+        ("linkage", &interface.linkage, &pinned_iface.linkage),
         (
             "calling convention",
             &interface.calling_conv,
-            &tags.interface.calling_conv,
+            &pinned_iface.calling_conv,
         ),
     ] {
         if found != pinned {
@@ -241,37 +351,37 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
             });
         }
     }
-    if interface.functy != tags.interface.functy {
+    if interface.functy != pinned_iface.functy {
         return Err(InterfaceError::Mismatch {
             slot: "signature index".into(),
-            pinned: format!("functy.{}", tags.interface.functy),
+            pinned: format!("functy.{}", pinned_iface.functy),
             found: format!("functy.{}", interface.functy),
         });
     }
-    if interface.producer != tags.interface.producer {
+    if interface.producer != pinned_iface.producer {
         return Err(InterfaceError::Mismatch {
             slot: "producer".into(),
-            pinned: format!("{:?}", tags.interface.producer),
+            pinned: format!("{:?}", pinned_iface.producer),
             found: format!("{:?}", interface.producer),
         });
     }
-    check_params("parameter", &interface.params, &tags.interface.params)?;
+    check_params("parameter", &interface.params, &pinned_iface.params)?;
     check_params(
         "block parameter",
         &interface.block_params,
-        &tags.interface.block_params,
+        &pinned_iface.block_params,
     )?;
-    if interface.aligns != tags.interface.aligns {
+    if interface.aligns != pinned_iface.aligns {
         return Err(InterfaceError::Mismatch {
             slot: "align".into(),
-            pinned: format!("{:?}", tags.interface.aligns),
+            pinned: format!("{:?}", pinned_iface.aligns),
             found: format!("{:?}", interface.aligns),
         });
     }
-    if interface.clauses != tags.interface.clauses {
+    if interface.clauses != pinned_iface.clauses {
         return Err(InterfaceError::Mismatch {
             slot: "annotation clause kinds".into(),
-            pinned: format!("{:?}", tags.interface.clauses),
+            pinned: format!("{:?}", pinned_iface.clauses),
             found: format!("{:?}", interface.clauses),
         });
     }
@@ -292,11 +402,7 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
             });
         }
     }
-    Ok(Projection {
-        core,
-        tags: observed,
-        interface,
-    })
+    Ok(())
 }
 
 fn check_params(

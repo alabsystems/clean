@@ -395,21 +395,36 @@ impl SoundnessCertificate {
 }
 
 /// The axiom-name partition of an environment.
-struct AxiomPartition {
+///
+/// `pub(super)` so the prelude-axiom census
+/// (`env::tests_prelude_axiom_ratchet`) censuses the DEFAULT elaboration
+/// environment through THIS taxonomy rather than inventing a second one. The
+/// two surfaces are different environments — `soundness_certificate_env()` is
+/// `Environment::new()` plus the NN/math overlays, `Environment::with_prelude()`
+/// is what `clean check` loads — but the partition of an axiom set into
+/// foundational / admitted-domain / other / trust-marker / builtin-quotient is
+/// one definition, and it lives here.
+pub(super) struct AxiomPartition {
     /// Every genuine `Axiom`-kind name (incl. trust markers), EXCLUDING the
     /// builtin quotient primitives (see `builtin_quot`).
-    all: Vec<String>,
+    ///
+    /// Its only reader (`TrustedBase::all_axioms`) sits behind
+    /// `cfg(any(test, feature = "math-overlays"))`, so a plain default-feature
+    /// `cargo build -p clean-kernel` sees no read at all. The allowance is for
+    /// that configuration, not a claim that the field is unused.
+    #[allow(dead_code)]
+    pub(super) all: Vec<String>,
     /// The trusted axiom base (every axiom EXCEPT trust markers and builtin
     /// quotient primitives).
-    trusted: Vec<String>,
+    pub(super) trusted: Vec<String>,
     /// Foundational logical-foundation axioms.
-    foundational: Vec<String>,
+    pub(super) foundational: Vec<String>,
     /// Admitted domain axioms (∈ `ADMITTED_DOMAIN_AXIOMS`).
-    admitted_domain: Vec<String>,
+    pub(super) admitted_domain: Vec<String>,
     /// Other admitted axioms (domain axioms over opaque/faithful carriers).
-    other: Vec<String>,
+    pub(super) other: Vec<String>,
     /// Trust markers registered as axiom-kind declarations.
-    trust: Vec<String>,
+    pub(super) trust: Vec<String>,
     /// Builtin quotient primitives (`Quot`, `Quot.mk`, `Quot.lift`, `Quot.ind`)
     /// — the type-former, constructor, and two eliminators. These are NOT
     /// asserted axioms: the kernel implements their typing (`quot::quot_*_type`)
@@ -424,11 +439,11 @@ struct AxiomPartition {
     /// which is what this bucket reads. Counting the four primitives as axioms
     /// would double-count the kernel (their rules are already trusted as "the
     /// kernel checker"). Enumerated here transparently, never hidden.
-    builtin_quot: Vec<String>,
+    pub(super) builtin_quot: Vec<String>,
 }
 
 /// Partition every `Axiom`-kind name in `env`. Each returned vec is sorted.
-fn partition_axioms(env: &Environment) -> AxiomPartition {
+pub(super) fn partition_axioms(env: &Environment) -> AxiomPartition {
     let mut all = BTreeSet::new();
     let mut trusted = BTreeSet::new();
     let mut foundational = BTreeSet::new();

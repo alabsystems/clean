@@ -99,7 +99,13 @@ impl MetaState {
             self.owned_scope_access_attempts.remove(&owner);
         }
 
-        // Replay undo records in reverse order
+        // Replay undo records in reverse order. Every record kind except
+        // `NextId`/`LevelPostpone` rewrites instantiation-relevant state, so
+        // one bump covers the whole replay (a record-free pop changes nothing
+        // observable and keeps the generation).
+        if self.undo_trail.len() > marker.undo_len {
+            self.touch();
+        }
         while self.undo_trail.len() > marker.undo_len {
             if let Some(record) = self.undo_trail.pop() {
                 self.apply_undo(record);
@@ -224,13 +230,6 @@ impl MetaState {
             }
             UndoRecord::LevelPostpone => {
                 self.postponed_levels.pop();
-            }
-            UndoRecord::LevelConstraint { name, old_value } => {
-                if let Some(val) = old_value {
-                    self.level_constraints.insert(name, val);
-                } else {
-                    self.level_constraints.remove(&name);
-                }
             }
             UndoRecord::LevelParent { name, old_parent } => {
                 if let Some(parent) = old_parent {

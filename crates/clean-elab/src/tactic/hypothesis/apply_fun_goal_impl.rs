@@ -102,8 +102,8 @@ pub(super) fn apply_fun_goal(state: &mut ProofState, func: Expr) -> TacticResult
     let rhs_result_ty = state.infer_type(&goal, &new_rhs)?;
     if !state.is_def_eq(&goal, &result_ty, &rhs_result_ty) {
         return Err(TacticError::TypeMismatch {
-            expected: format!("{result_ty:?}"),
-            actual: format!("{rhs_result_ty:?}"),
+            expected: format!("{result_ty}"),
+            actual: format!("{rhs_result_ty}"),
         });
     }
     let result_level = infer_sort_level(

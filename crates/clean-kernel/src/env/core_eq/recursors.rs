@@ -94,6 +94,23 @@ pub(crate) fn register(env: &mut Environment, ctx: &EqCtx) -> Result<(), EnvErro
     // `add_inductive`. A prior FullKernelCheck stamp described the pre-repair
     // bytes and is not authority for the replacements. Re-earn it from the
     // current type/value plus mandatory release-mode metadata validation.
+    //
+    // R1-EQREC (2026-08-25): this re-earn is what makes the transient
+    // `declaration_verification.remove` calls in the fix_* helpers sound. The
+    // FullKernelCheck stamp minted here is EARNED, not asserted:
+    // `validate_and_stamp_recursor` runs the recursor-metadata invariants,
+    // per-rule subject-reduction checks over the repaired iota payloads, and a
+    // fresh strict read-only declaration check of the exact constant payload
+    // (value-bearing for Eq.casesOn/Eq.recOn, whose aux-eliminator VALUES are
+    // type-checked against their types; type-only for the primitive value-less
+    // Eq.rec — the same stamp semantics `add_inductive` gives every generated
+    // recursor). Downstream consumers of the stamp for these names (traced
+    // 2026-08-25): axiom_audit's certification walk (absent/non-Full stamps on
+    // value-less kernel objects become `UnverifiedKernelObject` issues, None is
+    // re-checked, never promoted), canonical-ambient-axiom and clean-verify
+    // live-axiom integrity checks (kind-Axiom constants only — these three are
+    // kind Definition, so out of that census), and the noConfusion
+    // regeneration predicate (`.noConfusion*` names only).
     for name in ["Eq.rec", "Eq.casesOn", "Eq.recOn"] {
         env.validate_and_stamp_recursor(&Name::from_string(name))?;
     }
@@ -178,6 +195,16 @@ fn fix_eq_rec(
         None,
         false,
     );
+    // SOUNDNESS (R1-EQREC, 2026-08-25): TRANSIENT stamp removal, not absent
+    // provenance. The `add_inductive`-minted FullKernelCheck stamp described
+    // the PRE-repair payload, so it must not survive this replacement; the
+    // stamp is RE-EARNED for the repaired payload by
+    // `validate_and_stamp_recursor` at the end of `register()` (metadata
+    // invariants + per-rule subject reduction + `check_decl_readonly_strict`).
+    // If that re-check fails, `register()` errors and the absent stamp is the
+    // correct conservative state — every downstream consumer treats `None` as
+    // unknown, never as verified (axiom_audit certification flags it
+    // `UnverifiedKernelObject` / re-checks it; nothing promotes silently).
     env.declaration_verification.remove(&rec_name);
     env.constants.insert(rec_name.clone(), rec_const_info);
 
@@ -274,6 +301,8 @@ fn fix_eq_cases_on(
         Some(cases_value),
         false,
     );
+    // SOUNDNESS (R1-EQREC, 2026-08-25): transient removal — re-earned by
+    // `validate_and_stamp_recursor` in `register()`; see the Eq.rec note.
     env.declaration_verification.remove(&cases_name);
     env.constants.insert(cases_name.clone(), cases_const_info);
 
@@ -374,6 +403,8 @@ fn fix_eq_rec_on(
         Some(rec_on_value),
         false,
     );
+    // SOUNDNESS (R1-EQREC, 2026-08-25): transient removal — re-earned by
+    // `validate_and_stamp_recursor` in `register()`; see the Eq.rec note.
     env.declaration_verification.remove(&rec_on_name);
     env.constants.insert(rec_on_name.clone(), rec_on_const_info);
 
@@ -400,4 +431,62 @@ fn fix_eq_rec_on(
         env.recursors.insert(rec_on_name, fixed_val);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::env::DeclarationVerification;
+
+    /// R1-EQREC pin: the Eq recursor repair's transient stamp removal is
+    /// re-earned — after `init_eq`, all three repaired names carry
+    /// FullKernelCheck provenance (minted by `validate_and_stamp_recursor`
+    /// over the REPAIRED payloads, not left over from `add_inductive`).
+    #[test]
+    fn test_eq_repair_reearns_full_kernel_check_stamp() {
+        let mut env = Environment::new();
+        env.init_eq().expect("init_eq must succeed");
+        for name in ["Eq.rec", "Eq.casesOn", "Eq.recOn"] {
+            assert_eq!(
+                env.declaration_verification(&Name::from_string(name)),
+                Some(DeclarationVerification::FullKernelCheck),
+                "{name} must carry the re-earned FullKernelCheck stamp \
+                 (absent/lower provenance means the R1-EQREC re-earn regressed)"
+            );
+        }
+    }
+
+    /// R1-EQREC adversarial pin: the stamp is EARNED by validation, not
+    /// asserted. Corrupting a repaired rule payload (the iota rhs the
+    /// subject-reduction check walks) makes `validate_and_stamp_recursor`
+    /// refuse — so the FullKernelCheck stamp can only describe a payload that
+    /// actually passed the checks.
+    #[test]
+    fn test_eq_rec_stamp_is_earned_not_asserted() {
+        let mut env = Environment::new();
+        env.init_eq().expect("init_eq must succeed");
+        let rec_name = Name::from_string("Eq.rec");
+
+        // Happy path: re-validation of the genuine repaired payload succeeds.
+        env.validate_and_stamp_recursor(&rec_name)
+            .expect("re-validating the genuine repaired Eq.rec must succeed");
+
+        // Corrupt the repaired rule: claim one field where the promoted
+        // singleton has zero — the symbolic rule application no longer lines
+        // up and validation must refuse.
+        let mut rec_val = env
+            .recursors
+            .get(&rec_name)
+            .cloned()
+            .expect("Eq.rec recursor metadata must exist");
+        assert_eq!(rec_val.rules.len(), 1, "Eq has exactly one iota rule");
+        rec_val.rules[0].num_fields = 1;
+        env.recursors.insert(rec_name.clone(), rec_val);
+
+        assert!(
+            env.validate_and_stamp_recursor(&rec_name).is_err(),
+            "a corrupted Eq.rec rule payload must refuse validation — the \
+             stamp is earned by the checks, never minted by fiat"
+        );
+    }
 }

@@ -378,21 +378,21 @@ pub fn eval_absurd(state: &mut ProofState, proof: Expr, neg_proof: Expr) -> Tact
 
             if !state.is_def_eq(&goal, &domain_whnf, &p_whnf) {
                 return Err(TacticError::TypeMismatch {
-                    expected: format!("{p_ty:?} → False"),
-                    actual: format!("{neg_ty:?}"),
+                    expected: format!("{p_ty} → False"),
+                    actual: format!("{neg_ty}"),
                 });
             }
             if !state.is_def_eq(&goal, &codomain_whnf, &false_type) {
                 return Err(TacticError::TypeMismatch {
                     expected: "codomain to be False".into(),
-                    actual: format!("{codomain:?}"),
+                    actual: format!("{codomain}"),
                 });
             }
         }
         _ => {
             return Err(TacticError::TypeMismatch {
                 expected: "negation (P → False)".into(),
-                actual: format!("{neg_ty:?}"),
+                actual: format!("{neg_ty}"),
             });
         }
     }

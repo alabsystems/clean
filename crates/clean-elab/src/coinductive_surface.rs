@@ -24,7 +24,95 @@
 //! Bisim.unfold : the gfp is a post-fixpoint (the destructor)
 //! Bisim.fold   : the gfp is a pre-fixpoint (needs monotonicity)
 //! Bisim.step   : the declared constructor, proved through `fold`
+//! Bisim.cases  : one-step inversion — `Or.elim`/`And`-destructure of `unfold`
+//! Bisim.acc    : accumulation — the candidate may fall back on Bisim itself
+//! Bisim.coind_upto : Park up to a compatible closure of the candidate
+//! Bisim.paco   : the parameterized gfp — plus its tower (paco_coind,
+//!                paco_unfold, paco_fold, paco_mon, paco_bot, le_paco,
+//!                paco_acc); see the P.paco paragraph below
 //! ```
+//!
+//! With K ≥ 2 constructors (Brick 1 of
+//! `designs/2026-08-25-rank1-full-gfp-lowering.md`) the functor body is the
+//! right-nested `Or` of the per-constructor disjuncts (no `Or` layer is
+//! minted at K = 1, keeping the v1 output byte-stable), one intro theorem
+//! `P.<cᵢ>` is generated per constructor via the matching `Or` injection,
+//! `P.F_mono` and `P.cases` case-split with an `Or.elim` cascade, and every
+//! constructor's target variables are α-renamed onto the FIRST constructor's
+//! target row (the shared index binders). The rename is capture-honoring and
+//! fail-closed: a premise that shadows a renamed variable, or mentions a
+//! shared-row name as a constant, REFUSES (see [`rename_free`]).
+//!
+//! With LEADING constructor binders (Brick 2) — `| step (q : St) : Prem →
+//! P a⃗` — each declared binder becomes an `∃`-bound variable of that
+//! constructor's functor disjunct, in declaration order (`∃ b⃗, ⋀ …`). The
+//! intro theorem takes the binders as leading `∀`s and supplies them to
+//! `Exists.intro` before the conjunction, `P.F_mono` destructures the `∃`
+//! layer with `Exists.elim` and rebuilds it around the premise-mapped
+//! conjunction with the SAME witnesses (sound because binder types are
+//! P-free by the envelope), and each `P.cases` arm takes the constructor's
+//! binders (`∀ b⃗ᵢ, Prem⃗ᵢ → C`), the `∃` destructured in the proof.
+//!
+//! With COMPOUND targets (Brick 3) — `| step (k : Nat) : P k →
+//! P (Nat.succ k)` — a target position that is not an index-substituted
+//! bare variable contributes an index EQUATION to its disjunct, before the
+//! premises: `∃ k, (Nat.succ k = v) ∧ R k`. The ORIENTATION is pinned —
+//! written target on the LEFT, shared index binder on the right
+//! (`IndexEquation::prop` is the single point that spells it) — and the
+//! equations are HOMOGENEOUS by construction: the index telescope is
+//! non-dependent (a dependent one refuses at the signature), so both sides
+//! live at the declared index type; no heterogeneous equality, and no
+//! funext demand is ever made — an equation at a function-typed index is
+//! just `Eq` at the Pi type. Intro theorems conclude at the WRITTEN target
+//! and close each equation with `Eq.refl written`; `P.F_mono` carries
+//! equations through unchanged (they never mention `R`); each `P.cases`
+//! arm receives them as hypotheses between the `∃`-binders and the
+//! premises (`∀ b⃗ᵢ, eq⃗ᵢ → Prem⃗ᵢ → C`) — how an arm learns which indices
+//! its constructor concluded at, and what `Nat.noConfusion`-style
+//! discrimination consumes.
+//!
+//! With DECLARATION PARAMETERS (the declaration-parameters rung) —
+//! `coinductive P (p₁ : A₁) … (pₖ : Aₖ) : T⃗ → Prop` — the parameter row
+//! is FIXED through the coinduction: every companion takes the row as
+//! leading binders (encoding (b) of the rung — see [`params`] for the
+//! choice and its rationale), the candidate relation stays `T⃗ → Prop` at
+//! fixed `p⃗`, and the recursive substitution happens at `P p⃗` only.
+//! Constructors must apply `P` to EXACTLY the declared row first — in the
+//! target and in every recursive occurrence (mirroring the kernel's strict
+//! inductive discipline, `inductive/strict.rs` check 3) — a position that
+//! varies is an INDEX, not a parameter, and refuses by name. The row is
+//! EXPLICIT on every companion except `P.cases`, where it is implicit like
+//! the index row. Universe parameters stay refused by name. The
+//! zero-parameter output is byte-identical to the pre-rung output (golden-
+//! pinned).
+//!
+//! The PACO / ACCUMULATION rung (the per-declaration half of item 6,
+//! `designs/2026-08-20-rank1-coinductive-surface.md:131-134`) mints `P.acc`
+//! — strong coinduction: the candidate may step into `P.F (R ∨ P)`, falling
+//! back on ACCUMULATED P-knowledge — and `P.coind_upto` — the faithful
+//! specialization of the library `gfpRel_upto`: Park where the obligation
+//! targets `P.F (clo R)` for a caller-supplied monotone / `P.F`-compatible /
+//! idempotent / inflationary closure (quantifying over `clo` is intrinsic;
+//! `Mono F` specializes away through the minted `P.F_mono`). `P.acc` is the
+//! `clo := (· ∨ P)` instance, minted directly with a smaller proof term; it
+//! is the `r := ⊥` top-level projection of the library `paco_acc`. Both
+//! proofs are self-contained terms from `P.coind` / `P.F_mono` /
+//! `P.unfold`: the library file is graduated DATA, not a compiled
+//! dependency, so nothing here applies its theorems by name.
+//!
+//! The `P.paco` PARAMETERIZED-TOWER rung (the named follow-on, landed)
+//! mints the faithful per-declaration mirror of the library's paco
+//! section: `P.paco r` — the gfp of `fun R => P.F (R ∨ r)`, same
+//! impredicative encoding as `P` — with `P.paco_coind` / `P.paco_unfold` /
+//! `P.paco_fold` (Park/destructor/constructor at the accumulated functor),
+//! `P.paco_mon` (monotone in `r`), the two-implication `⊥` correspondence
+//! `P.paco_bot` / `P.le_paco` (the library's `paco_bot_le_gfp` /
+//! `gfp_le_paco`, the latter kept generalized over `r`), and the faithful
+//! accumulation `P.paco_acc` (`r' ≤ P.paco (r ∨ r') → r' ≤ P.paco r`) —
+//! compositional pcofix-style coinduction, nestable level over level.
+//! `P.acc`/`P.coind_upto` are unchanged by the rung. Statement shapes,
+//! union orders and proof routes live on the paco child module
+//! (`coinductive_surface_paco.rs`).
 //!
 //! The fixpoint is the standard impredicative union of post-fixpoints
 //! (`Coind.lean`'s `gfpRel`) at the declaration's own index telescope:
@@ -34,7 +122,11 @@
 //! ```
 //!
 //! No induction principle is generated, and none exists: `P` is a `def`, not
-//! an inductive type, so there is no `P.rec` to misuse.
+//! an inductive type, so there is no `P.rec` to misuse. `P.cases` is NOT one:
+//! it destructures a SINGLE unfolding (each arm sees the recursive premises
+//! at `P` itself, with a constant `C : Prop` motive — fully general here
+//! because the indices are fixed by the statement), and it is proved, not
+//! trusted.
 //!
 //! # v1 envelope (everything outside it REJECTS LOUDLY)
 //!
@@ -45,24 +137,75 @@
 //!
 //! * result sort `Prop`, reached through a NON-dependent arrow telescope of
 //!   arity ≥ 1 (`P : T₁ → … → Tₙ → Prop`);
-//! * no declaration parameters, no universe parameters, no `deriving`, no
-//!   modifiers;
-//! * exactly ONE constructor. A multi-constructor functor is a disjunction —
-//!   a named build item, not something to approximate silently;
-//! * that constructor's type is an ARROW chain `Prem₁ → … → Premⱼ → P v⃗`
-//!   (j ≥ 1) whose target arguments `v⃗` are DISTINCT identifiers — the
-//!   destructor-style one-step rule. Compound targets need the
-//!   `∃`-plus-index-equation lowering (build item);
-//! * each premise is either a fully-applied recursive occurrence `P e⃗`
-//!   (arity n, positional, arguments free of `P`) or a premise not mentioning
-//!   `P` at all — so recursive occurrences are strictly positive by
-//!   construction and the generated `F_mono` proof is always available;
+//! * declaration parameters `(p : A)` are supported as a FIXED row:
+//!   explicit binder info only, explicitly typed, types `P`-free with
+//!   constant/earlier-parameter free names; every constructor applies `P`
+//!   to exactly the row first (target and recursive premises); a bare
+//!   parameter name in an INDEX position refuses (ambiguous with a fresh
+//!   index variable — write it ascribed, `(p : T)`, to equate); a
+//!   constructor, guard or `∃`-conclusion binder shadowing a parameter
+//!   name refuses. NO universe parameters (refused by name), no
+//!   `deriving`, no modifiers;
+//! * at least ONE constructor, with pairwise-DISTINCT names. K = 0 refuses:
+//!   an empty disjunction would mint the constantly-False predicate;
+//! * every constructor's type is `∀ (b₁ : B₁) … (b_m : B_m), Prem₁ → … →
+//!   Premⱼ → P a⃗` (m ≥ 0; equations + premises ≥ 1 — see below): optional
+//!   LEADING explicitly-typed binders, then a plain arrow chain of
+//!   premises. A binder AFTER the first premise arrow (a dependent premise
+//!   telescope) refuses;
+//! * each target argument `aᵢ` (Brick 3) is an applicative, hole-free,
+//!   P-free term over the constructor's declared binders, its
+//!   index-substituted variables and registered constants. A position that
+//!   is a bare FRESH variable substitutes at its first bare occurrence
+//!   (later bare occurrences equate — `P x x` is admitted, first binds the
+//!   index, the second carries `x = v₂`); a bare DECLARED BINDER
+//!   substitutes when once-occurring with its declared type structurally
+//!   the index type, and otherwise stays ∃-bound behind an equation; a
+//!   bare REGISTERED CONSTANT refuses (ambiguous between v1's
+//!   fresh-variable reading and the constant — write `(c : T)` for the
+//!   constant reading); every other term equates. A fresh variable
+//!   occurring ONLY inside compound arguments has no bare position to bind
+//!   it and refuses (declare a binder to ∃-bind it);
+//! * per-constructor vacuity: index equations + premises ≥ 1. An
+//!   equations-only constructor (`| nil : CB 0 0`) is legal — its disjunct
+//!   is the equations conjunction — but no equations AND no premises would
+//!   make the disjunct constantly true, refused;
+//! * each leading binder not consumed by the substitution minimization
+//!   becomes an `∃`-bound variable of this constructor's disjunct, in
+//!   declaration order. Its TYPE must be P-free (a predicate occurrence
+//!   inside a binder type is a nested / negative-position hazard — the
+//!   next rung's problem, refused here), its free variables drawn from the
+//!   index-substituted target variables, earlier binders and existing
+//!   constants. Its NAME must be workable beyond doubt: not `_` (the intro
+//!   theorem must supply it as an `Exists.intro` witness), not
+//!   implicit/instance, not carrying a default value, not the predicate,
+//!   not declared twice, not carrying the generated `_coind` marker, not a
+//!   shared-index-row name (the α-rename would be captured; exempt when
+//!   the binder itself substitutes — it never ∃-binds then);
+//! * from the second constructor on, the α-rename onto the shared index row
+//!   must be beyond doubt: a premise binder shadowing a renamed variable
+//!   refuses, and a free occurrence of a shared-row name that is not one of
+//!   this constructor's own index-substituted variables refuses (it denotes
+//!   a constant the row binder would capture);
+//! * each premise is a fully-applied recursive occurrence `P e⃗` (arity n,
+//!   positional, arguments free of `P`), a premise not mentioning `P` at
+//!   all, or — the "P under `∀`/`→`" rung — a parenthesized GUARDED clause
+//!   `(∀ b⃗, H₁ → … → Hₙ → C)` whose binders are explicitly typed with
+//!   `P`-free types, whose hypotheses are `P`-free, and whose conclusion is
+//!   a recursive atom or a positive `∃`-nest over `P`-free conjuncts and
+//!   recursive atoms (the Milner weak-bisimulation clause shape; full
+//!   envelope, `F_mono` guard mapping and refusal catalog in [`guard`]) —
+//!   so recursive occurrences are strictly positive by construction and
+//!   the generated `F_mono` proof is always available;
 //! * each premise is applicative (identifiers, applications, arrows,
 //!   binders); `match` / `do` / tactic premises reject;
-//! * every free variable of a premise is a target variable or an existing
-//!   constant. This clause is load-bearing: a stray free name would be
-//!   silently AUTO-BOUND as an implicit parameter of the generated functor,
-//!   changing what the declaration means.
+//! * every free variable of a premise is a target variable, a declared
+//!   leading binder of its constructor, or an existing constant. This
+//!   clause is load-bearing: a stray free name would be silently AUTO-BOUND
+//!   as an implicit parameter of the generated functor, changing what the
+//!   declaration means. A premise-only variable WITHOUT a declared binder
+//!   keeps this refusal — the explicit binder is the deliberate tax for an
+//!   ∃-bound variable.
 //!
 //! [`lower`] is pure — it returns surface declarations. The caller elaborates
 //! them through the ordinary parse→elaborate→kernel-check path, so every
@@ -72,13 +215,60 @@
 use crate::ElabError;
 use clean_kernel::{Environment, Name};
 use clean_parser::{
-    DeclModifiers, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceCtor, SurfaceDecl,
-    SurfaceExpr, TerminationHints, UniverseExpr,
+    DeclModifiers, Span, SurfaceBinder, SurfaceCtor, SurfaceDecl, SurfaceExpr, UniverseExpr,
 };
 
+/// Generation half (validated [`Shape`] → surface declarations). Split along
+/// the validation/generation seam to keep both files under the paragon
+/// file-length ratchet; same module tree, so privacy is unchanged.
+#[path = "coinductive_surface_generate.rs"]
+mod generate;
+
+/// Target-row analysis (Brick 3): per-position substitution/equation
+/// classification and the α-rename helper. Same module-tree split as
+/// [`generate`].
+#[path = "coinductive_surface_target.rs"]
+mod target;
+
+/// Premise classification, including the GUARDED clause envelope of the
+/// "P under `∀`/`→`" rung (`∀ b⃗, H₁ → … → Hₙ → C`, `P` strictly positive
+/// in the conclusion — atom or `∃`-nest), its `F_mono` guard mapping and
+/// its α-rename. Same module-tree split as [`generate`].
+#[path = "coinductive_surface_guard.rs"]
+mod guard;
+
+/// Declared binder rows: DECLARATION-PARAMETER validation (the
+/// declaration-parameters rung — envelope, encoding choice (b) and the
+/// exact-row check mirroring the kernel's strict inductive discipline)
+/// plus the constructor-binder envelope (Brick 2, moved there whole).
+/// Same module-tree split as [`generate`].
+#[path = "coinductive_surface_params.rs"]
+mod params;
+
+use guard::{classify_premise, Premise};
+use target::TargetPos;
+
 /// Companion suffixes this lowering mints under the declaration's name.
-/// A constructor may not claim one of them.
-const RESERVED_SUFFIXES: [&str; 5] = ["F", "coind", "F_mono", "unfold", "fold"];
+/// A constructor may not claim one of them. The second row is the
+/// parameterized paco tower (`P.paco` rung).
+const RESERVED_SUFFIXES: [&str; 16] = [
+    "F",
+    "coind",
+    "F_mono",
+    "unfold",
+    "fold",
+    "cases",
+    "acc",
+    "coind_upto",
+    "paco",
+    "paco_coind",
+    "paco_unfold",
+    "paco_fold",
+    "paco_mon",
+    "paco_bot",
+    "le_paco",
+    "paco_acc",
+];
 
 /// Generated binder names, all carrying the `coind` marker so they cannot
 /// collide with a target variable (those are checked to be plain identifiers
@@ -89,116 +279,24 @@ const HYP_POST: &str = "hpost_coind";
 const HYP_LE: &str = "hle_coind";
 const HYP_H: &str = "h_coind";
 const HYP_HR: &str = "hR_coind";
+/// The `P.cases` motive binder.
+const MOTIVE_C: &str = "C_coind";
+/// Index-suffixed generated names (`{PREFIX}{i}`): the head/tail hypotheses
+/// of an `Or.elim` cascade level and the per-constructor `P.cases` arms.
+const HYP_HD_PREFIX: &str = "hd_coind";
+const HYP_HT_PREFIX: &str = "ht_coind";
+const ARM_PREFIX: &str = "arm_coind";
+/// The per-level `Exists.elim` hypotheses destructuring a disjunct's `∃ b⃗`
+/// layer (`{HYP_EX_PREFIX}{level}`, where `level` counts REMAINING binders,
+/// so the names are distinct within one nest).
+const HYP_EX_PREFIX: &str = "hex_coind";
+/// The re-abstracted hypotheses of a GUARDED premise inside the `F_mono`
+/// proof (`{HYP_G_PREFIX}{i}`; see [`guard`]).
+const HYP_G_PREFIX: &str = "hg_coind";
 
 fn unsupported(msg: impl Into<String>) -> ElabError {
     ElabError::Unsupported {
         feature: msg.into(),
-    }
-}
-
-// ── surface-term builders ────────────────────────────────────────────────
-
-fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), name.to_string())
-}
-
-/// Application that FLATTENS a nested head: `app(app(f, [a]), [b])` is
-/// `f a b`, the shape a parsed application would have had.
-fn app(head: SurfaceExpr, args: Vec<SurfaceExpr>) -> SurfaceExpr {
-    if args.is_empty() {
-        return head;
-    }
-    let new_args = args.into_iter().map(SurfaceArg::positional);
-    match head {
-        SurfaceExpr::App(span, h, mut existing) => {
-            existing.extend(new_args);
-            SurfaceExpr::App(span, h, existing)
-        }
-        other => SurfaceExpr::App(Span::dummy(), Box::new(other), new_args.collect()),
-    }
-}
-
-fn napp(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
-    app(ident(name), args)
-}
-
-fn arrow(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
-    SurfaceExpr::Arrow(Span::dummy(), Box::new(a), Box::new(b))
-}
-
-fn prop() -> SurfaceExpr {
-    SurfaceExpr::Universe(Span::dummy(), UniverseExpr::Prop)
-}
-
-fn binder(name: &str, ty: SurfaceExpr, info: SurfaceBinderInfo) -> SurfaceBinder {
-    SurfaceBinder::new(name, Some(ty), info)
-}
-
-/// `fun n₁ n₂ … => body` with untyped binders (solved from the expected type).
-fn lam(names: &[&str], body: SurfaceExpr) -> SurfaceExpr {
-    if names.is_empty() {
-        return body;
-    }
-    SurfaceExpr::Lambda(
-        Span::dummy(),
-        names
-            .iter()
-            .map(|n| SurfaceBinder::new(*n, None, SurfaceBinderInfo::Explicit))
-            .collect(),
-        Box::new(body),
-    )
-}
-
-fn and(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
-    napp("And", vec![a, b])
-}
-
-/// Right-nested combination of a non-empty list (`p₁ ∘ (p₂ ∘ (… ∘ pⱼ))`).
-fn right_nest(
-    mut parts: Vec<SurfaceExpr>,
-    f: impl Fn(SurfaceExpr, SurfaceExpr) -> SurfaceExpr,
-) -> SurfaceExpr {
-    let last = parts.pop().unwrap_or_else(prop);
-    parts.into_iter().rev().fold(last, |acc, p| f(p, acc))
-}
-
-fn mk_def(
-    name: String,
-    binders: Vec<SurfaceBinder>,
-    ty: SurfaceExpr,
-    val: SurfaceExpr,
-) -> SurfaceDecl {
-    SurfaceDecl::Def {
-        span: Span::dummy(),
-        name,
-        universe_params: Vec::new(),
-        binders,
-        ty: Some(Box::new(ty)),
-        val: Box::new(val),
-        attrs: Vec::new(),
-        termination: TerminationHints::default(),
-        modifiers: DeclModifiers::default(),
-        where_decls: Vec::new(),
-    }
-}
-
-fn mk_theorem(
-    name: String,
-    binders: Vec<SurfaceBinder>,
-    ty: SurfaceExpr,
-    proof: SurfaceExpr,
-) -> SurfaceDecl {
-    SurfaceDecl::Theorem {
-        span: Span::dummy(),
-        name,
-        universe_params: Vec::new(),
-        binders,
-        ty: Box::new(ty),
-        proof: Box::new(proof),
-        attrs: Vec::new(),
-        termination: TerminationHints::default(),
-        modifiers: DeclModifiers::default(),
-        where_decls: Vec::new(),
     }
 }
 
@@ -228,24 +326,83 @@ fn variant_label(expr: &SurfaceExpr) -> &'static str {
 
 // ── shape analysis ───────────────────────────────────────────────────────
 
-/// One premise of the single constructor.
-enum Premise {
-    /// A fully-applied recursive occurrence `P e⃗` (arity n).
-    Rec(Vec<SurfaceExpr>),
-    /// A premise that does not mention `P` at all.
-    Plain(SurfaceExpr),
+/// One index equation `written = vᵢ` of a disjunct (Brick 3): `written` is
+/// the constructor's target argument at that position (over the shared
+/// index row, declared binders and constants), `row` the shared index
+/// binder it is equated to. ORIENTATION IS PINNED: written target on the
+/// LEFT (`IndexEquation::prop` in the generation half is the single point
+/// that spells it; a statement-level test pins it end to end). Equations
+/// are HOMOGENEOUS by construction — the index telescope is non-dependent
+/// (a dependent telescope refuses at the signature), so both sides live at
+/// the declared index type and no heterogeneous-equality machinery exists
+/// here.
+struct IndexEquation {
+    written: SurfaceExpr,
+    row: String,
+}
+
+/// The lowering plan for ONE constructor — one disjunct of the full rank-1
+/// functor body `⋁_c ∃ b⃗_c, (⋀ᵢ aᵢ = vᵢ) ∧ ⋀ⱼ Premⱼ`
+/// (`designs/2026-08-25-rank1-full-gfp-lowering.md` §1). Every expression
+/// below speaks in the SHARED index row ([`Shape::idx_names`]): `validate`
+/// α-renames each constructor's index-substituted target variables onto the
+/// first constructor's row before the plan is built. Brick 2 populates
+/// `exists_binders`; Brick 3 populates `equations` (compound / repeated /
+/// non-substituted target positions) and the substitution minimizations —
+/// a bare once-occurring fresh variable or type-matching declared binder
+/// IS the index binder, no equation minted (v1 is exactly the case where
+/// every position substitutes and all three layers vanish).
+struct DisjunctPlan {
+    /// Constructor short name (the `step` of `Bisim.step`).
+    ctor: String,
+    /// `∃ b⃗` binders for constructor-local variables (Brick 2): the
+    /// constructor's LEADING explicitly-typed binders, in declaration order,
+    /// validated against the binder envelope (explicit, typed, P-free type)
+    /// and — from the second constructor on — with their types α-renamed
+    /// onto the shared index row. A binder consumed by the substitution
+    /// minimization (Brick 3) is NOT here: it became an index binder.
+    exists_binders: Vec<SurfaceBinder>,
+    /// Index equations for the non-substituted target positions, in
+    /// position order (Brick 3). Empty exactly for v1-shaped constructors.
+    equations: Vec<IndexEquation>,
+    /// Premises in declaration order, over the shared index row.
+    premises: Vec<Premise>,
+    /// The written target arguments, one per index position, over the
+    /// shared row: `vᵢ` at a substituted position, the written term at an
+    /// equated one. The intro theorem concludes at `P target_args` and
+    /// closes each equation with `Eq.refl written` there.
+    target_args: Vec<SurfaceExpr>,
+    /// The intro theorem's leading explicit `∀` group: ALL declared binders
+    /// in declaration order — ∃-bound ones as declared, substituted ones
+    /// under their shared-row name at their declared type. Equal to
+    /// `exists_binders` when no binder was substituted (every pre-Brick-3
+    /// shape).
+    intro_binders: Vec<SurfaceBinder>,
+    /// Index positions substituted by a FRESH variable (not a declared
+    /// binder): the intro theorem binds exactly these rows implicitly (v1:
+    /// every position, reproducing the old whole-row implicit header).
+    fresh_rows: Vec<usize>,
 }
 
 struct Shape {
     /// Fully-qualified declaration name.
     qname: String,
-    /// Constructor short name.
-    ctor: String,
+    /// The FIXED declaration-parameter row, validated ([`params`]): every
+    /// companion takes these as leading binders, and every occurrence of
+    /// the predicate inside the declaration applies exactly this row first.
+    /// Empty for every pre-rung shape (byte-stable output).
+    params: Vec<SurfaceBinder>,
     /// Index telescope types, in order.
     idx_tys: Vec<SurfaceExpr>,
-    /// Target variable names of the constructor, in order (distinct).
-    vars: Vec<String>,
-    premises: Vec<Premise>,
+    /// The SHARED index-binder row: the FIRST constructor's target-variable
+    /// names. Every other constructor's premises are α-renamed onto this row
+    /// by `validate`, so generation reads one binder row for the whole
+    /// functor. At K = 1 this is the identity of the v1 behavior.
+    idx_names: Vec<String>,
+    /// One plan per constructor, in declaration order (K ≥ 1; the envelope
+    /// refuses K = 0). The functor body is their right-nested `Or`; no `Or`
+    /// layer is minted at K = 1, keeping the v1 output byte-stable.
+    disjuncts: Vec<DisjunctPlan>,
 }
 
 /// Flatten a non-dependent arrow chain, returning `(antecedents, head)`.
@@ -341,51 +498,6 @@ fn known_constant(env: &Environment, id: &str) -> bool {
     env.get_const(&Name::from_string(id)).is_some()
 }
 
-/// `short v₁ … vₙ` with `n == arity` distinct positional identifier args.
-fn target_vars(target: &SurfaceExpr, short: &str, arity: usize) -> Option<Vec<String>> {
-    let SurfaceExpr::App(_, head, args) = strip_parens(target) else {
-        return None;
-    };
-    if !matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id == short) {
-        return None;
-    }
-    if args.len() != arity {
-        return None;
-    }
-    let mut vars: Vec<String> = Vec::with_capacity(arity);
-    for a in args {
-        if a.name.is_some() {
-            return None;
-        }
-        let SurfaceExpr::Ident(_, id) = strip_parens(&a.expr) else {
-            return None;
-        };
-        if id == short || vars.iter().any(|v| v == id) {
-            return None;
-        }
-        vars.push(id.clone());
-    }
-    Some(vars)
-}
-
-fn classify_premise(p: &SurfaceExpr, short: &str, arity: usize) -> Option<Premise> {
-    if let SurfaceExpr::App(_, head, args) = strip_parens(p) {
-        if matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id == short) {
-            if args.len() != arity || args.iter().any(|a| a.name.is_some()) {
-                return None;
-            }
-            if args.iter().any(|a| mentions(&a.expr, short)) {
-                return None;
-            }
-            return Some(Premise::Rec(args.iter().map(|a| a.expr.clone()).collect()));
-        }
-    }
-    if mentions(p, short) {
-        return None;
-    }
-    Some(Premise::Plain(p.clone()))
-}
-
 #[allow(clippy::too_many_arguments)]
 fn validate(
     qname: &str,
@@ -402,16 +514,16 @@ fn validate(
     if !universe_params.is_empty() {
         return Err(unsupported(format!(
             "{what}: universe-polymorphic coinductive predicates are not \
-             supported in v1 — the greatest-fixpoint lowering is Prop-valued \
-             and monomorphic for now"
+             supported — the greatest-fixpoint lowering is Prop-valued and \
+             monomorphic; only DECLARATION parameters lift \
+             (`{short} (p : T) : … → Prop`), universe parameters stay refused"
         )));
     }
-    if !binders.is_empty() {
-        return Err(unsupported(format!(
-            "{what}: declaration parameters are not supported in v1 — write \
-             them as leading indices (`{short} : Param → … → Prop`)"
-        )));
-    }
+    // The declaration-parameters rung: the row is validated fail-closed
+    // (explicit, typed, `P`-free — see `params::validate_params`) and FIXED
+    // through the coinduction.
+    let decl_params = params::validate_params(&what, short, env, binders)?;
+    let param_names: Vec<String> = decl_params.iter().map(|b| b.name.clone()).collect();
     if !deriving.is_empty() {
         return Err(unsupported(format!(
             "{what}: `deriving {}` has no meaning for a Prop-valued greatest \
@@ -448,206 +560,359 @@ fn validate(
     }
     let arity = idx_tys.len();
 
-    // ── the single constructor ─────────────────────────────────────────
-    let [ctor] = ctors else {
+    // ── the constructors (K ≥ 1, each individually v1-shaped) ──────────
+    if ctors.is_empty() {
         return Err(unsupported(format!(
-            "{what}: v1 supports exactly ONE constructor (the one-step \
-             functor); {} were declared — a multi-constructor functor is a \
-             DISJUNCTIVE one-step relation, which is a build item, not \
-             something to approximate silently",
-            ctors.len()
-        )));
-    };
-    if RESERVED_SUFFIXES.contains(&ctor.name.as_str()) {
-        return Err(unsupported(format!(
-            "{what}: constructor name `{}` collides with the generated \
-             companion `{qname}.{}`",
-            ctor.name, ctor.name
+            "{what}: at least one constructor is required — an EMPTY \
+             disjunction would make the one-step functor constantly False \
+             and `{qname}` the always-empty predicate; refusing to mint it"
         )));
     }
 
-    let Some((prem_exprs, target)) = flatten_arrows(&ctor.ty) else {
-        return Err(unsupported(format!(
-            "{what}: constructor `{}` uses binders (`(x : T) → …`); v1 \
-             requires a plain arrow chain of premises",
-            ctor.name
-        )));
-    };
-    if prem_exprs.is_empty() {
-        return Err(unsupported(format!(
-            "{what}: constructor `{}` has no premises, so the one-step \
-             functor would be constantly true and `{qname}` would hold of \
-             everything; v1 rejects that rather than mint it",
-            ctor.name
-        )));
-    }
-
-    let vars = target_vars(target, short, arity).ok_or_else(|| {
-        unsupported(format!(
-            "{what}: constructor `{}` must conclude in `{short} v₁ … v{arity}` \
-             with DISTINCT variable arguments (the destructor-style one-step \
-             rule); a compound target needs the index-equation lowering, \
-             which is a build item",
-            ctor.name
-        ))
-    })?;
-
-    // ── premises ───────────────────────────────────────────────────────
-    let mut premises = Vec::with_capacity(prem_exprs.len());
-    for p in &prem_exprs {
-        let analysed = classify_premise(p, short, arity).ok_or_else(|| {
-            unsupported(format!(
-                "{what}: every premise of `{}` must be either a FULLY-APPLIED \
-                 recursive occurrence `{short} e₁ … e{arity}` (arguments free \
-                 of `{short}`) or a premise that does not mention `{short}` at \
-                 all; a nested, negative or partially-applied occurrence is \
-                 refused because its positivity is not established here",
-                ctor.name
-            ))
-        })?;
-        premises.push(analysed);
-    }
-
-    // Every free variable of a premise must be a target variable or an
-    // existing constant. A stray name would otherwise be AUTO-BOUND as an
-    // implicit parameter of the generated functor, silently changing what
-    // the declaration means.
-    for p in &prem_exprs {
-        let mut bound: Vec<&str> = Vec::new();
-        let mut fvs: Vec<&str> = Vec::new();
-        all_idents(p, &mut bound, &mut fvs).map_err(|label| {
-            unsupported(format!(
-                "{what}: a premise of `{}` uses the non-applicative surface \
-                 form `{label}`; v1 premises must be built from identifiers, \
-                 applications, arrows and binders",
-                ctor.name
-            ))
-        })?;
-        for fv in fvs {
-            if fv == short || vars.iter().any(|v| v == fv) || known_constant(env, fv) {
-                continue;
-            }
+    // The shared index-binder row: the FIRST constructor's target-variable
+    // names. Every later constructor is α-renamed onto it.
+    let mut shared: Vec<String> = Vec::new();
+    let mut disjuncts: Vec<DisjunctPlan> = Vec::with_capacity(ctors.len());
+    for (ci, ctor) in ctors.iter().enumerate() {
+        if RESERVED_SUFFIXES.contains(&ctor.name.as_str()) {
             return Err(unsupported(format!(
-                "{what}: a premise of `{}` mentions `{fv}`, which is neither a \
-                 target variable nor a known constant. v1 refuses to auto-bind \
-                 it: an implicit parameter silently inserted into the generated \
-                 one-step functor would change what `{qname}` means",
+                "{what}: constructor name `{}` collides with the generated \
+                 companion `{qname}.{}`",
+                ctor.name, ctor.name
+            )));
+        }
+        if ctors[..ci].iter().any(|c| c.name == ctor.name) {
+            return Err(unsupported(format!(
+                "{what}: constructor name `{}` is declared more than once — \
+                 the generated intro theorems would collide at `{qname}.{}`",
+                ctor.name, ctor.name
+            )));
+        }
+
+        // ── leading constructor binders (Brick 2) ──────────────────────
+        // Peel the leading `Pi` groups the parser desugars
+        // `| c (b : T) … : τ` into. Only LEADING binders lift the old
+        // binder refusal: a `Pi` after the first premise arrow (a dependent
+        // premise telescope) still refuses below.
+        let mut ctor_binders: Vec<SurfaceBinder> = Vec::new();
+        let mut chain = strip_parens(&ctor.ty);
+        while let SurfaceExpr::Pi(_, bs, body) = chain {
+            ctor_binders.extend(bs.iter().cloned());
+            chain = strip_parens(body);
+        }
+        let Some((prem_exprs, target)) = flatten_arrows(chain) else {
+            return Err(unsupported(format!(
+                "{what}: constructor `{}` uses binders after its first \
+                 premise arrow; only LEADING explicitly-typed binders \
+                 (`| {} (x : T) : …`) are supported — a dependent premise \
+                 telescope is refused rather than mis-lowered",
+                ctor.name, ctor.name
+            )));
+        };
+        // ── target classification (Brick 3) ────────────────────────────
+        // Each target position is either an index-SUBSTITUTED bare variable
+        // (no equation — the v1 minimization) or an index EQUATION
+        // `written = vᵢ`; the full rules live on `target::classify_target`.
+        let mut positions = target::classify_target(
+            target,
+            short,
+            arity,
+            &ctor.name,
+            &what,
+            &ctor_binders,
+            &idx_tys,
+            &param_names,
+            env,
+        )?;
+        let subst_vars: Vec<String> = positions
+            .iter()
+            .filter_map(|p| match p {
+                TargetPos::Subst { var } => Some(var.clone()),
+                TargetPos::Equate { .. } => None,
+            })
+            .collect();
+
+        // Per-constructor vacuity (Brick 3 rule: equations + premises ≥ 1).
+        // An equations-only constructor (`| nil : CB 0 0`) is meaningful —
+        // its disjunct is the equations conjunction — but a constructor
+        // with NO equations and NO premises would make its disjunct, hence
+        // the whole functor, constantly true.
+        if prem_exprs.is_empty() && subst_vars.len() == arity {
+            return Err(unsupported(format!(
+                "{what}: constructor `{}` has no premises and no index \
+                 equations, so its disjunct of the one-step functor would be \
+                 constantly true and `{qname}` would hold of everything; \
+                 refusing to mint it",
                 ctor.name
             )));
         }
+
+        // ── the leading binders' own envelope (Brick 2) ────────────────
+        // Each declared binder becomes an ∃-bound variable of this
+        // constructor's functor disjunct, in declaration order. Every
+        // clause is fail-closed (explicitly-typed, explicit-info, P-free,
+        // non-overlapping, not shadowing a declaration parameter); the
+        // whole envelope lives in `params::check_ctor_binders`.
+        params::check_ctor_binders(
+            &what,
+            short,
+            env,
+            ci,
+            &shared,
+            &param_names,
+            &ctor.name,
+            &ctor_binders,
+            &subst_vars,
+        )?;
+
+        // ── premises ───────────────────────────────────────────────────
+        // Flat recursive atom / `P`-free / GUARDED clause (`guard` module);
+        // every other shape is refused with the classifier's named reason.
+        let mut premises = Vec::with_capacity(prem_exprs.len());
+        for p in &prem_exprs {
+            let analysed = classify_premise(p, short, &param_names, arity).map_err(|reason| {
+                unsupported(format!("{what}: constructor `{}`: {reason}", ctor.name))
+            })?;
+            premises.push(analysed);
+        }
+
+        // Every free variable of a premise must be an index-substituted
+        // target variable, a declared leading binder (Brick 2), a
+        // declaration parameter, or an existing constant. A stray name
+        // would otherwise be AUTO-BOUND as an implicit parameter of the
+        // generated functor, silently changing what the declaration means.
+        // A premise-only variable WITHOUT a declared binder still refuses —
+        // the explicit binder is the tax for an ∃-bound variable.
+        for p in &prem_exprs {
+            let mut bound: Vec<&str> = Vec::new();
+            let mut fvs: Vec<&str> = Vec::new();
+            all_idents(p, &mut bound, &mut fvs).map_err(|label| {
+                unsupported(format!(
+                    "{what}: a premise of `{}` uses the non-applicative surface \
+                     form `{label}`; v1 premises must be built from identifiers, \
+                     applications, arrows and binders",
+                    ctor.name
+                ))
+            })?;
+            for fv in fvs {
+                if fv == short
+                    || subst_vars.iter().any(|v| v == fv)
+                    || ctor_binders.iter().any(|b| b.name == fv)
+                    || param_names.iter().any(|p| p == fv)
+                    || known_constant(env, fv)
+                {
+                    continue;
+                }
+                return Err(unsupported(format!(
+                    "{what}: a premise of `{}` mentions `{fv}`, which is neither a \
+                     target variable nor a known constant. v1 refuses to auto-bind \
+                     it: an implicit parameter silently inserted into the generated \
+                     one-step functor would change what `{qname}` means",
+                    ctor.name
+                )));
+            }
+        }
+
+        // ── the shared index row + α-rename onto it ────────────────────
+        // The FIRST constructor defines the row: a substituted position
+        // contributes its own variable, an equated one a GENERATED
+        // `v_coind{i}` name — the `_coind` marker makes it un-writable in
+        // premises and binders, and a registered constant of that exact
+        // name refuses (it would be captured by the row binder).
+        if ci == 0 {
+            shared = positions
+                .iter()
+                .enumerate()
+                .map(|(i, pos)| match pos {
+                    TargetPos::Subst { var } => Ok(var.clone()),
+                    TargetPos::Equate { .. } => {
+                        let generated = format!("v_coind{i}");
+                        if known_constant(env, &generated) {
+                            return Err(unsupported(format!(
+                                "{what}: the generated index-row name \
+                                 `{generated}` collides with a registered \
+                                 constant, which the shared binder row would \
+                                 capture; rename that constant"
+                            )));
+                        }
+                        Ok(generated)
+                    }
+                })
+                .collect::<Result<Vec<_>, ElabError>>()?;
+        } else {
+            // Row-capture guard: a free name in this constructor that is a
+            // shared-row name but NOT one of its own substituted variables
+            // denotes a constant (every free name was vetted above), and
+            // the shared binder row would capture it. The α-rename below
+            // only maps this constructor's substituted variables, so this
+            // guard — not the rename — owns the constant-collision case.
+            let mut bound: Vec<&str> = Vec::new();
+            let mut fvs: Vec<&str> = Vec::new();
+            for p in &prem_exprs {
+                let _ = all_idents(p, &mut bound, &mut fvs);
+            }
+            for pos in &positions {
+                if let TargetPos::Equate { written } = pos {
+                    let _ = all_idents(written, &mut bound, &mut fvs);
+                }
+            }
+            for b in &ctor_binders {
+                if let Some(t) = b.ty.as_deref() {
+                    let _ = all_idents(t, &mut bound, &mut fvs);
+                }
+            }
+            for fv in fvs {
+                if shared.iter().any(|s| s == fv) && !subst_vars.iter().any(|v| v == fv) {
+                    return Err(unsupported(format!(
+                        "{what}: constructor `{}` mentions `{fv}`, which is not \
+                         one of this constructor's target variables but IS a \
+                         shared index-row name (`{}`) — under the shared binder \
+                         row that occurrence would be captured",
+                        ctor.name,
+                        shared.join(" ")
+                    )));
+                }
+            }
+
+            // The α-rename maps this constructor's substituted variables
+            // onto the row, positionally. An exact positional match is the
+            // identity and runs rename-free (v1 behavior — including its
+            // scope-honoring tolerance of shadowed target variables — is
+            // preserved exactly).
+            let map: Vec<(String, String)> = positions
+                .iter()
+                .enumerate()
+                .filter_map(|(i, pos)| match pos {
+                    TargetPos::Subst { var } if *var != shared[i] => {
+                        Some((var.clone(), shared[i].clone()))
+                    }
+                    _ => None,
+                })
+                .collect();
+            if !map.is_empty() {
+                let rename_err = |reason: &str| {
+                    unsupported(format!(
+                        "{what}: constructor `{}` names its target variables \
+                         differently from the first constructor (the shared \
+                         index row `{}`), and a premise cannot be α-renamed \
+                         onto that row: {reason}; renaming refuses rather than \
+                         risk changing what the premise means",
+                        ctor.name,
+                        shared.join(" ")
+                    ))
+                };
+                let renamed = |e: &SurfaceExpr| {
+                    target::rename_free(e, &map).map_err(|reason| rename_err(&reason))
+                };
+                for premise in &mut premises {
+                    *premise = match premise {
+                        Premise::Rec(args) => Premise::Rec(
+                            args.iter()
+                                .map(&renamed)
+                                .collect::<Result<Vec<_>, ElabError>>()?,
+                        ),
+                        Premise::Plain(e) => Premise::Plain(renamed(e)?),
+                        Premise::Guarded(g) => {
+                            Premise::Guarded(g.renamed(&map).map_err(|r| rename_err(&r))?)
+                        }
+                    };
+                }
+                // Binder TYPES and equated target arguments may mention this
+                // constructor's substituted variables, so they ride the same
+                // rename. Binder NAMES stay: they are constructor-local, and
+                // overlap with either side of the map was refused above.
+                for b in &mut ctor_binders {
+                    if let Some(t) = &b.ty {
+                        b.ty = Some(Box::new(renamed(t)?));
+                    }
+                }
+                for pos in &mut positions {
+                    if let TargetPos::Equate { written } = pos {
+                        *written = renamed(written)?;
+                    }
+                }
+            }
+        }
+
+        // ── assemble the disjunct plan (Brick 3) ───────────────────────
+        let mut equations = Vec::new();
+        let mut target_args = Vec::with_capacity(arity);
+        let mut fresh_rows = Vec::new();
+        for (i, pos) in positions.iter().enumerate() {
+            match pos {
+                TargetPos::Subst { var } => {
+                    target_args.push(SurfaceExpr::Ident(Span::dummy(), shared[i].clone()));
+                    if !ctor_binders.iter().any(|b| b.name == *var) {
+                        fresh_rows.push(i);
+                    }
+                }
+                TargetPos::Equate { written } => {
+                    equations.push(IndexEquation {
+                        written: written.clone(),
+                        row: shared[i].clone(),
+                    });
+                    target_args.push(written.clone());
+                }
+            }
+        }
+        // A SUBSTITUTED declared binder leaves the ∃ nest — it IS the index
+        // binder. In the intro theorem's leading ∀ group it appears under
+        // its shared-row name at its declared type (structurally the index
+        // type, by the substitution rule), keeping the declared constructor
+        // type usable exactly as written.
+        let row_of = |name: &str| {
+            positions
+                .iter()
+                .position(|p| matches!(p, TargetPos::Subst { var } if var == name))
+        };
+        let exists_binders: Vec<SurfaceBinder> = ctor_binders
+            .iter()
+            .filter(|b| row_of(&b.name).is_none())
+            .cloned()
+            .collect();
+        let intro_binders: Vec<SurfaceBinder> = ctor_binders
+            .iter()
+            .map(|b| match row_of(&b.name) {
+                Some(i) => SurfaceBinder {
+                    span: b.span,
+                    name: shared[i].clone(),
+                    ty: b.ty.clone(),
+                    default: None,
+                    info: b.info,
+                },
+                None => b.clone(),
+            })
+            .collect();
+
+        disjuncts.push(DisjunctPlan {
+            ctor: ctor.name.clone(),
+            exists_binders,
+            equations,
+            premises,
+            target_args,
+            intro_binders,
+            fresh_rows,
+        });
     }
 
     Ok(Shape {
         qname: qname.to_string(),
-        ctor: ctor.name.clone(),
+        params: decl_params,
         idx_tys: idx_tys.into_iter().cloned().collect(),
-        vars,
-        premises,
+        idx_names: shared,
+        disjuncts,
     })
 }
 
-// ── generation ───────────────────────────────────────────────────────────
+// ── lowering entry point ─────────────────────────────────────────────────
 
-impl Shape {
-    /// `T₁ → … → Tₙ → Prop` — the type of a candidate relation.
-    fn rel_ty(&self) -> SurfaceExpr {
-        self.idx_tys
-            .iter()
-            .rev()
-            .fold(prop(), |acc, t| arrow(t.clone(), acc))
-    }
-
-    /// `(v₁ : T₁) … (vₙ : Tₙ)` binders at the requested binder info.
-    fn idx_binders(&self, info: SurfaceBinderInfo) -> Vec<SurfaceBinder> {
-        self.vars
-            .iter()
-            .zip(&self.idx_tys)
-            .map(|(v, t)| binder(v, t.clone(), info))
-            .collect()
-    }
-
-    fn var_args(&self) -> Vec<SurfaceExpr> {
-        self.vars.iter().map(|v| ident(v)).collect()
-    }
-
-    /// `head v₁ … vₙ`.
-    fn applied(&self, head: SurfaceExpr) -> SurfaceExpr {
-        app(head, self.var_args())
-    }
-
-    /// `∀ (v₁ : T₁) … (vₙ : Tₙ), body`.
-    fn forall_vars(&self, body: SurfaceExpr) -> SurfaceExpr {
-        SurfaceExpr::Pi(
-            Span::dummy(),
-            self.idx_binders(SurfaceBinderInfo::Explicit),
-            Box::new(body),
-        )
-    }
-
-    /// The one-step functor body with `rel` standing for the recursive
-    /// occurrences: `Prem₁' ∧ … ∧ Premⱼ'`.
-    fn functor_body(&self, rel: &str) -> SurfaceExpr {
-        right_nest(
-            self.premises
-                .iter()
-                .map(|p| match p {
-                    Premise::Rec(args) => napp(rel, args.clone()),
-                    Premise::Plain(e) => e.clone(),
-                })
-                .collect(),
-            and,
-        )
-    }
-
-    /// The declared premises, with recursive occurrences spelled at the
-    /// generated (fully-qualified) predicate name.
-    fn declared_premises(&self) -> Vec<SurfaceExpr> {
-        self.premises
-            .iter()
-            .map(|p| match p {
-                Premise::Rec(args) => napp(&self.qname, args.clone()),
-                Premise::Plain(e) => e.clone(),
-            })
-            .collect()
-    }
-
-    fn f_name(&self) -> String {
-        format!("{}.F", self.qname)
-    }
-    fn coind_name(&self) -> String {
-        format!("{}.coind", self.qname)
-    }
-    fn mono_name(&self) -> String {
-        format!("{}.F_mono", self.qname)
-    }
-    fn unfold_name(&self) -> String {
-        format!("{}.unfold", self.qname)
-    }
-    fn fold_name(&self) -> String {
-        format!("{}.fold", self.qname)
-    }
-}
-
-/// The accessor for the `i`-th conjunct of a right-nested `j`-conjunction
-/// proof `h`: `And.left (And.right (… h))`, and plain `h` when `j == 1`.
-fn conjunct(h: SurfaceExpr, i: usize, j: usize) -> SurfaceExpr {
-    let mut acc = h;
-    for _ in 0..i {
-        acc = napp("And.right", vec![acc]);
-    }
-    if i + 1 < j {
-        acc = napp("And.left", vec![acc]);
-    }
-    acc
-}
-
-/// Validate a `coinductive` declaration against the v1 envelope and return
+/// Validate a `coinductive` declaration against the envelope and return
 /// the surface declarations it lowers to, in dependency order.
 ///
 /// # Errors
 ///
 /// [`ElabError::Unsupported`] — naming the declaration and the precise
-/// envelope clause — for every shape outside the v1 envelope documented on
+/// envelope clause — for every shape outside the envelope documented on
 /// this module. Nothing is generated in that case.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lower(
@@ -672,202 +937,5 @@ pub(crate) fn lower(
         deriving,
         modifiers,
     )?;
-    Ok(generate(&shape))
-}
-
-fn generate(s: &Shape) -> Vec<SurfaceDecl> {
-    let j = s.premises.len();
-    let rel_ty = s.rel_ty();
-    let gfp = || ident(&s.qname);
-    // `fun v⃗ h_coind => …` — the shared binder row of every generated proof.
-    let lam_names: Vec<&str> = s
-        .vars
-        .iter()
-        .map(String::as_str)
-        .chain(std::iter::once(HYP_H))
-        .collect();
-
-    // ── 1. the one-step functor ────────────────────────────────────────
-    // def P.F (R : T⃗ → Prop) (v⃗ : T⃗) : Prop := Prem₁[P:=R] ∧ … ∧ Premⱼ[P:=R]
-    let mut f_binders = vec![binder(REL_R, rel_ty.clone(), SurfaceBinderInfo::Explicit)];
-    f_binders.extend(s.idx_binders(SurfaceBinderInfo::Explicit));
-    let f_def = mk_def(s.f_name(), f_binders, prop(), s.functor_body(REL_R));
-
-    // `∀ v⃗, rel v⃗ → P.F rel v⃗` — "rel is a post-fixpoint of the functor".
-    let post_of = |rel: SurfaceExpr| {
-        s.forall_vars(arrow(
-            s.applied(rel.clone()),
-            s.applied(napp(&s.f_name(), vec![rel])),
-        ))
-    };
-
-    // ── 2. the greatest fixpoint ───────────────────────────────────────
-    // def P (v⃗ : T⃗) : Prop := ∃ R, (∀ v⃗, R v⃗ → P.F R v⃗) ∧ R v⃗
-    let gfp_def = mk_def(
-        s.qname.clone(),
-        s.idx_binders(SurfaceBinderInfo::Explicit),
-        prop(),
-        napp(
-            "Exists",
-            vec![SurfaceExpr::Lambda(
-                Span::dummy(),
-                vec![binder(REL_R, rel_ty.clone(), SurfaceBinderInfo::Explicit)],
-                Box::new(and(post_of(ident(REL_R)), s.applied(ident(REL_R)))),
-            )],
-        ),
-    );
-
-    // ── 3. Park coinduction ────────────────────────────────────────────
-    // theorem P.coind (R) (post : ∀ v⃗, R v⃗ → P.F R v⃗) : ∀ v⃗, R v⃗ → P v⃗ :=
-    //   fun v⃗ h => Exists.intro R (And.intro post h)
-    let coind_thm = mk_theorem(
-        s.coind_name(),
-        vec![
-            binder(REL_R, rel_ty.clone(), SurfaceBinderInfo::Explicit),
-            binder(HYP_POST, post_of(ident(REL_R)), SurfaceBinderInfo::Explicit),
-        ],
-        s.forall_vars(arrow(s.applied(ident(REL_R)), s.applied(gfp()))),
-        lam(
-            &lam_names,
-            napp(
-                "Exists.intro",
-                vec![
-                    ident(REL_R),
-                    napp("And.intro", vec![ident(HYP_POST), ident(HYP_H)]),
-                ],
-            ),
-        ),
-    );
-
-    // ── 4. monotonicity of the generated functor ───────────────────────
-    // theorem P.F_mono (R) (S) (hle : ∀ v⃗, R v⃗ → S v⃗)
-    //     : ∀ v⃗, P.F R v⃗ → P.F S v⃗ :=
-    //   fun v⃗ h => ⟨…, hle e⃗ h.right…, …⟩
-    //
-    // Sound by construction: every recursive premise is a POSITIVE,
-    // fully-applied occurrence (the envelope enforces it), so mapping each
-    // through `hle` and rebuilding the conjunction is a proof.
-    let mono_val = lam(
-        &lam_names,
-        right_nest(
-            s.premises
-                .iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    let acc = conjunct(ident(HYP_H), i, j);
-                    match p {
-                        Premise::Rec(args) => {
-                            let mut a = args.clone();
-                            a.push(acc);
-                            napp(HYP_LE, a)
-                        }
-                        Premise::Plain(_) => acc,
-                    }
-                })
-                .collect(),
-            |a, b| napp("And.intro", vec![a, b]),
-        ),
-    );
-    let mono_thm = mk_theorem(
-        s.mono_name(),
-        vec![
-            binder(REL_R, rel_ty.clone(), SurfaceBinderInfo::Explicit),
-            binder(REL_S, rel_ty.clone(), SurfaceBinderInfo::Explicit),
-            binder(
-                HYP_LE,
-                s.forall_vars(arrow(s.applied(ident(REL_R)), s.applied(ident(REL_S)))),
-                SurfaceBinderInfo::Explicit,
-            ),
-        ],
-        s.forall_vars(arrow(
-            s.applied(napp(&s.f_name(), vec![ident(REL_R)])),
-            s.applied(napp(&s.f_name(), vec![ident(REL_S)])),
-        )),
-        mono_val,
-    );
-
-    // ── 5. the gfp is a post-fixpoint (the destructor) ─────────────────
-    // theorem P.unfold : ∀ v⃗, P v⃗ → P.F P v⃗ :=
-    //   fun v⃗ h => Exists.elim h (fun R hR =>
-    //     P.F_mono R P (P.coind R hR.left) v⃗ (hR.left v⃗ hR.right))
-    let post_hyp = napp("And.left", vec![ident(HYP_HR)]);
-    let carrier_hyp = napp("And.right", vec![ident(HYP_HR)]);
-    let mut mono_args = vec![
-        ident(REL_R),
-        gfp(),
-        napp(&s.coind_name(), vec![ident(REL_R), post_hyp.clone()]),
-    ];
-    mono_args.extend(s.var_args());
-    mono_args.push(app(
-        post_hyp,
-        s.var_args().into_iter().chain([carrier_hyp]).collect(),
-    ));
-    let unfold_thm = mk_theorem(
-        s.unfold_name(),
-        Vec::new(),
-        s.forall_vars(arrow(
-            s.applied(gfp()),
-            s.applied(napp(&s.f_name(), vec![gfp()])),
-        )),
-        lam(
-            &lam_names,
-            napp(
-                "Exists.elim",
-                vec![
-                    ident(HYP_H),
-                    lam(&[REL_R, HYP_HR], napp(&s.mono_name(), mono_args)),
-                ],
-            ),
-        ),
-    );
-
-    // ── 6. the gfp is a pre-fixpoint ───────────────────────────────────
-    // theorem P.fold : ∀ v⃗, P.F P v⃗ → P v⃗ :=
-    //   P.coind (P.F P) (fun v⃗ h => P.F_mono P (P.F P) P.unfold v⃗ h)
-    let f_gfp = || napp(&s.f_name(), vec![gfp()]);
-    let mut fold_mono_args = vec![gfp(), f_gfp(), ident(&s.unfold_name())];
-    fold_mono_args.extend(s.var_args());
-    fold_mono_args.push(ident(HYP_H));
-    let fold_thm = mk_theorem(
-        s.fold_name(),
-        Vec::new(),
-        s.forall_vars(arrow(s.applied(f_gfp()), s.applied(gfp()))),
-        napp(
-            &s.coind_name(),
-            vec![
-                f_gfp(),
-                lam(&lam_names, napp(&s.mono_name(), fold_mono_args)),
-            ],
-        ),
-    );
-
-    // ── 7. the declared constructor ────────────────────────────────────
-    // theorem P.c {v⃗ : T⃗} : Prem₁ → … → Premⱼ → P v⃗ :=
-    //   fun h₁ … hⱼ => P.fold v⃗ ⟨h₁, …, hⱼ⟩
-    let hyp_names: Vec<String> = (0..j).map(|i| format!("hprem_coind{i}")).collect();
-    let ctor_ty = s
-        .declared_premises()
-        .into_iter()
-        .rev()
-        .fold(s.applied(gfp()), |acc, p| arrow(p, acc));
-    let packed = right_nest(hyp_names.iter().map(|h| ident(h)).collect(), |a, b| {
-        napp("And.intro", vec![a, b])
-    });
-    let hyp_refs: Vec<&str> = hyp_names.iter().map(String::as_str).collect();
-    let ctor_thm = mk_theorem(
-        format!("{}.{}", s.qname, s.ctor),
-        s.idx_binders(SurfaceBinderInfo::Implicit),
-        ctor_ty,
-        lam(
-            &hyp_refs,
-            app(
-                ident(&s.fold_name()),
-                s.var_args().into_iter().chain([packed]).collect(),
-            ),
-        ),
-    );
-
-    vec![
-        f_def, gfp_def, coind_thm, mono_thm, unfold_thm, fold_thm, ctor_thm,
-    ]
+    Ok(generate::generate(&shape))
 }

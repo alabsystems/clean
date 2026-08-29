@@ -414,8 +414,21 @@ impl Specification {
     /// Returns `SpecError` if any declaration fails to elaborate or
     /// kernel-check.
     pub(super) fn add_eval_ir_float_fin_witnesses(&mut self) -> Result<(), SpecError> {
-        for (_, src, note) in super::eval_ir_float_fin_witnesses::FIN_WITNESSES {
-            self.add_recursive_def(src, note)?;
+        // Per-witness wall time under CLEAN_SPEC_STAGE_TIMING. These 28 witnesses
+        // make the kernel DECIDE reflected binary64 arithmetic by reduction over
+        // 2^63-scale Nat literals, and measurement (task #57) shows this single
+        // stage costs more than the other 156 stages of `Specification::new()`
+        // combined — 584.8 s for all of those against hours here. Naming the
+        // expensive witness is the whole diagnosis, so it gets its own line.
+        let timing = std::env::var_os("CLEAN_SPEC_STAGE_TIMING").is_some();
+        for (name, src, note) in super::eval_ir_float_fin_witnesses::FIN_WITNESSES {
+            if timing {
+                let t0 = std::time::Instant::now();
+                self.add_recursive_def(src, note)?;
+                eprintln!("[fin-witness] {:>9} ms  {name}", t0.elapsed().as_millis());
+            } else {
+                self.add_recursive_def(src, note)?;
+            }
         }
         Ok(())
     }

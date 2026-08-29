@@ -323,10 +323,18 @@ fn count_parse_only_leaves(decl: &SurfaceDecl, counts: &mut ParseOnlyCounts) {
 
 /// Parse `content` with the same tactic-aware file parser the elaborating
 /// check path uses, and classify every leaf declaration WITHOUT elaborating.
-pub(crate) fn parse_only_counts(content: &str) -> ParseOnlyCounts {
+/// `seed` pre-populates the parser's notation registry with what the file's
+/// imports declare (see `clean_elab::notation_imports`); an EMPTY seed makes
+/// `parse_file_seeded` the same code path as
+/// `parse_file_with_tactics_diagnostics`, which is what the unseeded control
+/// arm of the rank-8 measurement uses.
+pub(crate) fn parse_only_counts(
+    content: &str,
+    seed: &clean_parser::NotationSeed,
+) -> ParseOnlyCounts {
     let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
     let mut counts = ParseOnlyCounts::default();
-    match clean_parser::parse_file_with_tactics_diagnostics(content, &patterns) {
+    match clean_parser::parse_file_seeded(content, &patterns, seed) {
         Ok(report) => {
             for decl in &report.decls {
                 count_parse_only_leaves(decl, &mut counts);
@@ -355,6 +363,14 @@ pub(crate) fn parse_only_counts(content: &str) -> ParseOnlyCounts {
 }
 
 /// JSON payload for `clean check --parse-only --json`.
+///
+/// `imported_notations` / `import_modules_read` are an ADDITIVE extension of
+/// `Clean-parse-only-report-v1`: every key the version already declared keeps
+/// its name, type and meaning, and the sole consumer
+/// (`scripts/parser_mathlib_sweep.sh`, which pins the version string and then
+/// reads keys) is unaffected. The version is therefore not bumped — a bump
+/// would make every existing artifact and that pinned reader disagree for a
+/// change that removes nothing.
 #[derive(Debug, Serialize)]
 struct ParseOnlyReport {
     schema_version: &'static str,
@@ -365,6 +381,11 @@ struct ParseOnlyReport {
     rawdecl_recovered: usize,
     hard_error: usize,
     recovery_diagnostics: usize,
+    /// Notation commands harvested from the file's transitive `.lean` import
+    /// closure and seeded into the parser before this file was read.
+    imported_notations: usize,
+    /// Modules of that closure resolved to project-local source and read.
+    import_modules_read: usize,
     first_errors: Vec<String>,
 }
 
@@ -380,7 +401,11 @@ struct ParseOnlyReport {
 pub(crate) fn parse_only_check(path: &Path, json: bool) -> anyhow::Result<()> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| anyhow::anyhow!("failed to read {}: {e}", path.display()))?;
-    let counts = parse_only_counts(&content);
+    // Seed the parser with the notation the file's imports declare, so a
+    // measurement of "what Clean's parser can read" is not silently a
+    // measurement of "what Clean hand-wrote into its builtin grammar".
+    let (seed, harvest) = clean_elab::notation_imports::seed_from_imports(path, &content);
+    let counts = parse_only_counts(&content, &seed);
     let failed = counts.rawdecl_recovered + counts.hard_error;
 
     if json {
@@ -393,6 +418,8 @@ pub(crate) fn parse_only_check(path: &Path, json: bool) -> anyhow::Result<()> {
             rawdecl_recovered: counts.rawdecl_recovered,
             hard_error: counts.hard_error,
             recovery_diagnostics: counts.recovery_diagnostics,
+            imported_notations: harvest.notations,
+            import_modules_read: harvest.modules_read,
             first_errors: counts.first_errors,
         };
         writeln!(
@@ -411,6 +438,13 @@ pub(crate) fn parse_only_check(path: &Path, json: bool) -> anyhow::Result<()> {
             counts.hard_error,
             counts.recovery_diagnostics
         );
+        if harvest.modules_read > 0 {
+            let _ = writeln!(
+                out,
+                "Seeded {} notation(s) from {} imported module(s)",
+                harvest.notations, harvest.modules_read
+            );
+        }
         for err in &counts.first_errors {
             let _ = writeln!(out, "  {err}");
         }
@@ -632,7 +666,23 @@ fn check_file_body(
     // event means the tactic block was replaced by a synthetic sorry (or the
     // declaration by a `RawDecl`), so the declaration was already failing —
     // this only attributes the failure.
-    let report = clean_parser::parse_file_with_tactics_diagnostics(&content, &patterns)?;
+    //
+    // NOTATION SEED (queue-B rank 8). Lean's notation is an environment
+    // extension; Clean's registry was file-local, so a file could not use a
+    // symbol declared in a module it imports unless Clean had hand-written it.
+    // `seed_from_imports` walks the file's transitive project-local `.lean`
+    // closure and registers what it declares before the file is read. See
+    // `clean_elab::notation_imports` for the boundary. A file with no
+    // resolvable imports gets an empty seed, and `parse_file_seeded` with an
+    // empty seed IS `parse_file_with_tactics_diagnostics`.
+    let (notation_seed, harvest) = clean_elab::notation_imports::seed_from_imports(path, &content);
+    if verbose && harvest.modules_read > 0 {
+        println!(
+            "Seeded {} notation(s) from {} imported module(s) ({} unresolved)",
+            harvest.notations, harvest.modules_read, harvest.modules_unresolved
+        );
+    }
+    let report = clean_parser::parse_file_seeded(&content, &patterns, &notation_seed)?;
     let decls = report.decls;
     for diag in &report.diagnostics {
         let named = match &diag.tactic {
@@ -2029,6 +2079,13 @@ pub(crate) fn resolve_project_dir(dir: Option<PathBuf>) -> anyhow::Result<PathBu
 #[cfg(test)]
 mod tests {
     use super::{parse_only_counts, typecheck_elab_result};
+
+    /// `parse_only_counts` with an EMPTY notation seed — the pre-rank-8 code
+    /// path, which `parse_file_seeded` reduces to exactly when nothing is
+    /// seeded.
+    fn unseeded_parse_only_counts(content: &str) -> super::ParseOnlyCounts {
+        parse_only_counts(content, &clean_parser::NotationSeed::new())
+    }
     use clean_elab::ElabResult;
     use clean_kernel::{Environment, Expr, Name};
 
@@ -2039,7 +2096,7 @@ mod tests {
     fn test_parse_only_counts_good_and_rawdecl_recovered() {
         // Same shape as the parser's own recovery fixture
         // (`test_file_error_recovery_skips_malformed_decls`).
-        let counts = parse_only_counts("def foo := 1\ndef ??? := !!!\ndef bar := 2\n");
+        let counts = unseeded_parse_only_counts("def foo := 1\ndef ??? := !!!\ndef bar := 2\n");
         assert_eq!(counts.hard_error, 0, "recovered file must not hard-error");
         assert!(
             counts.rawdecl_recovered >= 1,
@@ -2069,7 +2126,7 @@ mod tests {
     /// error with zero per-declaration counts.
     #[test]
     fn test_parse_only_counts_hard_error_aborts_file() {
-        let counts = parse_only_counts("def x : Sort (u + 9999) := x\n");
+        let counts = unseeded_parse_only_counts("def x : Sort (u + 9999) := x\n");
         assert_eq!(
             counts.hard_error, 1,
             "expected a hard error, got {counts:?}"
@@ -2093,7 +2150,8 @@ mod tests {
         // Same fixture as the parser's own in-namespace recovery test
         // (`test_namespace_body_error_recovery_keeps_following_decl_scoped`):
         // the RawDecl lands INSIDE the Namespace node, never at top level.
-        let counts = parse_only_counts("namespace Foo\n  def bad := \n  def good := 1\nend Foo\n");
+        let counts =
+            unseeded_parse_only_counts("namespace Foo\n  def bad := \n  def good := 1\nend Foo\n");
         assert_eq!(counts.hard_error, 0, "recovered file must not hard-error");
         assert!(
             counts.rawdecl_recovered >= 1,
@@ -2109,7 +2167,7 @@ mod tests {
     /// failures and no error signatures.
     #[test]
     fn test_parse_only_counts_all_valid_file() {
-        let counts = parse_only_counts("def a := 1\ndef b := 2\naxiom c : Type\n");
+        let counts = unseeded_parse_only_counts("def a := 1\ndef b := 2\naxiom c : Type\n");
         assert_eq!(counts.decls, 3, "expected 3 leaves, got {counts:?}");
         assert_eq!(counts.parse_ok, 3, "all decls must parse, got {counts:?}");
         assert_eq!(counts.rawdecl_recovered, 0, "no RawDecl expected");
@@ -2118,6 +2176,113 @@ mod tests {
             counts.first_errors.is_empty(),
             "no error signatures expected, got {:?}",
             counts.first_errors
+        );
+    }
+
+    /// Queue-B rank 8, the two-file repro stated in the brick.
+    ///
+    /// `Lib/Defs.lean` declares `notation "‖" e "‖" => norm e`; `Use.lean`
+    /// imports it and uses `‖a‖` while declaring no notation of its own.
+    /// Before the notation seed this failed under BOTH `--parse-only` and full
+    /// `clean check` with `unknown operator or character '‖'`, because Clean's
+    /// notation registry was file-local.
+    ///
+    /// The control is the same file with the `import` line removed: the seed
+    /// is then empty and the declaration must still be unparseable, which is
+    /// what proves the import — not some unrelated grammar change — is what
+    /// made it parse.
+    #[test]
+    fn test_parse_only_seeds_notation_from_an_imported_module() {
+        use std::fs;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        fs::create_dir_all(root.join("Lib")).expect("mkdir Lib");
+        fs::write(
+            root.join("Lib/Defs.lean"),
+            "notation \"‖\" e \"‖\" => norm e\n",
+        )
+        .expect("Lib/Defs.lean");
+
+        let user_body = "def size (a : Nat) : Nat := ‖a‖\n";
+        let with_import = root.join("Use.lean");
+        fs::write(&with_import, format!("import Lib.Defs\n{user_body}")).expect("Use.lean");
+        let without_import = root.join("Alone.lean");
+        fs::write(&without_import, user_body).expect("Alone.lean");
+
+        let control = {
+            let content = fs::read_to_string(&without_import).expect("read");
+            let (seed, stats) =
+                clean_elab::notation_imports::seed_from_imports(&without_import, &content);
+            assert_eq!(stats.modules_read, 0, "control imports nothing");
+            assert!(seed.is_empty());
+            parse_only_counts(&content, &seed)
+        };
+        assert_eq!(
+            control.rawdecl_recovered, 1,
+            "control: without the import the notation is unknown, got {control:?}"
+        );
+        assert_eq!(control.decls, 1, "control has one leaf, got {control:?}");
+
+        let content = fs::read_to_string(&with_import).expect("read");
+        let (seed, stats) = clean_elab::notation_imports::seed_from_imports(&with_import, &content);
+        assert_eq!(stats.modules_read, 1, "Lib.Defs must resolve and be read");
+        assert_eq!(stats.notations, 1, "one notation command harvested");
+        let seeded = parse_only_counts(&content, &seed);
+        assert_eq!(
+            seeded.rawdecl_recovered, 0,
+            "the imported notation must make the declaration parse, got {seeded:?}"
+        );
+        // TWO leaves, not one: `count_parse_only_leaves` counts the `import`
+        // command itself as a declaration, so the seeded file's denominator is
+        // the control's plus the import line. Pinned explicitly because a
+        // parse-rate reading that silently mixes the two denominators is the
+        // exact way this measurement could flatter itself.
+        assert_eq!(seeded.decls, 2, "import + def, got {seeded:?}");
+        assert_eq!(seeded.parse_ok, 2, "got {seeded:?}");
+    }
+
+    /// The end-to-end command, not just its counting helper: `parse_only_check`
+    /// must build the seed itself, so the capability has its production caller.
+    #[test]
+    fn test_parse_only_check_command_uses_the_import_seed() {
+        use std::fs;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        fs::create_dir_all(root.join("Lib")).expect("mkdir Lib");
+        fs::write(root.join("Lib/Ops.lean"), "infixr:25 \" ~~> \" => Prod\n")
+            .expect("Lib/Ops.lean");
+        let use_path = root.join("UseOps.lean");
+        fs::write(
+            &use_path,
+            "import Lib.Ops\ndef q (A B : Type) : Type := A ~~> B\n",
+        )
+        .expect("UseOps.lean");
+
+        super::parse_only_check(&use_path, false)
+            .expect("`clean check --parse-only` must parse a file using imported notation");
+    }
+
+    /// The same repro through the ELABORATING path, not the parse meter: a
+    /// two-file project where the notation and its expansion head both live in
+    /// the imported module. This is what makes the seed a capability rather
+    /// than a measurement artefact.
+    #[test]
+    fn check_file_elaborates_a_use_of_imported_notation() {
+        use std::fs;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        fs::write(root.join("lakefile.lean"), "package proj\n").expect("lakefile");
+        fs::write(
+            root.join("Defs.lean"),
+            "def normN (n : Nat) : Nat := n\nnotation \"‖\" e \"‖\" => normN e\n",
+        )
+        .expect("Defs.lean");
+        let use_path = root.join("UseDefs.lean");
+        fs::write(&use_path, "import Defs\ndef size (a : Nat) : Nat := ‖a‖\n")
+            .expect("UseDefs.lean");
+
+        check_file_with_json(&use_path, false, false, PreludeMode::Builtin, false).expect(
+            "`clean check` must elaborate a declaration that uses notation from an imported module",
         );
     }
 

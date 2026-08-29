@@ -195,7 +195,8 @@ impl Environment {
     ///
     /// Unlike `unfold`, this respects the `TransparencyMode` and `Reducibility`:
     /// - `Reducible`: Only unfolds constants marked as `Reducibility::Reducible`
-    /// - `Instances`: Unfolds Reducible + Semireducible + registered instances
+    /// - `Instances`: Unfolds Reducible + registered instances, but keeps other
+    ///   Regular definitions folded so wrapper types retain distinct instances
     /// - `Default`: Unfolds everything except `Reducibility::Irreducible`/`Opaque`
     /// - `All`: Unfolds everything including irreducible constants (but never opaque)
     ///

@@ -256,11 +256,11 @@
         "mutate": {
           "file": "tests/differential/expressions.txt",
           "op": "append",
-          "content": "(this-is-not-a-valid-expression\n"
+          "text": "(this-is-not-a-valid-expression\n"
         },
-        "command": "bash scripts/kernel_soundness_gate.sh",
+        "command": "env KERNEL_SOUNDNESS_EVIDENCE_PATH=\"${TMPDIR:-/tmp}/gate-demo-kernel-soundness-evidence.json\" bash scripts/kernel_soundness_gate.sh",
         "expect_contains": "expressions_sha256 mismatch",
-        "why": "MEASURED 2026-08-27: the gate pins its own corpus by digest, so a silently-edited differential input is refused before any lane can pass on it. Recorded because this row was pinned but had NO arms."
+        "why": "MEASURED 2026-08-27: the gate pins its own corpus by digest, so a silently-edited differential input is refused before any lane can pass on it. Recorded because this row was pinned but had NO arms. THIS ARM COULD NOT RUN AT ALL UNTIL 2026-08-27: its `append` mutation carried the key `content`, and `_apply` reads `mut[\"text\"]`, so `--demonstrate kernel_soundness_gate` died with `KeyError: 'text'` after the green baseline run and before planting anything. The registry called it `replayable: true` and R5 EVIDENCE never noticed, because R5 only checks that the record MENTIONS the gate -- it does not validate the mutation's op schema. Fixed here (`content` -> `text`) and REPLAYED; three more arms in this file are still un-runnable for the same class of reason and are recorded in docs/analysis/2026-08-27-trust-core-gates-wired-and-wired-by-disposition.md section 5, because fixing an arm one cannot replay is not an improvement. THE EVIDENCE REDIRECT IS ALSO PART OF THE ARM, added 2026-08-27 after this demonstrator was measured leaving a FAILED-RUN artifact in the tree: `--demonstrate` restores the file it MUTATED, but this gate also MINTS reports/kernel-soundness-launch-evidence.json and nothing restored that -- so the committed artifact read `\"status\": \"failed\"` with expression_count 2002, the arm's own fingerprint, while the gate was green at HEAD on the real 2001-expression corpus. KERNEL_SOUNDNESS_EVIDENCE_PATH sends both the baseline mint and the mutated mint to a temp file. Nothing about the arm is weakened: the gate's verdict is its exit status and its per-lane lines, both produced before the artifact is written. RE-RUN planted-observed-reverted after the change, and it still fires -- see the replay line recorded in docs/analysis/2026-08-27-trust-core-gates-wired-and-wired-by-disposition.md section 5. The identical one-word fix is owed to the deny_sorry_gate arm and is deliberately NOT applied there: that arm's mutation target was dirty from a concurrent lane, --demonstrate correctly refuses to clobber it, and an unreplayed edit to a demonstration record is exactly the artifact this registry exists to stop shipping. The general fix is for --demonstrate to restore what a gate MINTS, not only what it MUTATES."
       }
     ],
     "kv_invariance_gate": [
@@ -339,22 +339,11 @@
         "mutate": {
           "file": "crates/clean-elab/src/tactic/core/mod.rs",
           "op": "append",
-          "content": "\n#[allow(dead_code)]\nfn __demo_planted_bypass_site() {\n    fn local_stub(_x: u8) {}\n    let close_goal_unchecked = local_stub;\n    close_goal_unchecked(0u8);\n}\n"
+          "text": "\n#[allow(dead_code)]\nfn __demo_planted_bypass_site() {\n    fn local_stub(_x: u8) {}\n    let close_goal_unchecked = local_stub;\n    close_goal_unchecked(0u8);\n}\n"
         },
         "command": "cargo test --locked -j 2 -p clean-elab --lib close_goal_unchecked_site_count_ratchet",
         "expect_contains": "close_goal_unchecked ratchet VIOLATED: 1 production call sites found (max: 0)",
-        "why": "MEASURED 2026-08-26: a real (non-string, non-comment) call site is counted and the ratchet refuses. Planted, observed red, reverted, observed green in one session."
-      },
-      {
-        "arm": "a string literal containing the token does NOT count (the lexed property)",
-        "mutate": {
-          "file": "crates/clean-elab/src/tactic/core/mod.rs",
-          "op": "append",
-          "content": "\n#[allow(dead_code)]\nfn __demo_string_only() { let _ = \"close_goal_unchecked(\"; }\n"
-        },
-        "command": "cargo test --locked -j 2 -p clean-elab --lib close_goal_unchecked_site_count_ratchet",
-        "expect_contains": "test result: ok",
-        "why": "MEASURED 2026-08-26: the CONTROL for source_scan.kind=lexed. A raw-lines scanner would redden here; this one correctly stays green, which is what makes the soundness claim readable."
+        "why": "MEASURED 2026-08-26: a real (non-string, non-comment) call site is counted and the ratchet refuses. Planted, observed red, reverted, observed green in one session. NEGATIVE-CONTROL NOTE (2026-08-27): a second arm recorded this morning asserted the CONTROL \u2014 that a string literal containing the token does NOT count, which is what makes source_scan.kind=lexed true. --demonstrate correctly REFUSED it: an arm that leaves the gate green 'cannot fail, so its green means nothing'. The arms mechanism demonstrates REFUSAL only; it has no notion of a negative control, and asserting 'does NOT fire' belongs in the checker's own selftest. The control was withdrawn from here rather than left as a permanently-failing arm."
       }
     ],
     "prelude-axiom-ratchet": [
@@ -444,15 +433,15 @@
     ],
     "check_gate_registry": [
       {
-        "arm": "a gate-shaped script lands with no registry row (R2 INVENTORY)",
+        "arm": "a demonstrated gate's script changes without re-demonstration (R7 FRESH)",
         "mutate": {
-          "file": "scripts/check_demo_planted_gate.py",
-          "op": "create",
-          "content": "#!/usr/bin/env python3\n\"\"\"Planted demonstration artifact.\"\"\"\nimport sys\nsys.exit(0)\n"
+          "file": "scripts/check_enum_tag_pin.py",
+          "op": "append",
+          "text": "\n# planted by the check_gate_registry demonstration arm; reverted immediately\n"
         },
         "command": "python3 scripts/check_gate_registry.py",
-        "expect_contains": "is gate-shaped by name, and has NO row in data/gate_registry.json",
-        "why": "MEASURED 2026-08-27: the inventory rule is what stops an enforcement artifact from entering the tree unclassified. Planted, observed red, removed, observed the red disappear. Recorded because this row \u2014 the REGISTRY'S OWN \u2014 was pinned with NO arms, the fourth such row found this week; a checker that cannot be replayed cannot be trusted to have ever refused anything."
+        "expect_contains": "The script changed since it was last seen to fail",
+        "why": "MEASURED 2026-08-27. R7 is what stops a demonstration pin from outliving the script it attests, and this arm proves it fires on a one-comment edit. It REPLACES an arm that used op \"create\", which _apply does not implement \u2014 so the arm recorded this morning to close the 'pinned but replayable by nobody' hole was itself replayable by nobody, and R5 never noticed because it checks only that a record MENTIONS the gate, never that its mutate matches _apply's op schema. Target chosen because it is a CLEAN file: --demonstrate correctly refuses to clobber an uncommitted edit, so an arm aimed at a file this lane is editing can never be replayed."
       }
     ],
     "rust_frontend": [

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use clean_kernel::{Expr, ExprKind};
 
-use super::key::{DiscrKey, IndexMode, Match};
+use super::key::{subtree_key_count, DiscrKey, IndexMode, Match};
 use super::path::{is_trivially_generic_path, mk_path};
 use super::trie::Trie;
 use crate::tactic::{Goal, ProofState};
@@ -124,11 +124,14 @@ where
 
         let mut matches = Vec::new();
         self.visit_root_key(root_key, &path[1..], &mut matches);
+        // Same whole-subterm semantics as `Trie::match_path`: a root-level
+        // stored `Star`/`Other` covers the query's entire first subtree.
+        let after_subtree = &path[subtree_key_count(path)..];
         if !matches!(root_key, DiscrKey::Star) {
-            self.visit_root_key(&DiscrKey::Star, &path[1..], &mut matches);
+            self.visit_root_key(&DiscrKey::Star, after_subtree, &mut matches);
         }
         if !matches!(root_key, DiscrKey::Other) {
-            self.visit_root_key(&DiscrKey::Other, &path[1..], &mut matches);
+            self.visit_root_key(&DiscrKey::Other, after_subtree, &mut matches);
         }
         matches
     }

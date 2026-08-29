@@ -7822,63 +7822,68 @@ fn test_transparency_mode_instances_unfolds_registered_instances() {
     );
 }
 
-/// Test: TransparencyMode::Instances with Semireducible instance (#430 edge case)
+/// Test: TransparencyMode::Instances with a registered Regular definition.
 ///
-/// Semireducible instances should unfold via the normal path (should_unfold returns true),
-/// not requiring the special instance check. This tests that we don't break anything.
+/// A Regular definition stays folded at instance transparency unless it is an
+/// actual registered instance. This pins the registration-only exception used
+/// by `unfold_with_transparency` without reopening ordinary wrapper `def`s.
 #[test]
-fn test_transparency_mode_instances_semireducible_instance() {
+fn test_transparency_mode_instances_registered_regular_definition() {
     let mut env = Environment::new();
 
-    // Add a semireducible instance - this should unfold via normal path
+    // Add a Regular definition that is also a registered instance.
     {
         let mut info = ConstantInfo::new(
-            Name::from_string("instSemireducible"),
+            Name::from_string("instRegular"),
             vec![],
             Expr::prop(),
             Some(Expr::prop()),
             false,
         );
         info.reducibility = Reducibility::Regular(0);
-        env.constants
-            .insert(Name::from_string("instSemireducible"), info);
+        env.constants.insert(Name::from_string("instRegular"), info);
     }
 
     env.register_instance(KernelInstanceInfo {
-        name: Name::from_string("instSemireducible"),
+        name: Name::from_string("instRegular"),
         class_name: Name::from_string("Bar"),
         priority: 100,
         type_: None,
         value: None,
     });
 
-    let name = Name::from_string("instSemireducible");
+    let name = Name::from_string("instRegular");
 
-    // Semireducible unfolds in Default mode (via should_unfold)
+    // Regular unfolds in Default mode (via should_unfold).
     let default_result = env
         .unfold_with_transparency(&name, &[], TransparencyMode::Default)
-        .expect("semireducible instance should unfold in Default mode (via should_unfold)");
+        .expect("registered Regular definition should unfold in Default mode");
     assert_eq!(
         default_result,
         Expr::prop(),
-        "semireducible instance unfolded in Default must be Prop"
+        "registered Regular definition unfolded in Default must be Prop"
     );
 
-    // Semireducible unfolds in Instances mode (via should_unfold, not special case)
+    // A registered Regular instance unfolds through the explicit instance
+    // exception; `Reducibility::should_unfold(Instances)` itself is false.
     let inst_result = env
         .unfold_with_transparency(&name, &[], TransparencyMode::Instances)
-        .expect("semireducible instance should unfold in Instances mode");
+        .expect("registered Regular definition should unfold in Instances mode");
     assert_eq!(
         inst_result,
         Expr::prop(),
-        "semireducible instance unfolded in Instances must be Prop"
+        "registered Regular definition unfolded in Instances must be Prop"
+    );
+    assert!(
+        !Reducibility::Regular(0).should_unfold(TransparencyMode::Instances),
+        "ordinary Regular wrapper definitions must remain folded during instance search"
     );
 
-    // Semireducible does NOT unfold in Reducible mode (not reducible)
+    // Regular does NOT unfold in Reducible mode.
     assert!(
         env.unfold_with_transparency(&name, &[], TransparencyMode::Reducible)
             .is_none(),
-        "semireducible instance should NOT unfold in Reducible mode"
+        "registered Regular definition should NOT unfold in Reducible mode"
     );
 }
 
@@ -9897,6 +9902,14 @@ fn test_unfold_with_transparency_reducibility_boundaries() {
         env.unfold_with_transparency(&semi_name, &[], TransparencyMode::Reducible)
             .is_none(),
         "Semireducible must not unfold in Reducible mode"
+    );
+
+    // An ordinary Regular definition also stays folded in Instances mode.
+    // Only a name registered in the instance table gets the narrow exception.
+    assert!(
+        env.unfold_with_transparency(&semi_name, &[], TransparencyMode::Instances)
+            .is_none(),
+        "unregistered Regular definitions must not unfold in Instances mode"
     );
 
     // Semireducible: DOES unfold in Default mode

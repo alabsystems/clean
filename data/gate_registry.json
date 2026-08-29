@@ -6,7 +6,8 @@
     "path": "the artifact (empty for legs and suite rows)",
     "kind": "gate|leg|suite-row|battery|tool",
     "claims": "soundness|quality|hygiene|evidence|none -- a soundness row must be demonstrated or waived",
-    "wired_by": "re-derived, not trusted: the runners that invoke it",
+    "wired_by": "re-derived, not trusted: the runners that INVOKE it",
+    "read_by": "ADDED 2026-08-27 by the wiring audit. The runners that READ or NAME this artifact without invoking it: a script that PARSES it, a recipe string recorded for a human, an input-dependency list, a Rust `const` holding its path. Real information -- these files genuinely do depend on the artifact -- kept deliberately separate from `wired_by`, which means RUNS and nothing else. NOT re-derived by any rule yet, and an edge may only be moved here once R3's scan can stop reporting it as a runner: R3 still measures `wired_by` with the LOOSE scan (a bare path in a non-prose line), so removing an edge whose runner file is inside the scan closure makes R3 report it as an undeclared `extra`. Measured disposition of all 23 reference-only edges, and which 18 are blocked on that: docs/analysis/2026-08-27-gate-registry-wiring-audit.md and its 2026-08-27 disposition section.",
     "demonstrated": "the last time a mutation made it say no, pinned to the sha256 of the script it demonstrated",
     "waiver": "owner + expiry + reason, for a row that is not demonstrated yet",
     "source_scan": "how the implementation reads Rust/Lean SOURCE, re-derived by R9: lexed (comments and string literals blanked before matching) | raw-lines (matches prose too -- REFUSED for a soundness row) | digest (hash/parse, not a text match). Absent when the row reads no source."
@@ -239,6 +240,24 @@
       "note": "FOUND 2026-08-25 by lane LOOSE while closing the two gates ANTICORR reported. ANTICORR fixed `metas.assign(` and `.close_goal_unchecked(` in crates/clean-elab/src/tactic/tests/bypass_ratchet.rs and recorded the fix as complete; these two DUPLICATE ratchets in core.rs, over the same patterns and the same tree, were still grep-based, so the identical `// SOUNDNESS:` plant that ANTICORR's fixed battery accepted was still RED here. Its measurement was filtered to the bypass_ratchet module and could not see them. Both rewritten onto the shared lexer, and their two sanctioned exclusions (the close_goal_unchecked definition + delegation, and the one checked close_goal metas.assign delegation) now assert an EXACT match count, so a sanctioned site cannot quietly gain a neighbour."
     },
     {
+      "id": "clean-verify::test::fidelity_gate_lane",
+      "path": "crates/clean-verify/tests/fidelity_gate_lane.rs",
+      "kind": "battery",
+      "claims": "evidence",
+      "wired_by": [],
+      "demonstrated": {
+        "kind": "selftest-inline",
+        "flag": "verdict_is_falsifiable_not_hardcoded",
+        "ref": "cargo test --locked -p clean-verify --test fidelity_gate_lane",
+        "replayable": false,
+        "date": "2026-08-28",
+        "script_sha256": "9581ec7015b2072537719cb707c43d400cdfa9c718335644acc067a6a0634afe",
+        "note": "TWO-WAY, as standing arms in the same file. DIRECTION 1 (must stay GREEN): audit_fidelity_lane_is_green_and_non_vacuous and audit_whnf_fidelity_lane_is_green_and_non_vacuous run the real 63-term corpus and additionally assert non-vacuity -- terms_supported > 20, terms_excluded_unsupported == 0, all 6 fragment ctors covered, and the accounting identity terms_supported == terms_agreed + terms_known_divergent. DIRECTION 2 (must go RED): verdict_is_falsifiable_not_hardcoded takes the REAL passing metric, pushes one NewDivergenceReport, and requires passed() to flip to false and report() to name the key and print VERDICT: FAIL, then requires removing it to restore the pass. A gate that stops saying no is not fixed, it is deleted -- so both directions are arms, not prose. Two supporting arms: the_comparison_reads_real_kernel_output pins that the differential returns the REDUCT of a beta redex (a comparison that never reduced anything would satisfy 'both sides agreed'), and out_of_fragment_terms_are_counted_with_a_reason pins that Const/Lit are COUNTED in the exclusion histogram rather than silently skipped. replayable=false: the falsifiability is inline in this file, so there is nothing for data/gate_demonstrations.json to replay -- the same shape as clean-auto::expr_let_constructor_hygiene. REPLAYED AGAINST THE REAL TREE, 2026-08-28, not only inline: the micro-checker's Sort rule in crates/clean-verify/src/bootstrap_checker.rs:242 was mutated from `Sort n : Sort (n+1)` to `Sort (n+2)` and the lane went RED -- 4 passed, 3 FAILED (audit_fidelity_lane_is_green_and_non_vacuous, the_comparison_reads_real_kernel_output, verdict_is_falsifiable_not_hardcoded), report printing `VERDICT: FAIL` with 34 named NewDivergenceReports across 8 structural keys, in BOTH directions (`micro rejected but kernel(check) accepted` AND `micro accepted but kernel(check) rejected`). The mutation was reverted with `git checkout` and the lane re-measured GREEN (7 passed) at the pinned sha. That is a mutation the differential comparison itself had to catch, so it demonstrates the COMPARISON and not just the accounting."
+      },
+      "waiver": null,
+      "note": "WIRED 2026-08-28. WHAT THIS ROW IS: the scheduled, fail-closed caller that crates/clean-verify/src/fidelity_gate.rs did not have. docs/SELF_VERIFICATION_PROGRAM.md (Layer 2 item 1) and docs/SELF_VERIFICATION_CERTIFICATE.md both recorded 'nothing runs the gate -- scripts/local_gate.sh invokes clean-verify zero times and audit_fidelity() has no caller outside its own test'; re-measured 2026-08-28 and still true (both clean-verify mentions in local_gate.sh are comments; audit_fidelity appeared nowhere outside fidelity_gate.rs's own cfg(test) module and the lib.rs re-export). WHAT IT DOES NOT ESTABLISH, and this is the load-bearing half: the gate compares the real Rust kernel against BootstrapChecker, a SECOND HAND-WRITTEN RUST CHECKER with ZERO references to KExpr (grep -c KExpr crates/clean-verify/src/bootstrap_checker.rs -> 0, re-measured 2026-08-28). It therefore says NOTHING about the reflected model and does NOT bridge the model-to-checker gap. Layer 2 is NOT closed, not partly closed, and not advanced by this row. Scope: 63 closed terms, a 6-of-25-constructor fragment {Sort,BVar,Pi,Lam,App,Let}, NO environment -- the 63 is pinned mechanically by corpus_scope_is_pinned_at_sixty_three_closed_terms so the certificate's sentence cannot go stale silently. claims=evidence and not soundness for exactly that reason. WIRING: no runner names this path; scripts/verify_runner.py enumerates clean-verify's integration targets from cargo metadata and schedules this one as clean-verify::test::fidelity_gate_lane with its own input digest -- the same arrangement as clean-verify::test::premise_witness_gate, which is why wired_by is empty. NOT in local_gate.sh or the pre-push hook: it needs a clean-verify build, the cost class that put gate::masquerade in the suite rather than in a leg. Reads no Rust or Lean SOURCE (it calls the library and inspects a metric), so R9 does not apply."
+    },
+    {
       "id": "clean-verify::test::premise_witness_gate",
       "path": "crates/clean-verify/tests/premise_witness_gate.rs",
       "kind": "battery",
@@ -413,9 +432,13 @@
       "kind": "gate",
       "claims": "soundness",
       "wired_by": [
+        "scripts/local_gate.sh"
+      ],
+      "read_by": [
         "crates/clean-cli/src/cmd_axiom_audit_release_check.rs",
         "crates/clean-cli/src/cmd_replacement/consts.rs"
       ],
+      "read_by_note": "WIRED FOR REAL 2026-08-27, and BOTH entries it replaces were references. cmd_axiom_audit_release_check.rs:29 (`const SCRIPT_REL_PATH`) and consts.rs:82 (`const AXIOM_AUDIT_RELEASE_CHECK_PATH`) are data strings the CLI compares against; neither spawns this gate. So a `kind: gate, claims: soundness` row was run by nothing at all -- which is why its RED went unnoticed between measurements. It is now the LAST leg of scripts/local_gate.sh full mode, and the placement is the decision, not an accident: the gate is RED at HEAD, so it runs after every other leg has printed and its refusal masks nothing. RE-MEASURED 2026-08-27 at c0d0e44a8: exit 1, 158 s wall, lane 1 GREEN (total_domain_axioms=0, total_theorems=3242, constructive_theorems=265, total_all_axioms=0), lane 2 reporting `per-conjecture rows drift from verify_gamma_crown --json output` on the same FIFTEEN rows and with the same deltas the waiver recorded on 2026-08-25 (C001 theorems 312->329, definitions 361->337, opaques 6->4). Two things that number does NOT say: it is the cost to the FIRST failure, and a green run costs strictly more (lane 2's constructive-claim closure then builds and runs the `clean` binary, which the drift refusal never reached); and it includes a clean-kernel rebuild for `--features \"test-utils math-overlays\"`, which the leg pays again because it runs after kernel_lint_ratchet's `cargo clean -p clean-kernel`.",
       "demonstrated": null,
       "waiver": {
         "owner": "lane-gate-registry",
@@ -469,10 +492,13 @@
       "kind": "gate",
       "claims": "evidence",
       "wired_by": [
-        "crates/clean-cli/src/cmd_bench.rs",
         "scripts/release_readiness_smoke.sh",
         "scripts/run_public_benchmarks.sh"
       ],
+      "read_by": [
+        "crates/clean-cli/src/cmd_bench.rs"
+      ],
+      "read_by_note": "MOVED FROM wired_by 2026-08-27 by the wiring audit, which measured it as a REFERENCE and not an invocation: cmd_bench.rs:27 is `const CHECKER: &str = \"python3 scripts/check_benchmark_publication.py --check\";` -- a command string this file prints for a human, bound to no process spawn in this file. It moved rather than being dropped because the dependency is real: the CLI's bench path tells the operator to run this gate, so an edit to either has to consider the other. This edge was mechanically movable because its runner is a .rs file, which R3's scan reaches ONLY through the declaration itself; the eighteen reference edges whose runner is a .py file inside the scan closure could not move yet (see `read_by` in the columns block).",
       "demonstrated": null,
       "waiver": null,
       "note": "MEASURED 2026-08-24: RED at HEAD (exit 1, 9 errors); still RED 2026-08-25, now 10 (fresh_until=2026-08-24 expired). RE-MEASURED 2026-08-25 and the verdict is: DO NOT RE-PIN, and the pinning scheme is not the defect. The question asked was whether the Cargo.toml / Cargo.lock / clean-kernel-Cargo.toml digests drift on unrelated dependency bumps (in which case they are the wrong identity, per the canary-pin precedent) or whether the 2026-08-10-pristine numbers really were measured against a different program. Probed by rebuilding the bench BUILD CLOSURE (clean-kernel + clean-server, dev-dependencies included, since bench targets link them) from the lock at the publication source commit 7e962047e and at HEAD: 437 packages both sides, and 63 third-party packages MOVED -- ay 0.6.0 -> 0.15.0 across 38 crates, tla-core 0.3.0 -> 0.13.0, trust-cg-* 0.1.0 -> 0.3.0, trust-ir 0.2.0 -> 0.6.0, rustls 0.23.42 -> 0.23.41, simd-adler32 0.3.10 -> 0.3.9 -- plus clean-kernel's own manifest gaining a `smallvec` dev-dependency with the `serde` feature, which feature-unifies into its bench build. The [profile.release]/[profile.bench] tables and clean-server's manifest are byte-identical. So the drift is inside the benched program, re-pinning would certify 2026-08-10 numbers for a different binary, and the gate is doing its job. ONE cause WAS fixed: `.gitignore`'s bare `logs/` (a Pulse-runtime rule) also matched reports/benchmarks/publication/<run>/logs/, so the three REQUIRED stderr logs were recorded in current.json with sha256 and byte counts and NEVER COMMITTED -- unfixable by re-running the suite, and the reason those three errors would have survived any fresh run. .gitignore now un-excludes that directory, and the checker distinguishes 'nobody produced it' from 'git refuses to store it', naming the pattern and line. Falsified both ways 2026-08-25. REMAINS RED until a fresh pristine run is minted; this box is running five heavy lanes and kernel-panicked under that load on 2026-08-19, so a benchmark run here would be worthless as well as risky. COUNT AFTER THIS LANE: 12 errors, not 10, and the two new ones are honest and self-inflicted by design -- `scripts/check_benchmark_publication.py` is itself a CANONICAL INPUT, so editing the checker moves its own pinned digest. They clear the moment a fresh run re-pins, and they are the gate correctly refusing to certify old numbers against a new checker."
@@ -513,6 +539,27 @@
         "note": "1 arm: a chained kernel enum is renumbered in crates/clean-kernel/src/mode.rs -- the reorder every other gate is blind to"
       },
       "waiver": null
+    },
+    {
+      "id": "check_crystal_fixture_pins",
+      "path": "scripts/check_crystal_fixture_pins.py",
+      "kind": "gate",
+      "claims": "soundness",
+      "wired_by": [
+        "scripts/local_gate.sh",
+        "scripts/githooks/pre-push"
+      ],
+      "demonstrated": {
+        "kind": "selftest-inline",
+        "flag": "--selftest",
+        "ref": "python3 scripts/check_crystal_fixture_pins.py --selftest",
+        "replayable": false,
+        "date": "2026-08-27",
+        "script_sha256": "3db9cc107319041e5742e7d9cee75e10088ee5959bd82ed044ccf1414b06f0e7",
+        "note": "4 arms on a synthetic tree, run FIRST on every invocation: pins hold -> silent; a one-token edit to a fixture -> RED; a record row with no committed fixture -> RED; a committed fixture with no record row -> RED. DEMONSTRATED ON THE REAL TREE the same day, not only on the fixture: replacing the first `true` with `false` in crates/clean-verify/tests/fixtures/level_is_zero.trust-ir.txt -- the designated target's own pinned body -- gives exit 1 and names it verbatim, `DRIFTED from its pin: 0cd8e9866377152b != recorded eaff18d50c8b6ecb (1453 bytes vs recorded 1452)`; restoring the file returns exit 0 at 21 fixtures. The mutation is the exact shape the gate exists to catch, on the exact body the programme is designated on."
+      },
+      "waiver": null,
+      "note": "FOUND 2026-08-27 (lane REV, queue-B rank 10). scripts/crystal_fixture_rebaseline.py records `new_sha256` and `new_bytes` for every fixture it mints; measured that day, those fields were read by the minter and BY NOTHING ELSE in either tree -- no gate, no suite row, no script. So 21 *.trust-ir.txt files pinned the emitted IR that every link-2a lane compares its spec module against, a committed record stated what they held when a real compiler produced them, and the two were never compared: editing a fixture left every link-2a gate green, because every link-2a gate reads the fixture. This is the sibling of the hole crystal_fixture_freshness.py exists to close, one level down -- and unlike that one it needs no compiler and no dump, which is why it can be a leg where that cannot. It does NOT claim the fixtures still match what the compiler emits TODAY; that is the live-dump duty, still owed, and its blocker is recorded in data/crystal_revalidation_at_head_2026-08-27_laneREV.json. NO source_scan key: R9 measures that this gate does not read Rust/Lean SOURCE for a verdict, and it is right. Reads no Rust or Lean SOURCE for a verdict. Its inputs are binary: the bytes of every crates/clean-verify/tests/fixtures/*.trust-ir.txt, hashed whole, and the `fixtures` object of a committed JSON record. The ONE thing it reads out of a .rs file is the string literal in `const CURRENT_REBASELINE: &str = \"...\";`, matched by an anchored regex on the const declaration itself -- which record is current, never a count of anything -- and a declaration that stops matching is a hard refusal, not a zero."
     },
     {
       "id": "check_env_bypass_census",
@@ -595,8 +642,8 @@
         "flag": "--selftest",
         "ref": "scripts/check_gate_registry.py --selftest",
         "date": "2026-08-27",
-        "script_sha256": "5643dd43df2523e5f1e59f9e8d9c62deb7e0910d029c74be994b7ffb7afdb132",
-        "note": "37 arms, one or more per rule, on a synthetic repo; runs before the check on every invocation. Arms 17-21 are R8 RETIRED (2026-08-25). Arms 22-28 are R9 SCANNER (2026-08-25, lane ANTICORR): a source-reading gate with no `source_scan` declaration, a row that declares `lexed` over an implementation that does not lex, `raw-lines` REFUSED for a soundness row, `raw-lines` ALLOWED for a quality row, a declaration left behind by a scanner that is gone, a declaration with no note, and a kind outside the enum. Arms 29-31 are the R2 PACKAGE form (2026-08-25, lane MASQ): a gate-shaped Python PACKAGE with no row must be R2 INVENTORY, while a library package (no `__main__.py`) and a package whose name is not gate-shaped must both leave the tree GREEN. THE REAL-TREE ARM, measured the same day: restore the just-deleted `scripts/masquerade_gate/` with `git checkout HEAD -- scripts/masquerade_gate` and the full check goes `GATE_REGISTRY=fail problems=3` with `R2 INVENTORY: scripts/masquerade_gate is gate-shaped by name, and has NO row` plus `R8 RETIRED: masquerade_gate is recorded retired but scripts/masquerade_gate is STILL IN THE TREE`; `git rm -r` restores GREEN. Before this pattern the same tree was GATE_REGISTRY=ok with the package sitting there unregistered, which is how it hid for its whole life. Arms 32-33 are 2026-08-25 (lane LOOSE), extending R9 to the RUST rows: a battery that walks the tree with its OWN recursor (no rglob, no collect_rust_source_files, no shell grep) was INVISIBLE to READS_SOURCE and could have declared nothing -- crates/clean-auto/tests/expr_let_constructor_hygiene.rs is exactly that shape; and `script_code_only` now blanks Rust COMMENTS before the detectors run, so a stripper NAMED in a doc comment can no longer certify a row `lexed` (comments ONLY -- blanking string literals too deleted the very literal a walker identifies itself by, and made R9 report two freshly-fixed Rust scanners as 'no longer reads source'). `code_before_line_comment` was struck from STRIPS_NONCODE and deleted from the tree: it was a split-on-slash-slash one-liner, and accepting its name as evidence of `lexed` would have certified the exact defect R9 exists to find. Arms 34-37 are R10 PUSHED (2026-08-25, lane LEFTOVER), and they need a real repository because R10 reads a COMMIT rather than a directory: 34 leaves the WORKING TREE green and makes only the pushed commit stale, which is exactly the shape that let 7c0801a9e reach origin/main carrying an R7 RED for four commits; 35 is a pushed tip with no registry at all; 36 is the green control, without which a checker that always said R10 would score two of three. THE REAL-TREE ARM, measured the same day: with the working tree at c1e236739 and `CLEAN_PUSH_RANGES` naming 7c0801a9e, the check reports `R10 PUSHED: clean-elab::tactic::bypass_ratchet is pinned at sha256:b6d05778ea12 and ... in the commit you are pushing (7c0801a9e) is sha256:e08259428cc5`, while the same tree with no CLEAN_PUSH_RANGES says nothing about that row at all. Arm 37 and the CLEAN_PUSH_RANGES isolation around the working-tree arms both come from R10's FIRST pre-push hook run, which reddened four green controls: the arms that exercise the working-tree rules run on a synthetic directory that is not a git repository, they inherited the hook's exported CLEAN_PUSH_RANGES, and they were judged against a commit that had nothing to do with them -- and were told the registry was MISSING, which sends a reader hunting for a deleted file that was never deleted. The main arm loop now pops that variable and restores it before the R10 arms, and R10 distinguishes `is not a commit in the repository at <root>` from `commit has no data/gate_registry.json`. Verified in exactly the hook's condition: 37/37 both with and without an inherited CLEAN_PUSH_RANGES."
+        "script_sha256": "f283133bba7094792ad7ed2a76b1abf99717c36eca15329d2d7336098ca3a584",
+        "note": "37 arms, one or more per rule, on a synthetic repo; runs before the check on every invocation. Arms 17-21 are R8 RETIRED (2026-08-25). Arms 22-28 are R9 SCANNER (2026-08-25, lane ANTICORR): a source-reading gate with no `source_scan` declaration, a row that declares `lexed` over an implementation that does not lex, `raw-lines` REFUSED for a soundness row, `raw-lines` ALLOWED for a quality row, a declaration left behind by a scanner that is gone, a declaration with no note, and a kind outside the enum. Arms 29-31 are the R2 PACKAGE form (2026-08-25, lane MASQ): a gate-shaped Python PACKAGE with no row must be R2 INVENTORY, while a library package (no `__main__.py`) and a package whose name is not gate-shaped must both leave the tree GREEN. THE REAL-TREE ARM, measured the same day: restore the just-deleted `scripts/masquerade_gate/` with `git checkout HEAD -- scripts/masquerade_gate` and the full check goes `GATE_REGISTRY=fail problems=3` with `R2 INVENTORY: scripts/masquerade_gate is gate-shaped by name, and has NO row` plus `R8 RETIRED: masquerade_gate is recorded retired but scripts/masquerade_gate is STILL IN THE TREE`; `git rm -r` restores GREEN. Before this pattern the same tree was GATE_REGISTRY=ok with the package sitting there unregistered, which is how it hid for its whole life. Arms 32-33 are 2026-08-25 (lane LOOSE), extending R9 to the RUST rows: a battery that walks the tree with its OWN recursor (no rglob, no collect_rust_source_files, no shell grep) was INVISIBLE to READS_SOURCE and could have declared nothing -- crates/clean-auto/tests/expr_let_constructor_hygiene.rs is exactly that shape; and `script_code_only` now blanks Rust COMMENTS before the detectors run, so a stripper NAMED in a doc comment can no longer certify a row `lexed` (comments ONLY -- blanking string literals too deleted the very literal a walker identifies itself by, and made R9 report two freshly-fixed Rust scanners as 'no longer reads source'). `code_before_line_comment` was struck from STRIPS_NONCODE and deleted from the tree: it was a split-on-slash-slash one-liner, and accepting its name as evidence of `lexed` would have certified the exact defect R9 exists to find. Arms 34-37 are R10 PUSHED (2026-08-25, lane LEFTOVER), and they need a real repository because R10 reads a COMMIT rather than a directory: 34 leaves the WORKING TREE green and makes only the pushed commit stale, which is exactly the shape that let 7c0801a9e reach origin/main carrying an R7 RED for four commits; 35 is a pushed tip with no registry at all; 36 is the green control, without which a checker that always said R10 would score two of three. THE REAL-TREE ARM, measured the same day: with the working tree at c1e236739 and `CLEAN_PUSH_RANGES` naming 7c0801a9e, the check reports `R10 PUSHED: clean-elab::tactic::bypass_ratchet is pinned at sha256:b6d05778ea12 and ... in the commit you are pushing (7c0801a9e) is sha256:e08259428cc5`, while the same tree with no CLEAN_PUSH_RANGES says nothing about that row at all. Arm 37 and the CLEAN_PUSH_RANGES isolation around the working-tree arms both come from R10's FIRST pre-push hook run, which reddened four green controls: the arms that exercise the working-tree rules run on a synthetic directory that is not a git repository, they inherited the hook's exported CLEAN_PUSH_RANGES, and they were judged against a commit that had nothing to do with them -- and were told the registry was MISSING, which sends a reader hunting for a deleted file that was never deleted. The main arm loop now pops that variable and restores it before the R10 arms, and R10 distinguishes `is not a commit in the repository at <root>` from `commit has no data/gate_registry.json`. Verified in exactly the hook's condition: 37/37 both with and without an inherited CLEAN_PUSH_RANGES. Arms 38-43 are the mutation ENGINE (2026-08-28): `_apply` and `_restore` themselves, not a rule. Added because the registry's own recorded R2 arm used `op: \"create\"`, which `_apply` never implemented -- it raised an UNCAUGHT FileNotFoundError, which is not `Red`, so it would have taken the whole --demonstrate sweep down with a traceback rather than one [FAIL]; and `_restore` would have left the plant behind, leaving every later run R2 red. Nobody had seen either because a standing R7 red made every replay bail at the baseline check first."
       },
       "waiver": null,
       "note": "This file. It registers itself: R2 would refuse a tree where it had no row. The R2 scan gained a PACKAGE form on 2026-08-25: every one of the seven name patterns matches a BASENAME, so `scripts/masquerade_gate/` -- a five-module Python package carrying a soundness detector -- was invisible to the inventory it was supposed to be in. A directory under `scripts/` with a `__main__.py` and a gate-shaped NAME is now one artifact needing one row; `scripts/axiom_audit/` stays out because it has no `__main__.py` and is not independently runnable."
@@ -700,6 +747,7 @@
         "scripts/check_gate_registry.py",
         "scripts/local_gate.sh"
       ],
+      "wired_by_note": "ONE BLOCKED REFERENCE ENTRY (measured 2026-08-27): `scripts/check_gate_registry.py` does not run this gate. The whole edge is check_gate_registry.py:951, the ONE-LINE docstring of `selftest_suite_files` -- and it reaches R3 as code only because `_code_lines` skips a triple-quoted block while it is UNCLOSED, so a docstring that opens and closes on one line is never skipped. It cannot move to `read_by` yet without turning R3 red (that file is inside the scan closure), so it stays declared with this note; it moves in the change that flips the discriminator on. Evidence: docs/analysis/2026-08-27-gate-registry-wiring-audit.md section A. Justfile and local_gate.sh are real invocations and are unaffected.",
       "demonstrated": {
         "kind": "mutation-record",
         "ref": "scripts/check_script_selftests.sh",
@@ -811,12 +859,13 @@
         "scripts/local_gate.sh",
         "scripts/verify_runner.py"
       ],
+      "wired_by_note": "FOUR BLOCKED REFERENCE ENTRIES (measured 2026-08-27): crystal_chain_revalidation.py:392 and crystal_fixture_rebaseline.py:812 carry the path as the value of a \"recipe\"/\"how_to_re_derive\" key (a command recorded for a human), crystal_freshness_scope.py:171 binds it to `FIXTURE_SCRIPT = ...` and spawns nothing with it here, and verify_runner.py:810 has it as element 15 of an INPUT-DEPENDENCY list, not a command vector. None of the four runs this gate. `scripts/local_gate.sh` DOES, and is the only real edge on this row. The four cannot move to `read_by` yet: R3 still measures this column with the LOOSE scan and all four files are inside its closure, so dropping them makes R3 report undeclared `extra` edges (measured). Evidence and the full disposition: docs/analysis/2026-08-27-gate-registry-wiring-audit.md section A.",
       "demonstrated": {
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-08-24",
-        "script_sha256": "0b432544a841eebf589a5074b8303fe7facf31de7d2f1ab1d5c0be4b0b623fca",
+        "date": "2026-08-27",
+        "script_sha256": "5f8ae134f495c7b5cb1e06d4ed63be6e18029aa96e17ee6ae6fcfcd5867bc196",
         "requires_env": "TRUST_IR_BUILD_DUMP",
         "note": "Instance 2 CLOSED as a falsification: a planted stale fixture (an instruction the shipped body does not have) makes it print STRUCTURAL drift and exit 1, measured against a live trustc dump. The arm needs TRUST_IR_BUILD_DUMP because no dump is in the git tree; it fails closed when that is unset rather than reporting a skip as a pass (instance 3)."
       },
@@ -838,6 +887,7 @@
         "scripts/local_gate.sh",
         "scripts/verify_runner.py"
       ],
+      "wired_by_note": "ONE BLOCKED REFERENCE ENTRY (measured 2026-08-27): verify_runner.py:809 has this path as element 17 of the `clean-verify::test::crystal_a1_lineage` INPUT-DEPENDENCY list, which is what the runner digests to decide whether that row's green is still valid -- a genuine dependency, but not a command. Justfile, the hook and local_gate.sh are real invocations. It cannot move to `read_by` yet (verify_runner.py is a runner ROOT, so R3's loose scan always sees the edge and would report it as undeclared `extra`). Evidence: docs/analysis/2026-08-27-gate-registry-wiring-audit.md section A.",
       "demonstrated": {
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
@@ -854,9 +904,13 @@
       "kind": "gate",
       "claims": "soundness",
       "wired_by": [
-        "crates/clean-cli/src/cmd_replacement/consts.rs",
-        "scripts/check_add_decl_ratchet.py"
+        "scripts/check_add_decl_ratchet.py",
+        "scripts/local_gate.sh"
       ],
+      "read_by": [
+        "crates/clean-cli/src/cmd_replacement/consts.rs"
+      ],
+      "read_by_note": "WIRED FOR REAL 2026-08-27. Both entries this row carried were measured as REFERENCES, not invocations: consts.rs:64 is `pub(crate) const DENY_SORRY_GATE_PATH: &str = ...` (a data string, moved here) and check_add_decl_ratchet.py:308 names the gate inside a `print(...)` argument -- so this `claims: soundness` gate was run by nothing. It is now a full-mode leg of scripts/local_gate.sh. MEASURED at the wiring: PASSED, `GATE STATUS: PASSED`, 6/6 steps, 178 s wall including a forced ~55 s clean-kernel recompile. WHY check_add_decl_ratchet.py STAYS IN wired_by EVEN THOUGH IT IS A REFERENCE: R3 still re-derives this column with the LOOSE scan, that file is inside the scan closure (local_gate.sh invokes it), and dropping the entry makes R3 report an undeclared `extra` -- measured, not assumed. It moves to `read_by` in the same change that flips the discriminator on (step 3 of docs/issues/2026-08-27-gate-registry-wiring-scan-counts-data-strings.md). Same finding as its sibling gate above: the committed reports/deny-sorry-launch-evidence.json records `\"status\": \"failed\"` (5 of 6 steps) while the gate is green at HEAD, left behind by the demonstrator's own run.",
       "demonstrated": {
         "kind": "selftest-inline",
         "flag": "scanner.selftest()",
@@ -948,8 +1002,12 @@
       "kind": "gate",
       "claims": "soundness",
       "wired_by": [
+        "scripts/local_gate.sh"
+      ],
+      "read_by": [
         "crates/clean-cli/src/cmd_replacement/consts.rs"
       ],
+      "read_by_note": "WIRED FOR REAL 2026-08-27, and the entry it replaces was never an invocation. Until this change the only declared runner was consts.rs:53, `pub(crate) const KERNEL_SOUNDNESS_GATE_PATH: &str = \"scripts/kernel_soundness_gate.sh\";` -- a data string the launch-evidence validator compares against, bound to no process spawn. So a `kind: gate, claims: soundness` row that mints one of the three trust-core launch-evidence artifacts was run by NOTHING, and had been since it was written (docs/analysis/2026-08-27-gate-registry-wiring-audit.md sections A and C). It is now a full-mode leg of scripts/local_gate.sh. MEASURED at the wiring: PASS, `=== Kernel Soundness Gate: PASS ===`, 124 s wall including a forced ~55 s clean-kernel recompile, on a box running a second lane. THE WIRING IMMEDIATELY FOUND SOMETHING: the committed reports/kernel-soundness-launch-evidence.json records `\"status\": \"failed\"` (1 of 3 steps, lane 0 refusing a 2002-expression corpus) while the gate is green at HEAD on the real 2001-expression corpus -- it is the residue of the arm below, because `--demonstrate` restores the file it MUTATED and nothing restores the artifact the gate MINTS. The leg cannot fix that (refreshing a launch-evidence artifact is a deliberate act) and does not try; it redirects its own mint to a temp path so it never adds to the problem.",
       "demonstrated": {
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
@@ -1011,7 +1069,7 @@
       "demonstrated": null,
       "waiver": null,
       "note": "The gate itself. Its legs are the `leg` rows below.",
-      "wired_by_note": "REFERENCE, NOT AN INVOCATION (2026-08-27): recorded because the R3 scan cannot yet tell a path in a DATA string from a command. See docs/issues/2026-08-27-gate-registry-wiring-scan-counts-data-strings.md \u2014 it carries the measured evidence and the prototype discriminator, and also shows this column already contains readers-not-runners the loose scan never challenged. Do not read this entry as 'this script runs that gate'."
+      "wired_by_note": "FOUR BLOCKED REFERENCE ENTRIES (measured 2026-08-27, superseding the interim note of the same day): of the eight declared runners, four are readers, not runners. check_gate_registry.py:150 and check_hook_coverage.py:66 BIND the path to a name and PARSE the file (check_hook_coverage's own docstring says the hook does not run local_gate.sh); check_lint_coverage.py:68 has it as element 2 of `GATE_SITES`, a list of files it greps for `--workspace`/`--all-targets`; verdict_set.py:1220 emits `\"wired_by\": [\"scripts/local_gate.sh\"]` INSIDE an artifact it generates -- a value describing another gate's wiring. Justfile, scripts/githooks/pre-push, scripts/install-git-hooks.sh and scripts/kernel_lint_ratchet.sh are the four real invocations. The four readers cannot move to `read_by` yet: R3 still measures this column with the LOOSE scan and every one of them is inside its closure, so dropping them makes R3 report undeclared `extra` edges (measured). Evidence: docs/analysis/2026-08-27-gate-registry-wiring-audit.md section A."
     },
     {
       "id": "paragon_ratchet",
@@ -1077,7 +1135,7 @@
       },
       "waiver": null,
       "note": "Instance 3's repair CONFIRMED 2026-08-24 by running it: the script still exits 0 on `SRCELAB_GATE=skipped:no-binary` -- correct for the pre-push hook, which must not refuse a pusher over an unbuilt release binary -- and verify_runner.py's _SKIPPED_VERDICT_RE turns exactly that verdict into UNKNOWN rather than GREEN. The skip-as-pass hole is closed at the row, not at the script, and that is the right place.",
-      "wired_by_note": "REFERENCE, NOT AN INVOCATION (2026-08-27): recorded because the R3 scan cannot yet tell a path in a DATA string from a command. See docs/issues/2026-08-27-gate-registry-wiring-scan-counts-data-strings.md \u2014 it carries the measured evidence and the prototype discriminator, and also shows this column already contains readers-not-runners the loose scan never challenged. Do not read this entry as 'this script runs that gate'."
+      "wired_by_note": "ONE BLOCKED REFERENCE ENTRY (measured 2026-08-27, superseding the interim note of the same day): `scripts/parity_tiers.py` does not run this gate. The edge is parity_tiers.py:697, `mint_command=\"scripts/source_elab_gate.sh --jobs 2 --update\"` -- a command RECORDED for a human inside a returned row, bound to no spawn. The hook, local_gate.sh and verify_runner.py are real invocations. It cannot move to `read_by` yet: R3 still measures this column with the LOOSE scan and parity_tiers.py is inside its closure, so dropping the entry makes R3 report it as an undeclared `extra` (measured). Evidence: docs/analysis/2026-08-27-gate-registry-wiring-audit.md section A."
     },
     {
       "id": "spine_scoreboard",
@@ -1086,11 +1144,13 @@
       "claims": "evidence",
       "wired_by": [
         "scripts/githooks/pre-push",
-        "scripts/local_gate.sh"
+        "scripts/local_gate.sh",
+        "scripts/spine_assumption_ledger.py"
       ],
       "demonstrated": null,
       "waiver": null,
-      "note": "G-SCORE direction ratchet; --ratchet is read-only by its own self-tested contract."
+      "note": "G-SCORE direction ratchet; --ratchet is read-only by its own self-tested contract.",
+      "wired_by_note": "REFERENCE, NOT AN INVOCATION (2026-08-27): scripts/spine_assumption_ledger.py names this script in its module docstring (:11) and in an emitted consumers list (:895) \u2014 it never executes it; the dependency runs the other way (the scoreboard READS the ledger artifact). Recorded because the R3 scan counts data strings as calls; see docs/issues/2026-08-27-gate-registry-wiring-scan-counts-data-strings.md."
     },
     {
       "id": "tcb_target_ratchet",
@@ -1156,6 +1216,7 @@
         "scripts/trust_ir_axes.py",
         "scripts/verify_runner.py"
       ],
+      "wired_by_note": "FOUR BLOCKED REFERENCE ENTRIES (measured 2026-08-27): crystal_chain_revalidation.py:391 and crystal_fixture_rebaseline.py:799 carry `scripts/trust_ir_build.sh --print-only` as the value of a \"recipe\" key, trust_ir_axes.py:1121 names it inside `doc[\"note\"]` prose it EMITS, and verify_runner.py:810 has it as element 18 of an input-dependency list. None of the four runs this gate; `scripts/local_gate.sh` does (opt-in, CLEAN_TRUST_IR_BUILD=1) and is the only real edge here. The four cannot move to `read_by` yet -- R3 still measures this column with the LOOSE scan and all four are inside its closure -- so they stay declared with this note and move when the discriminator flips on. Evidence: docs/analysis/2026-08-27-gate-registry-wiring-audit.md section A.",
       "demonstrated": null,
       "waiver": null
     },
@@ -1279,6 +1340,27 @@
       },
       "waiver": null,
       "implemented_by": "scripts/check_enum_tag_pin.py"
+    },
+    {
+      "id": "crystal-fixture-pins",
+      "path": "",
+      "kind": "leg",
+      "claims": "soundness",
+      "wired_by": [
+        "scripts/local_gate.sh",
+        "scripts/githooks/pre-push"
+      ],
+      "demonstrated": {
+        "kind": "selftest-inline",
+        "flag": "--selftest",
+        "ref": "python3 scripts/check_crystal_fixture_pins.py --selftest",
+        "replayable": false,
+        "date": "2026-08-27",
+        "note": "inherited from registry row check_crystal_fixture_pins",
+        "inherited_from": "check_crystal_fixture_pins"
+      },
+      "waiver": null,
+      "implemented_by": "scripts/check_crystal_fixture_pins.py"
     },
     {
       "id": "crystal-revalidation-scope",
@@ -1826,9 +1908,9 @@
         "kind": "selftest-inline",
         "ref": "scripts/crystal_a0_census.py --selftest",
         "replayable": false,
-        "date": "2026-08-27",
-        "script_sha256": "7779703e0125e068a37cffb61d6255a843b73f54d178d7f4b2fa791c577c99c0",
-        "note": "11 arms on every invocation and via --selftest: five verify_prefix refusals (partition, spliced-total, name-mismatch, callee-oor, vacuous-edges), the fail-closed indirect arm, and five discharge-core arms (covered=True, missing-entry=False, indirect=False, wider-than-reality REFUSES, clause-(a)-without-named-residual REFUSES). The happy path is asserted to still pass. Runs before ANY census output can be produced."
+        "date": "2026-08-28",
+        "script_sha256": "eb1ccf2184232024505a1ee8458fe0d73ab582d2b5f6de6bbf429825a19df870",
+        "note": "14 arms on every invocation and via --selftest: five verify_prefix refusals (partition, spliced-total, name-mismatch, callee-oor, vacuous-edges), the fail-closed indirect arm, five discharge-core clause-(a) arms, and \u2014 audit r1 M1 repair \u2014 three clause-(b) arms (bare clause-b REFUSES; a theorem the target's clause_b_theorems does not list REFUSES; a listed theorem whose named source file does not register it REFUSES), plus a live check that the COMMITTED table's clause-b theorems are registered at their named sources. The happy path is asserted to still pass. Runs before ANY census output can be produced."
       },
       "waiver": null,
       "note": "THE A0 CRITERION COMPUTER, reclassified tool->gate 2026-08-27 in the same commit that adopted the owner's R2 ruling (workflow wf_1c3df27b) -- exactly as this row's previous note demanded. It computes BOTH cells: the historical syntactic bodyful_reachable_closure (scoring unchanged, 189 six-of-six reproduced byte-stable through two widenings) and the semantic bodyful_or_discharged_closure (owner ruling: the syntactic criterion demanded a Rust body for a chain terminating at _Unwind_RaiseException, a C symbol -- a floor; the semantic cell discharges escaping callees against data/crystal_a0_discharge.json, clause (a) reached-and-modelled with a NAMED residual or clause (b) unreachable-and-proved by kernel-checked theorem, fail-closed BOTH directions: missing entry = False, wider-than-reality table = REFUSAL). Wired: local_gate.sh full mode replays the 11 refusal arms and validates the committed table on every full run. verify_prefix's five refusals plus the indirect and discharge arms are demonstrated on EVERY invocation (selftest-inline). The heavy census run itself still needs external trust dump artifacts and is invoked by lanes; its committed records are data/crystal_a0_census_2026-08-22.json (syntactic era) and data/crystal_a0_census_2026-08-27.json (first semantic record: a0_complete_semantic=190 = 189 + level::Level::is_zero, verified by name with zero other bodies discharged)."
@@ -1933,7 +2015,7 @@
       "demonstrated": null,
       "waiver": null,
       "tool_reason": "Ring R2's claim command (designs/2026-08-22-one-trust-backward-design.md \u00a75), landed 2026-08-25 in its UNEARNED state: it reads data/verdict_set.json and REFUSES with earned=0/3, naming what each partition still owes (chains against an absent data/spine_set.json; a module-granularity closure where the design wants per-body; the IO-contract and script-TCB obligations). Classified tool, not gate, per R3 \u2014 a gate nothing runs is not a gate, and wiring a deliberately-red command into local_gate.sh would only teach --no-verify. It becomes kind=gate with a real wired_by the day R2's obligations are earned and it can go green on merit; until then it enforces nothing and its refusal ledger is evidence, not enforcement.",
-      "wired_by_note": "REFERENCE, NOT AN INVOCATION (2026-08-27): recorded because the R3 scan cannot yet tell a path in a DATA string from a command. See docs/issues/2026-08-27-gate-registry-wiring-scan-counts-data-strings.md \u2014 it carries the measured evidence and the prototype discriminator, and also shows this column already contains readers-not-runners the loose scan never challenged. Do not read this entry as 'this script runs that gate'."
+      "wired_by_note": "BOTH DECLARED ENTRIES ARE BLOCKED REFERENCES (measured 2026-08-27, superseding the interim note of the same day), so this row's REAL runner set is EMPTY -- nothing invokes scripts/verdict_gate.sh. verdict_io_contracts.py:1050 names it inside the prose value of a \"ledger\" dict entry it EMITS; verdict_set.py:137 has it as element 1 of `RING_R2_GATES`, a tuple of paths, bound to no spawn in that file. That is consistent with, not a contradiction of, the row's `tool_reason`: R2's claim command is deliberately unwired while it is red on merit, and R3 exempts `kind: tool` from the wiring requirement for exactly this case. The two entries cannot move to `read_by` yet -- both files are inside R3's loose-scan closure -- so they stay declared with this note and move when the discriminator flips on. Evidence: docs/analysis/2026-08-27-gate-registry-wiring-audit.md sections A and C."
     },
     {
       "id": "a0a6_probe_transcription",
@@ -1949,7 +2031,7 @@
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
         "date": "2026-08-27",
-        "script_sha256": "b2b4760405ec64dfd8ab26aaa5ad59f20ce28cdf0355bc446a497b0c1421eab2",
+        "script_sha256": "ac2aae8fb5741305a9baa7bac1f7345f86232b2874c1749893b4ef8707929108",
         "note": "2 arms, both on SOURCE records rather than on the probe: flipping lane RMX's A0.bodyful_reachable_closure to true (the 5-of-6 -> 6-of-6 edit somebody would make if they believed the prose) and zeroing its event lineage. Either makes the probe disagree with the record it cites and the gate names the JSON path. The script also runs a 6-arm --selftest FIRST on every invocation, so its own falsifiability is not checked only when somebody remembers -- and REPLAYING these two arms is what found the selftest's own instance-4 bug: its mutations were absolute (`set true`), so against a tree where the demonstrator had already made the same edit the arm was a silent no-op and reported GREEN. The selftest arms are now RELATIVE and a no-op raises rather than passes."
       },
       "waiver": null,
@@ -1995,11 +2077,11 @@
         "ref": "python3 scripts/check_doc_claims.py --selftest",
         "replayable": false,
         "date": "2026-08-27",
-        "script_sha256": "b960019141f664cafb437a41af5886fd3f08bdbcaed868dec748f21f847190e3",
-        "note": "19 arms on a synthetic doc tree, run FIRST on every invocation. Six are two-way: the artifact moves and the prose does not (RED) and the same move with the prose following it (GREEN); a path that is not in the tree (RED) and the same path declared `absent` (GREEN); an unbound N/M-plus-artifact paragraph (RED) and the same paragraph with `pointer-only` (GREEN). Three are false-positive controls that must stay green -- basename shorthand (`nothing.rs`), a first segment that is not a directory of this repo (`Mathlib/Logic/Basic.lean`), and an `elsewhere` citation whose sibling repo is absent from the box. Four refuse a marker that would otherwise do nothing: malformed, unknown kind, `absent` with no reason, `pointer-only` with no reason -- a marker that silently no-ops is instance 4 in doc form. DEMONSTRATED ON THE REAL TREE the same day, both directions, mutate-and-restore: (A) rewriting CLAUDE.md's `**63/63 on the same 63-snippet denominator**` back to the historically-false `51/63` gives exit 1 and \"D2 FIGURE: CLAUDE.md:153 re-derives `passed/total` = 63/63 from reports/everyday-battery.json, and that value does NOT appear in the 3 lines above the marker\"; (B) editing reports/everyday-battery.json's `passed` to 51 while the prose keeps 63/63 gives the same refusal reading `= 51/63`. Arm B is the one a paragraph-wide span would have PASSED, because that paragraph states its own superseded 38/63 and 51/63 three lines below the marker -- which is why the span is the three lines ABOVE it."
+        "script_sha256": "f23ab11bc4a8b6774e266ba376dc8392c6e3bdb0aa484b8f4b82a2086301710b",
+        "note": "31 arms on a synthetic doc tree, run FIRST on every invocation (0.32 s). Nine are two-way -- an arm that only ever goes red measures nothing about its subject: the artifact moves and the prose does not (RED) / the same move with the prose following it (GREEN); a path that is not in the tree (RED) / the same path declared `absent` (GREEN); an unbound N/M-plus-artifact paragraph (RED) / the same paragraph with `pointer-only` (GREEN); a crate-relative citation with no `base` (RED) / with one (GREEN). Four are false-positive controls that must stay GREEN: basename shorthand (`nothing.rs`); a first segment that is not a directory of this repo (`Mathlib/Logic/Basic.lean`); an `elsewhere` whose sibling repo is absent from the box; and -- added 2026-08-27 -- an `elsewhere` whose path is absent from the sibling's WORKING TREE and present in its HISTORY, which is the shape that made this gate call six correct citations dead. Seven refuse a declaration that would otherwise do nothing: malformed marker, unknown kind, `absent` with no reason, `pointer-only` with no reason, `base` with no reason, a `base` that rescues no citation at all, and an `elsewhere` whose path resolves in THIS repo. The last two are the from-the-other-side rules: a marker that silently no-ops is instance 4 in doc form, and a marker that outlives its reason is worse, because it keeps a citation exempt on the day the thing it points at disappears. One more refuses `absent`/`elsewhere`/`base` in a doc that D1 does not govern, where they read as exemptions and grant nothing. DEMONSTRATED ON THE REAL TREE, mutate-and-restore, snapshot taken at the instant of mutation and byte-compared on restore. (A) rewriting CLAUDE.md's `**63/63 ...**` back to the historically-false `51/63` gives exit 1 and \"D2 FIGURE: CLAUDE.md:153 re-derives `passed/total` = 63/63 from reports/everyday-battery.json, and that value does NOT appear in the 3 lines above the marker\"; (B) editing reports/everyday-battery.json's `passed` to 51 while the prose keeps 63/63 gives the same refusal reading `= 51/63` -- the arm a paragraph-wide span would have PASSED, because that paragraph states its own superseded 38/63 and 51/63 three lines below the marker. 2026-08-27 on docs/CRYSTAL_STATUS.md, eight further real-tree arms, all RED: removing its `base` marker turns 49 crate-relative citations red; a base pointed at a non-directory; a base moved to a directory that rescues nothing (dead declaration); `tests/crystal_a2_mint_lz.rs` -> `..._zz.rs`, proving a base cannot rescue a path that is in neither place; an `elsewhere` path absent from ../trust; an `elsewhere` naming an unknown sibling; an `elsewhere` whose path resolves locally; a typo in a `scripts/` citation. Plus two GREEN measurements that are the point of the cross-repo rework: all six formerly-'dead' citations classify `verified` via origin/HEAD while absent from ../trust's checkout; and with the sibling pointed at a directory that does not exist, all 20 cross-repo citations report UNVERIFIED, are NAMED on stderr, and the run still exits 0 -- an unchecked citation is never a refusal and is never folded into the pass line."
       },
       "waiver": null,
-      "note": "FOUND 2026-08-26. Four CLAUDE.md claims were proved false by measurement in one day -- the everyday battery quoted as 51/63 when reports/everyday-battery.json, cited in the same sentence, had read 63/63 since 2026-08-24; \"~75% of elaboration time is ElabCtx::build_local_ctx\" fixed 2026-08-22 at 10.5x; the `forall_true_iff` Sort*/U2 diagnosis both fixed AND wrong; \"simp has NO conditional-lemma discharger\" stale since 2026-08-02 -- and two of them caused bricks to be opened against work already done. Lake's prose was wrong in the OTHER direction (\"the native backend builds nothing\"), which is the same defect. WHAT IT DOES NOT CLAIM: of those four only the battery is reachable by a deterministic re-derivation, because the prose named the artifact carrying the number. The other three are qualitative assertions about program behaviour and no string-matching gate can evaluate them; D3 is the structural answer -- a NEW quantitative claim beside an artifact must bind one -- not a semantic one. SCOPE IS MEASURED: a first draft over every backticked path in seven docs returned 246 misses, nearly all correct prose (basename shorthand; 76 in CRYSTAL_STATUS.md that resolve in the sibling Trust repo; GATE_REGISTRY.md NAMING retired files that R8 REQUIRES to be gone -- a blanket existence rule would contradict a rule this repo already enforces). D1 is therefore on for the four navigation docs only, where it is 100% true positives, and the other three docs are `figure`-only with the reason recorded rather than silently exempt. IT FOUND LIVE ROT ON THE DAY IT WAS WRITTEN: docs/AUDIT_LEAN4_REPLACEMENT_2026-07-23.md -- the file CLAUDE.md calls \"the commit-pinned source interpretation\" and AGENTS.md \"the dated, commit-pinned capability audit\" -- is cited five times across CLAUDE.md, AGENTS.md, README.md and VISION.md and has never existed; the doc is _2026-07-22.md. And reports/metadata-v12-sysroot.md, cited three times as the v12-sysroot recipe, is in NEITHER this repo nor ../trust. Reads Markdown and JSON only, so it declares no `source_scan` (R9): a declaration left behind by a scanner that is not there is itself an R9 refusal."
+      "note": "FOUND 2026-08-26. Four CLAUDE.md claims were proved false by measurement in one day -- the everyday battery quoted as 51/63 when reports/everyday-battery.json, cited in the same sentence, had read 63/63 since 2026-08-24; \"~75% of elaboration time is ElabCtx::build_local_ctx\" fixed 2026-08-22 at 10.5x; the `forall_true_iff` Sort*/U2 diagnosis both fixed AND wrong; \"simp has NO conditional-lemma discharger\" stale since 2026-08-02 -- and two of them caused bricks to be opened against work already done. Lake's prose was wrong in the OTHER direction (\"the native backend builds nothing\"), which is the same defect. WHAT IT DOES NOT CLAIM: of those four only the battery is reachable by a deterministic re-derivation, because the prose named the artifact carrying the number. The other three are qualitative assertions about program behaviour and no string-matching gate can evaluate them; D3 is the structural answer -- a NEW quantitative claim beside an artifact must bind one -- not a semantic one. SCOPE IS MEASURED: a first draft over every backticked path in seven docs returned 246 misses, nearly all correct prose (basename shorthand; GATE_REGISTRY.md NAMING retired files that R8 REQUIRES to be gone -- a blanket existence rule would contradict a rule this repo already enforces). EXTENDED 2026-08-27 to docs/CRYSTAL_STATUS.md, the live status page the repo's own rule says outranks the design docs and CLAUDE.md -- the last doc that should be exempt from having its citations re-derived. Surface 173 -> 445 rooted paths, gate 0.10 s -> 0.35 s. The estimate recorded here and in docs/GATE_REGISTRY.md -- '76 in CRYSTAL_STATUS.md that resolve in the sibling Trust repo' -- was itself a doc claim, and it was wrong in the way that matters: it named the wrong REPO for most of them, so the debt looked cross-repo and unresolvable when it is almost entirely local and checkable. Measured split of the 64 citations that miss the root: 44 (49 places) resolve under crates/clean-verify/ -- the page is ABOUT that crate and writes its tests and fixtures crate-relative -- and 20 (24 places) are genuinely cross-repo. The 44 are what the new `base` kind is for. Rewriting 49 citations would have satisfied the gate and left the convention in place, so the next lane writing about a clean-verify test would be refused for spelling it the way the whole document already spells it; `base` legalises the convention without weakening the rule, since the root is tried first, the base second, and a path in neither is still a refusal. IT FOUND LIVE ROT ON THE DAY IT WAS WRITTEN: docs/AUDIT_LEAN4_REPLACEMENT_2026-07-23.md -- the file CLAUDE.md calls \"the commit-pinned source interpretation\" and AGENTS.md \"the dated, commit-pinned capability audit\" -- is cited five times across CLAUDE.md, AGENTS.md, README.md and VISION.md and has never existed; the doc is _2026-07-22.md. AND ITS OWN CROSS-REPO RULE WAS UNSOUND, WHICH THE EXTENSION FOUND BY BEING WRONG. `elsewhere` resolved against the sibling's WORKING TREE. ../trust on this box is a shallow blob:none partial clone parked at ef5a5910ea (2026-08-14) while its own origin/main is 605e61cb22 (2026-08-27), so six live, correct CRYSTAL_STATUS.md citations read as existing in neither repo -- and `git log --all --diff-filter=A` corroborated it, because a shallow clone has no such commit to find. One batched `git ls-tree origin/main` finds all six, in 9 ms. The false-REFUSAL direction is the dangerous one for a gate whose exemptions are prose: the fix a red build invites is an `absent` marker, so six correct citations would have been permanently exempted and six false sentences written into the repo's live status page. The sentence this one replaces -- recorded here 2026-08-26, that the v12-sysroot recipe is in neither repo -- was the same error, and a third lane retracted it in 9513f5136 within the hour. Three lanes, one checkout, one wrong answer, reached independently: a mechanism defect, not three careless readings. That lane fixed the sentences; this one fixes the instrument. _sibling_tracked now resolves cross-repo citations against the sibling's HISTORY (origin/HEAD, origin/main, origin/master, main, HEAD -- first that resolves), one non-recursive batched ls-tree per sibling, no network. A sibling that cannot be ASKED -- absent from the box, or present and not a repository -- is UNVERIFIED: counted, named on stderr with the reason, never a refusal and never folded into the pass line. Reads Markdown and JSON only, so it declares no `source_scan` (R9): a declaration left behind by a scanner that is not there is itself an R9 refusal."
     },
     {
       "id": "cargo_test_nonvacuous",
@@ -2071,12 +2153,12 @@
         "flag": "--selftest",
         "ref": "python3 scripts/check_doc_claims.py --selftest",
         "replayable": false,
-        "date": "2026-08-26",
-        "note": "Inherits the gate's 19 arms; the leg runs --selftest before the check, so a gutted demonstrator refuses the push rather than passing it.",
+        "date": "2026-08-27",
+        "note": "Inherits the gate's 31 arms; the leg runs --selftest before the check, so a gutted demonstrator refuses the push rather than passing it.",
         "inherited_from": "check_doc_claims"
       },
       "waiver": null,
-      "note": "Fast-path leg AND in-hook, 0.06 s measured 2026-08-26. Classified in scripts/githooks/gate-legs.txt as IN_HOOK/both."
+      "note": "Fast-path leg AND in-hook, 0.35 s measured 2026-08-27 (0.06 s before docs/CRYSTAL_STATUS.md joined D1; the delta is 272 more rooted paths plus one batched `git ls-tree` in ../trust). Classified in scripts/githooks/gate-legs.txt as IN_HOOK/both."
     },
     {
       "id": "lowering_adequacy",
@@ -2190,6 +2272,25 @@
       "waiver": null,
       "implemented_by": "crates/clean-elab/src/lean4_corpus_tests.rs",
       "note": "WIRED 2026-08-27; the third of the three batteries that caught essentially every elaborator defect of the 2026-08 frontier work and were wired to no gate at all. 63 everyday-language snippets on ONE denominator -- 38 byte-identical to the 2026-07-20 R100 measurement (LOCKED: they may not regress, and the assert names the snippet that did) and 25 reconstructed -- checked against the committed reports/everyday-battery.json verdict-for-verdict. THE LEG CLOSES TWO FAIL-OPEN PATHS THAT LIVE IN THE TEST, and neither is hypothetical: with CLEAN_EVERYDAY_UPDATE set the test REWRITES the artifact and returns, so an operator with that variable exported would silently convert this leg into an artifact generator that can never disagree with anything (the leg strips it with `env -u`); with the artifact ABSENT the test prints a NOTE and returns green, measuring nothing (the leg refuses, naming the regeneration command). Neither fix belongs in the test, which is also run by lanes that are legitimately regenerating. The cargo call is wrapped in scripts/cargo_test_nonvacuous.sh for the reason the soundness-cert leg is: a filter that selects zero tests exits 0 and libtest calls it `ok`."
+    },
+    {
+      "id": "a0-census-selftest",
+      "path": "",
+      "kind": "leg",
+      "claims": "soundness",
+      "wired_by": [
+        "scripts/local_gate.sh"
+      ],
+      "demonstrated": {
+        "kind": "selftest-inline",
+        "flag": "--selftest",
+        "ref": "scripts/crystal_a0_census.py --selftest",
+        "date": "2026-08-27",
+        "note": "inherited from registry row crystal_a0_census (11 arms: five verify_prefix refusals, fail-closed indirect, five discharge-core arms) plus the discharge-table well-formedness check inlined in the leg body.",
+        "inherited_from": "crystal_a0_census"
+      },
+      "waiver": null,
+      "implemented_by": "scripts/crystal_a0_census.py"
     }
   ],
   "retired": [

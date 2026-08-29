@@ -45,6 +45,7 @@ pub use core_spec::{
     ir_w2b_pd_module_defs, ir_w2b_pm_module_defs, ir_w2b_pp_module_defs, ir_w2c_ci_module_defs,
     ir_w2c_ga_module_defs, ir_w3_os_module_defs, ir_w3_ou_module_defs, ir_w4_fc_module_defs,
 };
+pub(crate) mod decl_budget;
 mod declaration_registration;
 mod definition;
 mod definition_registration;
@@ -125,6 +126,28 @@ impl Specification {
             red_env_script_override,
         };
 
+        // Arm the kernel's ambient per-declaration runaway guard for the whole
+        // build, and restore the thread's previous budget on the way out.
+        //
+        // WHY, measured: without it a single non-terminating declaration hangs
+        // this constructor forever with no diagnostic — `ir_f64_w_fin_renormalise`
+        // did exactly that for 7h48m at 100% CPU, taking every spec-paying test
+        // target with it. Armed, the same shape is a named
+        // `SpecError::DeclarationBudgetExhausted`. See `decl_budget` for the
+        // bound, where its number comes from, and what it does NOT catch.
+        //
+        // Armed HERE and not around `Environment::new()`: the budget bounds the
+        // spec's own declarations, not the fixed cost of standing up the
+        // environment they are registered into — the same placement rule
+        // `clean check` follows (`cmd_core.rs:184`).
+        decl_budget::with_spec_declaration_budget(|| Self::build_stages(&mut spec))?;
+
+        Ok(spec)
+    }
+
+    /// The registration stages of a full specification, run under an armed
+    /// per-declaration budget by [`Self::new`].
+    fn build_stages(spec: &mut Specification) -> Result<(), SpecError> {
         // Add core type theory specification.
         spec.add_core_spec()?;
         if spec.red_env_script_override.is_some() {
@@ -132,12 +155,18 @@ impl Specification {
                 "fresh red-environment script was not consumed by the full core bundle".to_string(),
             ));
         }
+        // A stage-level refill, so a stage that registers declarations WITHOUT
+        // going through `add_definition`/`add_inductive` (which refill
+        // per-declaration) still starts from a full pot rather than inheriting
+        // whatever the previous stage left.
+        decl_budget::begin_declaration();
         spec.add_type_checker_spec()?;
         // tc_spec registers algorithmic-correctness definitions
         // (tc_infer_type_correct, tc_def_eq_transitivity, …). Without this
         // call, the ProofLibrary's matching proof terms in
         // proofs/library_type_checker_spec.rs would fail with
         // "Unknown property: tc_infer_type_correct" during verify_kernel.
+        decl_budget::begin_declaration();
         spec.add_tc_spec()?;
 
         // Discharge the `Nat.shiftRight` EnvInjected axiom: the kernel's
@@ -149,11 +178,15 @@ impl Specification {
         // `register_nat_testbit_def`) idempotently and is itself idempotent, so
         // this is safe regardless of build order. Mirrors how `init_bool` is
         // already invoked through `env_mut()` in `add_foundation_types`.
-        spec.env_mut()
-            .register_nat_shiftright_def()
-            .map_err(|e| SpecError::EnvError(e.to_string()))?;
+        decl_budget::begin_declaration();
+        decl_budget::finish_declaration(
+            "Nat.shiftRight",
+            spec.env_mut()
+                .register_nat_shiftright_def()
+                .map_err(|e| SpecError::EnvError(e.to_string())),
+        )?;
 
-        Ok(spec)
+        Ok(())
     }
 
     /// Get the environment

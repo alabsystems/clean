@@ -3224,10 +3224,28 @@ const EVAL_IR_STAGE_APPLY: &[CoreSpecStageApply] = &[
 ];
 
 /// Apply the ordered stages for the requested bundle to the specification.
+///
+/// Runs under the kernel's ambient per-declaration budget (see
+/// `crate::spec::decl_budget`), so a declaration that does not terminate fails
+/// by name instead of hanging the build. Arming here — and not only in
+/// `Specification::new` — is what covers the bundles built directly on
+/// `new_empty()` (`new_eval_ir_spec` and the test-scoped bundles); the two
+/// armings nest and restore exactly.
 pub(super) fn run_bundle(
     spec: &mut Specification,
     bundle: CoreSpecBundle,
 ) -> Result<(), SpecError> {
+    crate::spec::decl_budget::with_spec_declaration_budget(|| run_bundle_stages(spec, bundle))
+}
+
+fn run_bundle_stages(spec: &mut Specification, bundle: CoreSpecBundle) -> Result<(), SpecError> {
+    // Per-stage wall time, off unless asked for. `Specification::new()` is the
+    // single most expensive thing in this crate and until now nothing said WHERE
+    // the time went — diagnosing a regression meant sampling a live process and
+    // guessing from the stack. Set CLEAN_SPEC_STAGE_TIMING=1 to get one line per
+    // executed stage on stderr.
+    let timing = std::env::var_os("CLEAN_SPEC_STAGE_TIMING").is_some();
+    let mut idx: usize = 0;
     for stage in STAGES {
         let include = match bundle {
             CoreSpecBundle::Full => true,
@@ -3246,8 +3264,26 @@ pub(super) fn run_bundle(
                 .any(|apply| std::ptr::fn_addr_eq(*apply, stage.apply)),
         };
         if include {
-            (stage.apply)(spec)?;
+            // A stage-level refill of the per-declaration budget. The
+            // registration helpers refill per DECLARATION; this is the floor
+            // for a stage that reaches `env_mut().add_decl` directly, so such a
+            // stage cannot accumulate the whole bundle's ticks into one pot.
+            crate::spec::decl_budget::begin_declaration();
+            if timing {
+                let t0 = std::time::Instant::now();
+                (stage.apply)(spec)?;
+                let ms = t0.elapsed().as_millis();
+                // Index, not name: `CoreSpecStage` carries only a fn pointer, and
+                // threading a `&'static str` through 202 literals to get a label
+                // would be a far bigger change than the diagnostic is worth. Map
+                // the index back with:
+                //   grep -n 'apply: Specification::' bundles.rs | sed -n "$((i+1))p"
+                eprintln!("[spec-stage] {idx:3} {ms:>8} ms");
+            } else {
+                (stage.apply)(spec)?;
+            }
         }
+        idx += 1;
     }
     Ok(())
 }

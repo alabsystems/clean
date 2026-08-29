@@ -54,9 +54,10 @@ oracle-http = ["dep:ureq"]
 reduction-stats = ["clean-kernel/reduction-stats"]
 # CLI surface for Epic #3436 Phase 4 (#3454): exposes `clean_auto::cli` with
 # clap-derived argument structs and a `FeatureDescriptor` array for the
-# top-level `clean auto prove` verb. Non-CLI consumers (the kernel, tests,
-# downstream crates) do not pay for clap + clean-features unless they opt in.
-cli = ["dep:clap", "dep:clean-features"]
+# top-level `clean auto prove` and `clean auto premise` verbs. The latter's
+# advertised Gamma-Crown environment requires the kernel's math overlays.
+# Non-CLI consumers do not pay for these dependencies unless they opt in.
+cli = ["dep:clap", "dep:clean-features", "clean-kernel/math-overlays"]
 
 [dependencies]
 clean-kernel.workspace = true

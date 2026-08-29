@@ -310,7 +310,8 @@
         }
       ],
       "site_prefixes": ["crates/clean-kernel/src/env/"],
-      "max_occurrences": 83
+      "max_occurrences_note_2026_08_27": "83 -> 84: bd60299ac registers the field table for `Iff` in the kernel's own prelude (crates/clean-kernel/src/env/logic_iff.rs) -- the fix for `h.mp` dying with UnknownStructureField because Iff.mp is Iff.rec-built and the Proj fallback had nothing to read. In-prefix, kernel-internal, reviewed here (audit r1); the baseline is raised for exactly this one call.",
+      "max_occurrences": 84
     },
     {
       "id": "param-binder-metadata",

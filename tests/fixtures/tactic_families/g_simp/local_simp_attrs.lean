@@ -6,8 +6,15 @@ import Init
 -- RC-J conditional-rewriting class (premise discharge landed 2026-08-02,
 -- commit 68b867935). The four `ls*` declarations are helpers, not probes.
 
-theorem canary_env_g_simp_local_attrs (as : List Nat) : as.reverse.reverse = as :=
-  List.reverse_reverse as
+-- Environment canary. BOTH facts are absent from Clean's builtin/stub prelude and
+-- present in real Init, so this declaration fails unless `import Init` genuinely
+-- loaded. Its discriminating power is re-proved on every run rather than assumed
+-- (family_gate.py --canary-check); the previous single-fact canary
+-- `List.reverse_reverse` was silently disarmed on 2026-08-23 by 3df6e4aad, which
+-- registered a kernel-proved copy of it INTO the builtin prelude.
+theorem canary_env_g_simp_local_attrs (as bs : List Nat) (n m : Nat) :
+    (as ++ bs).reverse = bs.reverse ++ as.reverse ∧ n.succ - m.succ = n - m :=
+  And.intro (List.reverse_append as bs) (Nat.succ_sub_succ_eq_sub n m)
 
 /-- Helper (not a probe): definition unfolded by the local simp set. -/
 def lsf (n : Nat) : Nat := n + 1

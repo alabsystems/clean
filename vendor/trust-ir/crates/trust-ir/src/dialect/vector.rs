@@ -202,9 +202,9 @@ pub fn pack_lanes(vector_ty: Ty, lanes: impl IntoIterator<Item = ValueId>) -> Di
 /// introduced. Consumers that optimize broadcasts can recognize the repeated
 /// operands directly.
 pub fn pack_lanes_repeated(vector_ty: Ty, lane: ValueId) -> Result<DialectInst, String> {
-    let (_elem_ty, lanes) = supported_lane_vector_shape(&vector_ty).ok_or_else(|| {
+    let (_elem_ty, lanes) = supported_pack_lane_vector_shape(&vector_ty).ok_or_else(|| {
         format!(
-            "{DIALECT}.{PACK_LANES_OP} repeated-lane pack supports only <16 x i8>, <8 x i16>, <4 x i32>, <2 x i64>, and <8 x i8>, got {vector_ty:?}"
+            "{DIALECT}.{PACK_LANES_OP} repeated-lane pack supports only <16 x i8>, <8 x i16>, <4 x i32>, <2 x i64>, <8 x i8>, <4 x f32>, and <2 x f64>, got {vector_ty:?}"
         )
     })?;
     Ok(pack_lanes(vector_ty, vec![lane; lanes as usize]))
@@ -369,7 +369,18 @@ pub fn decode_pack_lanes(inst: &DialectInst) -> Result<PackLanesSpec, String> {
     check_header(inst, PACK_LANES_OP)?;
     require_result_count(inst, 1)?;
     let vector_ty = inst.result_tys[0].clone();
-    let (elem_ty, lanes) = supported_lane_vector_ty(inst, &vector_ty)?;
+    // Packs admit the FP shapes too — see `supported_pack_lane_vector_shape`.
+    // The decode gate MUST match the construction gate, or a pack that
+    // `pack_lanes_repeated` accepts becomes undecodable downstream.
+    let (elem_ty, lanes) =
+        supported_pack_lane_vector_shape(&vector_ty).ok_or_else(|| {
+            format!(
+                "{} supports only <16 x i8>, <8 x i16>, <4 x i32>, <2 x i64>, <8 x i8>, \
+                 <4 x f32>, and <2 x f64> lane vectors, got {:?}",
+                inst.qualified_name(),
+                vector_ty
+            )
+        })?;
     if inst.operands.len() != lanes as usize {
         return Err(format!(
             "{} expects {lanes} lane operand(s), got {}",
@@ -688,6 +699,25 @@ fn supported_lane_vector_ty(inst: &DialectInst, ty: &Ty) -> Result<(Ty, u32), St
             ty
         )
     })
+}
+
+/// Lane-vector shapes admitted specifically for `vector.pack_lanes`.
+///
+/// A pack is pure BIT ASSEMBLY: it concatenates N same-width lane values into
+/// one vector and gives the element type no semantic role — there is no
+/// arithmetic, no rounding, no comparison. So the packed FP shapes are safe
+/// here even though they are NOT admitted for the element-semantic ops
+/// (`shuffle`, `mask_to_bits`, lane insert/extract), which stay integer-only
+/// via [`supported_lane_vector_shape`].
+///
+/// This is what lets an FP splat lower to a real aarch64 `DUP` instead of
+/// being scalarized — the same reason `<8 x i8>` was admitted below.
+fn supported_pack_lane_vector_shape(ty: &Ty) -> Option<(Ty, u32)> {
+    match ty {
+        Ty::Vector(elem, 4) if elem.as_ref() == &Ty::F32 => Some((Ty::F32, 4)),
+        Ty::Vector(elem, 2) if elem.as_ref() == &Ty::F64 => Some((Ty::F64, 2)),
+        _ => supported_lane_vector_shape(ty),
+    }
 }
 
 fn supported_lane_vector_shape(ty: &Ty) -> Option<(Ty, u32)> {

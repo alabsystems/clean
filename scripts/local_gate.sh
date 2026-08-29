@@ -655,6 +655,24 @@ echo "== local gate: crystal enum tag pin =="
 "$GATE_PYTHON" scripts/check_enum_tag_pin.py \
   || fail "crystal enum tag pin — a chained enum's declaration order, discriminants, serde-index coherence, reflected tag def or recorded switch arms moved, so a registered crystal module now proves something about a body that is no longer shipped; see data/crystal_enum_tag_pin.json"
 
+# Crystal FIXTURE PINS. The sibling of the leg above, and of the hole
+# crystal_fixture_freshness.py exists to close -- one level DOWN, where nobody
+# had looked. The rebaseline tool records the sha256 and byte length of every
+# `*.trust-ir.txt` it mints; measured 2026-08-27, those fields were read by the
+# minter and BY NOTHING ELSE in either tree. So twenty-one fixtures pinned the
+# emitted IR that every link-2a lane compares its spec module against, a
+# committed record said what they contained when a real compiler produced them,
+# and the two were never compared: editing a fixture leaves every link-2a gate
+# green, because every link-2a gate reads the fixture.
+# It needs no compiler and no dump, which is exactly why it can be a leg where
+# crystal_fixture_freshness.py cannot. A green here means "nobody edited a
+# fixture since the last real measurement", NEVER "the chains are revalidated".
+# ~0.04 s including its own four mutation arms.
+# GATE-LEG: crystal-fixture-pins
+echo "== local gate: crystal fixture pins =="
+"$GATE_PYTHON" scripts/check_crystal_fixture_pins.py \
+  || fail "crystal fixture pins — a committed *.trust-ir.txt no longer equals the digest the newest rebaseline record minted for it, or the fixture set gained/lost a member; the spec modules are compared against that text, so a theorem may now describe a body no measurement ever saw. Re-derive from a dump (scripts/crystal_fixture_freshness.py), never by editing the pin"
+
 # Crystal A0/A6 PROBE TRANSCRIPTION. data/crystal_a0_a6_probe.json was re-minted
 # 2026-08-25 from A0 4-of-6 / A6 3-of-4 to A0 5-of-6 / A6 4-of-4 -- and the
 # re-mint is NOT a measurement: every current verdict in it is COPIED from a
@@ -684,8 +702,11 @@ echo "== local gate: Aristotle model-guide corpus (static) =="
 
 if [[ $FAST -eq 0 ]]; then
   # GATE-FULL-ONLY BEGIN
-  # GATE-LEG: a0-census-selftest (full mode: needs no trust artifacts, ~0.1 s;
-  # kept out of the fast region so the hook-coverage sha pin does not move).
+  # GATE-LEG: a0-census-selftest
+  # (full mode: needs no trust artifacts, ~0.1 s; kept out of the fast region
+  # so the hook-coverage sha pin does not move. Audit r1: the census regex
+  # requires the id ALONE on the marker line -- prose after it made this leg
+  # invisible to check_gate_registry's leg census.)
   # Trust (2026-08-27, owner ruling R2 of workflow wf_1c3df27b): the A0
   # criterion is now the two-clause semantic obligation, computed by
   # scripts/crystal_a0_census.py against data/crystal_a0_discharge.json.
@@ -700,16 +721,31 @@ if [[ $FAST -eq 0 ]]; then
   "$GATE_PYTHON" scripts/crystal_a0_census.py --selftest \
     || fail "crystal_a0_census selftest — a refusal arm stopped firing; the A0 criterion computer can no longer be trusted to refuse"
   "$GATE_PYTHON" - <<'PYCHK' || fail "crystal_a0_discharge.json malformed"
-import json
+import json, os
 t = json.load(open("data/crystal_a0_discharge.json"))
-assert t["schema"] == "clean.crystal.a0.discharge.v1"
+assert t["schema"] == "clean.crystal.a0.discharge.v2"
 for name, tgt in t["targets"].items():
+    listed = {r.get("theorem"): r for r in tgt.get("clause_b_theorems", [])}
+    # audit r1 M1: clause (b) is fail-closed here too -- a bare clause-b, an
+    # unlisted theorem, or a theorem no source file registers all refuse.
+    for r in tgt.get("clause_b_theorems", []):
+        w = (r.get("where") or "").split()[0]
+        assert w and os.path.isfile(w), (name, r.get("theorem"), w)
+        src = open(w, encoding="utf-8", errors="replace").read()
+        th = r["theorem"]
+        assert (f"def {th} " in src or f"def {th}(" in src or f"{th}:" in src), (name, th, w)
     for k, ent in tgt["escaping_callees"].items():
-        int(k)
+        # v2: keys are trust-ir callee NAMES (durable), not func_ids (volatile)
+        assert isinstance(k, str) and k.strip() and not k.isdigit(), (name, k)
         assert ent["clause"] in ("a", "b"), (name, k)
         if ent["clause"] == "a":
             assert ent.get("model") and ent.get("residual"), (name, k)
-print(f"discharge table: {sum(len(t2['escaping_callees']) for t2 in t['targets'].values())} entries across {len(t['targets'])} target(s), well-formed")
+        if ent["clause"] == "b":
+            th = ent.get("theorem")
+            assert th and th in listed, (name, k, th)
+# NOTE (audit r1): callee-vs-walk agreement is checked only by the heavy census
+# runs against a dump; this leg checks WELL-FORMEDNESS + theorem registration.
+print(f"discharge table: {sum(len(t2['escaping_callees']) for t2 in t['targets'].values())} entries across {len(t['targets'])} target(s), well-formed; clause-b theorems source-verified")
 PYCHK
 
   # Workspace lint. This step used to be `cargo check --locked -q` under a
@@ -858,6 +894,106 @@ PYCHK
   scripts/check_script_selftests.sh \
     || fail "script self-tests — a self-test of one of this repo's gate/tooling scripts is red and unquarantined, or the quarantine ledger has an expired/stale/malformed row (data/script_selftest_quarantine.json)"
 
+  # ── THE TRUST-CORE SOUNDNESS GATES ─────────────────────────────────────────
+  #
+  # `scripts/kernel_soundness_gate.sh`, `scripts/deny_sorry_gate.sh` and
+  # `scripts/axiom_audit_release_check.sh` are the three gates that MINT the
+  # trust-core launch evidence (reports/{kernel-soundness,deny-sorry,
+  # axiom-audit}-launch-evidence.json) that `clean replacement status` reads.
+  # All three are `kind: gate, claims: soundness` in data/gate_registry.json —
+  # and until this change NOT ONE OF THEM WAS RUN BY ANYTHING. That is measured,
+  # not asserted: the 2026-08-27 wiring audit re-derived every declared
+  # `wired_by` edge with a discriminator that can tell a command from a data
+  # string, and all four of their declared runners turned out to be REFERENCES —
+  # a Rust `const` holding the path, a name inside an error message — never an
+  # invocation (docs/analysis/2026-08-27-gate-registry-wiring-audit.md §A, §C).
+  # A gate nobody runs is not a gate; three of them, on the rows whose claims
+  # column reads `soundness`, is the registry's own UNWIRED class at its worst.
+  #
+  # The first two are wired HERE. The third is the LAST leg of this file, and
+  # the split is deliberate — see the block at the end for why.
+  #
+  # WHAT WIRING THEM FOUND ON THE FIRST RUN, before a line of this block existed:
+  # the committed kernel-soundness and deny-sorry launch evidence both record
+  # `"status": "failed"` (1-of-3 and 5-of-6 steps). They are FAILED-RUN artifacts
+  # left in the tree by the lane that recorded the demonstration arms
+  # (7422b63a0): `--demonstrate` runs the REAL gate on a REAL mutation and
+  # restores the file it MUTATED, but the gate also mints its evidence artifact
+  # and nothing restores that. Both gates are GREEN at HEAD (measured below).
+  # Refreshing those two artifacts is a deliberate, reviewable act; this leg
+  # does not do it, and its own mint cannot add to the problem (see below).
+  #
+  # A MISSING PREREQUISITE IS A REFUSAL, NOT A SKIP — the same contract as the
+  # three probe batteries above and for the same reason: a soundness gate that
+  # silently does not run is exactly the green stamp this file exists to stop
+  # shipping, and downstream a skip is indistinguishable from a pass.
+  #
+  # READ-ONLY, TWICE OVER, AND THE SECOND HALF IS THE POINT. Each of these three
+  # `rm -f`s its tracked evidence artifact at startup and rewrites it at the end,
+  # so a plain call would dirty the tree on EVERY gate run — and a gate that
+  # dirties the tree is a gate people learn to `git checkout` past. The batteries
+  # above solve that by snapshot-and-restore. These three also accept an explicit
+  # output path, which is strictly stronger, so the leg does both:
+  #   1. `*_EVIDENCE_PATH` points the mint at a temp file, so the tracked
+  #      artifact is never opened at all — not deleted, not rewritten, and no
+  #      window in which an interrupt leaves it missing;
+  #   2. `_battery_readonly` still wraps the call as the BACKSTOP, so a future
+  #      edit that re-hardcodes the path inside one of these scripts cannot
+  #      silently start dirtying the tree again.
+  # Neither weakens anything: the verdict is the exit status and the per-lane
+  # lines, all produced before the artifact is written.
+  #
+  # THE STRIPPED ENV VARS EACH CLOSE A MEASURED FAIL-OPEN PATH, not a
+  # hypothetical one:
+  #   * REGEN_BASELINE — set, `lean4_parity` and the clean-elab `soundness_gate`
+  #     test REGENERATE their Lean 4 baselines instead of checking against them
+  #     (crates/clean-elab/tests/soundness_gate/baseline.rs:280).
+  #     kernel_soundness_gate.sh unsets it internally; deny_sorry_gate.sh does
+  #     NOT, and its steps 4-6 run both of those targets. An operator with it
+  #     exported turns that gate into a baseline generator.
+  #   * DENY_SORRY — `deny_sorry_not_enabled_in_parent`
+  #     (crates/clean-kernel/tests/deny_sorry_gate.rs:212) RETURNS EARLY when it
+  #     is set in the parent, so one of the eleven tests the gate counts becomes
+  #     a no-op that still reports `ok`. The gate sets DENY_SORRY=1 per lane with
+  #     its own `env`, so stripping it here costs those lanes nothing.
+  #   * DENY_SORRY_GATE_CHILD — a child-process marker the subprocess test sets
+  #     for its own re-exec; a parent that inherits one runs a child body where a
+  #     no-op belongs, and the gate pins an exact count of eleven.
+  #
+  # COST, measured 2026-08-27 at c0d0e44a8 on this box (8 GB, --jobs 2, a second
+  # lane building concurrently). Two numbers each, because the spread is the
+  # whole story and one number would misinform:
+  #                                     WARM      COLD (needs a clean-kernel build)
+  #   kernel soundness gate              38 s      124 s
+  #   DENY_SORRY clean gate              27 s      178 s
+  # WARM is the leg's real steady-state cost — 65 s for the pair — and is what
+  # this position buys: both run after the full clean-kernel --lib suite above,
+  # so the compile is already paid unless a feature set differs. COLD is the same
+  # legs when a clean-kernel edit (here, the other lane's) forces a ~55 s
+  # recompile first. Either way it is small beside the 233 s workspace clippy,
+  # the ~75 s KV re-stamp and the ~30 min kernel suite this block sits after.
+  # They are LAST-BUT-ONE on purpose: `set -e` means a red here would otherwise
+  # mask every leg after it, and they must still precede the kernel lint ratchet,
+  # which runs `cargo clean -p clean-kernel`.
+  declare -F _battery_readonly >/dev/null \
+    || fail "internal: _battery_readonly is not defined — the trust-core soundness legs must stay AFTER the probe-battery block that defines it (scripts/local_gate.sh)"
+
+  echo "== local gate: kernel soundness gate (3 lanes, mints trust-core evidence) =="
+  ks_evidence="$(mktemp "${TMPDIR:-/tmp}/gate-kernel-soundness-evidence.XXXXXX")"
+  _battery_readonly reports/kernel-soundness-launch-evidence.json \
+    env -u REGEN_BASELINE -u DENY_SORRY KERNEL_SOUNDNESS_EVIDENCE_PATH="$ks_evidence" \
+    bash scripts/kernel_soundness_gate.sh \
+    || { rm -f "$ks_evidence"; fail "kernel soundness gate — a trust-core soundness lane failed: the differential corpus no longer matches the Lean 4 baseline it was minted against (lane 0), Clean's kernel infers a different type than Lean 4 for a pinned expression (lane 1), or the clean-elab accept/reject corpus no longer splits the way the baseline says (lane 2). The failing lane is named above; reproduce it verbatim with: bash scripts/kernel_soundness_gate.sh"; }
+  rm -f "$ks_evidence"
+
+  echo "== local gate: DENY_SORRY clean gate (6 lanes, mints trust-core evidence) =="
+  ds_evidence="$(mktemp "${TMPDIR:-/tmp}/gate-deny-sorry-evidence.XXXXXX")"
+  _battery_readonly reports/deny-sorry-launch-evidence.json \
+    env -u REGEN_BASELINE -u DENY_SORRY -u DENY_SORRY_GATE_CHILD DENY_SORRY_EVIDENCE_PATH="$ds_evidence" \
+    bash scripts/deny_sorry_gate.sh \
+    || { rm -f "$ds_evidence"; fail "DENY_SORRY clean gate — a curated sorry-free lane is no longer sorry-free, a production add_decl_* bypass is unaccounted/unsanctioned/over its pinned cap in data/unchecked_decl_ratchet.json, or DENY_SORRY=1 no longer blocks sorry-term creation in a subprocess. The failing step is named above; reproduce it verbatim with: bash scripts/deny_sorry_gate.sh"; }
+  rm -f "$ds_evidence"
+
   # Trusted-kernel lint ratchet (audit #6): re-surfaces the dead_code/unused
   # debt the workspace [lints] allow hides in clean-kernel. Last because it
   # `cargo clean -p clean-kernel` (force-warn needs a fresh compile), which
@@ -999,6 +1135,63 @@ if [[ -n "${KV_VERDICT:-}${KVINV_VERDICT:-}" ]]; then
        echo "        A green gate here is the ABSENCE of a measurement, not a passing one."
        echo "        Re-run with KV_GATE_REQUIRE_MEASURED=1 to make that a hard failure." ;;
   esac
+fi
+
+# The third trust-core soundness gate, and it is LAST BY DECISION.
+#
+# `scripts/axiom_audit_release_check.sh` is `kind: gate, claims: soundness` and,
+# like its two siblings above, was run by nothing at all before 2026-08-27: both
+# of its declared runners were Rust `const`s holding its path
+# (docs/analysis/2026-08-27-gate-registry-wiring-audit.md §A). It re-derives
+# data/axiom_audit.json — the first-class domain-axiom metric CLAUDE.md's
+# soundness rules name — against live kernel output, so it belongs in a gate.
+#
+# IT IS RED AT HEAD, AND WIRING IT IS STILL THE RIGHT MOVE. Re-measured
+# 2026-08-27 at c0d0e44a8: exit 1 in 158 s cold / 100 s warm. Lane 1 is GREEN
+# (total_domain_axioms=0, total_all_axioms=0, total_theorems=3242,
+# constructive_theorems=265) and lane 2 reports `per-conjecture rows drift from
+# verify_gamma_crown --json output` on all FIFTEEN conjecture rows, with the same
+# deltas the row's registry waiver recorded on 2026-08-25 (C001 theorems
+# 312->329, definitions 361->337, opaques 6->4). The soundness headline does not
+# move — 0 domain axioms stored, 0 live, no row gains an axiom — so this is
+# bookkeeping drift, and the fix is one command that is deliberately a separate
+# reviewable act:  python3 -m scripts.axiom_audit.reconcile
+#
+# SO WHY HERE, PHYSICALLY LAST. `set -e` means a fail-closed leg masks every leg
+# after it. Placed with its siblings it would have hidden the kernel lint
+# ratchet, the trust-verify soundness ratchet and the trust-ir axis surface
+# behind a red that is already known and already owned. Placed here, after the
+# KV verdict summary, it masks NOTHING: every other leg has run and printed, and
+# the only thing its refusal costs is the final PASS line — which is the honest
+# outcome while a soundness gate is red. It is not silenced and it is not
+# skipped; the same shape the trust-verify-soundness leg above already has.
+#
+# WHAT THOSE NUMBERS DO NOT SAY, twice over: they are the cost to the FIRST failure,
+# and a GREEN run costs strictly more (lane 2's constructive-claim closure then
+# builds and runs the `clean` binary, which the drift refusal never reached);
+# and it includes a clean-kernel rebuild under `--features "test-utils
+# math-overlays"` which this position pays again, because kernel_lint_ratchet
+# runs `cargo clean -p clean-kernel` above. If that cost ever stops being worth
+# paying on every full run, the answer is to reconcile the fifteen rows, not to
+# move the leg back where it can mask other work.
+#
+# `clean_BIN` is stripped: scripts/axiom_audit/verify.py:66 uses it as the
+# `clean` binary for the constructive-claim closure, so an exported stale one
+# reconciles this tree's audit against a binary that is not this tree's.
+if [[ $FAST -eq 1 ]]; then
+  echo "  AXIOM_AUDIT_RELEASE=SKIPPED reason=fast-mode (two cargo builds; runs in full mode, or directly: bash scripts/axiom_audit_release_check.sh)"
+else
+  # GATE-FULL-ONLY BEGIN
+  declare -F _battery_readonly >/dev/null \
+    || fail "internal: _battery_readonly is not defined — the axiom-audit release leg must stay AFTER the probe-battery block that defines it (scripts/local_gate.sh)"
+  echo "== local gate: axiom-audit release check (2 lanes, mints trust-core evidence) =="
+  aa_evidence="$(mktemp "${TMPDIR:-/tmp}/gate-axiom-audit-evidence.XXXXXX")"
+  _battery_readonly reports/axiom-audit-launch-evidence.json \
+    env -u clean_BIN AXIOM_AUDIT_EVIDENCE_PATH="$aa_evidence" \
+    bash scripts/axiom_audit_release_check.sh \
+    || { rm -f "$aa_evidence"; fail "axiom-audit release check — data/axiom_audit.json has stale aggregates (lane 1), its per-conjecture rows drift from live \`verify_gamma_crown --json\` output (lane 2), or a \`proof_mechanism: constructive\` claim no longer closes over the foundational axioms alone. KNOWN RED AT HEAD on lane-2 row drift ONLY, with 0 domain axioms stored and 0 live — see the axiom_audit_release_check waiver in data/gate_registry.json. The drifting rows are named above; refresh them deliberately with: python3 -m scripts.axiom_audit.reconcile"; }
+  rm -f "$aa_evidence"
+  # GATE-FULL-ONLY END
 fi
 
 echo "LOCAL GATE: PASS"

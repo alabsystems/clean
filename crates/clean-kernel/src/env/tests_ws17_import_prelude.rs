@@ -806,6 +806,14 @@ fn test_ws_level_import_prelude_suppresses_string_repr_tostring_stubs() {
         "instToStringNat",
         "instToStringString",
         "instToStringBool",
+        // The rest of Lean's core `ToString` family, registered by the same
+        // suppressed init: the import lane must keep taking the genuine
+        // instances from the checked `.olean` path.
+        "instToStringInt",
+        "instToStringChar",
+        "instToStringUInt32",
+        "instToStringUInt64",
+        "instToStringList",
     ] {
         assert!(
             default_env.get_const(&Name::from_string(c)).is_some(),

@@ -26,8 +26,15 @@ impl Specification {
     /// not apply.
     pub(crate) fn add_definition_reducible(
         &mut self,
-        mut def: SpecDefinition,
+        def: SpecDefinition,
     ) -> Result<(), SpecError> {
+        let name = def.name.clone();
+        super::decl_budget::begin_declaration();
+        let outcome = self.add_definition_reducible_inner(def);
+        super::decl_budget::finish_declaration(&name, outcome)
+    }
+
+    fn add_definition_reducible_inner(&mut self, mut def: SpecDefinition) -> Result<(), SpecError> {
         let type_expr = self.elaborate_source(&def.type_src, &format!("type of {}", def.name))?;
         def.elaborated_type = Some(type_expr.clone());
 
@@ -60,7 +67,7 @@ impl Specification {
 
         self.env
             .add_decl(decl)
-            .map_err(|e| SpecError::TypeError(format!("add_decl: {e}")))?;
+            .map_err(|e| SpecError::TypeError(format!("add_decl {}: {e}", def.name)))?;
 
         self.definitions.insert(def.name.clone(), def);
         Ok(())

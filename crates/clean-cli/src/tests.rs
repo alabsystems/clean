@@ -369,6 +369,68 @@ fn cli_parse_check_parse_only_flag() {
     }
 }
 
+/// `clean run` forwards its trailing arguments to the program as `argv`.
+///
+/// This is the leg that does NOT need a C compiler. The end-to-end proof lives
+/// in `crates/clean/tests/run_argv_passthrough.rs`, but every test there skips
+/// when `cc` is absent — so without this one, a machine with no `cc` would
+/// catch nothing at all if the field were removed again. Parsing is also where
+/// the gap actually was: the engine has marshalled `argv` since f514848a8;
+/// `RunArgs` simply had no field to fill.
+#[test]
+fn cli_parse_run_forwards_trailing_program_arguments() {
+    use clap::Parser;
+    let cli = Cli::try_parse_from([
+        "clean",
+        "run",
+        "main.lean",
+        "--decl",
+        "main",
+        "--keep-temp",
+        "--",
+        "alpha",
+        "two words",
+        "--literal-flag",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Run(args) => {
+            assert_eq!(args.file, PathBuf::from("main.lean"));
+            assert_eq!(args.decl, "main");
+            assert!(
+                args.keep_temp,
+                "`--keep-temp` precedes the program arguments, so it is \
+                 `clean run`'s own flag, not argv[0]"
+            );
+            assert_eq!(
+                args.args,
+                ["alpha", "two words", "--literal-flag"],
+                "everything after `--` is the program's argv, verbatim and in \
+                 order; the `--` itself is the separator and is not forwarded"
+            );
+        }
+        _ => panic!("Expected Run command"),
+    }
+}
+
+/// NEGATIVE CONTROL: no trailing arguments means an EMPTY argv, which is what
+/// makes the entry see `List.nil`. Before the field existed this was the only
+/// reachable state, so a test that only checked the three-argument form would
+/// pass against a hardcoded three-element list.
+#[test]
+fn cli_parse_run_without_trailing_arguments_has_empty_argv() {
+    use clap::Parser;
+    let cli = Cli::try_parse_from(["clean", "run", "main.lean", "--decl", "main"]).unwrap();
+    match cli.command {
+        Commands::Run(args) => {
+            assert!(args.args.is_empty(), "no trailing arguments means no argv");
+            assert!(!args.keep_temp);
+            assert_eq!(args.opt_level, 0);
+        }
+        _ => panic!("Expected Run command"),
+    }
+}
+
 #[test]
 fn cli_parse_lake_run() {
     use clap::Parser;

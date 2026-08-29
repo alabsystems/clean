@@ -1135,7 +1135,7 @@ pub fn reconstruct_bv_compute_blast(
 /// See [`BvComputeBlastError`]. Every gate clause is kernel-justified; a corrupt
 /// gate clause (non-tautology) or broken resolution chain is rejected, never
 /// papered over.
-pub fn reconstruct_bv_compute_blast_with_context(
+pub(crate) fn reconstruct_bv_compute_blast_with_context(
     env: &clean_kernel::Environment,
     base_ctx: &clean_kernel::LocalContext,
     proof: &BvBlastProof,

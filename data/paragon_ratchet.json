@@ -11,7 +11,7 @@
   "totals": {
     "files_over_1000": 441,
     "unwrap_expect_production": 1230,
-    "bare_pub_non_lib": 13381,
+    "bare_pub_non_lib": 13402,
     "allow_dead_code_sites": 57
   },
   "crates": {
@@ -72,7 +72,7 @@
     "clean-elab": {
       "files_over_1000": 69,
       "unwrap_expect_production": 261,
-      "bare_pub_non_lib": 1385,
+      "bare_pub_non_lib": 1387,
       "allow_dead_code_sites": 7
     },
     "clean-features": {
@@ -90,7 +90,7 @@
     "clean-kernel": {
       "files_over_1000": 44,
       "unwrap_expect_production": 158,
-      "bare_pub_non_lib": 1201,
+      "bare_pub_non_lib": 1209,
       "allow_dead_code_sites": 0
     },
     "clean-lake": {
@@ -138,7 +138,7 @@
     "clean-parser": {
       "files_over_1000": 9,
       "unwrap_expect_production": 217,
-      "bare_pub_non_lib": 119,
+      "bare_pub_non_lib": 130,
       "allow_dead_code_sites": 0
     },
     "clean-reflect": {
@@ -191,7 +191,7 @@
     },
     {
       "path": "crates/clean-elab/src/lean4_corpus_tests.rs",
-      "lines": 13603
+      "lines": 13694
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/par_reduces_c.rs",
@@ -203,7 +203,7 @@
     },
     {
       "path": "crates/clean-lsp/src/backend/tests.rs",
-      "lines": 8359
+      "lines": 8485
     },
     {
       "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
@@ -267,7 +267,7 @@
     }
   ],
   "generated_by": "scripts/paragon_ratchet.sh --update",
-  "last_updated": "2026-08-27",
+  "last_updated": "2026-08-28",
   "worst_offenders_over_500": [
     {
       "path": "crates/clean-mathverse/src/coq/alpha.rs",

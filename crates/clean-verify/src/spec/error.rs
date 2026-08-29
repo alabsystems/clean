@@ -26,4 +26,24 @@ pub enum SpecError {
     /// Definition exists but has no elaborated form
     #[error("Missing elaboration for definition {0}")]
     MissingElaboration(String),
+    /// One declaration spent the whole ambient per-declaration budget.
+    ///
+    /// **Not a verdict about the declaration.** It says the work was cut short
+    /// — neither "it was rejected" nor "it was accepted". It exists so that a
+    /// runaway spec declaration is a NAMED failure instead of a silent hang;
+    /// see `crates/clean-verify/src/spec/decl_budget.rs` for the measured
+    /// incident this replaces and for how to raise or disable the bound.
+    #[error(
+        "{declaration}: did not finish — spent the whole per-declaration budget of \
+         {limit} kernel operations. This is a RUNAWAY GUARD, not a type error: the \
+         declaration was cut short, so its verdict is unknown. Raise the bound with \
+         CLEAN_SPEC_DECL_BUDGET=<n> (0 = unlimited), or measure what it really costs \
+         with CLEAN_SPEC_DECL_BUDGET_TRACE=1."
+    )]
+    DeclarationBudgetExhausted {
+        /// The declaration that did not finish.
+        declaration: String,
+        /// The tick budget it spent.
+        limit: u64,
+    },
 }

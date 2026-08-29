@@ -159,14 +159,21 @@ pub enum SurfaceDecl {
         modifiers: DeclModifiers,
     },
 
-    /// Rocq-style Type-level codata: an observation record elaborated to
-    /// the indexed-container M-type encoding (`Codata.*` seed library) —
-    /// no kernel cofix, no new reduction rule.
+    /// Rocq-style Type-level codata, elaborated to the indexed-container
+    /// M-type encoding (`Codata.*` seed library) — no kernel cofix, no new
+    /// reduction rule.
+    ///
+    /// Two body shapes, mutually exclusive by construction (see
+    /// [`CodataBody`]):
     ///
     /// ```text
-    /// codata Stream (A : Type) where
+    /// codata Stream (A : Type) where          -- RECORD body
     ///   head : A
     ///   tail : Stream A
+    ///
+    /// codata ITr (E : Type) (R : Type) where  -- VARIANT body
+    ///   | Ret : R → ITr E R
+    ///   | Tau : ITr E R → ITr E R
     /// ```
     Codata {
         span: Span,
@@ -175,7 +182,7 @@ pub enum SurfaceDecl {
         binders: Vec<SurfaceBinder>,
         /// Optional declared result sort (`: Type`)
         ty: Option<Box<SurfaceExpr>>,
-        fields: Vec<SurfaceField>,
+        body: CodataBody,
         /// Deriving clauses (rejected loudly by the elaborator for now)
         deriving: Vec<String>,
         /// Declaration modifiers (private, protected, noncomputable, etc.)
@@ -590,6 +597,24 @@ impl SurfaceDecl {
             | SurfaceDecl::LibraryNote { span, .. } => *span,
         }
     }
+}
+
+/// The body of a `codata` declaration.
+///
+/// Record and variant bodies are mutually exclusive *by construction* —
+/// a `codata` block is either observation fields or `|`-led constructor
+/// clauses, never both. Representing them as one enum rather than two
+/// possibly-non-empty vectors means "half a record and half a variant" is
+/// not a state the elaborator has to defend against.
+///
+/// See `designs/2026-08-28-variant-codata-surface.md` §2.
+#[derive(Debug, Clone)]
+pub enum CodataBody {
+    /// `head : A` / `tail : Stream A` observation fields (the rank-1
+    /// record envelope).
+    Record(Vec<SurfaceField>),
+    /// `| Ret : R → T` constructor clauses (the variant envelope).
+    Variant(Vec<SurfaceCtor>),
 }
 
 /// Constructor of an inductive type

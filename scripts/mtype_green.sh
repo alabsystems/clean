@@ -87,7 +87,7 @@ PY
 for spec in "MTypeIndexed.lean:229" "MTypeIndexedPoly.lean:229" \
             "../../../../crates/clean-elab/data/MTypeIndexedPoly2.lean:229" \
             "ITreeHK.lean:249" \
-            "ITreeEco.lean:605" \
+            "ITreeEco.lean:717" \
             "../../clean-iris/proof/IrisCore.lean:46" \
             "../../clean-iris/proof/IrisCMRA.lean:63" \
             "elab_fvar_hygiene_regression.lean:21" \

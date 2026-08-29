@@ -9,8 +9,15 @@ import Init
 -- crates/clean-elab/src/tactic/simp/expr.rs (`lemma_levels`) must flip ≥3
 -- of them back to NoProgress (see scripts/tactic_parity/TEETH.md).
 
-theorem canary_env_g_simp_only (as : List Nat) : as.reverse.reverse = as :=
-  List.reverse_reverse as
+-- Environment canary. BOTH facts are absent from Clean's builtin/stub prelude and
+-- present in real Init, so this declaration fails unless `import Init` genuinely
+-- loaded. Its discriminating power is re-proved on every run rather than assumed
+-- (family_gate.py --canary-check); the previous single-fact canary
+-- `List.reverse_reverse` was silently disarmed on 2026-08-23 by 3df6e4aad, which
+-- registered a kernel-proved copy of it INTO the builtin prelude.
+theorem canary_env_g_simp_only (as bs : List Nat) (n m : Nat) :
+    (as ++ bs).reverse = bs.reverse ++ as.reverse ∧ n.succ - m.succ = n - m :=
+  And.intro (List.reverse_append as bs) (Nat.succ_sub_succ_eq_sub n m)
 
 theorem p_simp_only_01 (a b : Bool) : (a && (a && b)) = (a && b) := by simp only [Bool.and_self_left]
 theorem p_simp_only_02 (n : Nat) : n + 0 = n := by simp only [Nat.add_zero]

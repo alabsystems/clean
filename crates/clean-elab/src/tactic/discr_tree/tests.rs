@@ -37,7 +37,7 @@ fn mk_eq(nat_ty: &Expr, lhs: Expr, rhs: Expr) -> Expr {
     )
 }
 
-fn discr_tree_state() -> (ProofState, Goal) {
+pub(super) fn discr_tree_state() -> (ProofState, Goal) {
     let mut env = Environment::new();
     env.init_nat().unwrap();
     env.init_eq().unwrap();
@@ -72,7 +72,7 @@ fn discr_tree_state() -> (ProofState, Goal) {
 }
 
 /// Helper: create `f a b` from name strings.
-fn mk_app2(head: &str, arg1: &str, arg2: &str) -> Expr {
+pub(super) fn mk_app2(head: &str, arg1: &str, arg2: &str) -> Expr {
     Expr::app(
         Expr::app(
             Expr::const_(Name::from_string(head), vec![]),
@@ -83,14 +83,14 @@ fn mk_app2(head: &str, arg1: &str, arg2: &str) -> Expr {
 }
 
 /// Helper: create `g a` from name strings.
-fn mk_app1(head: &str, arg: &str) -> Expr {
+pub(super) fn mk_app1(head: &str, arg: &str) -> Expr {
     Expr::app(
         Expr::const_(Name::from_string(head), vec![]),
         Expr::const_(Name::from_string(arg), vec![]),
     )
 }
 
-fn sorted_values<T: Clone + Ord>(matches: &[Match<T>]) -> Vec<T> {
+pub(super) fn sorted_values<T: Clone + Ord>(matches: &[Match<T>]) -> Vec<T> {
     let mut vals: Vec<T> = matches.iter().map(|m| m.value.clone()).collect();
     vals.sort();
     vals

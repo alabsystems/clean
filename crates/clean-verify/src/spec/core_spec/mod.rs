@@ -326,6 +326,7 @@ mod univ_poly;
 mod wall_a_completeness;
 mod wall_a_headmatch;
 mod wbelow3;
+mod wh3_defeq_soundness;
 mod wh3_fuel_adequacy;
 mod wh3_hiota_repair;
 mod wh3_norm_acc;

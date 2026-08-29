@@ -202,6 +202,11 @@ pub(crate) fn write_fat_ptr_kind_stable(out: &mut Vec<u8>, kind: &crate::FatPtrK
             write_u8_stable(out, 2);
             write_u32_stable(out, trait_id);
         }
+        // Tag 3, DISTINCT from Str's 1 on purpose: this digest is a
+        // content-derived identity, and a container-tail pointer is not a
+        // string pointer. Sharing a tag would make two different meanings hash
+        // equal, which is the one thing a stable digest may never do.
+        crate::FatPtrKind::ContainerLen => write_u8_stable(out, 3),
     }
 }
 
@@ -472,6 +477,7 @@ pub(crate) fn write_pointer_metadata_shape_stable(
             write_u8_stable(out, 2);
             write_u32_stable(out, trait_id);
         }
+        PointerMetadataShape::ContainerLen => write_u8_stable(out, 3),
     }
 }
 

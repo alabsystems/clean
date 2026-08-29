@@ -15,7 +15,7 @@
 //! ```
 //!
 //! Defaults `--output` to `docs/cli/` in the current working directory, which
-//! matches the repo-root checkout that `scripts/gen_cli_docs.sh` invokes.
+//! matches the repo-root checkout that `cargo gen-cli-docs` runs from.
 //!
 //! The binary owns three responsibilities:
 //!
@@ -50,7 +50,7 @@ use clean_cli::__test_support::{all_features, render_all_docs};
 struct Args {
     /// Output directory. Defaults to `docs/cli/` relative to the current
     /// working directory, which is the repository root when invoked via
-    /// `scripts/gen_cli_docs.sh`.
+    /// `cargo gen-cli-docs`.
     #[arg(long, default_value = "docs/cli")]
     output: PathBuf,
 }

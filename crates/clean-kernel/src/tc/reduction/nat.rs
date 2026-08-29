@@ -607,20 +607,42 @@ impl<'env> TypeChecker<'env> {
             return false;
         }
 
-        // Large closed count.
-        let big_count = match self.get_nat_bignat_whnf(args[3]) {
-            Some(BigNat::Small(v)) => v >= CLOSED_FOLD_GRIND_STUCK_THRESHOLD,
-            Some(BigNat::Big(_)) => true,
-            None => false,
-        };
-        if !big_count {
+        // Exact test FIRST: does the body really reference `ih` (de Bruijn 0
+        // under the two step binders)? Only then is the fold a Θ(count) grind
+        // rather than a one-step case split. It walks the step body, which is
+        // bounded by the step's own size.
+        //
+        // ORDER IS LOAD-BEARING — DO NOT SWAP THESE BACK. This test used to run
+        // AFTER the count probe below, on the reasoning that it "walks the
+        // step" and the probe is cheap. The probe is not cheap and it is not
+        // pure: `get_nat_bignat_whnf` runs a full WHNF and raises
+        // `nat_probe_depth` for its dynamic extent. Past `NAT_PROBE_MAX_DEPTH`
+        // (8) `reduce_nat` declines its unary succ/pred collapse — see the
+        // guard at the top of `reduce_nat`, whose own comment claims
+        // "Production whnf calls run at depth 0 and are untouched", which is
+        // exactly the invariant a probe on this path breaks. The un-collapsed
+        // result is then written into `whnf_cache`, whose key is the expression
+        // ALONE and carries no depth, so a rung evaluated deep inside a probe
+        // poisons every later consumer running at depth 0.
+        //
+        // Measured consequence of the old order: `ir_f64_w_fin_renormalise`
+        // (binary64 1.0 + -(1 - 2^-53), the maximum-cancellation witness) went
+        // from milliseconds to NOT TERMINATING — observed at 100% CPU with flat
+        // RSS for 7h48m — which hung `Specification::new()` and with it every
+        // spec-paying test target. Five probe entries were enough; a poisoned
+        // shared cache does not need to be hit often.
+        if !references_bvar(step_body, 0) {
             return false;
         }
 
-        // Exact test, run last because it walks the step: does the body really
-        // reference `ih` (de Bruijn 0 under the two step binders)? Only then is
-        // the fold a Θ(count) grind rather than a one-step case split.
-        references_bvar(step_body, 0)
+        // Large closed count. Runs LAST because it is the unbounded, effectful
+        // step: only a fold that already passed the exact test above can reach
+        // it, which is what keeps the probe off the hot path.
+        match self.get_nat_bignat_whnf(args[3]) {
+            Some(BigNat::Small(v)) => v >= CLOSED_FOLD_GRIND_STUCK_THRESHOLD,
+            Some(BigNat::Big(_)) => true,
+            None => false,
+        }
     }
 
     fn get_nat_bignat_whnf(&self, e: &Expr) -> Option<BigNat> {

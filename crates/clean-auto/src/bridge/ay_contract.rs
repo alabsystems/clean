@@ -36,6 +36,13 @@ pub use super::ay_backend::{
     BVSHIFT_MAX_REFLECTION_STEPS,
 };
 
+// Kernel-checked computational BitVec identities (no solver authority). These
+// live in the BV reconstruction lane and therefore share its feature gate.
+#[cfg(feature = "ay-bv-blast")]
+pub use super::ay_backend::{
+    reconstruct_bv_compute_identity, BvComputeIdentity, BvComputeReconstruction,
+};
+
 // Raw ay provider types that appear in AyBackend public method signatures.
 // Re-exported here so downstream crates can name them without adding a direct
 // `ay` dependency. Part of #3014.

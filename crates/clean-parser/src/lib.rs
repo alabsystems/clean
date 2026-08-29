@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 pub mod grammar;
 pub mod interpolation;
 pub mod lexer;
+pub mod notation_seed;
 pub mod surface;
 pub mod surface_tactic;
 pub mod surface_tactic_types;
@@ -30,16 +31,17 @@ mod syntax_boundary_regressions;
 pub use grammar::Parser;
 pub use interpolation::InterpolationPart;
 pub use lexer::InterpolatedStringKind;
+pub use notation_seed::{NotationSeed, SeededNotation};
 pub use surface::{
     AesopAttr, AesopBuilder, AesopIndexMode, AesopPhase, Attribute, AttributeCommandAttr,
-    ConvEnterArg, DeclModifiers, DeclScope, DecreasingBy, DoCatchClause, DoElem, DoLetExprKind,
-    DoMatchArm, LevelExpr, MacroArm, NotationItem, NotationKind, OpenPath, OpenRename,
-    PrecedenceLevel, Projection, QAntiquotContent, QQuotationKind, SimpPriority, Span, SurfaceArg,
-    SurfaceBinder, SurfaceBinderInfo, SurfaceCalcJustification, SurfaceCalcStep, SurfaceCtor,
-    SurfaceDecl, SurfaceExpr, SurfaceField, SurfaceFieldAssign, SurfaceInductionAlt, SurfaceLit,
-    SurfaceMatchArm, SurfacePattern, SurfaceRwRule, SurfaceTactic, SurfaceTacticLocation,
-    SyntaxPatternItem, TacticMatchArm, TerminationBy, TerminationHints, TerminationKind,
-    UniverseExpr, Visibility, WhereLocalDef,
+    CodataBody, ConvEnterArg, DeclModifiers, DeclScope, DecreasingBy, DoCatchClause, DoElem,
+    DoLetExprKind, DoMatchArm, LevelExpr, MacroArm, NotationItem, NotationKind, OpenPath,
+    OpenRename, PrecedenceLevel, Projection, QAntiquotContent, QQuotationKind, SimpPriority, Span,
+    SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceCalcJustification, SurfaceCalcStep,
+    SurfaceCtor, SurfaceDecl, SurfaceExpr, SurfaceField, SurfaceFieldAssign, SurfaceInductionAlt,
+    SurfaceLit, SurfaceMatchArm, SurfacePattern, SurfaceRwRule, SurfaceTactic,
+    SurfaceTacticLocation, SyntaxPatternItem, TacticMatchArm, TerminationBy, TerminationHints,
+    TerminationKind, UniverseExpr, Visibility, WhereLocalDef,
 };
 pub use tactic_patterns::{TacticArgPattern, TacticPatterns};
 
@@ -196,11 +198,32 @@ pub fn parse_file_with_tactics_located(
 }
 
 /// Parse a file with tactic-pattern-aware parsing and recovery diagnostics.
+///
+/// # Errors
+///
+/// Returns a `ParseError` if the input cannot be parsed at file level.
 pub fn parse_file_with_tactics_diagnostics(
     input: &str,
     patterns: &TacticPatterns,
 ) -> Result<ParseReport, ParseError> {
     Parser::parse_file_with_tactics_diagnostics(input, patterns)
+}
+
+/// Parse a file with tactic-pattern-aware parsing, recovery diagnostics, and
+/// the notation registry pre-populated from the file's imports.
+///
+/// See [`notation_seed`] for how a seed is built. An empty seed makes this
+/// identical to [`parse_file_with_tactics_diagnostics`].
+///
+/// # Errors
+///
+/// Returns a `ParseError` if the input cannot be parsed at file level.
+pub fn parse_file_seeded(
+    input: &str,
+    patterns: &TacticPatterns,
+    seed: &NotationSeed,
+) -> Result<ParseReport, ParseError> {
+    Parser::parse_file_seeded(input, patterns, seed)
 }
 
 /// Source location for parser recovery diagnostics.

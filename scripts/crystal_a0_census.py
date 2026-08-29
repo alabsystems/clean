@@ -135,27 +135,59 @@ def parse_flips(path):
     return cod, ctfe
 
 
-def check_discharge(def_path, escapes, indirect, tgt):
+def clause_b_theorem_registered(theorem, where, repo_root="."):
+    """Is `theorem` actually registered as a spec declaration at `where`?
+
+    Audit r1 M1 (workflow wf_4d1a618b): the validator accepted a bare
+    `{"clause": "b"}` with no theorem at all -- fail-OPEN on exactly the clause
+    that claims a kernel-checked proof. A clause-(b) claim must be checkable
+    against the SOURCE: the named file must exist and register the named
+    theorem (the `add_recursive_def` rationale convention prefixes the source
+    with `def <name> ` and the rationale with `<name>:`). This is a
+    registration-existence check, not a proof check -- the proof is the
+    kernel's job; this only refuses a theorem NAME that nothing registers.
+    """
+    import os
+    path = os.path.join(repo_root, where)
+    if not os.path.isfile(path):
+        return False
+    src = open(path, encoding="utf-8", errors="replace").read()
+    return (f"def {theorem} " in src or f"def {theorem}(" in src
+            or f"{theorem}:" in src)
+
+
+def check_discharge(def_path, escapes, indirect, tgt, repo_root="."):
     """Core of the A0-SEMANTIC cell -- module-level so the selftest can reach it.
 
     escapes: the walk's escaping callee ids for this body. indirect: any
     indirect call in the closure. tgt: this def_path's discharge-table entry or
     None. True/False is the verdict; SystemExit is a REFUSAL (malformed or
     wider-than-reality table).
+
+    FAIL-CLOSED ON BOTH CLAUSES (audit r1 M1 repair): clause (a) must name
+    model+residual; clause (b) must name a `theorem` that is listed in the
+    target's `clause_b_theorems` AND whose named source file registers it.
+    Before this repair a bare `{"clause": "b"}` passed -- the one shape that
+    claims a proof was the one shape nothing checked.
     """
     if indirect:
         return False
     if tgt is None:
         return False
-    entries = {int(k) for k in tgt.get("escaping_callees", {})}
+    # v2 (audit r2 pre-emption): escapes are NAMES. Numeric func_ids renumber
+    # with every module change -- the v1 id-keyed table was correctly refused
+    # by this very gate on the first fresh dump (expect: 6516 -> 6547). The
+    # caller maps its escaping ids to trust-ir names before calling.
+    entries = set(tgt.get("escaping_callees", {}))
     extra = entries - set(escapes)
     if extra:
         raise SystemExit(
             f"discharge table for {def_path} names callee(s) {sorted(extra)} that the "
             f"walk does not find (walk escapes: {sorted(escapes)}) -- a table wider than "
             f"reality is refused, not ignored")
+    listed = {t.get("theorem"): t for t in tgt.get("clause_b_theorems", [])}
     for e in sorted(escapes):
-        ent = tgt.get("escaping_callees", {}).get(str(e))
+        ent = tgt.get("escaping_callees", {}).get(e)
         if ent is None:
             return False
         if ent.get("clause") not in ("a", "b"):
@@ -164,6 +196,23 @@ def check_discharge(def_path, escapes, indirect, tgt):
             raise SystemExit(
                 f"discharge entry {def_path}/{e} is clause (a) but names no model+residual "
                 f"-- an unnamed residual is a silence, which clause (a) exists to forbid")
+        if ent["clause"] == "b":
+            th = ent.get("theorem")
+            if not th:
+                raise SystemExit(
+                    f"discharge entry {def_path}/{e} is clause (b) but names NO theorem -- "
+                    f"an unreachability claim with no proof named is the fail-open hole "
+                    f"audit r1 M1 closed; refused")
+            row = listed.get(th)
+            if row is None:
+                raise SystemExit(
+                    f"discharge entry {def_path}/{e} names theorem {th!r} that the target's "
+                    f"clause_b_theorems does not list -- refused")
+            where = (row.get("where") or "").split()[0]
+            if not where or not clause_b_theorem_registered(th, where, repo_root):
+                raise SystemExit(
+                    f"clause_b theorem {th!r} is not registered at {where!r} -- a theorem "
+                    f"name nothing registers proves nothing; refused")
     return True
 
 
@@ -233,15 +282,38 @@ def selftest():
             return True
         print(f"  [RED] selftest arm {tag}: refusal did NOT fire")
         return False
-    if check_discharge("t", {9}, False, {"escaping_callees": {"9": ENT}}) is not True:
+    if check_discharge("t", {"callee_x"}, False, {"escaping_callees": {"callee_x": ENT}}) is not True:
         print("  [RED] arm discharge-covered: entry present but verdict False"); ok = False
-    if check_discharge("t", {9}, False, {"escaping_callees": {}}) is not False:
+    if check_discharge("t", {"callee_x"}, False, {"escaping_callees": {}}) is not False:
         print("  [RED] arm discharge-missing: escaping callee with no entry passed"); ok = False
-    if check_discharge("t", {9}, True, {"escaping_callees": {"9": ENT}}) is not False:
+    if check_discharge("t", {"callee_x"}, True, {"escaping_callees": {"callee_x": ENT}}) is not False:
         print("  [RED] arm discharge-indirect: indirect call passed the semantic cell"); ok = False
-    ok &= refuses_d("wider-than-reality", "t", {9}, False, {"escaping_callees": {"9": ENT, "10": ENT}})
-    ok &= refuses_d("clause-a-unnamed-residual", "t", {9}, False,
-                    {"escaping_callees": {"9": {"clause": "a", "model": "m"}}})
+    ok &= refuses_d("wider-than-reality", "t", {"callee_x"}, False, {"escaping_callees": {"callee_x": ENT, "callee_phantom": ENT}})
+    ok &= refuses_d("clause-a-unnamed-residual", "t", {"callee_x"}, False,
+                    {"escaping_callees": {"callee_x": {"clause": "a", "model": "m"}}})
+    # arms 12-14 (audit r1 M1): clause (b) is fail-closed too
+    ok &= refuses_d("clause-b-bare", "t", {"callee_x"}, False,
+                    {"escaping_callees": {"callee_x": {"clause": "b"}}})
+    ok &= refuses_d("clause-b-unlisted-theorem", "t", {"callee_x"}, False,
+                    {"escaping_callees": {"callee_x": {"clause": "b", "theorem": "phantom_thm"}},
+                     "clause_b_theorems": []})
+    ok &= refuses_d("clause-b-unregistered-theorem", "t", {"callee_x"}, False,
+                    {"escaping_callees": {"callee_x": {"clause": "b", "theorem": "phantom_thm"}},
+                     "clause_b_theorems": [{"theorem": "phantom_thm",
+                                            "where": "does/not/exist.rs"}]})
+    # ...and the REAL committed table's clause-b theorem must verify against source
+    import json as _json
+    try:
+        _t = _json.load(open("data/crystal_a0_discharge.json"))
+        for _name, _tg in _t["targets"].items():
+            for _row in _tg.get("clause_b_theorems", []):
+                _w = (_row.get("where") or "").split()[0]
+                if not clause_b_theorem_registered(_row["theorem"], _w):
+                    print(f"  [RED] committed clause_b theorem {_row['theorem']} not "
+                          f"registered at {_w}")
+                    ok = False
+    except FileNotFoundError:
+        pass  # bare-clone selftest contexts without the table stay green
     if not ok:
         raise SystemExit("crystal_a0_census selftest: arms misbehave -- refusing to census")
 
@@ -252,7 +324,7 @@ def main(argv):
     # demonstration is invocable by name and the registry badge matches the file.
     if len(argv) > 1 and argv[1] == "--selftest":
         selftest()
-        print("crystal_a0_census selftest: 11/11 arms behave")
+        print("crystal_a0_census selftest: 14/14 arms behave")
         return
     selftest()
     if len(argv) < 5:
@@ -314,7 +386,8 @@ def main(argv):
         if discharge_table is None:
             return False
         tgt = discharge_table.get("targets", {}).get(def_path)
-        return check_discharge(def_path, escapes, indirect, tgt)
+        escape_names = {funcs[e]["name"] for e in escapes}
+        return check_discharge(def_path, escape_names, indirect, tgt, repo_root=".")
 
     rows = []
     for b in cov["bodies"]:

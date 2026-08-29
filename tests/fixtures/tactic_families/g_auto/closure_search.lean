@@ -6,8 +6,15 @@ import Init
 -- definitional unfolding via the helper def); the search rows reproduce the
 -- RC-O class (`a = a` with 93k constants loaded failed 2026-07-29).
 
-theorem canary_env_g_auto_closure_search (as : List Nat) : as.reverse.reverse = as :=
-  List.reverse_reverse as
+-- Environment canary. BOTH facts are absent from Clean's builtin/stub prelude and
+-- present in real Init, so this declaration fails unless `import Init` genuinely
+-- loaded. Its discriminating power is re-proved on every run rather than assumed
+-- (family_gate.py --canary-check); the previous single-fact canary
+-- `List.reverse_reverse` was silently disarmed on 2026-08-23 by 3df6e4aad, which
+-- registered a kernel-proved copy of it INTO the builtin prelude.
+theorem canary_env_g_auto_closure_search (as bs : List Nat) (n m : Nat) :
+    (as ++ bs).reverse = bs.reverse ++ as.reverse ∧ n.succ - m.succ = n - m :=
+  And.intro (List.reverse_append as bs) (Nat.succ_sub_succ_eq_sub n m)
 
 /-- Helper for the grind definitional-unfolding probe (not a probe row). -/
 def gsDouble (n : Nat) : Nat := n + n

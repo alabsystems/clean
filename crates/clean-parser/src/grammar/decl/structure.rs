@@ -431,18 +431,29 @@ impl Parser {
         })
     }
 
-    /// Parse a `codata` declaration (Rocq-style Type-level codata as an
-    /// observation record; M-type encoded by the elaborator):
+    /// Parse a `codata` declaration (Rocq-style Type-level codata; M-type
+    /// encoded by the elaborator). Two body shapes:
     ///
     /// ```text
-    /// codata Stream (A : Type) where
+    /// codata Stream (A : Type) where       -- RECORD: observation fields
     ///   head : A
     ///   tail : Stream A
+    ///
+    /// codata ITr (E : Type) (R : Type) where   -- VARIANT: ctor clauses
+    ///   | Ret : R → ITr E R
+    ///   | Tau : ITr E R → ITr E R
     /// ```
     ///
-    /// Reuses the structure field grammar (`name : Ty` only — field
-    /// defaults are rejected loudly). `extends` is not part of the codata
-    /// surface.
+    /// The record body reuses the structure field grammar (`name : Ty`
+    /// only — field defaults are rejected loudly). The variant body reuses
+    /// [`Parser::parse_ctor_type`] verbatim, so `| Vis (e : E) (k : Ans e → T) : T`
+    /// desugars exactly as it does for `inductive`. `where` is required for
+    /// a record body and optional before a `|`-led variant body, matching
+    /// `inductive`. `extends` is not part of the codata surface.
+    ///
+    /// The two bodies never mix: a `|` after fields, or a field after
+    /// clauses, is a parse error rather than a half-formed declaration.
+    /// See `designs/2026-08-28-variant-codata-surface.md` §2.
     pub(in crate::grammar) fn codata_decl_with_mods(
         &mut self,
         start_span: Span,
@@ -459,8 +470,37 @@ impl Parser {
             None
         };
 
-        self.expect(&TokenKind::Where)?;
+        let had_where = self.eat(&TokenKind::Where);
+        let body = if self.check(&TokenKind::Pipe) {
+            CodataBody::Variant(self.codata_variant_clauses(&name, &binders)?)
+        } else if had_where {
+            CodataBody::Record(self.codata_record_fields()?)
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current_span().start,
+                message: "codata expects `where` followed by observation fields, \
+                          or `|`-led constructor clauses"
+                    .to_string(),
+            });
+        };
 
+        let deriving = self.parse_deriving_clause()?;
+
+        Ok(SurfaceDecl::Codata {
+            span: start_span,
+            name,
+            universe_params,
+            binders,
+            ty,
+            body,
+            deriving,
+            modifiers,
+        })
+    }
+
+    /// The record body: `name : Ty` observation fields.
+    fn codata_record_fields(&mut self) -> Result<Vec<SurfaceField>, ParseError> {
         let mut fields = Vec::new();
         while self.is_field_start() {
             let field_span = self.current_span();
@@ -483,18 +523,47 @@ impl Parser {
                 is_default_override: false,
             });
         }
+        if self.check(&TokenKind::Pipe) {
+            return Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current_span().start,
+                message: "codata: a `|` constructor clause cannot follow observation \
+                          fields — a codata body is either a record (fields) or a \
+                          variant (clauses), never both"
+                    .to_string(),
+            });
+        }
+        Ok(fields)
+    }
 
-        let deriving = self.parse_deriving_clause()?;
-
-        Ok(SurfaceDecl::Codata {
-            span: start_span,
-            name,
-            universe_params,
-            binders,
-            ty,
-            fields,
-            deriving,
-            modifiers,
-        })
+    /// The variant body: `|`-led constructor clauses, sharing the
+    /// `inductive` constructor grammar.
+    fn codata_variant_clauses(
+        &mut self,
+        name: &str,
+        binders: &[SurfaceBinder],
+    ) -> Result<Vec<SurfaceCtor>, ParseError> {
+        let mut ctors = Vec::new();
+        while self.eat(&TokenKind::Pipe) {
+            let ctor_span = self.current_span();
+            let ctor_name = self.ident()?;
+            let ctor_ty = self.parse_ctor_type(ctor_span, name, binders)?;
+            ctors.push(SurfaceCtor {
+                span: ctor_span,
+                name: ctor_name,
+                ty: ctor_ty,
+            });
+        }
+        if self.is_field_start() {
+            return Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current_span().start,
+                message: "codata: an observation field cannot follow `|` constructor \
+                          clauses — a codata body is either a record (fields) or a \
+                          variant (clauses), never both"
+                    .to_string(),
+            });
+        }
+        Ok(ctors)
     }
 }

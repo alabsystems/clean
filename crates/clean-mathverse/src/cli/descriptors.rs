@@ -823,8 +823,7 @@ const BUILD_LIBRARY_DESC: FeatureDescriptor = FeatureDescriptor {
          independently skippable via `--skip-*` flags so the command supports \
          partial rebuilds (e.g. re-package an existing shard tree, or publish \
          an already-packaged archive). See \
-         [docs/MATHVERSE_RELEASE_PROCESS.md](docs/MATHVERSE_RELEASE_PROCESS.md) for \
-         the underlying workflow.",
+         `docs/MATHVERSE_RELEASE_PROCESS.md` for the underlying workflow.",
     category: Category::Import,
     stability: Stability::Usable,
     examples: &[

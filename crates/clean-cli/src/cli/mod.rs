@@ -132,6 +132,26 @@ pub struct RunArgs {
     /// print its path instead of deleting it on exit.
     #[arg(long)]
     pub keep_temp: bool,
+    /// Arguments handed to the built program as its `argv`, i.e. what a
+    /// `def main (args : List String)` entry receives.
+    ///
+    /// Trailing pass-through, spelled exactly as `clean lake run` /
+    /// `clean lake exe` spell theirs (`trailing_var_arg` +
+    /// `allow_hyphen_values`), so `clean run f.lean --decl main -- --flag x`
+    /// hands the program `["--flag", "x"]` rather than trying to parse
+    /// `--flag` as one of `clean run`'s own options. `clean run`'s flags must
+    /// therefore precede the first program argument.
+    ///
+    /// Like Lean, an entry that takes no `List String` simply never sees
+    /// these: `argv` is a property of the program's own contract, and the
+    /// driver only marshals a list when the entry's elaborated type asks for
+    /// one.
+    #[arg(
+        trailing_var_arg = true,
+        allow_hyphen_values = true,
+        value_name = "ARG"
+    )]
+    pub args: Vec<String>,
 }
 
 /// Target language for `clean extract`.
@@ -400,14 +420,14 @@ the small-`Nat` result and prints it. And Lean 4's own entry contract — \
 `(args : List String)`: the driver marshals the process arguments into a \
 `List String` when the entry takes one, drives every IO effect, and \
 PROPAGATES the returned `UInt32` as its own exit status (an `IO Unit` entry \
-exits 0). `clean run` itself passes no arguments to the program — use \
-`clean lake run <target> -- <args>` to forward them; that surface builds \
-through the same engine and execs the produced binary with the caller's \
-argv. Entries taking anything other than one `List String`, and prelude \
-externs outside the shim tables, are rejected with an explicit message \
-rather than mis-linked. Override the compiler with `$CC`; pass `--keep-temp` \
-to retain the scratch build directory (emitted C + runtime + binary) for \
-inspection.",
+exits 0). Trailing arguments after `--` ARE the program's `argv`: \
+`clean run main.lean --decl main -- alpha beta` hands the entry \
+`[\"alpha\", \"beta\"]`, flag-like tokens included, the same trailing \
+pass-through `clean lake run <target> -- <args>` uses. Entries taking \
+anything other than one `List String`, and prelude externs outside the shim \
+tables, are rejected with an explicit message rather than mis-linked. \
+Override the compiler with `$CC`; pass `--keep-temp` to retain the scratch \
+build directory (emitted C + runtime + binary) for inspection.",
         category: Category::Dev,
         stability: Stability::Experimental,
         examples: &[
@@ -418,6 +438,10 @@ inspection.",
             Example {
                 cmd: "clean run main.lean --decl main",
                 what: "run a `def main : IO UInt32` entry; `clean run` exits with the status it returns",
+            },
+            Example {
+                cmd: "clean run main.lean --decl main -- alpha beta",
+                what: "hand `[\"alpha\", \"beta\"]` to a `def main (args : List String)` entry as its argv",
             },
             Example {
                 cmd: "clean run answer.lean --decl answer --keep-temp",

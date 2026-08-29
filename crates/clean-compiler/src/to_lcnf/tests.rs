@@ -2090,3 +2090,87 @@ fn test_beta_redex_compound_argument_is_bound_once() {
         "the body must survive the reduction:\n{dumped}"
     );
 }
+
+// -- `let` in VALUE position (the `for` / `let mut` lowering gap) -------------
+
+/// A `let` reached in VALUE position — here the RHS of another `let` — must
+/// FLATTEN into the enclosing A-normal statement stream, not fail the whole
+/// declaration.
+///
+/// This is the form that stopped `for x in xs do` with a `let mut`
+/// accumulator: the reassignment inside the `ForIn` step function is a `let`,
+/// and `Id.run`'s inlining leaves the whole `do` block in an argument
+/// position, so lowering reached it through `expr_to_let_value` rather than
+/// through `expr_to_code`. Only the latter had a `Let` arm, so the declaration
+/// died with `Unsupported("Expression form: Let(..)")`.
+///
+/// Asserting SCOPE, not just success, is the point. A flattening that emits
+/// the bindings in the wrong order, or lets the outer binding name the wrong
+/// `FVarId`, still "lowers" — and then computes the wrong value at runtime.
+#[test]
+fn test_let_in_value_position_flattens_in_scope_order() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+
+    // let outer : Nat := (let inner : Nat := 7; inner); outer
+    let inner = Expr::let_named(
+        Name::from_string("inner"),
+        Expr::const_str("Nat"),
+        Expr::nat_lit(7),
+        Expr::bvar(0),
+        false,
+    );
+    let outer = Expr::let_named(
+        Name::from_string("outer"),
+        Expr::const_str("Nat"),
+        inner,
+        Expr::bvar(0),
+        false,
+    );
+
+    let code = expr_to_code(&mut ctx, &outer).expect("a `let` in value position must lower");
+
+    // Collect the flattened bindings in emission order.
+    let mut lets = Vec::new();
+    let mut cur = &code;
+    while let Code::Let(decl, rest) = cur {
+        lets.push(decl);
+        cur = rest.as_ref();
+    }
+
+    assert_eq!(
+        lets.len(),
+        2,
+        "both bindings must survive into one flat stream, got: {lets:?}"
+    );
+
+    // The INNER binding is emitted first — it is what the outer one names.
+    match &lets[0].value {
+        LetValue::Lit(clean_kernel::Literal::Nat(n)) if n.to_u64() == Some(7) => {}
+        other => {
+            panic!("the inner `let` must be emitted FIRST and bind the literal 7, got {other:?}")
+        }
+    }
+
+    // The OUTER binding names the inner one, and the terminal returns the outer.
+    match &lets[1].value {
+        LetValue::FVar { fvar, args } => {
+            assert_eq!(
+                *fvar, lets[0].fvar_id,
+                "the outer binding must name the inner binding's fvar — a \
+                 different id here is a mis-scoped flattening, which computes \
+                 a wrong value at runtime rather than failing"
+            );
+            assert!(args.is_empty(), "no application is involved, got {args:?}");
+        }
+        other => panic!("expected the outer `let` to name the inner fvar, got {other:?}"),
+    }
+
+    match cur {
+        Code::Return(fv) => assert_eq!(
+            *fv, lets[1].fvar_id,
+            "the declaration must return the OUTER binding"
+        ),
+        other => panic!("expected a Return terminal, got {other:?}"),
+    }
+}

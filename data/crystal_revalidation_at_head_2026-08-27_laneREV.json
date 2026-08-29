@@ -1,0 +1,106 @@
+{
+  "schema": "clean.crystal.revalidation_at_head/v1",
+  "what_this_is": "A DATED re-verification of the eighteen crystal chains at clean HEAD, and an explicit statement of the part that could NOT be re-verified here and why. It is not a fixture rebaseline and not a new chain record: no trustc dump was taken, so no fixture was compared to a live build.",
+  "lane": "REV",
+  "measured_utc": "2026-08-28T02:04:36Z",
+  "clean_head": "16374d511f984b1f10d64400331f77a364f93b3f",
+  "clean_head_at_start": "22b4d9c1e6417071d456f49189a34cf99a74d2d8",
+  "re_verified_at_head": {
+    "crystal_freshness_scope": {
+      "command": "python3 scripts/crystal_freshness_scope.py",
+      "verdict": "NUMBERING-SCOPE",
+      "exit": 0,
+      "record_covered": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+      "covered_clean_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
+      "covered_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
+      "live_kernel_src_sha256": "faae91aaaaf464770a27842d57540817bcf382efda8d485cd86bac640b2c0ad5",
+      "chained_body_sources_moved": [],
+      "item_granular_def_paths": 19,
+      "meaning": "all 19 chained def_paths are pinned at ITEM granularity and every recorded item digest equals the live one, so NO chained body's own defining source moved between the covered rev and HEAD. AMBER stands because whole-crate index renumbering is unmeasured without a dump."
+    },
+    "crystal_enum_tag_pin": {
+      "command": "python3 scripts/check_enum_tag_pin.py",
+      "exit": 0,
+      "detail": "4 chained enums, 34 discriminants; declaration order, serde-index coherence, #[repr] on 3, explicit discriminants, Rust pin tables, 4 reflected tag defs, 6 recorded artifacts all agree"
+    },
+    "a0a6_probe_transcription": {
+      "command": "python3 scripts/check_a0a6_probe_transcription.py",
+      "exit": 0,
+      "detail": "selftest 6/6 arms behave (1 green, 4 red, 1 refusal); the probe re-derives from 11 committed records"
+    },
+    "crystal_a0_census_selftest": {
+      "command": "python3 scripts/crystal_a0_census.py --selftest",
+      "exit": 0,
+      "detail": "11/11 arms behave"
+    },
+    "gate_registry": {
+      "command": "python3 scripts/check_gate_registry.py",
+      "exit": 0,
+      "detail": "rows=129 gate=51 leg=39 battery=22 suite-row=7 tool=10 soundness=42/48"
+    },
+    "crystal_fixture_pins": {
+      "command": "python3 scripts/check_crystal_fixture_pins.py",
+      "exit": 0,
+      "landed_by_this_lane": true,
+      "detail": "21 of 21 committed *.trust-ir.txt fixtures byte-identical to the new_sha256/new_bytes recorded by data/crystal_fixture_rebaseline_2026-08-21_lane18.json; the committed set and the recorded set are equal (none added uncompared, none vanished).",
+      "why_it_did_not_exist_before": "crystal_fixture_rebaseline.py writes new_sha256/new_bytes for every fixture it mints; measured 2026-08-27 those fields were read by the minter and by NOTHING ELSE in either tree. The emitted-IR text every link-2a lane compares its spec module against, and the record of what that text held when a real compiler produced it, were never compared.",
+      "ceiling": "A green means 'nobody has edited a fixture since the last real measurement'. It does NOT mean the fixtures still match what the compiler emits today -- that is the live-dump duty, still owed.",
+      "demonstrated": "synthetic 4 arms inline on every invocation, plus on the real tree: flipping the first `true` to `false` in crates/clean-verify/tests/fixtures/level_is_zero.trust-ir.txt gives exit 1 naming the drift; appending one byte to has_loose_bvars' fixture turns the pre-push hook RED at the crystal-fixture-pins leg."
+    }
+  },
+  "probe_vs_page_disagreement": {
+    "question": "docs/CRYSTAL_STATUS.md and data/crystal_a0_a6_probe.json once disagreed ON PURPOSE. Do they still?",
+    "answer": "NO -- RESOLVED, and it was resolved before this lane.",
+    "evidence": {
+      "probe_schema": "clean.crystal.a0a6.probe.v2",
+      "probe_transcribed_utc_date": "2026-08-25",
+      "probe_current_A0_score": "5-of-6",
+      "probe_current_A6_score": "4-of-4",
+      "probe_retires_the_sentence": "docs/CRYSTAL_STATUS.md previously said this probe 'has not been re-minted, so the probe and this page disagree on purpose until it is'.  That sentence is retired by this file.",
+      "page_records_the_remint_at": "docs/CRYSTAL_STATUS.md line 4024",
+      "claude_md_records_the_remint_at": "CLAUDE.md line 526"
+    },
+    "residual": "The probe is a TRANSCRIPTION, not a fresh measurement, and it says so in its own header. It carries the syntactic 5-of-6 plus the `bodyful_or_discharged_closure` PASS adopted by the 2026-08-27 owner ruling. Its `not_established_by_any_committed_record` list -- 6 entries -- is the honest residual and is unchanged by this lane."
+  },
+  "NOT_re_verified_and_why": {
+    "the_owed_measurement": "scripts/crystal_fixture_freshness.py <TRUST_IR_BUILD_DUMP> -- compare all 21 committed fixtures against a live trustc dump of clean-kernel at HEAD",
+    "blocker": "THE RECORDED PRODUCER IS NOT ON THIS MACHINE",
+    "recorded_producer": {
+      "trust_worktree_rev": "c4e667ca51a4b6bd0bc3790e540cdabc707c45a1",
+      "trustc_sha256": "044fb2df5ac0c18f795139f121e15094eea62135be81396aca62142004f9ba1f",
+      "librustc_driver_sha256": "4e2a161f6e0d9f6ddf184d5d744c6f46fa9defba52028addfe31b4885fde510c",
+      "resolvable_in_local_trust_checkout": false,
+      "probe_git_result": "git -C $HOME/trust cat-file -t c4e667ca51a4b6bd0bc3790e540cdabc707c45a1 -> could not get object info"
+    },
+    "what_is_present_instead": {
+      "trust_checkout_head": "ef5a5910eaca06e02d9081d16c450f2bd99a554a (2026-08-14)",
+      "stage1_trustc_sha256": "c6e9853b8d77698fa668cdf91e02870a2563e30ad8db49a32857d0edeee61959",
+      "stage1_driver_sha256": "567dc8d028d96fb137ce6f1a2e0da5ccf83797d1d2046c8ef9a82c3015a4a705",
+      "stage2_trustc_sha256": "80221c857fcb27998db7f3e3497605526f9d214386bc6caa27afa6bbadb240ce",
+      "sealed_marker_wave_drivers_found": 0,
+      "driver_functional": true,
+      "driver_functional_evidence": "a 14-line Level/LevelArc probe lowers and dumps: -Ztrust-ir-lower=on -Ztrust-dump=ir emits coverage.json with derived_mir `agreed`, and the driver registers marker-order/marker-drop/marker-arm/agg-field-order and body_lineage.v2"
+    },
+    "consequence": "A dump taken here is a DIFFERENT PRODUCER from the one the fixtures were cut with. crystal_fixture_freshness.py's AMBER classes absorb whole-crate numbering, but any STRUCTURAL difference would be unattributable between producer drift and clean-side drift -- exactly the confound section 7(a3) of docs/CRYSTAL_STATUS.md forbids reasoning through. So this lane did not publish a comparison it could not attribute."
+  },
+  "clean_side_gates_left_running": {
+    "targets": [
+      "clean-verify::test::crystal_a1_lineage",
+      "clean-verify::test::axiom_ratchet",
+      "clean-verify::test::eval_ir",
+      "clean-verify::test::vacuity_firewall"
+    ],
+    "launcher": "scripts/verify_runner_pinned.sh --only ... run --jobs 2",
+    "state_at_write_time": "queued behind a 27 GB oversize job in scripts/heavy_gate.sh; UNKNOWN is not rounded up",
+    "note": "This lane's own commit widens crystal_a1_lineage's input digest, which correctly demotes that row to UNKNOWN once. Re-run it to convert the demotion back into a measured verdict."
+  },
+  "discharge_commands": {
+    "1_rebuild_the_recorded_producer": "git -C $TRUST worktree add --detach $W c4e667ca51a4b6bd0bc3790e540cdabc707c45a1  # NOT FETCHABLE from the local checkout; needs the trust remote",
+    "2_or_seal_the_tip_and_accept_a_producer_change": "$TRUST/scripts/seal_driver.sh seal laneX && $TRUST/scripts/seal_driver.sh verify <sealed>",
+    "3_dump": "TRUST_IR_BUILD_TARGET_DIR=$W/ckt TRUST_IR_BUILD_DUMP=$W/dump_O3 scripts/heavy_gate.sh run 8 dump -- bash scripts/trust_ir_build.sh --print-only",
+    "4_compare": "python3 scripts/crystal_fixture_freshness.py $W/dump_O3 --json $W/fresh.json",
+    "5_mint_the_record": "python3 scripts/crystal_chain_revalidation.py $W/dump_O3 --freshness-report $W/fresh.json --trustc <tc> --driver <dylib> --supersedes data/crystal_chain_revalidation_2026-08-21_lane18.json --out data/crystal_chain_revalidation_<date>_<rev>.json",
+    "6_repin_the_scope": "python3 scripts/crystal_freshness_scope.py --emit   # only after 4 and 5; a CONTENT-SCOPE failure is never refreshed by re-emitting"
+  },
+  "honest_verdict": "The eighteen chains are NOT re-verified against a live build at HEAD, and this lane did not make them so. What IS established here: no chained body's own source moved (19 of 19 item digests identical), the four cheap crystal gates are green at HEAD, and the probe/page disagreement is closed. The remaining AMBER is a producer-availability problem, not an effort problem, and it is now named."
+}

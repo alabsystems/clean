@@ -88,6 +88,14 @@ pub use proof_reconstruct::pcay_bvshift::{
     bvshift_identity_obligation, certify_bvshift_unsat, BvShiftCertified, BvShiftCertifyError,
     MAX_REFLECTION_STEPS as BVSHIFT_MAX_REFLECTION_STEPS,
 };
+// Direct, kernel-checked computational BitVec identities. Keep this on the
+// curated provider surface rather than leaving the re-export stranded inside
+// the crate-private reconstruction module (which also makes release builds
+// diagnose it as an unused import).
+#[cfg(feature = "ay-bv-blast")]
+pub use proof_reconstruct::theory_lemma_bv::{
+    reconstruct_bv_compute_identity, BvComputeIdentity, BvComputeReconstruction,
+};
 // Re-export ay's BvExpr fragment so downstream (trust-router) can name bvmul
 // obligations without a direct `ay-proof` dependency. Gated with the BV lane.
 #[cfg(feature = "ay-bv-blast")]

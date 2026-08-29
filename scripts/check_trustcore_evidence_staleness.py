@@ -168,9 +168,9 @@ def main() -> int:
             print(f"  STALE: {finding}")
         print(
             "  A cmd_replacement/ gate-logic edit outdated the checked-in "
-            "trust-core evidence. Regenerate with a HEAD-built clean binary —\n"
-            "    clean replacement trust-core-evidence --kernel-soundness\n"
-            "    clean replacement trust-core-evidence --deny-sorry\n"
+            "trust-core evidence. Regenerate with a HEAD-built clean binary (audit r2: WITHOUT --evidence the command only PRINTS -- the flag is what writes the report; this remedy text once omitted it and cost two 15-minute mint cycles) —\n"
+            "    clean replacement trust-core-evidence --kernel-soundness --evidence reports/kernel-soundness-launch-evidence.json\n"
+            "    clean replacement trust-core-evidence --deny-sorry --evidence reports/deny-sorry-launch-evidence.json\n"
             "    clean replacement axiom-audit --verify data/axiom_audit.json "
             "--evidence reports/axiom-audit-launch-evidence.json --json\n"
             "  — and commit the refreshed artifacts in the SAME change as the "

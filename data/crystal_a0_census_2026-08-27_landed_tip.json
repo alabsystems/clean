@@ -1,0 +1,2099 @@
+{
+ "schema": "clean.crystal.a0_census/1",
+ "provenance": {
+  "discharge": "data/crystal_a0_discharge.json",
+  "trust_rev": "37c4d31d47cd",
+  "corpus": "f21d6336bf",
+  "kind": "landed-tip-revalidation"
+ },
+ "inputs": {
+  "dump_O3": "$HOME/trust/scratchpad/laneRVAL/wc/dump_O3",
+  "flip_O3": "$HOME/trust/scratchpad/laneRVAL/wc/O3.flip.txt",
+  "flip_O0": "$HOME/trust/scratchpad/laneRVAL/wc/O0.flip.txt"
+ },
+ "criteria": [
+  "lowered",
+  "spliced",
+  "zero_unsupported",
+  "derived_agreed",
+  "bodyful_reachable_closure",
+  "flip_event_O3"
+ ],
+ "totals": {
+  "bodies": 13906,
+  "score_distribution": {
+   "0": 4951,
+   "2": 2493,
+   "3": 4359,
+   "4": 548,
+   "5": 1354,
+   "6": 201
+  },
+  "a0_complete_6_of_6": 201,
+  "a0_complete_with_nonvacuous_markers": 46,
+  "ctfe_flip_O3_bodies": 42,
+  "a0_one_short_5_of_6": 1354,
+  "one_short_missing_criterion": {
+   "flip_event_O3": 951,
+   "bodyful_reachable_closure": 403
+  },
+  "a0_complete_semantic": 202
+ },
+ "a0_complete_bodies": [
+  {
+   "def_path": "bitvec_compute::BvNames::new",
+   "def_index": 328,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::bundle::CertBundle::verify_theorem::{closure#0}",
+   "def_index": 763,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::bundle::trust_min::{closure#0}",
+   "def_index": 814,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::bundle::trust_from_certification_audit::{closure#0}",
+   "def_index": 818,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::cross_project::hex_digit",
+   "def_index": 860,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::types::proof_cert_has_recursive_children",
+   "def_index": 1283,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::builder::state::NodeId::index",
+   "def_index": 1788,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::builder::state::NodeId::raw",
+   "def_index": 1789,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::NullCollector as cert::trace::TraceCollector>::enabled",
+   "def_index": 2616,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::NullCollector as std::default::Default>::default",
+   "def_index": 2618,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::ThreadedCollector as cert::trace::TraceCollector>::enabled",
+   "def_index": 2629,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::origin::OriginTrust::is_unpinned",
+   "def_index": 3062,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::origin::ConstantOrigin::needs_recheck",
+   "def_index": 3071,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::registration::<impl env::Environment>::extend_constants_checked::is_tolerable",
+   "def_index": 3217,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::registration::<impl env::Environment>::upgrade_axiom_stubs_checked::is_tolerable",
+   "def_index": 3227,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+   "def_index": 3322,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ai_proof_search::AiSearchBudget as std::default::Default>::default",
+   "def_index": 3568,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::ai_proof_search::constant_kind_rank",
+   "def_index": 3602,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::proof_search::constant_kind_rank",
+   "def_index": 13298,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::Reducibility::height",
+   "def_index": 13474,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::Reducibility::is_regular",
+   "def_index": 13475,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::Reducibility::kind_rank",
+   "def_index": 13478,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::SimpPriority::value",
+   "def_index": 13483,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::collect_fvar_ids_for_diagnostics::Collector as expr::visitor::ExprVisitor>::combine",
+   "def_index": 13494,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::persistent_ext::ExtensionIdx::index",
+   "def_index": 13525,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::inductive_container_map::FieldPos::is_self_rec",
+   "def_index": 13990,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "def_index": 15095,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_bool_ext::nat_gcd",
+   "def_index": 15208,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "def_index": 15256,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "def_index": 15457,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "def_index": 15459,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "def_index": 15461,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "def_index": 15463,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_name::lean4_name_hash",
+   "def_index": 15762,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "def_index": 16078,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::Environment::set_cumulative",
+   "def_index": 16085,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+   "def_index": 16334,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::subst::FVarSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16464,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::subst::LevelParamSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16473,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::subst::LevelParamSubstSlice<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+   "def_index": 16485,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::Multiplicity::allows_zero",
+   "def_index": 16555,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::Multiplicity::allows_many",
+   "def_index": 16556,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::FVarId::new",
+   "def_index": 16590,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::FVarId::as_u64",
+   "def_index": 16591,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::bvar_in_range",
+   "def_index": 16740,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::convert::binder_info_to_u8",
+   "def_index": 16882,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::empty",
+   "def_index": 17016,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::contains",
+   "def_index": 17017,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::with",
+   "def_index": 17018,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::bits",
+   "def_index": 17019,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+   "def_index": 17119,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "level::Level::kind_ord",
+   "def_index": 17265,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::AllocationId::new",
+   "def_index": 17514,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::AllocationId::raw",
+   "def_index": 17515,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::AllocationId::is_null",
+   "def_index": 17516,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::offset",
+   "def_index": 17520,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::len",
+   "def_index": 17521,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::is_empty",
+   "def_index": 17522,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "micro::types::MicroLevel::structural_cmp::{closure#0}",
+   "def_index": 18116,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "micro::types::MicroLevel::kind_ord",
+   "def_index": 18117,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "mode::CleanMode::from_source_system",
+   "def_index": 18147,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "mode::CleanMode::allows_large_elimination",
+   "def_index": 18151,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "def_index": 18152,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::Address::new",
+   "def_index": 18707,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::Address::raw",
+   "def_index": 18708,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::Address::is_null",
+   "def_index": 18709,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::MemoryValue::new",
+   "def_index": 18712,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::MemoryValue::get",
+   "def_index": 18713,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sem_memory_model::MemoryValue as std::convert::From<u8>>::from",
+   "def_index": 18715,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::<impl std::convert::From<sem_memory_model::MemoryValue> for u8>::from",
+   "def_index": 18717,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::branch_sharing_recursor_app::RecursorApp::<'a>::major_idx",
+   "def_index": 19134,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries",
+   "def_index": 19292,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::def_eq::delta::<impl tc::TypeChecker<'env>>::lazy_delta_step_no_consts",
+   "def_index": 19351,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::SourcePos::unknown",
+   "def_index": 19677,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::SourcePos::new",
+   "def_index": 19678,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::clamp_u32",
+   "def_index": 19685,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::reduction::cofib::CofibAtom::var",
+   "def_index": 19909,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::reduction::cofib::CofibAtom::value",
+   "def_index": 19910,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::reduction_stats::reduction_stats_reset",
+   "def_index": 20429,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::TypeChecker::<'env>::set_allow_unsafe",
+   "def_index": 20675,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::TypeChecker::<'env>::set_allow_partial",
+   "def_index": 20676,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::TypeChecker::<'env>::set_cumulative",
+   "def_index": 20677,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<bitvec_compute::BvNames as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 20884,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::bundle::BundleInspectIssue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21103,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::ProverSystem as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21216,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::ProverInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21275,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::CrossProjectDependency as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21338,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::CrossProjectCert as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21401,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::gamma_crown_import::GammaCrownBoundType as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21493,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::TrustLevel as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21669,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ArchiveDependency as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21730,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::VerificationStep as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21795,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::DistributionInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21859,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ArchiveFormat as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21924,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ArchiveFormat as std::default::Default>::default",
+   "def_index": 21971,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::MetadataValidationError as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21983,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ProofArchiveMetadata as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 22014,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::builder::state::NodeId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24046,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::builder_pool::PoolStats as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24077,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::streaming::CompressionAlgorithm as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24539,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::types::CompressedCertSchema as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24660,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::types::CompressedExpr as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24837,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::types::CompressedLevel as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24997,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::DeclKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26534,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cfg::SsaPosition as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26737,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::ProofQuality as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26828,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::CertificationIssue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26889,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::CertificationAudit as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26905,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::CanonicalAmbientAxiomKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26921,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::codata_origin::CodataLane as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26937,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::codata_origin::CodataOrigin as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26997,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_info::InductiveInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27084,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::origin::DeclarationVerification as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27102,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::origin::OriginTrust as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27168,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::origin::ConstantOrigin as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27234,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_elision::ProofValueElision as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27404,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_elision::ProofValueElision as std::default::Default>::default",
+   "def_index": 27406,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_elision::ProofElisionStats as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27425,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_quality::ProofQualityFinding as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27444,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_quality::ProofQualityError as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27453,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::snapshot::SnapshotHeader as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27651,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::sorry_summary::DeclarationTrustSummary as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27807,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::sorry_summary::SorrySummary as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27878,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ai_proof_search::AiSearchBudget as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27986,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::algebra_int_mul_assoc_proof::Sign as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28239,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopRulePhase as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28572,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopRuleBuilder as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28645,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopIndexMode as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28716,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopIndexMode as std::default::Default>::default",
+   "def_index": 28763,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::TransparencyMode as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28783,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::TransparencyMode as std::default::Default>::default",
+   "def_index": 28788,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::Reducibility as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28856,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::Reducibility as std::default::Default>::default",
+   "def_index": 28861,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::SimpPriority as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29048,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::SimpPriority as std::default::Default>::default",
+   "def_index": 29050,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::ConstantKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29167,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::ConstantKind as std::default::Default>::default",
+   "def_index": 29172,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::persistent_ext::ExtensionIdx as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29781,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_instance::InstanceExtEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29812,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_instance::InstanceInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29825,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_attr::AttrExtEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29846,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_attr::AttrRegistration as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29858,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_builder::GeneratedAuxDefs as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29901,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_container_map::FieldPos as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29935,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_no_confusion::NoConfusionRegenerationIssue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30053,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_no_confusion::NoConfusionRegenerationDiagnostic as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30065,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_no_confusion::NoConfusionRegenerationReport as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30079,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_rel_family::FieldPos as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30147,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::native_reducers_float_to_rat::DyadicValue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30335,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::native_reducers_float_to_rat::FloatClass as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30355,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::native_reducers_float_to_rat::ParsedDyadic as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30368,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::kind::ExprKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 32548,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::kind::ZFCSetExpr as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33136,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderInfo as std::default::Default>::default",
+   "def_index": 33339,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33344,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::Multiplicity as std::default::Default>::default",
+   "def_index": 33409,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::Multiplicity as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33414,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderData as std::default::Default>::default",
+   "def_index": 33475,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderData as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33480,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BigNat as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33546,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::Literal as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33608,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::MDataValue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33676,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::FVarId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33740,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<flat::types::FlatTag as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33886,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<flat::types::FlatFlags as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33902,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<inductive::RecursorArgOrder as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34449,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<memory_model::AllocationId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34623,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<memory_model::MemoryRegion as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34668,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<memory_model::BorrowAccess as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34736,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<micro::types::MicroLiteral as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34889,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<micro::types::MicroResult as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34908,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<micro::types::MicroError as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34918,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::CleanMode as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34991,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::CleanMode as std::default::Default>::default",
+   "def_index": 35047,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::SourceSystem as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35098,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::AxiomId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35204,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<name::NameInner as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35319,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<serde_budget::DecodeResourceLimits as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35417,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<quot::QuotKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35516,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sem_memory_model::Address as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35581,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sem_memory_model::MemoryValue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35627,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sorry::kind::SorryKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35787,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}",
+   "def_index": 35834,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "def_index": 35878,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::expr_location::ExprPathStep as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35883,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::expr_location::ExprLocation as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35897,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::HeartbeatProfileCategory as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35943,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfileEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35963,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfileNameEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35975,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfileTacticEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35988,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::SourcePos as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36003,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfilePositionEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36022,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::OverrunEstimate as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36036,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::monad_reduce::BindKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36078,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::reduction::cofib::CofibAtom as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36096,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::reduction::cofib::Cofib as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36110,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcHypothesis as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36272,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcObligation as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36334,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcResult as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36408,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcBatch as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36468,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcBatchResult as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36526,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": false,
+   "a6_event_lineage_equal": true
+  }
+ ],
+ "one_short_missing_flip_only_sample": [
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#0}",
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#1}",
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_seq::{constant#0}",
+  "<cert::compression::limits::LimitedMapAccess<A> as env::_::_serde::de::MapAccess<'de>>::size_hint",
+  "<cert::compression::limits::LimitedSeqAccess<A> as env::_::_serde::de::SeqAccess<'de>>::size_hint",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#0}",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#1}",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_seq::{constant#0}",
+  "<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema::magic::{constant#0}",
+  "<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_",
+  "<cert::compression::types::CompressedCertSchema as std::clone::Clone>::clone::{constant#0}",
+  "<cert::compression::types::CompressedCertSchema as std::cmp::Eq>::assert_fields_are_eq::{constant#0}",
+  "<cert::types::BoundedStr<'_> as std::fmt::Debug>::fmt::MAX_CHARS",
+  "<cfg::BasicBlock<I, T, L, P> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::CfgError<L> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::DefinitionSite<L> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::SsaInfo<V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::SsaValidationError<L, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::UseSite<L> as std::cmp::Eq>::assert_fields_are_eq",
+  "<flat::header::FlatHeader as std::clone::Clone>::clone::{constant#0}",
+  "<flat::header::FlatHeader as std::clone::Clone>::clone::{constant#1}",
+  "<flat::types::FlatExpr as std::clone::Clone>::clone::{constant#0}",
+  "<flat::types::FlatExpr as std::clone::Clone>::clone::{constant#1}",
+  "<flat::types::FlatLevel as std::clone::Clone>::clone::{constant#0}",
+  "<flat::types::FlatLevel as std::clone::Clone>::clone::{constant#1}",
+  "<level::Level as env::_::_serde::Deserialize<'de>>::deserialize::_",
+  "<micro::types::MicroBoundedStr<'_> as std::fmt::Debug>::fmt::MAX_CHARS",
+  "<name::Name as std::cmp::Ord>::cmp::components::{constant#0}",
+  "<name::Name as std::fmt::Debug>::fmt::{constant#0}",
+  "<name::Name as std::fmt::Display>::fmt::{constant#0}",
+  "<separation_logic::SepExpr<A, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<separation_logic::SepHeap<A, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<separation_logic::SepLogicProof<A, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "VERSION",
+  "bitvec_coercion::names::ADD_ZERO_ID",
+  "bitvec_coercion::names::ALL_FALSE",
+  "bitvec_coercion::names::APPEND",
+  "bitvec_coercion::names::BEQ_EQ_ISZERO_SUB",
+  "bitvec_coercion::names::BVF",
+  "bitvec_coercion::names::BVF_ADD_CONG"
+ ],
+ "one_short_missing_closure_bodies": [
+  "<<<level::Level as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <level::Level as env::_::_serde::Deserialize<'de>>::deserialize::LevelWire>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<<level::Level as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <level::Level as env::_::_serde::Deserialize<'de>>::deserialize::LevelWire>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedLevel>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedLevel>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::ReductionStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::ReductionStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::ReductionStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::ReductionStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceDefEqStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceDefEqStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceDefEqStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceDefEqStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__Visitor<'de, C, E, L, LS, N, Li, M, D, Z> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ZFCSetCertKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ZFCSetCertKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ZFCSetCertKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ZFCSetCertKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ZFCSetCertKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ZFCSetExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ZFCSetExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ZFCSetExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ZFCSetExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ZFCSetExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<level::Level as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <level::Level as env::_::_serde::Deserialize<'de>>::deserialize::LevelWire>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<level::Level as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <level::Level as env::_::_serde::Deserialize<'de>>::deserialize::LevelWire>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<name::_::<impl env::_::_serde::Deserialize<'de> for name::NameInner>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<<name::_::<impl env::_::_serde::Deserialize<'de> for name::NameInner>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_enum::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cache::TypeCheckCacheStats as std::default::Default>::default",
+  "<cert::batch::build_types::BatchBuildStats as std::default::Default>::default",
+  "<cert::batch::verify::BatchVerifyStats as std::default::Default>::default",
+  "<cert::builder_pool::PoolStats as std::default::Default>::default",
+  "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+  "<cert::bundle::_::<impl env::_::_serde::Deserialize<'de> for cert::bundle::BundleArchive>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::bundle::_::<impl env::_::_serde::Deserialize<'de> for cert::bundle::BundleArchive>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::bundle::_::<impl env::_::_serde::Deserialize<'de> for cert::bundle::CertBundleEntry>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::bundle::_::<impl env::_::_serde::Deserialize<'de> for cert::bundle::CertBundleEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::bundle::_::<impl env::_::_serde::Deserialize<'de> for cert::bundle::CertBundleManifest>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::bundle::_::<impl env::_::_serde::Deserialize<'de> for cert::bundle::CertBundleManifest>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::CertArchiveEnvelope>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::CertArchiveEnvelope>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::dict::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::dict::CertDictionary>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::dict::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::dict::CertDictionary>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::dict::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::dict::DictCertArchive>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::dict::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::dict::DictCertArchive>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::lz4::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::lz4::CertArchive>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::lz4::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::lz4::CertArchive>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCert>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCert>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedCertNode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedLevel>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::types::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::types::CompressedLevel>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::zstd_backend::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::zstd_backend::ZstdCertArchive>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::compression::zstd_backend::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::zstd_backend::ZstdCertArchive>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::CrossProjectCert>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::CrossProjectCert>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::CrossProjectDependency>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::CrossProjectDependency>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::ProverInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::ProverInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::ProverSystem>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::cross_project::_::<impl env::_::_serde::Deserialize<'de> for cert::cross_project::ProverSystem>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::gamma_crown_import::_::<impl env::_::_serde::Deserialize<'de> for cert::gamma_crown_import::GammaCrownBoundType>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::gamma_crown_import::_::<impl env::_::_serde::Deserialize<'de> for cert::gamma_crown_import::GammaCrownBoundType>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::gamma_crown_import::_::<impl env::_::_serde::Deserialize<'de> for cert::gamma_crown_import::GammaCrownCert>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::gamma_crown_import::_::<impl env::_::_serde::Deserialize<'de> for cert::gamma_crown_import::GammaCrownCert>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::ArchiveDependency>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::ArchiveDependency>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::ArchiveFormat>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::ArchiveFormat>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::DistributionInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::DistributionInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::ProofArchiveMetadata>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::ProofArchiveMetadata>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::TrustLevel>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::TrustLevel>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::VerificationStep>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::metadata::_::<impl env::_::_serde::Deserialize<'de> for cert::metadata::VerificationStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::DeclKind>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::DeclKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::ReductionStep>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::ReductionStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceDefEqStep>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceDefEqStep>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::trace::_::<impl env::_::_serde::Deserialize<'de> for cert::trace::TraceEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::DefEqStepWire<D, N, S, V>>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ProofCertWire<C, E, L, LS, N, Li, M, D, Z>>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ZFCSetCertKind>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<cert::types::_::<impl env::_::_serde::Deserialize<'de> for cert::types::ZFCSetCertKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::discharge_axiom_stub_for_inductive_import",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+  "<env::_::<impl env::_::_serde::Deserialize<'de> for env::Environment>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::_::<impl env::_::_serde::Deserialize<'de> for env::Environment>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopIndexMode>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopIndexMode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRule>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRule>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRuleBuilder>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRuleBuilder>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRulePhase>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRulePhase>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRuleSet>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::aesop::_::<impl env::_::_serde::Deserialize<'de> for env::aesop::AesopRuleSet>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::ai_proof_search::_::<impl env::_::_serde::Deserialize<'de> for env::ai_proof_search::CandidateEnvelope>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::ai_proof_search::_::<impl env::_::_serde::Deserialize<'de> for env::ai_proof_search::CandidateEnvelope>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::ai_proof_search::_::<impl env::_::_serde::Deserialize<'de> for env::ai_proof_search::CandidateWrapper>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::ai_proof_search::_::<impl env::_::_serde::Deserialize<'de> for env::ai_proof_search::CandidateWrapper>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::ai_proof_search::_::<impl env::_::_serde::Deserialize<'de> for env::ai_proof_search::WrappedCandidateEnvelope>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::ai_proof_search::_::<impl env::_::_serde::Deserialize<'de> for env::ai_proof_search::WrappedCandidateEnvelope>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::codata_origin::_::<impl env::_::_serde::Deserialize<'de> for env::codata_origin::CodataLane>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::codata_origin::_::<impl env::_::_serde::Deserialize<'de> for env::codata_origin::CodataLane>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::codata_origin::_::<impl env::_::_serde::Deserialize<'de> for env::codata_origin::CodataOrigin>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::codata_origin::_::<impl env::_::_serde::Deserialize<'de> for env::codata_origin::CodataOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::decl_add::MmAxiomOnlyGuard as std::ops::Drop>::drop::{closure#0}::{closure#0}",
+  "<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::ConstantOrigin>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::DeclarationVerification>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::DeclarationVerification>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::OriginTrust>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::origin::_::<impl env::_::_serde::Deserialize<'de> for env::origin::OriginTrust>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::proof_elision::ProofElisionStats as std::default::Default>::default",
+  "<env::serialization::_::<impl env::_::_serde::Deserialize<'de> for env::serialization::ConstantOriginInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::serialization::_::<impl env::_::_serde::Deserialize<'de> for env::serialization::ConstantOriginInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::serialization::_::<impl env::_::_serde::Deserialize<'de> for env::serialization::JsonEnvironment>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::serialization::_::<impl env::_::_serde::Deserialize<'de> for env::serialization::JsonEnvironment>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::serialization::_::<impl env::_::_serde::Deserialize<'de> for env::serialization::StructureFieldInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::serialization::_::<impl env::_::_serde::Deserialize<'de> for env::serialization::StructureFieldInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::snapshot::_::<impl env::_::_serde::Deserialize<'de> for env::snapshot::SnapshotFile>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::snapshot::_::<impl env::_::_serde::Deserialize<'de> for env::snapshot::SnapshotFile>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::snapshot::_::<impl env::_::_serde::Deserialize<'de> for env::snapshot::SnapshotHeader>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::snapshot::_::<impl env::_::_serde::Deserialize<'de> for env::snapshot::SnapshotHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::sorry_summary::DeclarationTrustSummary as std::default::Default>::default",
+  "<env::sorry_summary::SorrySummary as std::default::Default>::default",
+  "<env::sorry_summary::_::<impl env::_::_serde::Deserialize<'de> for env::sorry_summary::DeclarationTrustSummary>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::sorry_summary::_::<impl env::_::_serde::Deserialize<'de> for env::sorry_summary::DeclarationTrustSummary>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::sorry_summary::_::<impl env::_::_serde::Deserialize<'de> for env::sorry_summary::SorrySummary>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::sorry_summary::_::<impl env::_::_serde::Deserialize<'de> for env::sorry_summary::SorrySummary>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::ConstantInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::ConstantInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::ConstantKind>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::ConstantKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Declaration>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::EnvExtensionEntry>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::EnvExtensionEntry>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::EnvExtensionEntryData>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::EnvExtensionEntryData>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::KernelClassInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::KernelClassInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::KernelInstanceInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::KernelInstanceInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::PersistentEnvExtensionState>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::PersistentEnvExtensionState>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Reducibility>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::Reducibility>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::SimpLemmaInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::SimpLemmaInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::SimpPriority>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::SimpPriority>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::TransparencyMode>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<env::types::_::<impl env::_::_serde::Deserialize<'de> for env::types::TransparencyMode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ExprKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ZFCSetExpr>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::kind::_::<impl env::_::_serde::Deserialize<'de> for expr::kind::ZFCSetExpr>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::meta::_::<impl env::_::_serde::Deserialize<'de> for expr::meta::ExprMeta>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::sorry::SorryFlags as std::default::Default>::default",
+  "<expr::types::FVarId as std::cmp::Ord>::cmp",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::BigNat>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::BigNat>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::BinderData>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::BinderData>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::BinderInfo>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::BinderInfo>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::FVarId>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::Literal>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::Literal>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::MDataValue>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::MDataValue>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::Multiplicity>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<expr::types::_::<impl env::_::_serde::Deserialize<'de> for expr::types::Multiplicity>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<flat::types::FlatFlags as std::default::Default>::default",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::Constructor>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::Constructor>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::ConstructorVal>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::ConstructorVal>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::InductiveDecl>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::InductiveDecl>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::InductiveType>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::InductiveType>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::InductiveVal>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::InductiveVal>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::RecursorArgOrder>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::RecursorArgOrder>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::RecursorRule>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::RecursorRule>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::RecursorVal>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<inductive::_::<impl env::_::_serde::Deserialize<'de> for inductive::RecursorVal>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+  "<level::LevelArc as std::cmp::PartialEq>::eq",
+  "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+  "<memory_model::AllocationId as std::cmp::Ord>::cmp",
+  "<memory_model::AllocationId as std::default::Default>::default",
+  "<memory_model::_::<impl env::_::_serde::Deserialize<'de> for memory_model::AllocationId>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<memory_model::_::<impl env::_::_serde::Deserialize<'de> for memory_model::BorrowAccess>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<memory_model::_::<impl env::_::_serde::Deserialize<'de> for memory_model::BorrowAccess>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<memory_model::_::<impl env::_::_serde::Deserialize<'de> for memory_model::MemoryRegion>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<memory_model::_::<impl env::_::_serde::Deserialize<'de> for memory_model::MemoryRegion>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<mode::AxiomId as std::fmt::Display>::fmt",
+  "<mode::CleanMode as std::fmt::Display>::fmt",
+  "<mode::_::<impl env::_::_serde::Deserialize<'de> for mode::AxiomId>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<mode::_::<impl env::_::_serde::Deserialize<'de> for mode::AxiomId>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<mode::_::<impl env::_::_serde::Deserialize<'de> for mode::CleanMode>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<mode::_::<impl env::_::_serde::Deserialize<'de> for mode::CleanMode>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<mode::_::<impl env::_::_serde::Deserialize<'de> for mode::SourceSystem>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<mode::_::<impl env::_::_serde::Deserialize<'de> for mode::SourceSystem>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<name::_::<impl env::_::_serde::Deserialize<'de> for name::NameInner>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<name::_::<impl env::_::_serde::Deserialize<'de> for name::NameInner>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<quot::_::<impl env::_::_serde::Deserialize<'de> for quot::QuotKind>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<quot::_::<impl env::_::_serde::Deserialize<'de> for quot::QuotKind>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<quot::_::<impl env::_::_serde::Deserialize<'de> for quot::QuotVal>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<quot::_::<impl env::_::_serde::Deserialize<'de> for quot::QuotVal>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<sem_memory_model::Address as std::cmp::Ord>::cmp",
+  "<sem_memory_model::Address as std::default::Default>::default",
+  "<sem_memory_model::MemoryValue as std::cmp::Ord>::cmp",
+  "<sem_memory_model::MemoryValue as std::default::Default>::default",
+  "<sem_memory_model::_::<impl env::_::_serde::Deserialize<'de> for sem_memory_model::Address>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<sem_memory_model::_::<impl env::_::_serde::Deserialize<'de> for sem_memory_model::MemoryValue>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<tc::batch::BatchCheckStats as std::default::Default>::default",
+  "<tc::reduction::cofib::Cofib as std::cmp::PartialEq>::eq",
+  "<tc::sliding_cache::SlidingCacheStats as std::default::Default>::default",
+  "<tc::sliding_equiv_manager::SlidingEquivStats as std::default::Default>::default",
+  "<vc_protocol::VcBatch as std::cmp::PartialEq>::eq",
+  "<vc_protocol::VcBatchResult as std::cmp::PartialEq>::eq",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcBatch>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcBatch>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcBatchResult>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcBatchResult>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcHypothesis>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcHypothesis>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcObligation>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcObligation>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcResult>::deserialize::__FieldVisitor as env::_::_serde::de::Visitor<'de>>::expecting",
+  "<vc_protocol::_::<impl env::_::_serde::Deserialize<'de> for vc_protocol::VcResult>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::expecting",
+  "cache::TypeCheckCache::is_empty",
+  "cache::TypeCheckCache::len",
+  "cert::builder::cache::WhnfCache::is_empty",
+  "cert::compression::dict::CertDictionary::size",
+  "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::def_eq",
+  "cert::def_eq::<impl cert::verifier::CertVerifier<'env>>::try_struct_eta_eq",
+  "env::Environment::ensure_native_reducers",
+  "env::decl_add::MmAxiomOnlyGuard::enter::{closure#0}",
+  "env::decl_add::mm_two_pass_active::{closure#0}",
+  "env::ext_attr::AttrExtState::is_empty",
+  "env::ext_instance::InstanceExtState::is_empty",
+  "env::ext_simp::SimpExtState::contains",
+  "env::ext_simp::SimpExtState::is_empty",
+  "env::ext_simp::SimpExtState::len",
+  "env::inductive_fixed_indices::fixed_indices_to_params::{closure#2}",
+  "env::native_reducers_bitvec::<impl env::Environment>::init_bitvec_native_reducers",
+  "env::native_reducers_float::f64_to_nat",
+  "env::native_reducers_float::nat_to_f64",
+  "env::sorry_tracer::SorryTracer::has_sorry_deps::{closure#0}",
+  "expr::kind::ExprKind::compute_meta::{closure#0}",
+  "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry",
+  "expr::sorry::<impl expr::Expr>::has_sorry",
+  "expr::sorry::<impl expr::Expr>::has_synthetic_sorry",
+  "flat::builder::FlatBuilder::expr_count",
+  "level::Level::is_nonzero",
+  "level::Level::is_zero",
+  "level::Level::leq",
+  "micro::env::MicroEnv::is_empty",
+  "micro::env::MicroEnv::len",
+  "name::NameInterner::is_empty",
+  "sorry::accounting::record_ay_reconstruction_success::{closure#0}",
+  "sorry::accounting::reset_local_ay_reconstruction_success_counter::{closure#0}",
+  "tc::branch_sharing::BranchSharingCache::contains",
+  "tc::branch_sharing::BranchSharingCache::len",
+  "tc::config::<impl tc::TypeChecker<'env>>::pop_binder_local",
+  "tc::config::<impl tc::TypeChecker<'env>>::reset_local_context",
+  "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_string_lit_expansion",
+  "tc::def_eq::structural::<impl tc::TypeChecker<'env>>::try_structure_eta_expansion",
+  "tc::equiv_manager::EquivManager::is_equiv",
+  "tc::heartbeat::<impl tc::TypeChecker<'env>>::heartbeat_spent",
+  "tc::local_context::LocalContext::is_empty",
+  "tc::local_context::LocalContext::len",
+  "tc::reduction::cofib::Cofib::is_bot",
+  "tc::reduction::cofib::Cofib::is_top::{closure#0}",
+  "tc::reduction::int::contains_big_nat_lit"
+ ]
+}

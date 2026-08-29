@@ -2,6 +2,9 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
+#[path = "support/rustc.rs"]
+mod rustc_support;
+
 use clean_auto::oracle::{sort_oracle_candidates, OracleCandidate, OracleRequest};
 use clean_auto::premise::{HybridSelector, MePoSelector, PremiseDatabase, PremiseId};
 use clean_auto::{SmtBridge, SmtVerificationResult};
@@ -82,15 +85,13 @@ fn compile_external_snippet(test_name: &str, source: &str) -> std::process::Outp
     let source_path = compile_dir.join("snippet.rs");
     fs::write(&source_path, source).expect("snippet source should be writable");
 
-    // TRUST OPT-OUT — see `clean-elab/src/tactic/native_decide_eval.rs` for the
-    // full rationale. `rustc` resolves through rustup from this repo's
-    // `rust-toolchain.toml`, pinned to `channel = "trust"`, so it ran Trust's
-    // obligation checker over this throwaway API-surface SNIPPET and failed the
-    // build ("Trust strict verification failed for `snippet::touch`"). The
-    // snippet exists only to prove a name is reachable; it is not a
-    // verification target. Probe, and fall back when the flag is not understood.
+    // TRUST OPT-OUT — use Cargo's selected `RUSTC` so this snippet and the
+    // linked crate metadata always share a compiler ABI. When that compiler is
+    // Trust, disable obligation checking for this throwaway API-surface probe;
+    // the snippet proves only that a public name is reachable. Fall back when
+    // the selected compiler does not understand Trust's opt-out flag.
     let run_rustc = |trust_opt_out: bool| {
-        let mut cmd = Command::new("rustc");
+        let mut cmd = Command::new(rustc_support::cargo_rustc());
         if trust_opt_out {
             cmd.arg("-Ztrust-verify=off");
         }
@@ -469,6 +470,31 @@ fn touch_items() {
         _solve_verification_level,
         _solve_verification_summary,
     );
+}
+"#,
+    );
+}
+
+/// Kernel-checked computational BitVec identities are part of the curated
+/// provider contract when the reconstruction lane is enabled. Keep an actual
+/// downstream compile pin here: otherwise these re-exports can become stranded
+/// in the crate-private backend again while internal tests continue to pass.
+#[cfg(feature = "ay-bv-blast")]
+#[test]
+#[file_serial]
+fn test_ay_contract_bv_compute_identity_surface_is_nameable() {
+    assert_external_compile_succeeds(
+        "ay_contract_bv_compute_identity_surface",
+        r#"
+#![allow(dead_code)]
+use clean_auto::bridge::ay_contract::{
+    reconstruct_bv_compute_identity, BvComputeIdentity, BvComputeReconstruction,
+};
+
+fn touch() {
+    let _reconstruct = reconstruct_bv_compute_identity;
+    let _identity = BvComputeIdentity::SubSelf;
+    let _reconstruction: Option<BvComputeReconstruction> = None;
 }
 "#,
     );

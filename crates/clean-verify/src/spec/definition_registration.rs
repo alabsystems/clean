@@ -6,7 +6,7 @@
 
 use clean_kernel::{Declaration, Name, TypeChecker};
 
-use super::{SpecDefinition, SpecError, Specification};
+use super::{decl_budget, SpecDefinition, SpecError, Specification};
 
 /// How to elaborate a definition's value relative to its declared type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,13 +104,26 @@ impl Specification {
     }
 
     /// Add a definition.
+    ///
+    /// This is the unit the ambient per-declaration runaway budget is scoped
+    /// to: it is refilled here and read back after registration, so a
+    /// declaration that does not terminate becomes a NAMED
+    /// `SpecError::DeclarationBudgetExhausted` instead of an unbounded spin.
+    /// See `crate::spec::decl_budget`.
     pub fn add_definition(&mut self, def: SpecDefinition) -> Result<(), SpecError> {
+        let name = def.name.clone();
+        decl_budget::begin_declaration();
+        let outcome = self.add_definition_inner(def);
+        decl_budget::finish_declaration(&name, outcome)
+    }
+
+    fn add_definition_inner(&mut self, def: SpecDefinition) -> Result<(), SpecError> {
         let (def, decl) = self.prepare_definition_decl(def)?;
 
         // Full kernel type checking via add_decl. Part of #1386.
         self.env
             .add_decl(decl)
-            .map_err(|e| SpecError::TypeError(format!("add_decl: {e}")))?;
+            .map_err(|e| SpecError::TypeError(format!("add_decl {}: {e}", def.name)))?;
 
         self.definitions.insert(def.name.clone(), def);
         Ok(())
@@ -126,11 +139,18 @@ impl Specification {
     /// mappings, and `add_decl` remains the final type-checking authority. For
     /// monomorphic definitions this is a no-op, so the helper stays opt-in.
     pub fn add_definition_checked(&mut self, def: SpecDefinition) -> Result<(), SpecError> {
+        let name = def.name.clone();
+        decl_budget::begin_declaration();
+        let outcome = self.add_definition_checked_inner(def);
+        decl_budget::finish_declaration(&name, outcome)
+    }
+
+    fn add_definition_checked_inner(&mut self, def: SpecDefinition) -> Result<(), SpecError> {
         let (def, decl) = self.prepare_definition_decl_impl(def, ValueElab::AlignAgainstType)?;
 
         self.env
             .add_decl(decl)
-            .map_err(|e| SpecError::TypeError(format!("add_decl: {e}")))?;
+            .map_err(|e| SpecError::TypeError(format!("add_decl {}: {e}", def.name)))?;
 
         self.definitions.insert(def.name.clone(), def);
         Ok(())

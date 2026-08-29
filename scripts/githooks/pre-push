@@ -277,6 +277,7 @@ leg_trustcore_evidence_staleness()      { "$PY" scripts/check_trustcore_evidence
 leg_crystal_revalidation_scope()        { "$PY" scripts/crystal_freshness_scope.py; }
 leg_crystal_enum_tag_pin()              { "$PY" scripts/check_enum_tag_pin.py; }
 leg_a0a6_probe_transcription()          { "$PY" scripts/check_a0a6_probe_transcription.py; }
+leg_crystal_fixture_pins()              { "$PY" scripts/check_crystal_fixture_pins.py; }
 leg_paragon_ratchet()                   { scripts/paragon_ratchet.sh; }
 leg_isabelle_ops_portability()          { "$PY" scripts/test_isabelle_ops_portability.py; }
 leg_aristotle_corpus_static()           { "$PY" scripts/aristotle_corpus_gate.py --fast; }
@@ -310,6 +311,7 @@ g-simp-static
 trustcore-evidence-staleness
 crystal-revalidation-scope
 crystal-enum-tag-pin
+crystal-fixture-pins
 a0a6-probe-transcription
 paragon-ratchet
 isabelle-ops-portability

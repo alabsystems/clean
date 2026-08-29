@@ -154,7 +154,10 @@ impl Parser {
     /// Fix for #2001: previously only forms 1 and 3 were handled, so
     /// `| intro (a : A) (b : B) : And A B` was parsed as just `And`,
     /// dropping the binders entirely.
-    fn parse_ctor_type(
+    /// Also used by the `codata` variant body
+    /// (`grammar::decl::structure::codata_variant_clauses`), so that
+    /// `| Vis (e : E) (k : Ans e → T) : T` desugars identically there.
+    pub(in crate::grammar) fn parse_ctor_type(
         &mut self,
         ctor_span: Span,
         ind_name: &str,

@@ -656,8 +656,26 @@ impl Environment {
                 // registered". Measured, with a witness corpus, in
                 // `test_ground_fallback_dep_divergence_survives_the_gate_known_gap`;
                 // scope, consequences and the two candidate fixes are in
-                // docs/issues/2026-08-23-r1-mm-two-pass-theorem.md. Until that is closed
-                // this row stays at 1 — the exit theorem is not yet earned.
+                // docs/issues/2026-08-23-r1-mm-two-pass-theorem.md.
+                //
+                // R1-MM CLOSED (2026-08-27, `a2072b66a`) — entirely in
+                // `crates/clean-olean`; THIS path is unchanged. Every real verification
+                // records its `reusable` bit in `KernelVerifyReport::ground_only`,
+                // `mm_verify_range` emits it as an additional `G <label>` line under a
+                // `VERIFIED_FORMAT 2` stamp (the forked child sink too), and `mm_gate`'s
+                // fixpoint drops any theorem citing a dependency that is not KEPT *and*
+                // CITABLE — so the gate's predicate finally knows which type a dependency
+                // was checked against. An unstamped labels file means reusability UNKNOWN
+                // and is REFUSED by default. Equality with the sequential set is now
+                // MEASURED on four corpora in both the full-range and the production
+                // split-range configurations, and the characterization test above was
+                // INVERTED, not deleted
+                // (`test_ground_fallback_dep_no_longer_diverges_from_sequential`).
+                // The row STILL STAYS AT 1: what the exit theorem now waits on is the
+                // set.mm EXPOSURE measurement — whether the already-shipped Metamath
+                // export contains theorems the fixed gate drops. Harness built and
+                // mechanized, number unmeasured: `mm_kverify <set.mm> <N> --exposure`,
+                // exit 3 = EXPOSED, 0 = CLEAN, 1/2 = the run broke.
                 //
                 // G1 FAIL-CLOSE: the flag alone no longer authorizes dropping the proof.
                 // The caller must be provably inside a sanctioned two-pass scope (an

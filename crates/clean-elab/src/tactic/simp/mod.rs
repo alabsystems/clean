@@ -247,6 +247,14 @@ fn simp_impl(
                         if new_lhs == current_lhs {
                             continue;
                         }
+                        // See the sibling trace in `expr.rs`: fired-rewrite
+                        // diagnostics for the LHS-transitivity loop.
+                        if std::env::var_os("CLEAN_SIMP_REWRITE_TRACE").is_some() {
+                            eprintln!(
+                                "simp-rewrite(trans): lemma={} from={current_lhs:?} to={new_lhs:?}",
+                                lemma.name
+                            );
+                        }
                         if !budget.admit(&new_lhs) {
                             // Same growth budget as the main loop: a lemma
                             // that balloons the LHS ends the search. `admit`

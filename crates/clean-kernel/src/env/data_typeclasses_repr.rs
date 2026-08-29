@@ -657,6 +657,324 @@ impl Environment {
         );
         self.add_tostring_const_instance("instToStringBool", &bool_const, tostring_bool_fn)?;
 
+        self.init_to_string_extended_instances()?;
+
+        Ok(())
+    }
+
+    /// Register the rest of Lean's core `ToString` family — `Int`, `Char`,
+    /// `UInt32`, `UInt64` and `List α`.
+    ///
+    /// Measured 2026-08-27 through `clean run`, before this: `toString` on any
+    /// of those five failed elaboration outright with "failed to synthesize
+    /// instance `ToString <T>`". Only `Nat`/`String`/`Bool` were registered,
+    /// which is also why `List.foldl (·+·) 0 [1,2,3,4]` could not be printed —
+    /// its result defaults to `UInt64`.
+    ///
+    /// ORDERING. Every body below renders through an instance rather than
+    /// open-coding a number, so registering them was correctly blocked until
+    /// `cdd16e470` taught the `l_toString` shim to APPLY its instance. Before
+    /// that fix each of these would have printed a `Nat` reading of whatever
+    /// pointer or tag the value happened to be — more silently-wrong output,
+    /// not less.
+    ///
+    /// Lean ground truth (`Init/Data/ToString/Basic.lean`, `Init/Data/Repr.lean`):
+    ///
+    /// ```lean
+    /// instance : ToString Int    := ⟨fun i => Int.repr i⟩
+    /// instance : ToString Char   := ⟨fun c => String.singleton c⟩
+    /// instance : ToString UInt32 := ⟨fun n => toString n.toNat⟩
+    /// instance : ToString UInt64 := ⟨fun n => toString n.toNat⟩
+    /// instance [ToString α] : ToString (List α) := ⟨List.toString⟩
+    /// ```
+    ///
+    /// `Int.repr` and `String.singleton` are not declared in this prelude, so
+    /// their Lean bodies are inlined at the constant that needs them:
+    /// `Int.repr` IS the two-constructor split written here on `Int.rec`
+    /// (`negSucc n` denotes `-(n+1)`, hence the `Nat.succ`), and
+    /// `String.singleton c` IS `String.mk [c]`. `List.toString`'s accumulator
+    /// `foldl` is written as the equivalent right fold on `List.rec` — the
+    /// rendered text is identical, `[]` for nil and `[x, y, z]` otherwise.
+    ///
+    /// Wired from `init_to_string_instances`, so it inherits that function's
+    /// import-mode suppression and idempotence: in import mode the genuine
+    /// instances arrive through the checked `.olean` path instead.
+    fn init_to_string_extended_instances(&mut self) -> Result<(), EnvError> {
+        self.init_int()?;
+        self.init_list()?;
+        // Every body below concatenates with `String.append`; `Int.rec`'s
+        // negative arm and the whole `List` rendering are unwritable without
+        // it. Idempotent, and it pulls in its own `List.append` dependency.
+        self.init_string_append()?;
+
+        // A cut-down environment that never registered one of these carriers
+        // skips that instance rather than failing prelude construction — the
+        // same shape `init_char_defs` uses. Skipping leaves the pre-existing
+        // "failed to synthesize instance" behaviour, never a wrong rendering.
+        let registered =
+            |env: &Environment, n: &str| env.get_const(&Name::from_string(n)).is_some();
+        if !registered(self, "String.append") {
+            return Ok(());
+        }
+
+        let string_const = Expr::const_(Name::from_string("String"), vec![]);
+        let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
+        let append = Expr::const_(Name::from_string("String.append"), vec![]);
+
+        // `toString (n : Nat)` spelled through the class, i.e.
+        // `@ToString.toString.{0} Nat instToStringNat n`. Going through the
+        // projection rather than calling `Nat.repr` directly is what keeps the
+        // rendering an INSTANCE application all the way down, which is the
+        // representation the compiler's `l_toString` / `l_instToStringNat`
+        // pair implements.
+        let render_nat = |arg: Expr| {
+            Expr::apps(
+                Expr::const_(Name::from_string("ToString.toString"), vec![Level::zero()]),
+                [
+                    nat_const.clone(),
+                    Expr::const_(Name::from_string("instToStringNat"), vec![]),
+                    arg,
+                ],
+            )
+        };
+
+        // ── ToString Int ────────────────────────────────────────────────────
+        // fun (i : Int) => Int.rec (motive := fun _ => String)
+        //   (fun n => toString n)                   -- Int.ofNat n
+        //   (fun n => "-" ++ toString (Nat.succ n)) -- Int.negSucc n = -(n+1)
+        //   i
+        let int_const = Expr::const_(Name::from_string("Int"), vec![]);
+        let tostring_int_fn = {
+            let mut b = EnvDeclBuilder::new();
+            let (i_id, i) = b.fresh_local(int_const.clone());
+            let motive = {
+                let (m_id, _m) = b.fresh_local(int_const.clone());
+                b.mk_lam(
+                    m_id,
+                    BinderInfo::Default,
+                    int_const.clone(),
+                    string_const.clone(),
+                )
+            };
+            let of_nat_minor = {
+                let (n_id, n) = b.fresh_local(nat_const.clone());
+                b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), render_nat(n))
+            };
+            let neg_succ_minor = {
+                let (n_id, n) = b.fresh_local(nat_const.clone());
+                let succ_n = Expr::app(Expr::const_(Name::from_string("Nat.succ"), vec![]), n);
+                let body = Expr::apps(append.clone(), [Expr::str_lit("-"), render_nat(succ_n)]);
+                b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), body)
+            };
+            // `Int.rec.{1}`: the motive lands in `Sort 1`, i.e. `Type 0`, which
+            // is where `String` lives.
+            let rec = Expr::apps(
+                Expr::const_(
+                    Name::from_string("Int.rec"),
+                    vec![Level::succ(Level::zero())],
+                ),
+                [motive, of_nat_minor, neg_succ_minor, i],
+            );
+            let r = b.mk_lam(i_id, BinderInfo::Default, int_const.clone(), rec);
+            b.finish(r)
+        };
+        self.add_tostring_const_instance("instToStringInt", &int_const, tostring_int_fn)?;
+
+        // ── ToString Char ───────────────────────────────────────────────────
+        // fun (c : Char) => String.mk (List.cons Char c (List.nil Char))
+        // — Lean's `String.singleton c`, which this prelude does not declare.
+        let char_const = Expr::const_(Name::from_string("Char"), vec![]);
+        if registered(self, "Char") && registered(self, "String.mk") {
+            let tostring_char_fn = {
+                let mut b = EnvDeclBuilder::new();
+                let (c_id, c) = b.fresh_local(char_const.clone());
+                let nil = Expr::app(
+                    Expr::const_(Name::from_string("List.nil"), vec![Level::zero()]),
+                    char_const.clone(),
+                );
+                let one = Expr::apps(
+                    Expr::const_(Name::from_string("List.cons"), vec![Level::zero()]),
+                    [char_const.clone(), c, nil],
+                );
+                let body = Expr::app(Expr::const_(Name::from_string("String.mk"), vec![]), one);
+                let r = b.mk_lam(c_id, BinderInfo::Default, char_const.clone(), body);
+                b.finish(r)
+            };
+            self.add_tostring_const_instance("instToStringChar", &char_const, tostring_char_fn)?;
+        }
+
+        // ── ToString UInt32 / UInt64 ────────────────────────────────────────
+        // fun (n : UIntW) => toString (UIntW.toNat n)
+        for (inst_name, ty_name, to_nat) in [
+            ("instToStringUInt32", "UInt32", "UInt32.toNat"),
+            ("instToStringUInt64", "UInt64", "UInt64.toNat"),
+        ] {
+            if !registered(self, ty_name) || !registered(self, to_nat) {
+                continue;
+            }
+            let ty = Expr::const_(Name::from_string(ty_name), vec![]);
+            let f = {
+                let mut b = EnvDeclBuilder::new();
+                let (n_id, n) = b.fresh_local(ty.clone());
+                let as_nat = Expr::app(Expr::const_(Name::from_string(to_nat), vec![]), n);
+                let r = b.mk_lam(n_id, BinderInfo::Default, ty.clone(), render_nat(as_nat));
+                b.finish(r)
+            };
+            self.add_tostring_const_instance(inst_name, &ty, f)?;
+        }
+
+        self.add_tostring_list_instance()?;
+
+        Ok(())
+    }
+
+    /// Register `instToStringList : {α : Type u} → [ToString α] → ToString (List α)`.
+    ///
+    /// The body is Lean's `List.toString` written as a right fold:
+    ///
+    /// ```text
+    /// []      ↦ "[]"
+    /// x :: xs ↦ "[" ++ toString x ++ join xs ++ "]"
+    /// join []        = ""
+    /// join (y :: ys) = ", " ++ toString y ++ join ys
+    /// ```
+    ///
+    /// so `[1, 2, 3]` renders as `[1, 2, 3]`, `[7]` as `[7]`, and `[]` as `[]`
+    /// — byte-for-byte what Lean prints. Both folds are `List.rec` at
+    /// `Sort 1` over the element universe, and the element rendering is
+    /// `@ToString.toString.{u} α inst`, so the ELEMENT instance is what
+    /// renders each element; nothing here assumes `Nat`.
+    fn add_tostring_list_instance(&mut self) -> Result<(), EnvError> {
+        let u = Name::from_string("u");
+        let u_level = Level::param(u.clone());
+        let type_u = Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone())));
+        let string_const = Expr::const_(Name::from_string("String"), vec![]);
+        let append = Expr::const_(Name::from_string("String.append"), vec![]);
+        let tostring_const = |l: Level| Expr::const_(Name::from_string("ToString"), vec![l]);
+        let list_const = |l: Level| Expr::const_(Name::from_string("List"), vec![l]);
+
+        // {α : Type u} → [inst : ToString α] → ToString (List α)
+        let inst_type = {
+            let mut b = EnvDeclBuilder::new();
+            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+            let ts_alpha = Expr::app(tostring_const(u_level.clone()), alpha.clone());
+            let (inst_id, _inst) = b.fresh_local(ts_alpha.clone());
+            let list_alpha = Expr::app(list_const(u_level.clone()), alpha.clone());
+            let r = Expr::app(tostring_const(u_level.clone()), list_alpha);
+            let r = b.mk_pi(inst_id, BinderInfo::InstImplicit, ts_alpha, r);
+            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+            b.finish(r)
+        };
+
+        let inst_value = {
+            let mut b = EnvDeclBuilder::new();
+            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+            let ts_alpha = Expr::app(tostring_const(u_level.clone()), alpha.clone());
+            let (inst_id, inst) = b.fresh_local(ts_alpha.clone());
+            let list_alpha = Expr::app(list_const(u_level.clone()), alpha.clone());
+
+            // @ToString.toString.{u} α inst x — the ELEMENT's own rendering.
+            let render_elem = |x: Expr| {
+                Expr::apps(
+                    Expr::const_(
+                        Name::from_string("ToString.toString"),
+                        vec![u_level.clone()],
+                    ),
+                    [alpha.clone(), inst.clone(), x],
+                )
+            };
+            // `List.rec.{1, u}`: motive into `Sort 1`, elements at `Type u`.
+            let list_rec = Expr::const_(
+                Name::from_string("List.rec"),
+                vec![Level::succ(Level::zero()), u_level.clone()],
+            );
+            // motive := fun (_ : List α) => String
+            let motive = {
+                let (m_id, _m) = b.fresh_local(list_alpha.clone());
+                b.mk_lam(
+                    m_id,
+                    BinderInfo::Default,
+                    list_alpha.clone(),
+                    string_const.clone(),
+                )
+            };
+
+            // join (y :: ys) = ", " ++ toString y ++ join ys
+            let join_cons = {
+                let (y_id, y) = b.fresh_local(alpha.clone());
+                let (ys_id, _ys) = b.fresh_local(list_alpha.clone());
+                let (ih_id, ih) = b.fresh_local(string_const.clone());
+                let body = Expr::apps(
+                    append.clone(),
+                    [
+                        Expr::apps(append.clone(), [Expr::str_lit(", "), render_elem(y)]),
+                        ih,
+                    ],
+                );
+                let r = b.mk_lam(ih_id, BinderInfo::Default, string_const.clone(), body);
+                let r = b.mk_lam(ys_id, BinderInfo::Default, list_alpha.clone(), r);
+                b.mk_lam(y_id, BinderInfo::Default, alpha.clone(), r)
+            };
+
+            // x :: xs ↦ "[" ++ toString x ++ join xs ++ "]"
+            // The recursive result for `xs` is deliberately unused: the head is
+            // bracketed and every later element is comma-prefixed, which is a
+            // different fold from the one the outer recursion is running.
+            let outer_cons = {
+                let (x_id, x) = b.fresh_local(alpha.clone());
+                let (xs_id, xs) = b.fresh_local(list_alpha.clone());
+                let (ih_id, _ih) = b.fresh_local(string_const.clone());
+                let join_xs = Expr::apps(
+                    list_rec.clone(),
+                    [
+                        alpha.clone(),
+                        motive.clone(),
+                        Expr::str_lit(""),
+                        join_cons,
+                        xs,
+                    ],
+                );
+                let body = Expr::apps(
+                    append.clone(),
+                    [
+                        Expr::apps(append.clone(), [Expr::str_lit("["), render_elem(x)]),
+                        Expr::apps(append.clone(), [join_xs, Expr::str_lit("]")]),
+                    ],
+                );
+                let r = b.mk_lam(ih_id, BinderInfo::Default, string_const.clone(), body);
+                let r = b.mk_lam(xs_id, BinderInfo::Default, list_alpha.clone(), r);
+                b.mk_lam(x_id, BinderInfo::Default, alpha.clone(), r)
+            };
+
+            let (l_id, l) = b.fresh_local(list_alpha.clone());
+            let rendered = Expr::apps(
+                list_rec,
+                [alpha.clone(), motive, Expr::str_lit("[]"), outer_cons, l],
+            );
+            let tostring_fn = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), rendered);
+            let value = Expr::apps(
+                Expr::const_(Name::from_string("ToString.mk"), vec![u_level.clone()]),
+                [list_alpha, tostring_fn],
+            );
+            let r = b.mk_lam(inst_id, BinderInfo::InstImplicit, ts_alpha, value);
+            let r = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
+            b.finish(r)
+        };
+
+        self.add_decl(Declaration::Definition {
+            name: Name::from_string("instToStringList"),
+            level_params: vec![u],
+            type_: inst_type,
+            value: inst_value,
+            is_reducible: true,
+        })?;
+        self.register_instance(KernelInstanceInfo {
+            name: Name::from_string("instToStringList"),
+            class_name: Name::from_string("ToString"),
+            priority: LEAN_DEFAULT_INSTANCE_PRIORITY,
+            type_: None,
+            value: None,
+        });
         Ok(())
     }
 
@@ -763,6 +1081,10 @@ mod tests {
             "instToStringNat",
             "instToStringString",
             "instToStringBool",
+            "instToStringInt",
+            "instToStringChar",
+            "instToStringUInt32",
+            "instToStringUInt64",
         ];
 
         for name in poly {

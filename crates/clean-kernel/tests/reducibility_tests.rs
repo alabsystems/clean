@@ -23,10 +23,10 @@ fn test_should_unfold_reducible_always() {
 }
 
 #[test]
-fn test_should_unfold_regular_not_in_reducible_mode() {
+fn test_should_unfold_regular_only_in_default_and_all_modes() {
     let reg = Reducibility::Regular(0);
     assert!(!reg.should_unfold(TransparencyMode::Reducible));
-    assert!(reg.should_unfold(TransparencyMode::Instances));
+    assert!(!reg.should_unfold(TransparencyMode::Instances));
     assert!(reg.should_unfold(TransparencyMode::Default));
     assert!(reg.should_unfold(TransparencyMode::All));
 }

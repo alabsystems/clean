@@ -302,6 +302,25 @@ impl Parser {
         Self::build(input, Some(patterns.clone()))
     }
 
+    /// Register every notation of `seed` before any of `self`'s input is
+    /// parsed, so a file may use notation its imports declare.
+    ///
+    /// Each entry goes through the same registration path a file-local
+    /// `notation` command takes, carrying its own declaring namespace (see
+    /// [`crate::notation_seed`]). Seeding an empty seed is a no-op and leaves
+    /// the custom-notation layers as transparent pass-throughs.
+    pub fn seed_notation(&mut self, seed: &crate::notation_seed::NotationSeed) {
+        for entry in seed.entries() {
+            self.register_custom_operator_ns(
+                entry.kind,
+                entry.precedence,
+                &entry.pattern,
+                &entry.expansion,
+                entry.scope_ns.clone(),
+            );
+        }
+    }
+
     /// Shared constructor backing [`Parser::new`] and [`Parser::new_with_tactics`];
     /// holds the single canonical field initializer so the two entry points
     /// cannot drift.
@@ -624,7 +643,30 @@ impl Parser {
         input: &str,
         patterns: &TacticPatterns,
     ) -> Result<ParseReport, ParseError> {
+        Self::parse_file_seeded(
+            input,
+            patterns,
+            &crate::notation_seed::NotationSeed::default(),
+        )
+    }
+
+    /// Tactic-aware file parse with the parser's notation registry
+    /// pre-populated from `seed` — the notation the file's imports declare.
+    ///
+    /// With an empty seed this is exactly
+    /// [`Parser::parse_file_with_tactics_diagnostics`], which delegates here so
+    /// the two cannot drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `ParseError` if the input cannot be parsed at file level.
+    pub fn parse_file_seeded(
+        input: &str,
+        patterns: &TacticPatterns,
+        seed: &crate::notation_seed::NotationSeed,
+    ) -> Result<ParseReport, ParseError> {
         let mut parser = Parser::new_with_tactics(input, patterns);
+        parser.seed_notation(seed);
         let decls = parser.file()?;
         Ok(ParseReport {
             decls,

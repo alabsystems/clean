@@ -40,6 +40,28 @@ pub enum FatPtrKind {
     Slice(TyId),
     Str,
     TraitObject { trait_id: u32 },
+    /// A pointer whose pointee merely CONTAINS a DST in tail position, rather
+    /// than being one: `*const ArcInner<str>` inside `Arc<str>`. rustc lays it
+    /// out fat with `usize` metadata, exactly like `Slice`/`Str`.
+    ///
+    /// It is a DISTINCT kind because the data pointer means something else. A
+    /// `Slice`/`Str` data pointer addresses slice or string CONTENT; this one
+    /// addresses the CONTAINER header (the `ArcInner`), and the length
+    /// describes the DST that sits at the container's tail. Spelling one of
+    /// these `Str` would make a claim about what the pointer addresses that is
+    /// simply false, which is why the producer signed an anonymous
+    /// `(ptr, i64)` tuple instead and left this variant as the recorded
+    /// follow-up (`container_pointee_ty`, trust-thir-lower lib.rs).
+    ///
+    /// The tuple spelling had no layout rule — `ty_layout_shape` covers the
+    /// EMPTY tuple only — so every type transitively containing a fat pointer
+    /// had an unresolvable layout, and the v31 enum-layout validator correctly
+    /// failed closed on it. Measured 2026-08-27: `enum E { A, B(Arc<str>) }`
+    /// alone produced two `ConstTypeMismatch` rows.
+    ///
+    /// No pointee `TyId` is carried: the tail type is not what this kind is
+    /// about, and recording one would invite exactly the content claim above.
+    ContainerLen,
 }
 
 impl core::fmt::Display for FatPtrKind {
@@ -48,6 +70,7 @@ impl core::fmt::Display for FatPtrKind {
             FatPtrKind::Slice(elem) => write!(f, "slice ty.{}", elem.0),
             FatPtrKind::Str => f.write_str("str"),
             FatPtrKind::TraitObject { trait_id } => write!(f, "dyn.{trait_id}"),
+            FatPtrKind::ContainerLen => f.write_str("container_len"),
         }
     }
 }

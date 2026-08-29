@@ -115,7 +115,7 @@ impl MatchTarget {
 /// SOUNDNESS: `instOfNatNat k` is the structure literal storing `k`, so the
 /// projection ι/δ-reduces to `k` — the two spellings are definitionally equal
 /// (the kernel's `add_decl` re-check enforces exactly this equivalence).
-fn as_nat_ofnat_literal(e: &Expr) -> Option<Expr> {
+pub(crate) fn as_nat_ofnat_literal(e: &Expr) -> Option<Expr> {
     let head = e.get_app_fn();
     let ExprKind::Const(head_name, _) = head.kind() else {
         return None;

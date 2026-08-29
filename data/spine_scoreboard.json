@@ -7,15 +7,15 @@
     "UNKNOWN is a first-class value, never 0; it neither satisfies nor violates a direction.",
     "Quoting any row of this file from prose is a bug: read the artifact."
   ],
-  "generated_at_utc": "2026-08-27T14:22:52Z",
+  "generated_at_utc": "2026-08-28T06:13:26Z",
   "generator": "scripts/spine_scoreboard.py",
   "inputs": {
     "spine_set": "ABSENT",
     "a0_census": "sha256:f1acedfd852f29023474404a75d7dfc6c4aaad4af52052faa0f45e1de81f054f",
     "axiom_ratchet": "sha256:cca27c20be9d4a38ef4d6008beae43231ed359a68a55fb3ed9a403ee44dd1fc0",
-    "unchecked_decl_ratchet": "sha256:318ba0a4e01c692a91a07db000cb660276d167c32004e9b6c675fad212ce2f3b",
+    "unchecked_decl_ratchet": "sha256:ced9d6769eac024ace38607b1ebbd10fa37f926450a1a237ca02c4b462f2b5de",
     "env_bypass_census": "sha256:f527328f663985fd545a4b218f8dd97c144cb9ef81eee455f1482238971f5f96",
-    "assumption_ledger": "ABSENT",
+    "assumption_ledger": "sha256:a0999b253f654bf4af9cd996d0fbec0f15384a4716f565136673a12705e5ad7a",
     "parity_tiers": "sha256:09b0d48abc6020c0a47b10685948048f8f7d270768d55968ec9535e31f82864e",
     "evalir_coverage": "sha256:20ca5312340df670270aade72eaf7d77e11b9fd58bfdd6fc5fde64ec6a4cfe79",
     "evalir_adequacy_grid": "sha256:52a937ca039244e487b123f489d72ff51caf42c20604de3ffed0c5205ab67775",
@@ -220,7 +220,7 @@
           "add_decl_unchecked": 1,
           "extend_constants_unchecked": 1,
           "extend_constants_structural": 6,
-          "last_updated": "2026-08-23"
+          "last_updated": "2026-08-27"
         }
       }
     },
@@ -240,10 +240,47 @@
     },
     {
       "id": "assumption_ledger.count",
-      "value": "UNKNOWN",
+      "value": 26,
       "direction": "down",
       "producer": "data/spine_assumption_ledger.json",
-      "reason": "data/spine_assumption_ledger.json absent \u2014 the \u00a73.6 ledger is not yet minted"
+      "provenance": {
+        "counts_by_class": {
+          "crystal-erasure-slot": 12,
+          "evalir-declared-delta": 11,
+          "core-callee-model": 1,
+          "layout-obligation": 2,
+          "operational-contract": 3
+        },
+        "counts_by_origin": {
+          "derived": 23,
+          "seeded": 6
+        },
+        "derived_classes": [
+          "crystal-erasure-slot",
+          "evalir-declared-delta"
+        ],
+        "seeded_classes": [
+          "core-callee-model",
+          "layout-obligation",
+          "operational-contract"
+        ],
+        "note": "count is the LIVE debt (status=measured); the prospective rows are reported separately and are disjoint from it, as are the lane-(b) rows below"
+      }
+    },
+    {
+      "id": "assumption_ledger.prospective",
+      "value": 3,
+      "direction": "none",
+      "producer": "data/spine_assumption_ledger.json"
+    },
+    {
+      "id": "assumption_ledger.cross_reference_disagreements",
+      "value": 0,
+      "direction": "down",
+      "producer": "data/spine_assumption_ledger.json vs data/verdict_io_contracts.json",
+      "provenance": {
+        "cross_references_checked": 1
+      }
     },
     {
       "id": "assumption_ledger.verdict_io_lane_b",

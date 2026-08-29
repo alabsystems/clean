@@ -390,6 +390,27 @@ impl Parser {
             },
             DeclScope::Default | DeclScope::Local => None,
         };
+        self.register_custom_operator_ns(kind, precedence, pattern, expansion, scope_ns);
+    }
+
+    /// Register a notation whose declaring namespace is already resolved.
+    ///
+    /// [`Parser::register_custom_operator`] derives that namespace from the
+    /// cursor's own `namespace` stack, which is the right answer for a
+    /// declaration in the file being parsed. A notation SEEDED from an
+    /// imported module (`crate::notation_seed`) was declared in a different
+    /// file, under a namespace stack that no longer exists at the cursor, so
+    /// it supplies its own — and everything downstream of this point is
+    /// identical for the two. Keeping one body means a seeded notation can
+    /// never be more capable, or differently modelled, than a declared one.
+    pub(super) fn register_custom_operator_ns(
+        &mut self,
+        kind: NotationKind,
+        precedence: Option<u32>,
+        pattern: &[NotationItem],
+        expansion: &SurfaceExpr,
+        scope_ns: Option<String>,
+    ) {
         // `infixl`/`infixr`/`prefix`/`postfix` name no operands in their pattern
         // (the operands are implicit) and their expansion is a bare head applied
         // positionally. The general `notation` command instead NAMES its operands

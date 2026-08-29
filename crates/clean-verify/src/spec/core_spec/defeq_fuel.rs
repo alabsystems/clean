@@ -555,6 +555,18 @@ impl Specification {
         self.add_wh_hiota_repair()?;
         // LAST: the iota residual, DISCHARGED. It stops being a hypothesis.
         self.add_hiotap3_discharge()?;
+        // LAST: DefEq soundness AT wh3 — the missing half of the direction
+        // pair. Completeness (def_eq_fuel_complete_wh3_final) was proved at
+        // this loop; the only soundness in the tree was at the TWO-WAY loop, so
+        // the halves did not pair.
+        //
+        // MUST follow add_hiotap3_discharge, not precede it: the DefEq-flavoured
+        // residual discharge `whcd3_iota_sound_at` consumes six helpers minted
+        // there (whc_fires_plain_gen, kapp_args_kapp_fn_nil, kapp_fn_kapp_fn,
+        // list_split_at_head, list_take_append_gen, list_take_len_of_head).
+        // The only consumer of what this stage produces is add_wh3_defeq_pair
+        // below, which is later still, so sitting late is free.
+        self.add_wh3_defeq_soundness()?;
         // LAST: three new suppliers for hnf3's residual — and the REFUTATION of
         // that residual as stated. Needs stuck_recursor's iota_immune_of_* and
         // hnf_discharge3's wh3_stuck_at, so it goes at the tail.
@@ -613,6 +625,12 @@ impl Specification {
         // The inhabitation FLOOR for Wh3NormAcc, and the completeness capstone
         // run at it. Registered last because the witness applies the capstone.
         self.add_wh3_norm_acc_witness()?;
+
+        // TRULY LAST: the two directions as one object. Must follow
+        // add_slot_dispatch_at, which is what mints def_eq_fuel_complete_wh3_final
+        // — registering it beside the soundness chain is a forward reference and
+        // aborts the whole spec build at that declaration.
+        self.add_wh3_defeq_pair()?;
 
         Ok(())
     }

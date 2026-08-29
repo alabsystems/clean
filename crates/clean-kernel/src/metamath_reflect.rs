@@ -3648,18 +3648,59 @@ fn schematic_dv_type(
 /// closure-gated theorems are exported. Skipping the proof-term BUILD here is no
 /// weaker than the existing pass-1, which already drops that term unchecked; we just
 /// avoid constructing it. An ill-formed type would make a reusing proof FAIL pass-2
-/// and the gate DROP it — never a false accept. Validated by count-equivalence
-/// (two-pass+gate == sequential).
+/// and the gate DROP it — never a false accept.
 ///
 /// The caller passes the theorem's actual `$d` frame (`disjoints`) and dummy frame
 /// (`fix_dummies`) so the registered SCHEMATIC type matches what the full
 /// schematic-`$d` path registers on SUCCESS. The one divergence is a theorem whose
 /// full path would FAIL schematic-`$d` and FALL BACK to the GROUND (non-reusable)
-/// type: this light path still registers the schematic type, but that only ever
+/// type: this light path still registers the schematic type. A wrong type only loses
+/// verifications, never falsely accepts.
+///
+/// R1-MM CORRECTION (2026-08-27). What stood here until this date — "that only ever
 /// makes a reusing proof FAIL-CLOSED (skip) in pass-2 — the same outcome the
 /// sequential verifier produces for a ground (non-reusable) theorem — so
-/// count-equivalence is preserved. A wrong type only loses verifications (caught by
-/// count-equivalence), never falsely accepts.
+/// count-equivalence is preserved", and, in the SOUNDNESS paragraph, "Validated by
+/// count-equivalence (two-pass+gate == sequential)" — was FALSE, and drew the
+/// OPPOSITE conclusion from the divergence it correctly named. Fail-closed is what
+/// happens when the reuser expects a shape the registered type does not have; here
+/// the light path hands the reuser precisely the SCHEMATIC shape it wants, so the
+/// reuser SUCCEEDS where the sequential verifier SKIPS it ("reuses $p theorem … that
+/// did not verify"). The divergence is therefore PERMISSIVE, not fail-closed. It was
+/// invisible in the configuration the original equivalence check ran in
+/// (`range = 0..max_provables`, ONE worker over the whole prefix, where every
+/// dependency is re-verified in source order before its dependents); production
+/// (`scripts/mm_two_pass.sh`) splits into DISJOINT ranges, and a worker whose pass-2
+/// range EXCLUDES the dependency checks dependents against THIS type. The
+/// dependency-closure gate did not catch it either: its predicate is
+/// `D ∈ verified`, which carries no notion of WHICH TYPE `D` was checked against.
+/// Refuted by execution and pinned as a characterization test in `90aa719e4`
+/// (`gate(two-pass) ⊋ sequential`); the in-crate twin of the sentence, in
+/// `crates/clean-olean/src/metamath/kernel_verify.rs`, was corrected the same day.
+///
+/// CLOSED (2026-08-27, `a2072b66a`), in `crates/clean-olean`, with no change to this
+/// path: every REAL verification now records its `reusable` bit in
+/// `KernelVerifyReport::ground_only`, `mm_verify_range` emits it as an additional
+/// `G <label>` line under a `VERIFIED_FORMAT 2` stamp (the fork sink too), and
+/// `mm_gate`'s fixpoint drops any theorem citing a dependency that is not KEPT *and*
+/// CITABLE. The ground-only theorem itself survives — the sequential verifier
+/// verifies it too; only CITATIONS of it are refused. Fail-closed on the marking:
+/// an UNSTAMPED labels file means "reusability UNKNOWN", not "nothing was
+/// ground-only", so `mm_gate` REFUSES it by default (`--allow-unmarked` treats every
+/// unmarked label as non-citable, which can only under-approximate). Equality with
+/// the sequential set is now MEASURED on four corpora in both the full-range and the
+/// production split-range configurations, and the characterization test was INVERTED
+/// rather than deleted (`test_ground_fallback_dep_no_longer_diverges_from_sequential`).
+///
+/// STILL OWED: the set.mm EXPOSURE measurement — whether any theorem the pre-fix
+/// two-pass export shipped as `KernelVerified` is one the fixed gate now drops. The
+/// harness is built and mechanized, the number is not measured (no Metamath corpus
+/// on the box that landed the fix): `mm_kverify <set.mm> <N> --exposure` runs the
+/// SEQUENTIAL verifier and prints every skip naming a dependency that IS in
+/// `report.verified`; exit **3** = measured EXPOSED (the shipped shard must be
+/// re-gated), **0** = measured CLEAN, **1**/**2** = the run broke — a crash can never
+/// read as a clean bill of health. Scope, witness corpus and exit criteria:
+/// `docs/issues/2026-08-23-r1-mm-two-pass-theorem.md` (§3, §8, §8.5).
 ///
 /// # Errors
 /// Returns `EnvError` if `set_mm_axiom_only` is not ON (misuse) or `add_decl` fails.

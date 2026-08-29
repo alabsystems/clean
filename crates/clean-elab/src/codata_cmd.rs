@@ -234,7 +234,7 @@ fn mk_theorem(
 
 /// Does `expr` mention the identifier `name` (exactly, or as a dotted
 /// prefix `name.…`)? Conservative surface walk for self-reference checks.
-fn mentions(expr: &SurfaceExpr, name: &str) -> bool {
+pub(crate) fn mentions(expr: &SurfaceExpr, name: &str) -> bool {
     let mut found = false;
     walk(expr, &mut |e| {
         if let SurfaceExpr::Ident(_, id) = e {
@@ -246,7 +246,7 @@ fn mentions(expr: &SurfaceExpr, name: &str) -> bool {
     found
 }
 
-fn walk(expr: &SurfaceExpr, f: &mut impl FnMut(&SurfaceExpr)) {
+pub(crate) fn walk(expr: &SurfaceExpr, f: &mut impl FnMut(&SurfaceExpr)) {
     f(expr);
     match expr {
         SurfaceExpr::App(_, h, args) => {
@@ -425,7 +425,7 @@ fn validate<'a>(
 
 /// Is `expr` exactly `head p1 … pk` (modulo parens) with the given
 /// identifier arguments in order?
-fn is_self_at_params(expr: &SurfaceExpr, head: &str, params: &[&str]) -> bool {
+pub(crate) fn is_self_at_params(expr: &SurfaceExpr, head: &str, params: &[&str]) -> bool {
     let expr = strip_parens(expr);
     if params.is_empty() {
         return matches!(expr, SurfaceExpr::Ident(_, id) if id == head);
@@ -444,7 +444,7 @@ fn is_self_at_params(expr: &SurfaceExpr, head: &str, params: &[&str]) -> bool {
     })
 }
 
-fn strip_parens(expr: &SurfaceExpr) -> &SurfaceExpr {
+pub(crate) fn strip_parens(expr: &SurfaceExpr) -> &SurfaceExpr {
     match expr {
         SurfaceExpr::Paren(_, e) => strip_parens(e),
         _ => expr,
@@ -464,13 +464,32 @@ pub(crate) fn elab_codata_decl(
         universe_params,
         binders,
         ty,
-        fields,
+        body,
         deriving,
         modifiers,
         ..
     } = decl
     else {
         return Err(unsupported("elab_codata_decl: not a codata declaration"));
+    };
+    // VARIANT body (`| Ret : R → T | …`) — its own lane, and in VC-1 a
+    // fully-validating but non-generating one: every envelope violation
+    // gets its own named refusal, and an in-envelope declaration is
+    // refused too, because the lowering is not built yet. Nothing is ever
+    // registered. See `designs/2026-08-28-variant-codata-surface.md`.
+    let fields = match body {
+        clean_parser::CodataBody::Record(fields) => fields,
+        clean_parser::CodataBody::Variant(ctors) => {
+            return crate::codata_variant::elab_variant_codata(
+                name,
+                universe_params,
+                binders,
+                ty,
+                ctors,
+                deriving,
+                modifiers,
+            )
+        }
     };
     // Indexed form: `codata C : (n : I) → Type where …` — the
     // source-index answer (the container index IS the user's index).
@@ -1664,7 +1683,7 @@ fn validate_mutual_member<'a>(
         universe_params,
         binders,
         ty,
-        fields,
+        body,
         deriving,
         modifiers,
         ..
@@ -1674,6 +1693,14 @@ fn validate_mutual_member<'a>(
             "mutual codata: every member of the block must be a `codata` \
              declaration",
         ));
+    };
+    let clean_parser::CodataBody::Record(fields) = body else {
+        return Err(unsupported(format!(
+            "mutual codata member `{name}`: a VARIANT codata body \
+             (`| Ctor : …`) cannot appear in a `mutual` block — mutual \
+             variant codata is outside the VC1 envelope \
+             (designs/2026-08-28-variant-codata-surface.md §5)"
+        )));
     };
     let member_poly = match universe_params.as_slice() {
         [] => None,

@@ -33,6 +33,35 @@ pub(crate) struct Match<T> {
     pub(crate) extra_args: usize,
 }
 
+/// How many CHILD subtrees follow `key` in a flattened path (the number of
+/// argument subterms `push_expr` emits after it). `Star` and `Other` are
+/// whole-subterm placeholders and `Lit` heads are emitted without an arity, so
+/// all three count 0; `Arrow` pushes only the Pi domain; `Proj` pushes its
+/// struct operand BEFORE the `arity` spine arguments.
+pub(crate) fn key_child_count(key: &DiscrKey) -> usize {
+    match key {
+        DiscrKey::Star | DiscrKey::Other | DiscrKey::Lit(_) => 0,
+        DiscrKey::FVar(_, arity) | DiscrKey::Const(_, arity) => *arity,
+        DiscrKey::Arrow => 1,
+        DiscrKey::Proj(_, _, arity) => arity + 1,
+    }
+}
+
+/// Number of leading keys of `path` that form ONE complete subterm — what a
+/// pattern-side `Star`/`Other` placeholder stands for. A path truncated by the
+/// emission cap can end mid-subterm; the count then clamps to the whole path,
+/// which only widens candidate offering (the unifier still decides the match).
+pub(crate) fn subtree_key_count(path: &[DiscrKey]) -> usize {
+    let mut pending = 1usize;
+    let mut taken = 0usize;
+    while pending > 0 && taken < path.len() {
+        pending -= 1;
+        pending += key_child_count(&path[taken]);
+        taken += 1;
+    }
+    taken
+}
+
 pub(crate) fn cmp_keys(lhs: &DiscrKey, rhs: &DiscrKey) -> Ordering {
     match (lhs, rhs) {
         (DiscrKey::Lit(lhs), DiscrKey::Lit(rhs)) => cmp_literals(lhs, rhs),

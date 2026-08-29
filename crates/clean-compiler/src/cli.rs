@@ -127,14 +127,22 @@ pub enum CompilerCliError {
 
 // -- Public entry points ------------------------------------------------------
 
-/// Dispatch entry point for `clean compile`. Called from the top-level
-/// `clean-cli` binary via `cmd_compile::handle_compile_command`.
+/// NOT the dispatch entry point for `clean compile`, despite what this comment
+/// said until 2026-08-27. `cmd_compile::handle_compile_command` does not call
+/// this function and never reaches it: it runs the real pipeline
+/// (`select_lcnf_decl` -> `emit_decls`), which parses, elaborates and lowers
+/// the declaration and its compilable dependency closure. `clean compile
+/// <file> --decl <d> --emit c` emits C today.
 ///
-/// The MVP validates that the caller supplied both a file and a `--decl`
-/// selector, then returns [`CompilerCliError::NotYetImplemented`]. The
-/// full pipeline is out of scope for #3453 (explicit non-goal in the
-/// issue body: "End-to-end .lean file elaboration pipeline" is listed
-/// under _Out of scope_).
+/// This is a `pub` stub with NO production caller — only the three unit tests
+/// below, which pin its `MissingInput` / `NotYetImplemented` returns. Those
+/// tests are green and describe nothing a user can reach, which is how the
+/// stale claim survived: the verb's `--help` text was derived from this
+/// function's behaviour rather than the handler's.
+///
+/// Left in place rather than deleted because it is public API of this crate;
+/// removing it is a separate change. Do not wire it into a dispatch path
+/// without replacing the body.
 pub fn run(args: CompileArgs) -> Result<(), CompilerCliError> {
     let Some(file) = args.file.as_ref() else {
         return Err(CompilerCliError::MissingInput);

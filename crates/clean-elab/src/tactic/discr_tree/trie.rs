@@ -2,7 +2,7 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use super::key::{cmp_keys, DiscrKey};
+use super::key::{cmp_keys, subtree_key_count, DiscrKey};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Trie<T> {
@@ -45,11 +45,22 @@ impl<T> Trie<T> {
     {
         if let Some((key, rest)) = path.split_first() {
             self.visit_child(key, rest, out);
+            // A stored `Star`/`Other` is a WHOLE-SUBTERM placeholder (the
+            // pattern side emits it with none of the subterm's children), so
+            // descending into one must skip the query's complete leading
+            // subtree — arity-aware — not a single key. Skipping one key made
+            // every star lemma invisible at any position whose corresponding
+            // argument was compound: `Nat.succ ?n` (path `[succ, *]`) was
+            // offered at `Nat.succ n` but NOT at
+            // `Nat.succ (List.length l)` (path `[succ, length, ..]`), which
+            // starved `simp`'s closing rewrite under `import Init` (g_simp
+            // probe 27).
+            let after_subtree = &path[subtree_key_count(path)..];
             if !matches!(key, DiscrKey::Star) {
-                self.visit_child(&DiscrKey::Star, rest, out);
+                self.visit_child(&DiscrKey::Star, after_subtree, out);
             }
             if !matches!(key, DiscrKey::Other) {
-                self.visit_child(&DiscrKey::Other, rest, out);
+                self.visit_child(&DiscrKey::Other, after_subtree, out);
             }
             return;
         }

@@ -34,12 +34,26 @@
 #                      docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md).
 #   CLEAN_BIN          clean binary (default: target/release/clean, then
 #                      target/debug/clean).
+#   PARSESWEEP_REPORT  where to write the artifact (default: the committed
+#                      reports/parser-mathlib-parse-rate.json).
+#
+# WHY THE REPORT PATH IS OVERRIDABLE. The headline this script produces is a
+# RATE, and a rate on its own attributes nothing — the denominator moves as the
+# parser learns to see declarations it previously swallowed, so differencing two
+# runs taken at unrelated commits is meaningless twice over. The only
+# interpretable form is a BEFORE/AFTER PAIR built from two known shas. That
+# needs two artifacts to exist at once, and until this override the script wrote
+# one hardcoded path unconditionally: measuring a pair meant either clobbering
+# whatever a concurrent lane had just minted there, or forking the script and
+# measuring with a copy that is no longer the committed command. Measured
+# 2026-08-28 on this shared box, both of those happened. The default is
+# unchanged, so every existing caller writes exactly where it always did.
 #
 # bash-3.2 safe.
 set -uo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 1
 
-REPORT=reports/parser-mathlib-parse-rate.json
+REPORT="${PARSESWEEP_REPORT:-reports/parser-mathlib-parse-rate.json}"
 
 # ---------------------------------------------------------------------------
 # The 40-module Mathlib KV cross-section.

@@ -137,6 +137,11 @@ proptest-regressions/
 # Generated test index cache (14MB, rebuild via scripts/build_test_index.py)
 .cleancache/
 data/test_index.json
+# Personal scratchpad READ by crates/clean-verify/tests/evalir_scratchpad.rs:
+# candidate declarations a developer drops in to elaborate one at a time
+# against a fast EvalIr-bundle spec. The test tolerates its absence, so it is
+# never shared state — tracking it would land half-finished candidates.
+data/spec_scratch_evalir.json
 data/merge_queue_diagnostics/
 # Mathverse Library raw data (2GB+ math libraries, download via scripts)
 data/raw/

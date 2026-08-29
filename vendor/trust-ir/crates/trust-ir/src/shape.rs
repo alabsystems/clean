@@ -257,6 +257,9 @@ pub enum PointerMetadataShape {
     SliceLen { elem: TyId },
     StrLen,
     VTable { trait_id: u32 },
+    /// `usize` length metadata whose data pointer addresses a CONTAINER whose
+    /// tail is the DST, not the DST content. See [`FatPtrKind::ContainerLen`].
+    ContainerLen,
 }
 
 impl core::fmt::Display for PointerMetadataShape {
@@ -265,6 +268,7 @@ impl core::fmt::Display for PointerMetadataShape {
             PointerMetadataShape::SliceLen { elem } => write!(f, "slice_len<ty.{}>", elem.0),
             PointerMetadataShape::StrLen => f.write_str("str_len"),
             PointerMetadataShape::VTable { trait_id } => write!(f, "vtable<dyn.{trait_id}>"),
+            PointerMetadataShape::ContainerLen => f.write_str("container_len"),
         }
     }
 }
@@ -275,6 +279,7 @@ impl FatPtrKind {
             FatPtrKind::Slice(elem) => PointerMetadataShape::SliceLen { elem },
             FatPtrKind::Str => PointerMetadataShape::StrLen,
             FatPtrKind::TraitObject { trait_id } => PointerMetadataShape::VTable { trait_id },
+            FatPtrKind::ContainerLen => PointerMetadataShape::ContainerLen,
         }
     }
 
@@ -286,9 +291,13 @@ impl FatPtrKind {
 impl PointerMetadataShape {
     pub fn metadata_ty(self, pointer_bits: u32) -> Option<Ty> {
         match self {
-            PointerMetadataShape::SliceLen { .. } | PointerMetadataShape::StrLen => {
-                pointer_sized_unsigned_ty(pointer_bits)
-            }
+            // ContainerLen carries the SAME `usize` metadata as a slice or
+            // str length -- the distinction is what the DATA pointer
+            // addresses, not the metadata's type -- so the layout is
+            // deliberately identical here and differs only in identity.
+            PointerMetadataShape::SliceLen { .. }
+            | PointerMetadataShape::StrLen
+            | PointerMetadataShape::ContainerLen => pointer_sized_unsigned_ty(pointer_bits),
             PointerMetadataShape::VTable { .. } => Some(Ty::Ptr),
         }
     }
@@ -2496,5 +2505,61 @@ mod tests {
         );
         // Non-aggregate constants still do not match an enum type.
         assert!(!Constant::Int(1).shape_matches_ty(&Ty::Enum(EnumId::new(0))));
+    }
+}
+
+#[cfg(test)]
+mod container_len_layout_tests {
+    use super::*;
+    use crate::FatPtrKind;
+
+    /// The defect this variant exists to close: a fat pointer signed as an
+    /// anonymous `(ptr, i64)` tuple has NO layout, because `ty_layout_shape`
+    /// covers the empty tuple only. Everything transitively containing one
+    /// became unresolvable, and the enum-layout validator failed closed.
+    ///
+    /// Asserted as a CONTRAST so the test states the whole point: the tuple
+    /// spelling does not resolve, the first-class kind does.
+    #[test]
+    fn container_len_resolves_where_the_tuple_spelling_does_not() {
+        let m = Module::new("container_len_layout");
+
+        let tuple = Ty::Tuple(vec![Ty::Ptr, Ty::I64]);
+        assert!(
+            m.ty_layout_shape(&tuple).is_err(),
+            "the tuple spelling is expected to have NO layout — if this starts \
+             resolving, the motivation for FatPtrKind::ContainerLen changed and \
+             this test should be the thing that says so"
+        );
+
+        let fat = Ty::FatPtr(FatPtrKind::ContainerLen);
+        let shape = m
+            .ty_layout_shape(&fat)
+            .expect("ContainerLen must resolve — that is the entire point");
+
+        // Same bytes as a str-length fat pointer: two pointer-sized words. The
+        // kinds differ in what the DATA pointer addresses, never in layout.
+        let str_shape = m
+            .ty_layout_shape(&Ty::FatPtr(FatPtrKind::Str))
+            .expect("Str fat pointer resolves");
+        assert_eq!(
+            shape.size_bytes(),
+            str_shape.size_bytes(),
+            "ContainerLen must lay out exactly like Str"
+        );
+        assert_eq!(shape.align_bits, str_shape.align_bits);
+    }
+
+    /// The identity half. Layout equality above must NOT become identity
+    /// equality: a container-tail pointer is not a string pointer, and the
+    /// metadata shapes are what downstream consumers switch on.
+    #[test]
+    fn container_len_is_not_str() {
+        assert_ne!(
+            FatPtrKind::ContainerLen.metadata_shape(),
+            FatPtrKind::Str.metadata_shape(),
+            "sharing a metadata shape with Str would re-encode the very claim \
+             the variant exists to avoid making"
+        );
     }
 }

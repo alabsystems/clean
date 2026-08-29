@@ -9,8 +9,15 @@ import Init
 -- (`l ++ [] = l`, `l.reverse.reverse = l` need the imported `@[simp]` set —
 -- RC-B — or a universe-polymorphic builtin route — RC-E).
 
-theorem canary_env_g_simp_core (as : List Nat) : as.reverse.reverse = as :=
-  List.reverse_reverse as
+-- Environment canary. BOTH facts are absent from Clean's builtin/stub prelude and
+-- present in real Init, so this declaration fails unless `import Init` genuinely
+-- loaded. Its discriminating power is re-proved on every run rather than assumed
+-- (family_gate.py --canary-check); the previous single-fact canary
+-- `List.reverse_reverse` was silently disarmed on 2026-08-23 by 3df6e4aad, which
+-- registered a kernel-proved copy of it INTO the builtin prelude.
+theorem canary_env_g_simp_core (as bs : List Nat) (n m : Nat) :
+    (as ++ bs).reverse = bs.reverse ++ as.reverse ∧ n.succ - m.succ = n - m :=
+  And.intro (List.reverse_append as bs) (Nat.succ_sub_succ_eq_sub n m)
 
 theorem p_simp_core_01 (n : Nat) : n + 0 = n := by simp
 theorem p_simp_core_02 (n : Nat) : 0 + n = n := by simp

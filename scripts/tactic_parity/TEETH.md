@@ -11,8 +11,10 @@ Both gates read per-declaration verdicts from `clean check --json`
 fail closed on: fixture/manifest drift, a probe count differing from the pinned
 family denominator, any silently skipped declaration (decl_count mismatch), any
 verdict that cannot be attributed to a declaration, a failing environment
-canary (stub/builtin-prelude fallback), a failing `required` row, zero passing
-probes, and any regression against the recorded baseline
+canary (stub/builtin-prelude fallback), a **disarmed** environment canary (one
+that the builtin prelude can also prove, and which therefore could not have
+failed), a failing `required` row, zero passing probes, and any regression
+against the recorded baseline
 (`data/tactic_family_baselines/<family>.json`).
 
 ## Demonstration procedure (both gates)
@@ -104,5 +106,41 @@ the fail-closed integrity properties:
   `…=failed reason=fixture-manifest-integrity` (builtin-prelude fixtures are
   rejected by the gate script itself).
 - Point `CLEAN_BIN` at a binary whose import path cannot resolve the Init
-  `.olean`s → the per-file term-mode canary (`List.reverse_reverse`, absent
-  from every builtin/stub prelude) fails and the gate exits 1.
+  `.olean`s → the per-file term-mode canary fails and the gate exits 1.
+- Round the `diverged` verdict off in ANY direction → `scripts/test_family_gate.py`
+  goes RED in milliseconds. **DEMONSTRATED 2026-08-28** at `9051c9aaa`, three
+  arms, each reverted immediately after:
+
+  | mutation | observed |
+  | --- | --- |
+  | `classify_file_verdicts` stops reading the report's `diverged` list (the pre-fix reading) | 2 RED — three declarations claimed passing against the binary's `success_count=2` |
+  | `diverged` rounded UP to `pass` | 1 RED — `test_diverged_is_neither_pass_nor_fail` |
+  | the `--decl-budget=` flag dropped from the argv | 1 RED — `test_the_budget_is_actually_passed_to_the_binary` |
+
+  The load-bearing check is arithmetic, not prose: the names left over after
+  removing the failed and the diverged must number EXACTLY the binary's own
+  `success_count`. Rounding `diverged` up to `pass` is the one direction that
+  would mint a green a declaration never earned, and that count is what makes
+  it impossible to do quietly. This tooth is why the budget could be turned on
+  at all — see `DECL_BUDGET` in `family_gate.py` for why a runaway declaration
+  used to cost its whole file's report, and
+  `docs/issues/2026-08-28-simp-diverges-bridging-nat-successor-spellings.md` for the
+  declaration that was doing it.
+- Rewrite any canary to something the builtin prelude can also prove →
+  `…=failed reason=canary-disarmed`. The canary's discriminating power is
+  **measured, not assumed**: every measured run (and `--canary-check` on its
+  own, ~5 s) re-runs each canary against `--prelude builtin` and requires it to
+  be REFUTED there.
+
+  This tooth exists because the property was silently lost for four days and
+  nothing noticed. The canary was chosen on 2026-08-10 as
+  `List.reverse_reverse`, genuinely absent from the builtin prelude at the
+  time; commit `3df6e4aad` (2026-08-23) registered a kernel-proved
+  `List.reverse_reverse` **into** that prelude, after which all 13 canaries in
+  both families passed on `--prelude builtin` and could no longer detect the
+  fallback they exist to detect. Measured 2026-08-27 at `9f604ef85`:
+  `clean check --prelude builtin` proved the old canary in 0.3 s with
+  `peak_decl_ticks=111`. A canary is only ever run in the environment it is
+  supposed to be distinguishing FROM the other one, so the loss is invisible
+  unless the other environment is measured too — which is now what the gate
+  does.

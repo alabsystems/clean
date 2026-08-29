@@ -788,6 +788,23 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
     #
     # Adding a path MOVES the digest, so the row correctly demotes to UNKNOWN once
     # and is re-measured. That is the intended cost.
+    #
+    # AND IT HAPPENED A THIRD TIME -- measured 2026-08-27 by lane REV, the same
+    # way lane V measured the second: enumerate what the test sources actually
+    # OPEN, then diff against this list. Chain 18 landed on 2026-08-21 and
+    # brought four `lane18` records with it; `freshness.rs:99` promoted
+    # `data/crystal_chain_revalidation_2026-08-21_lane18.json` to CURRENT_RECORD
+    # -- the newest live-dump comparison in the tree, the one every "the chains
+    # were revalidated" claim rests on -- and NONE of the four entered this list.
+    # `data/crystal_frontier_census_2026-08-21.json` and
+    # `data/crystal_mint_blind_slots.json` were outside it too. So the row that
+    # exists to notice chain drift could go green while the record it reads to
+    # decide that was edited underneath it.
+    #
+    # Twice is an instance; three times is a class, and a hand-maintained list
+    # is the class. `_crystal_extra_paths_owed()` below now RE-DERIVES the owed
+    # set from the test sources on every invocation and refuses rather than
+    # letting the fourth one land silently.
     "clean-verify::test::crystal_a1_lineage": [
         "data/crystal_chain_revalidation_2026-08-19.json",
         "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json",
@@ -802,6 +819,20 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json",
         "crates/clean-verify/src/spec/core_spec/generated/ir_lz.b039.prov.json",
         "data/crystal_fixture_freshness_2026-08-20_lane13.json",
+        # Chain 18's cohort, 2026-08-21 -- missing until lane REV, 2026-08-27.
+        "data/crystal_chain_revalidation_2026-08-21_lane18.json",
+        "data/crystal_fixture_freshness_2026-08-21_lane18.json",
+        "data/crystal_fixture_rebaseline_2026-08-21_lane18.json",
+        "data/crystal_fixture_rebaseline_bindings_2026-08-21_lane18.json",
+        # Read by `has_loose_bvars_evidence.rs` and `operand_audit.rs`
+        # respectively; missing for the same reason.
+        "data/crystal_frontier_census_2026-08-21.json",
+        "data/crystal_mint_blind_slots.json",
+        # Named in a live assertion MESSAGE (`bvar_in_range.rs`,
+        # `flat_flags_contains.rs`): the record those lanes promise to disagree
+        # with in writing rather than reconcile away. Part of the evidence
+        # statement, so part of the digest.
+        "data/crystal_flip_census_2026-08-13.json",
         "data/crystal_freshness_scope.json",
         "scripts/crystal_chain_revalidation.py",
         "scripts/crystal_fixture_freshness.py",
@@ -811,8 +842,167 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
     ],
 }
 
+# The test sources whose `data/crystal_*.json` references the list above owes an
+# entry for.  Kept beside the list so a new crystal test directory is a one-line
+# addition here rather than a silent gap.
+CRYSTAL_DIGEST_SOURCE_GLOBS = (
+    "crates/clean-verify/tests/crystal_a1_lineage.rs",
+    "crates/clean-verify/tests/crystal_a1_lineage/*.rs",
+)
+
+
+def _blank_rust_comments(src: str) -> str:
+    """Replace every Rust comment with spaces, leaving string literals intact.
+
+    The discrimination matters in both directions here.  A `data/crystal_*.json`
+    named in a `//!` module doc is PROSE -- narrative about how a chain was
+    chosen -- and putting it in the digest would demote a green whenever someone
+    improved a paragraph.  The same name inside a live `assert!` message is
+    CODE: it is the record the lane promises, in the failing output, to disagree
+    with in writing rather than reconcile away, and editing it changes what the
+    row means.  Blanking comments and keeping string literals is exactly that
+    line.  (Naive `split("//")` gets it backwards on both counts -- it drops the
+    tail of any literal containing `//`, and keeps doc text that merely mentions
+    a path.)
+    """
+    out: list[str] = []
+    i, n = 0, len(src)
+    while i < n:
+        ch = src[i]
+        if ch == '"':
+            out.append(ch)
+            i += 1
+            while i < n:
+                out.append(src[i])
+                if src[i] == "\\":
+                    if i + 1 < n:
+                        out.append(src[i + 1])
+                        i += 2
+                        continue
+                elif src[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "'" and i + 2 < n and (src[i + 1] != "\\" and src[i + 2] == "'"):
+            out.append(src[i : i + 3])  # char literal, never a lifetime
+            i += 3
+            continue
+        if src.startswith("//", i):
+            while i < n and src[i] != "\n":
+                out.append(" ")
+                i += 1
+            continue
+        if src.startswith("/*", i):
+            depth, i = 1, i + 2
+            out.append("  ")
+            while i < n and depth:
+                if src.startswith("/*", i):
+                    depth, i = depth + 1, i + 2
+                    out.append("  ")
+                elif src.startswith("*/", i):
+                    depth, i = depth - 1, i + 2
+                    out.append("  ")
+                else:
+                    out.append(" " if src[i] != "\n" else "\n")
+                    i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _crystal_extra_paths_owed(root: Path | None = None) -> dict[str, set[str]]:
+    """Re-derive, per crystal target, the `data/crystal_*.json` files it reads.
+
+    Read back from the SOURCES, never from `TARGET_EXTRA_PATHS` -- the list is
+    the thing being checked, and a checker that consults its subject proves
+    nothing.  Three separate lanes have now added a record that the row reads
+    and forgotten to widen the digest; this makes the fourth impossible.
+    """
+    base = root or REPO_ROOT
+    owed: dict[str, set[str]] = {}
+    for target, globs in (
+        ("clean-verify::test::crystal_a1_lineage", CRYSTAL_DIGEST_SOURCE_GLOBS),
+    ):
+        found: set[str] = set()
+        for pattern in globs:
+            parent, _, tail = pattern.rpartition("/")
+            for path in sorted((base / parent).glob(tail)):
+                code = _blank_rust_comments(path.read_text(encoding="utf-8", errors="replace"))
+                found.update(re.findall(r"data/crystal_[A-Za-z0-9_.-]+\.json", code))
+        owed[target] = found
+    return owed
+
+
+def _selftest_crystal_digest_coverage() -> None:
+    """Prove the checker can say no, on every invocation, before it says yes.
+
+    Four arms on a synthetic tree, ~1 ms, no repo I/O: a read record that is
+    listed must be silent; the same record unlisted must be reported; a record
+    named only in a `//!` doc must NOT be demanded; and a record named inside a
+    string literal that itself contains `//` must still be found (the exact case
+    a `split("//")` scanner truncates).  A checker whose refusal is only
+    exercised when somebody remembers is the thing this check exists to stop.
+    """
+    import tempfile
+
+    src = (
+        '//! prose naming data/crystal_doc_only.json\n'
+        'fn a() { let _ = read_json("data/crystal_listed.json"); }\n'
+        'fn b() { let _ = read_json("data/crystal_unlisted.json"); }\n'
+        'fn c() { panic!("see https://x/y data/crystal_after_slashes.json"); }\n'
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        (base / "crates/clean-verify/tests/crystal_a1_lineage").mkdir(parents=True)
+        (base / "crates/clean-verify/tests/crystal_a1_lineage/x.rs").write_text(src)
+        (base / "crates/clean-verify/tests/crystal_a1_lineage.rs").write_text("")
+        found = _crystal_extra_paths_owed(base)["clean-verify::test::crystal_a1_lineage"]
+    expected = {
+        "data/crystal_listed.json",
+        "data/crystal_unlisted.json",
+        "data/crystal_after_slashes.json",
+    }
+    if found != expected:
+        raise SystemExit(
+            "verify_runner SELFTEST FAILED: crystal digest re-derivation returned "
+            f"{sorted(found)}, expected {sorted(expected)} -- the scanner can no "
+            "longer tell a read record from a documented one, so its green is void"
+        )
+
+
+def check_crystal_extra_paths(root: Path | None = None) -> list[str]:
+    """Return one message per crystal record read but absent from the digest.
+
+    One-directional by design: an entry LISTED but not re-derived here is fine
+    and several are correct (the lane-13 freshness record is cited as
+    provenance by `tests/fixtures/*.lineage.json`, not by any `.rs`).  Only the
+    other direction can turn a stale green fresh, and only that is refused.
+    """
+    _selftest_crystal_digest_coverage()
+    problems: list[str] = []
+    for target, owed in _crystal_extra_paths_owed(root).items():
+        listed = set(TARGET_EXTRA_PATHS.get(target, ()))
+        for missing in sorted(owed - listed):
+            problems.append(
+                f"{target} reads {missing} but it is not in TARGET_EXTRA_PATHS, so a "
+                f"recorded GREEN for that target survives an edit to it"
+            )
+    return problems
+
 
 def build_inventory(packages: list[str], with_gates: bool = True) -> list[dict[str, Any]]:
+    # Fail closed BEFORE any verdict is derived or reported. An under-covering
+    # digest does not make a run wrong; it makes an already-recorded GREEN read
+    # fresh after the evidence beneath it moved -- so the wrong moment to notice
+    # is while printing that GREEN.
+    problems = check_crystal_extra_paths()
+    if problems:
+        raise SystemExit(
+            "verify_runner: crystal digest coverage is incomplete -- add the path(s) to "
+            "TARGET_EXTRA_PATHS:\n  " + "\n  ".join(problems)
+        )
     meta = cargo_metadata()
     inv: list[dict[str, Any]] = []
     if with_gates:

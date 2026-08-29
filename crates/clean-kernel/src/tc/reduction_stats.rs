@@ -44,7 +44,7 @@ struct Stats {
 }
 
 #[cfg(feature = "reduction-stats")]
-fn head_label(e: &crate::expr::Expr) -> String {
+fn head_label(e: &Expr) -> String {
     use crate::expr::ExprKind;
     match e.get_app_fn().kind() {
         ExprKind::Const(name, _) => name.to_string(),
@@ -61,7 +61,7 @@ fn head_label(e: &crate::expr::Expr) -> String {
 }
 
 #[cfg(feature = "reduction-stats")]
-pub(crate) fn record_core_pair(a: &crate::expr::Expr, b: &crate::expr::Expr) {
+pub(crate) fn record_core_pair(a: &Expr, b: &Expr) {
     let key = (head_label(a), head_label(b));
     let (da, db) = (
         u32::from(a.meta().approx_depth()),
@@ -148,19 +148,11 @@ pub(crate) fn record_unfold(name: &Name, cached: bool) {
     });
 }
 
-#[cfg(feature = "reduction-stats")]
-pub(crate) fn record_iota(rec_name: &Name) {
-    STATS.with(|s| {
-        let mut s = s.borrow_mut();
-        *s.iota_by_rec.entry(rec_name.clone()).or_insert(0) += 1;
-    });
-}
-
 /// One-shot deep-loop witness: when a single recursor's iota count crosses
 /// the threshold, dump the live (already-reduced) application once so runaway
 /// unary walks can be attributed to a concrete term shape. Diagnostic-only.
 #[cfg(feature = "reduction-stats")]
-pub(crate) fn record_iota_with_witness(rec_name: &Name, result: &crate::expr::Expr) {
+pub(crate) fn record_iota_with_witness(rec_name: &Name, result: &Expr) {
     let dump = STATS.with(|s| {
         let mut s = s.borrow_mut();
         let c = s.iota_by_rec.entry(rec_name.clone()).or_insert(0);

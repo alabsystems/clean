@@ -12,7 +12,7 @@
 //! Tracks source-system variants (see [`types::SourceSystem`]) via dedicated
 //! translators, with a keyword-scan census across 238 repositories.
 //! Enforces trust boundaries so axiomatized proofs can't contaminate kernel-verified ones.
-//! Indexes the corpus for sub-millisecond retrieval across 5 search modes.
+//! Indexes the corpus for sub-millisecond retrieval across 4 search modes.
 //!
 //! Current downloadable release: `mathverse-v1.2.0` (2026-05-24) — 65 shards,
 //! 945 MB uncompressed, published as a `mathverse-library-v1.2.0.tar.zst` archive

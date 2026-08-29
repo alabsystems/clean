@@ -134,24 +134,38 @@ const NAT_PRELUDE_SHIMS: &[PreludeShim] = &[
         definition: "clean_obj* l_Nat_mod(clean_obj* a, clean_obj* b) {\n  \
             return clean_nat_mod(a, b);\n}\n",
     },
-    // `toString {a} [ToString a] (x : a) : String`. Supports printing a computed
-    // `Nat`: the instance + type args are erased and the value (last arg, a
-    // boxed Nat) is rendered as a decimal string. Heap-aware (RUNG B): reads the
-    // value via `clean_nat_to_u128` so a Nat >= 2^63 renders exactly rather than
-    // decoding the heap pointer as garbage, and consumes `x` per the all-owned
-    // ABI. `u128` needs up to 39 digits, so the buffer is 48.
+    // `toString {a} [ToString a] (x : a) : String` is the PROJECTION of the
+    // single-method class `ToString`, so under the R3 representation documented
+    // on [`TYPECLASS_PRELUDE_SHIMS`] it applies its instance: the instance IS
+    // its bare method closure, and `ToString.toString inst x` is
+    // `clean_apply_1(inst, x)` — the same shape `l_HAdd_hAdd` / `l_HMod_hMod`
+    // already use. `clean_apply_1` consumes both per the all-owned ABI.
+    //
+    // It did not always. This shim was the one projection never converted to
+    // R3: it discarded `inst` and decimal-rendered `x` as a `Nat`, which made
+    // every non-`Nat` instance print a NUMBER instead of its own rendering,
+    // silently and with exit status 0 — `toString "world"` printed `5` (the
+    // string carrier's `len` field, read as a tagged Nat) and `toString true`
+    // printed `1`. Nothing was missing from the compiler: for both of those the
+    // emitter already lowers the genuine instance (`l_instToStringString`'s
+    // method is the identity; `l_instToStringBool`'s is a boxed switch onto
+    // `"true"`/`"false"`) and passes it in as `inst`. Only the shim threw it
+    // away. The `Nat` rendering the old body open-coded is not lost — it is
+    // exactly `l_instToStringNat`'s `clean_shim_nat_repr` below, which is the
+    // instance this now applies for `Nat`, heap-aware `u128` buffer and all.
+    //
+    // A non-closure `inst` means the caller erased an instance this projection
+    // needs, so fail loudly: `clean_apply_n` would read a tagged scalar's
+    // payload as an arity/fn header and jump through garbage, and the old body
+    // would have "succeeded" with a wrong number.
     PreludeShim {
         symbol: "l_toString",
         definition: "clean_obj* l_toString(clean_obj* ty, clean_obj* inst, clean_obj* x) {\n  \
-            (void)ty; (void)inst;\n  \
-            unsigned __int128 v = clean_nat_to_u128(x);\n  \
-            clean_dec(x);\n  \
-            char buf[48];\n  \
-            int i = (int)sizeof(buf);\n  \
-            buf[--i] = 0;\n  \
-            if (v == 0) { buf[--i] = '0'; }\n  \
-            else { while (v > 0) { buf[--i] = (char)('0' + (unsigned)(v % 10)); v /= 10; } }\n  \
-            return clean_mk_string(buf + i);\n}\n",
+            (void)ty;\n  \
+            if (clean_is_scalar(inst) || inst->header.kind != CLEAN_OBJ_KIND_CLOSURE) {\n    \
+            clean_panic(\"toString: ToString instance is not a method closure\");\n  \
+            }\n  \
+            return clean_apply_1(inst, x);\n}\n",
     },
     // `Nat.decEq a b : Decidable (a = b)`. The control-flow lowering uses its
     // result purely as a tag scrutinee; box `1` when equal, `0` otherwise.
@@ -266,6 +280,34 @@ const UINT32_PRELUDE_SHIMS: &[PreludeShim] = &[
             unsigned __int128 x = clean_nat_to_u128(v);\n  \
             clean_dec(v);\n  \
             return clean_nat_of_u64((uint64_t)(x & 0xFFFFFFFFu));\n}\n",
+    },
+];
+
+/// The `UInt64` counterparts of [`UINT32_PRELUDE_SHIMS`], same rationale and
+/// same boxed signatures — truncation IS `ofNat`'s semantics, `toNat` is the
+/// identity on the 64-bit window, and both read heap-aware through
+/// `clean_nat_to_u128` rather than tagged-only `clean_unbox` (a `UInt64` above
+/// `2^63` is a heap Nat).
+///
+/// Measured 2026-08-27, before this table existed: `def main : IO Unit :=
+/// IO.println (toString (9 : UInt64))` was refused with "native build cannot
+/// satisfy prelude extern `l_UInt64_ofNat`" — fail-closed, but it put every
+/// `UInt64`-touching entry outside the pillar, so `instToStringUInt64` could
+/// not have been measured through `clean run` without them.
+const UINT64_PRELUDE_SHIMS: &[PreludeShim] = &[
+    PreludeShim {
+        symbol: "l_UInt64_ofNat",
+        definition: "clean_obj* l_UInt64_ofNat(clean_obj* n) {\n  \
+            unsigned __int128 v = clean_nat_to_u128(n);\n  \
+            clean_dec(n);\n  \
+            return clean_nat_of_u64((uint64_t)(v & 0xFFFFFFFFFFFFFFFFull));\n}\n",
+    },
+    PreludeShim {
+        symbol: "l_UInt64_toNat",
+        definition: "clean_obj* l_UInt64_toNat(clean_obj* v) {\n  \
+            unsigned __int128 x = clean_nat_to_u128(v);\n  \
+            clean_dec(v);\n  \
+            return clean_nat_of_u64((uint64_t)(x & 0xFFFFFFFFFFFFFFFFull));\n}\n",
     },
 ];
 
@@ -400,6 +442,7 @@ const ALL_PRELUDE_SHIM_TABLES: &[&[PreludeShim]] = &[
     NAT_PRELUDE_SHIMS,
     INT_PRELUDE_SHIMS,
     UINT32_PRELUDE_SHIMS,
+    UINT64_PRELUDE_SHIMS,
     STRING_PRELUDE_SHIMS,
     BOOL_PRELUDE_SHIMS,
     TYPECLASS_PRELUDE_SHIMS,
@@ -535,6 +578,53 @@ const TYPECLASS_PRELUDE_SHIMS: &[PreludeShim] = &[
             return clean_mk_string(buf + i);\n}\n\
             clean_obj* l_instToStringNat(void) {\n  \
             return clean_alloc_closure((void*)clean_shim_nat_repr, 1, 0);\n}\n",
+    },
+    // `instToStringChar : ToString Char`. The kernel instance carries Lean's
+    // `⟨fun c => String.singleton c⟩`, which this prelude spells `String.mk [c]`
+    // because it declares no `String.singleton`. That body MUST NOT be lowered
+    // from source: `String.mk` compiles to `clean_alloc_ctor(0, 1, 0, list)` — a
+    // ctor cell over the `List Char` model — while the runtime carrier is the
+    // flat byte string `clean_mk_string` builds. Measured on the emitted C
+    // (2026-08-27): a source-lowered `⟨fun c => String.mk [c]⟩` produces exactly
+    // that ctor cell, and it links, so `IO.println` would then read a `len` word
+    // out of a constructor field. That is the same silent miscompile
+    // [`STRING_PRELUDE_SHIMS`] exists to close, and it is why this instance is
+    // denylisted and rendered here instead.
+    //
+    // The encoder is `l_String_push`'s, minus the prefix: a Char arrives boxed
+    // and is read with tagged-or-heap `clean_unbox_uint32`, and is a valid
+    // Unicode scalar by the `Char.valid` invariant. NUL is refused for the same
+    // reason `l_String_push` refuses it — the byte-string carrier is
+    // NUL-terminated, so a `'\0'` would silently render as the empty string.
+    // Consumes its argument per the all-owned closure ABI, like the `Nat` shim
+    // above (`clean_dec` on a tagged scalar is a no-op).
+    PreludeShim {
+        symbol: "l_instToStringChar",
+        definition: "static clean_obj* clean_shim_char_to_string(clean_obj* c) {\n  \
+            uint32_t cp = clean_unbox_uint32(c);\n  \
+            clean_dec(c);\n  \
+            if (cp == 0) { clean_panic(\"toString: NUL is not representable in the \
+byte-string carrier\"); }\n  \
+            char buf[5];\n  \
+            size_t k = 0;\n  \
+            if (cp < 0x80) { buf[k++] = (char)cp; }\n  \
+            else if (cp < 0x800) {\n    \
+            buf[k++] = (char)(0xC0 | (cp >> 6));\n    \
+            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
+            } else if (cp < 0x10000) {\n    \
+            buf[k++] = (char)(0xE0 | (cp >> 12));\n    \
+            buf[k++] = (char)(0x80 | ((cp >> 6) & 0x3F));\n    \
+            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
+            } else {\n    \
+            buf[k++] = (char)(0xF0 | (cp >> 18));\n    \
+            buf[k++] = (char)(0x80 | ((cp >> 12) & 0x3F));\n    \
+            buf[k++] = (char)(0x80 | ((cp >> 6) & 0x3F));\n    \
+            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
+            }\n  \
+            buf[k] = 0;\n  \
+            return clean_mk_string(buf);\n}\n\
+            clean_obj* l_instToStringChar(void) {\n  \
+            return clean_alloc_closure((void*)clean_shim_char_to_string, 1, 0);\n}\n",
     },
 ];
 
@@ -975,6 +1065,7 @@ pub(crate) fn render_native_translation_unit(
                     NAT_PRELUDE_SHIMS,
                     INT_PRELUDE_SHIMS,
                     UINT32_PRELUDE_SHIMS,
+                    UINT64_PRELUDE_SHIMS,
                     STRING_PRELUDE_SHIMS,
                     BOOL_PRELUDE_SHIMS,
                     TYPECLASS_PRELUDE_SHIMS,
@@ -994,6 +1085,7 @@ pub(crate) fn render_native_translation_unit(
                     NAT_PRELUDE_SHIMS,
                     INT_PRELUDE_SHIMS,
                     UINT32_PRELUDE_SHIMS,
+                    UINT64_PRELUDE_SHIMS,
                     STRING_PRELUDE_SHIMS,
                     BOOL_PRELUDE_SHIMS,
                     TYPECLASS_PRELUDE_SHIMS,
@@ -1939,5 +2031,163 @@ mod tests {
         let output = Command::new(&out_path).output().expect("run length binary");
         assert!(output.status.success(), "{output:?}");
         assert_eq!(String::from_utf8_lossy(&output.stdout), "5\n");
+    }
+
+    /// `toString` is the PROJECTION of the single-method class `ToString`, so it
+    /// must render through the instance the emitter hands it — not through a
+    /// hardcoded `Nat` renderer.
+    ///
+    /// The pre-R3 shim discarded `inst` and decimal-rendered its argument, so
+    /// every non-`Nat` instance printed a NUMBER: `toString "world"` printed `5`
+    /// (the string carrier's `len` field, read as a tagged Nat) and
+    /// `toString true` printed `1` — silently, with exit status 0. Neither was a
+    /// missing capability: the emitter already lowers both instances correctly
+    /// (`instToStringString`'s method is the identity, `instToStringBool`'s is a
+    /// boxed switch onto `"true"`/`"false"`) and already passes them in. Only
+    /// the shim ignored them.
+    ///
+    /// One program covers every case so a single link proves the dispatch, and
+    /// the `Nat` line is the CONTROL: it must still render decimally, now via
+    /// `l_instToStringNat`'s closure rather than the shim's open-coded copy.
+    #[test]
+    fn test_build_native_executable_tostring_dispatches_on_instance() {
+        if !cc_available() {
+            eprintln!(
+                "skipping test_build_native_executable_tostring_dispatches_on_instance: no cc"
+            );
+            return;
+        }
+        let (dir, file) = write_temp_lean(
+            "def main : IO Unit := do\n  \
+             IO.println (toString \"world\")\n  \
+             IO.println (toString true)\n  \
+             IO.println (toString false)\n  \
+             IO.println (toString (40 + 2))\n",
+        );
+        let out_path = dir.path().join("bin").join("tostring_dispatch");
+        build_native_executable(&file, "main", 0, &out_path).expect("build toString dispatch");
+        let output = Command::new(&out_path)
+            .output()
+            .expect("run toString binary");
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "world\ntrue\nfalse\n42\n",
+            "each line must come from its OWN ToString instance; `5` and `1` for \
+             the first two are the pre-R3 signature of the shim discarding \
+             `inst` and rendering its argument as a Nat"
+        );
+    }
+
+    /// A USER-DEFINED `ToString` instance must render through its own method —
+    /// the proof that the projection dispatches on the instance rather than on
+    /// a hardcoded set of prelude types.
+    ///
+    /// This is the case that shows the old shim reached user code, not just
+    /// prelude types: `toString { n := 7 : Tag }` printed `7`, the structure's
+    /// first field read as a tagged Nat, for an instance whose method ignores
+    /// its argument and returns a constant string. A renderer that happened to
+    /// special-case `String` and `Bool` would still fail this.
+    #[test]
+    fn test_build_native_executable_tostring_uses_user_defined_instance() {
+        if !cc_available() {
+            eprintln!(
+                "skipping test_build_native_executable_tostring_uses_user_defined_instance: no cc"
+            );
+            return;
+        }
+        let (dir, file) = write_temp_lean(
+            "structure Tag where\n  \
+             n : Nat\n\n\
+             instance : ToString Tag where\n  \
+             toString _ := \"TAG\"\n\n\
+             def main : IO Unit := IO.println (toString { n := 7 : Tag })\n",
+        );
+        let out_path = dir.path().join("bin").join("tostring_user");
+        build_native_executable(&file, "main", 0, &out_path).expect("build user ToString instance");
+        let output = Command::new(&out_path)
+            .output()
+            .expect("run user-instance binary");
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "TAG\n",
+            "the user instance's method must run; `7` is the structure's `n` \
+             field rendered as a Nat by a shim ignoring `inst`"
+        );
+    }
+
+    /// `for x in xs do` with a `let mut` accumulator compiles, links and RUNS.
+    ///
+    /// Lean lowers `for` through `ForIn` and `let mut` through state-threading,
+    /// and Clean's elaborator already produced exactly that term — `List.rec`
+    /// over `ForInStep.rec` with the accumulator threaded as `ForIn`'s `β`.
+    /// Every piece of it was already lowerable. The single blocker was that
+    /// `to_lcnf::lower::expr_to_let_value` had no `Let` arm, so a `let` reached
+    /// in VALUE position (the reassignment inside the step function; the whole
+    /// `do` block once `Id.run` inlines into an argument) failed the whole
+    /// declaration with `unsupported expression: Expression form: Let(..)`.
+    ///
+    /// Asserting the exact digits is the load-bearing half. Merely compiling
+    /// and linking would not catch a mis-scoped accumulator, which is the way
+    /// a let-flattening bug actually presents: the binding lands in the
+    /// statement stream but names the wrong `FVarId`, and the program prints a
+    /// wrong number with exit status 0. Each expected value is fixed by
+    /// arithmetic, not by what the implementation happens to emit:
+    ///
+    /// - `sum3`    `1+2+3`                        = 6
+    /// - `upto`    `1+2+3`, `break` at `x > 3`    = 6   (`ForInStep.done`)
+    /// - `grid`    `(1+2+3)*(10+20)`              = 180 (nested loops)
+    /// - `mutonly` `7+5`                          = 12  (`let mut`, no loop)
+    ///
+    /// `mutonly` is the control that separates the two constructs: it has no
+    /// `for` at all and was refused by the same missing arm, so it fails
+    /// independently of anything `ForIn`-shaped.
+    #[test]
+    fn test_build_native_executable_for_in_with_let_mut_runs() {
+        if !cc_available() {
+            eprintln!("skipping test_build_native_executable_for_in_with_let_mut_runs: no cc");
+            return;
+        }
+        let (dir, file) = write_temp_lean(
+            "def sum3 : Nat := Id.run do\n  \
+               let mut acc := 0\n  \
+               for x in [1, 2, 3] do\n    \
+                 acc := acc + x\n  \
+               return acc\n\n\
+             def upto : Nat := Id.run do\n  \
+               let mut acc := 0\n  \
+               for x in [1, 2, 3, 4, 5] do\n    \
+                 if x > 3 then\n      \
+                   break\n    \
+                 acc := acc + x\n  \
+               return acc\n\n\
+             def grid : Nat := Id.run do\n  \
+               let mut acc := 0\n  \
+               for x in [1, 2, 3] do\n    \
+                 for y in [10, 20] do\n      \
+                   acc := acc + x * y\n  \
+               return acc\n\n\
+             def mutonly : Nat := Id.run do\n  \
+               let mut acc := 7\n  \
+               acc := acc + 5\n  \
+               return acc\n\n\
+             def main : IO Unit := do\n  \
+               IO.println (toString sum3)\n  \
+               IO.println (toString upto)\n  \
+               IO.println (toString grid)\n  \
+               IO.println (toString mutonly)\n",
+        );
+        let out_path = dir.path().join("bin").join("for_in_let_mut");
+        build_native_executable(&file, "main", 0, &out_path).expect("build for-in + let-mut");
+        let output = Command::new(&out_path).output().expect("run for-in binary");
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "6\n6\n180\n12\n",
+            "the loop must actually iterate and the mutable accumulator must \
+             thread through it; a wrong number here is a mis-scoped flattened \
+             `let`, not a missing capability"
+        );
     }
 }

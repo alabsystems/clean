@@ -7,8 +7,15 @@ import Init
 -- flips them to `SmtFailed { tactic: "decide", detail: "found counterexample
 -- — goal is not valid" }` (see scripts/tactic_parity/TEETH.md).
 
-theorem canary_env_g_auto_norm_num (as : List Nat) : as.reverse.reverse = as :=
-  List.reverse_reverse as
+-- Environment canary. BOTH facts are absent from Clean's builtin/stub prelude and
+-- present in real Init, so this declaration fails unless `import Init` genuinely
+-- loaded. Its discriminating power is re-proved on every run rather than assumed
+-- (family_gate.py --canary-check); the previous single-fact canary
+-- `List.reverse_reverse` was silently disarmed on 2026-08-23 by 3df6e4aad, which
+-- registered a kernel-proved copy of it INTO the builtin prelude.
+theorem canary_env_g_auto_norm_num (as bs : List Nat) (n m : Nat) :
+    (as ++ bs).reverse = bs.reverse ++ as.reverse ∧ n.succ - m.succ = n - m :=
+  And.intro (List.reverse_append as bs) (Nat.succ_sub_succ_eq_sub n m)
 
 theorem p_auto_norm_num_01 : (2 : Nat) ≤ 3 := by norm_num
 theorem p_auto_norm_num_02 : (2 : Nat) + 2 = 4 := by norm_num

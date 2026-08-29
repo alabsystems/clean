@@ -33,6 +33,17 @@
 //!    completion, and returns the entry's `UInt32` as the process exit status
 //!    (`0` for an `IO Unit` entry). See [`crate::native_build`] for the IO
 //!    lowering, the entry contract, and the shim model.
+//!
+//! ## argv
+//!
+//! Trailing arguments — `clean run f.lean --decl main -- a b c` — are the
+//! program's `argv`. They are handed to the scratch binary verbatim, which is
+//! what `argv[1..]` the synthesized driver marshals into the entry's
+//! `List String`. This wrapper is where they enter: the marshalling half has
+//! worked since the entry contract landed, but `RunArgs` had no field for
+//! program arguments, so `clean run` could BUILD an argv-taking Lean entry and
+//! never hand it a non-empty argv — `args.length` printed `0` with no flag
+//! able to change it.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -56,11 +67,12 @@ pub(crate) use crate::native_build::is_primitive_denylisted;
 /// exit 1 and lose the value the program returned.
 pub(crate) fn handle_run_command(args: RunArgs) -> anyhow::Result<()> {
     let (emitted_c, decl_type) = emit_entry_c_with_type(&args.file, &args.decl, args.opt_level)?;
+    let program_args: Vec<&str> = args.args.iter().map(String::as_str).collect();
     let outcome = build_and_run_entry(
         &args.decl,
         &emitted_c,
         decl_type.as_ref(),
-        &[],
+        &program_args,
         args.keep_temp,
     )?;
 

@@ -1628,6 +1628,12 @@ fn fp_fat_ptr_kind(m: &Module, kind: &FatPtrKind) -> String {
         FatPtrKind::Slice(elem) => format!("slice {}", fp_tyid_ref(m, *elem)),
         FatPtrKind::Str => "str".to_string(),
         FatPtrKind::TraitObject { trait_id } => format!("dyn.{trait_id}"),
+        // Spelled exactly as `Display for FatPtrKind` spells it, and distinct
+        // from every other arm: a `ContainerLen` pointer addresses the
+        // container header rather than slice content, so fingerprinting it as
+        // `str` or `slice` would make two ABI-different fat pointers compare
+        // identical in `trust-ir-diff`.
+        FatPtrKind::ContainerLen => "container_len".to_string(),
     }
 }
 

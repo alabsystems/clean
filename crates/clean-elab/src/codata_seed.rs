@@ -95,7 +95,7 @@ fn seed_source() -> Result<String, ElabError> {
 /// swap), fail-closed (first failing declaration aborts with its error and
 /// leaves `env` untouched). Call this ONLY from codata elaboration paths —
 /// never from the default entry point.
-pub fn ensure_codata_seeds(env: &mut Environment) -> Result<(), ElabError> {
+pub(crate) fn ensure_codata_seeds(env: &mut Environment) -> Result<(), ElabError> {
     // Already seeded iff EVERY witness is present. A partial occupation (some
     // witnesses, or a squatted sentinel alone) deliberately falls through to
     // the pre-scan, which refuses.

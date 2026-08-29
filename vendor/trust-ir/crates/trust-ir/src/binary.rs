@@ -231,9 +231,30 @@ const MAGIC: &[u8; 8] = b"TRUST_IR";
 //   reader already parses: an ungated arm would let a v36-labelled blob decode
 //   as untagged. Well-formed only for a one-variant enum — nothing in the image
 //   discriminates.
+// v38 (container-tail fat pointers, ADDITIVE): `FatPtrKind::ContainerLen` at
+//   fat-pointer-kind tag 3, read-gated on `version >= 38`. It spells a pointer
+//   whose pointee CONTAINS a DST in tail position rather than being one — the
+//   `*const ArcInner<str>` inside `Arc<str>`. rustc lays it out fat with
+//   `usize` metadata, identically to `Str`, and the kinds are distinct only in
+//   what the DATA pointer addresses: `Str` points at string CONTENT, this
+//   points at the CONTAINER header whose tail is the DST. That is why the
+//   producer could not reuse `Str` — it would encode a falsehood — and signed
+//   an anonymous `(ptr, i64)` tuple instead, recording this variant as the
+//   follow-up.
+//
+//   The tuple had no layout rule (`ty_layout_shape` covers the EMPTY tuple
+//   only), so every type transitively containing a fat pointer had an
+//   unresolvable layout and the v31 enum-layout validator failed closed on it.
+//   Measured 2026-08-27 on the locked producer census: `enum E { A, B(Arc<str>) }`
+//   alone produced two `ConstTypeMismatch` rows, and the same shape made
+//   `modules_invalid` non-zero for the first time in the series.
+//
+//   The stable DIGEST tag is 3 as well, deliberately not `Str`'s 1: the digest
+//   is a content-derived identity and two different meanings must never hash
+//   equal.
 /// The format version this build serializes. Public so conformance tests and
 /// consumers assert against the canonical constant instead of a stale literal.
-pub const VERSION: u32 = 37;
+pub const VERSION: u32 = 38;
 /// Current TrustIR binary wire-format version emitted by [`serialize_module`].
 pub const FORMAT_VERSION: u32 = VERSION;
 const MIN_READ_VERSION: u32 = 23;
@@ -1058,6 +1079,11 @@ fn write_fat_ptr_kind(buf: &mut Vec<u8>, _pool: &mut StringPool, kind: &FatPtrKi
             write_u8(buf, 2);
             write_v32(buf, *trait_id);
         }
+        // v38. Read-gated below: an unknown tag already fails closed with
+        // `InvalidTag`, so the gate is not what makes this safe — it is what
+        // keeps a v37-LABELLED blob carrying tag 3 from being accepted as
+        // well-formed by a reader that would otherwise take it.
+        FatPtrKind::ContainerLen => write_u8(buf, 3),
     }
 }
 
@@ -1068,6 +1094,7 @@ fn read_fat_ptr_kind(r: &mut Reader<'_>) -> Result<FatPtrKind, BinaryError> {
         2 => Ok(FatPtrKind::TraitObject {
             trait_id: r.read_v32()?,
         }),
+        3 if r.version >= 38 => Ok(FatPtrKind::ContainerLen),
         t => Err(BinaryError::InvalidTag(t)),
     }
 }
@@ -8663,6 +8690,7 @@ mod tests {
             (FatPtrKind::Slice(TyId::new(0)), 0u8),
             (FatPtrKind::Str, 1),
             (FatPtrKind::TraitObject { trait_id: 0 }, 2),
+            (FatPtrKind::ContainerLen, 3),
         ] {
             let mut buf = Vec::new();
             write_fat_ptr_kind(&mut buf, &mut pool, &kind);

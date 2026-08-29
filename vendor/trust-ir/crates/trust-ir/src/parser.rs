@@ -618,6 +618,13 @@ impl<'a> Parser<'a> {
                 self.expect_char('>')?;
                 return Ok(Ty::FatPtr(FatPtrKind::Slice(TyId::new(elem_id))));
             }
+            // v38. Must be tried before the `dyn.` fallthrough, and it cannot
+            // collide with the `str` arm above: `try_str("str")` does not match
+            // "container_len".
+            if self.try_str("container_len") {
+                self.expect_char('>')?;
+                return Ok(Ty::FatPtr(FatPtrKind::ContainerLen));
+            }
             self.expect_str("dyn.")?;
             let trait_id = self.read_u32()?;
             self.expect_char('>')?;

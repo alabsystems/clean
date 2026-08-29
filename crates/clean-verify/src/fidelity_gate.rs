@@ -530,8 +530,12 @@ impl FidelityMetric {
             .collect();
         let _ = writeln!(
             s,
-            "  supported-fragment coverage = {}/5 [{}]",
+            // Denominator from `FragmentCtor::ALL`, not a literal: this line
+            // read "/5" for as long as the fragment has had six constructors,
+            // so the audit lane's own report printed "6/5".
+            "  supported-fragment coverage = {}/{} [{}]",
             self.coverage_count(),
+            FragmentCtor::ALL.len(),
             covered.join(", ")
         );
         let _ = writeln!(

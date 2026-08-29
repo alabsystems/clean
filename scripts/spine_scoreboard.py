@@ -343,30 +343,151 @@ def rows_bypass_doors(repo_root: Path):
 
 def rows_assumption_ledger(repo_root: Path):
     """The §3.6 assumption ledger — the consolidated file, plus the lane-(b)
-    rows that live in data/verdict_io_contracts.json until it exists.
+    rows that stay in data/verdict_io_contracts.json and are cross-referenced.
+
+    The consolidated file is minted by scripts/spine_assumption_ledger.py.
+    `count` is its LIVE debt (rows with status=measured) and is the number
+    §3.6 ratchets down; `prospective_count` holds rows for assumptions of jobs
+    that have not run, which is why they are reported (`none`) and never
+    ratcheted — converting one into a live row RAISES count, and that is
+    progress, not a regression.
 
     verdict_io_contracts.json's ledger block names its own destination
     ("data/spine_assumption_ledger.json, when that file exists") and its own
-    direction (down). Until the consolidated file is minted those 44 rows are
-    read where they are, so the ledger debt is aggregated here rather than
-    sitting in an artifact nothing reads.
+    direction (down). The consolidated ledger CROSS-REFERENCES those 44 rows
+    rather than absorbing them — one accounting point per assumption — so the
+    two counts stay disjoint, and the cross-reference's own row count is
+    checked against the lane-(b) artifact here.
     """
     producer = PRODUCERS["assumption_ledger"]
-    doc = _load_json(repo_root / PRODUCERS["assumption_ledger"])
-    entries = None
-    if isinstance(doc, list):
-        entries = doc
-    elif isinstance(doc, dict) and isinstance(doc.get("entries"), list):
-        entries = doc["entries"]
-    if entries is None:
-        rows = [_row("assumption_ledger.count", UNKNOWN, "down", producer,
-                     "data/spine_assumption_ledger.json absent — the §3.6 "
-                     "ledger is not yet minted")]
-    else:
-        rows = [_row("assumption_ledger.count", len(entries), "down", producer)]
+    doc = _load_json(repo_root / producer)
 
+    blocked = None
+    entries = doc.get("entries") if isinstance(doc, dict) else None
+    if not isinstance(doc, dict) or not isinstance(entries, list):
+        blocked = ("data/spine_assumption_ledger.json absent, unreadable, or "
+                   "carrying no 'entries' list — the §3.6 ledger is not minted "
+                   "here (mint: scripts/spine_assumption_ledger.py)")
+    elif not entries:
+        blocked = ("the ledger carries ZERO entries — that is schema drift, not "
+                   "an empty ledger; fail closed")
+    else:
+        missing = [k for k in ("count", "prospective_count", "row_count")
+                   if not isinstance(doc.get(k), int)]
+        if missing:
+            blocked = ("ledger totals missing or non-integer: %s (schema drift)"
+                       % ", ".join(missing))
+        else:
+            # The ledger's own arithmetic must close, or none of it is quoted.
+            bad = []
+            if doc["row_count"] != len(entries):
+                bad.append("row_count=%d but len(entries)=%d"
+                           % (doc["row_count"], len(entries)))
+            live = sum(1 for e in entries
+                       if isinstance(e, dict) and e.get("status") == "measured")
+            prospective = sum(1 for e in entries
+                              if isinstance(e, dict)
+                              and e.get("status") == "prospective")
+            if doc["count"] != live:
+                bad.append("count=%d but %d entries carry status=measured"
+                           % (doc["count"], live))
+            if doc["prospective_count"] != prospective:
+                bad.append("prospective_count=%d but %d entries carry "
+                           "status=prospective" % (doc["prospective_count"],
+                                                   prospective))
+            if live + prospective != len(entries):
+                bad.append("count + prospective_count = %d != len(entries) %d "
+                           "(a row carries a status outside the vocabulary)"
+                           % (live + prospective, len(entries)))
+            if bad:
+                blocked = ("the ledger disagrees with itself (" + "; ".join(bad)
+                           + ") — the count is withheld rather than a side "
+                           "picked")
+
+    prov = None
+    if blocked is None:
+        src_prov = doc.get("provenance") if isinstance(doc.get("provenance"), dict) else {}
+        prov = {
+            "counts_by_class": doc.get("counts_by_class", UNKNOWN),
+            "counts_by_origin": doc.get("counts_by_origin", UNKNOWN),
+            "derived_classes": src_prov.get("derived_classes", UNKNOWN),
+            "seeded_classes": src_prov.get("seeded_classes", UNKNOWN),
+            "note": "count is the LIVE debt (status=measured); the "
+                    "prospective rows are reported separately and are disjoint "
+                    "from it, as are the lane-(b) rows below",
+        }
+
+    rows = [
+        _row("assumption_ledger.count",
+             doc["count"] if blocked is None else UNKNOWN,
+             "down", producer, blocked, prov),
+        # Reported, never ratcheted: a prospective row is an assumption of a
+        # job that has NOT run. It falls when the job lands and mints live
+        # rows — which RAISES assumption_ledger.count. Ratcheting this down
+        # would reward deleting a planned assumption instead of doing it.
+        _row("assumption_ledger.prospective",
+             doc["prospective_count"] if blocked is None else UNKNOWN,
+             "none", producer, blocked),
+    ]
+    rows.append(_ledger_xref_row(repo_root, doc if blocked is None else None))
     rows.append(_ledger_lane_b_row(repo_root))
     return rows
+
+
+def _ledger_xref_row(repo_root: Path, ledger_doc):
+    """The consolidated ledger's cross-reference to lane (b) must still hold.
+
+    The two artifacts are counted separately ON PURPOSE, so the pointer
+    between them is the only thing keeping the split honest: if the ledger
+    claims lane (b) has N rows and lane (b) has M, one of the two counts is
+    stale and the split is no longer a split. Direction down, baseline 0 —
+    the same shape as the evalir/verdict_io denominator cross-checks.
+    """
+    row_id = "assumption_ledger.cross_reference_disagreements"
+    producer = (PRODUCERS["assumption_ledger"] + " vs "
+                + PRODUCERS["verdict_io_contracts"])
+    if not isinstance(ledger_doc, dict):
+        return _row(row_id, UNKNOWN, "down", producer,
+                    "the consolidated ledger could not be read (see "
+                    "assumption_ledger.count) — there is nothing to compare")
+    refs = ledger_doc.get("cross_references")
+    if not isinstance(refs, list) or not refs:
+        return _row(row_id, UNKNOWN, "down", producer,
+                    "the ledger carries no 'cross_references' list — the "
+                    "lane-(b) split cannot be checked, so no number is "
+                    "published")
+    doc = _load_json(repo_root / PRODUCERS["verdict_io_contracts"])
+    ledger = doc.get("ledger") if isinstance(doc, dict) else None
+    if not isinstance(ledger, dict) or not isinstance(ledger.get("row_count"), int):
+        return _row(row_id, UNKNOWN, "down", producer,
+                    "data/verdict_io_contracts.json absent, or its ledger block "
+                    "carries no integer 'row_count' — nothing to compare the "
+                    "cross-reference against")
+    disagreements = []
+    checked = 0
+    for ref in refs:
+        if not isinstance(ref, dict) or ref.get("path") != PRODUCERS["verdict_io_contracts"]:
+            continue
+        checked += 1
+        claimed = ref.get("row_count")
+        if not isinstance(claimed, int):
+            disagreements.append("cross-reference %r states no integer row_count"
+                                 % ref.get("id"))
+        elif claimed != ledger["row_count"]:
+            disagreements.append(
+                "%s cross-references %s at row_count=%d; that artifact reports "
+                "%d" % (PRODUCERS["assumption_ledger"],
+                        PRODUCERS["verdict_io_contracts"], claimed,
+                        ledger["row_count"]))
+    if checked == 0:
+        return _row(row_id, UNKNOWN, "down", producer,
+                    "the ledger's cross_references name no row for "
+                    "data/verdict_io_contracts.json — the lane-(b) split is "
+                    "unchecked")
+    return _row(row_id, len(disagreements), "down", producer,
+                provenance={"cross_references_checked": checked,
+                            "detail": disagreements} if disagreements
+                else {"cross_references_checked": checked})
 
 
 def _ledger_lane_b_row(repo_root: Path):
@@ -1037,6 +1158,32 @@ def _fixture_verdict_set(io_site_total=211):
     return {"partitions": {"b_io_bearing": {"io_site_total": io_site_total}}}
 
 
+def _fixture_assumption_ledger(measured=26, prospective=3, row_count=None,
+                               count=None, xref_rows=44, xref=True):
+    entries = ([{"id": "A-M-%d" % i, "status": "measured"} for i in range(measured)]
+               + [{"id": "A-P-%d" % i, "status": "prospective"}
+                  for i in range(prospective)])
+    doc = {
+        "schema": "clean.spine.assumption-ledger/1",
+        "count": measured if count is None else count,
+        "prospective_count": prospective,
+        "row_count": len(entries) if row_count is None else row_count,
+        "counts_by_class": {"self-test": len(entries)},
+        "counts_by_origin": {"derived": len(entries)},
+        "cross_references": [],
+        "entries": entries,
+        "provenance": {"derived_classes": ["self-test"], "seeded_classes": []},
+    }
+    if xref:
+        doc["cross_references"] = [{
+            "id": "XREF-VERDICT-IO-LANE-B",
+            "path": "data/verdict_io_contracts.json",
+            "block": "ledger",
+            "row_count": xref_rows,
+        }]
+    return doc
+
+
 def self_test():
     failures = []
 
@@ -1321,6 +1468,92 @@ def self_test():
         expect("verdict_io_missing_artifact_unknown",
                all(r["value"] == UNKNOWN and r.get("reason") for r in rows),
                "%d rows" % len(rows))
+
+    # --------------------------------------- §3.6 assumption ledger (R8)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        rows = rows_assumption_ledger(Path(tmp))
+        expect("assumption_ledger_missing_artifact_unknown",
+               len(rows) == 4
+               and all(r["value"] == UNKNOWN and r.get("reason") for r in rows)
+               and "not minted" in rows[0]["reason"],
+               "%d rows" % len(rows))
+
+        _write(tmp, "data/verdict_io_contracts.json", _fixture_verdict_io())
+        _write(tmp, "data/spine_assumption_ledger.json",
+               _fixture_assumption_ledger())
+        base_al = rows_assumption_ledger(Path(tmp))
+        by_id = {r["id"]: r for r in base_al}
+        expect("assumption_ledger_publishes_live_and_prospective",
+               by_id["assumption_ledger.count"]["value"] == 26
+               and by_id["assumption_ledger.count"]["direction"] == "down"
+               and by_id["assumption_ledger.prospective"]["value"] == 3
+               and by_id["assumption_ledger.prospective"]["direction"] == "none"
+               and by_id["assumption_ledger.cross_reference_disagreements"]["value"] == 0
+               and by_id["assumption_ledger.verdict_io_lane_b"]["value"] == 44,
+               "%d rows" % len(base_al))
+
+        # planted regression: the ledger of unproved things GREW.
+        _write(tmp, "data/spine_assumption_ledger.json",
+               _fixture_assumption_ledger(measured=27))
+        v, _ = check_directions(rows_assumption_ledger(Path(tmp)), base_al)
+        expect("assumption_ledger_planted_regression_detected",
+               len(v) == 1 and "assumption_ledger.count" in v[0]
+               and "26 -> 27" in v[0], "; ".join(v))
+
+        # a prospective row is REPORTED, never ratcheted: a job that has not
+        # run cannot make the gate red by existing.
+        _write(tmp, "data/spine_assumption_ledger.json",
+               _fixture_assumption_ledger(prospective=4))
+        v, _ = check_directions(rows_assumption_ledger(Path(tmp)), base_al)
+        expect("assumption_ledger_prospective_reported_not_ratcheted",
+               v == [], "; ".join(v))
+
+        # the ledger's own arithmetic must close, in each shape.
+        _write(tmp, "data/spine_assumption_ledger.json",
+               _fixture_assumption_ledger(count=25))
+        by_id = {r["id"]: r for r in rows_assumption_ledger(Path(tmp))}
+        expect("assumption_ledger_count_len_disagreement_fails_closed",
+               by_id["assumption_ledger.count"]["value"] == UNKNOWN
+               and "disagrees with itself"
+               in by_id["assumption_ledger.count"]["reason"]
+               and "status=measured" in by_id["assumption_ledger.count"]["reason"]
+               and by_id["assumption_ledger.prospective"]["value"] == UNKNOWN)
+
+        _write(tmp, "data/spine_assumption_ledger.json",
+               _fixture_assumption_ledger(row_count=30))
+        by_id = {r["id"]: r for r in rows_assumption_ledger(Path(tmp))}
+        expect("assumption_ledger_row_count_disagreement_fails_closed",
+               by_id["assumption_ledger.count"]["value"] == UNKNOWN
+               and "row_count=30" in by_id["assumption_ledger.count"]["reason"])
+
+        # the lane-(b) split is only honest while the pointer between the two
+        # artifacts holds: a stale cross-reference is a detected disagreement,
+        # not a silently double-counted or dropped set of rows.
+        _write(tmp, "data/spine_assumption_ledger.json",
+               _fixture_assumption_ledger(xref_rows=43))
+        cur = rows_assumption_ledger(Path(tmp))
+        by_id = {r["id"]: r for r in cur}
+        v, _ = check_directions(cur, base_al)
+        expect("assumption_ledger_cross_reference_disagreement_detected",
+               by_id["assumption_ledger.cross_reference_disagreements"]["value"] == 1
+               and by_id["assumption_ledger.count"]["value"] == 26
+               and any("cross_reference_disagreements" in x for x in v),
+               "; ".join(v))
+
+        _write(tmp, "data/spine_assumption_ledger.json",
+               _fixture_assumption_ledger(xref=False))
+        by_id = {r["id"]: r for r in rows_assumption_ledger(Path(tmp))}
+        expect("assumption_ledger_missing_cross_reference_fails_closed",
+               by_id["assumption_ledger.cross_reference_disagreements"]["value"] == UNKNOWN
+               and "cross_references"
+               in by_id["assumption_ledger.cross_reference_disagreements"]["reason"])
+
+        _write(tmp, "data/spine_assumption_ledger.json", {"entries": []})
+        by_id = {r["id"]: r for r in rows_assumption_ledger(Path(tmp))}
+        expect("assumption_ledger_empty_entries_fails_closed",
+               by_id["assumption_ledger.count"]["value"] == UNKNOWN
+               and "ZERO entries" in by_id["assumption_ledger.count"]["reason"])
 
     # Read-only ratchet / explicit refresh contract, against a temp repo root
     # (their prints are swallowed so the arm verdicts below stay readable).

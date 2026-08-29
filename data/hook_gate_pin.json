@@ -1,8 +1,8 @@
 {
   "_comment": "Digests of scripts/local_gate.sh, split at its GATE-FULL-ONLY markers (comments and blank lines stripped). BOTH halves are pinned: pinning only the fast half meant the single edit that changes a leg's mode -- moving it into a full-only region -- was also the edit that stopped watching its body. Refreshed only by `python3 scripts/check_hook_coverage.py --update`, and only when the leg tables already agree. A moved digest means a leg changed and its classification needs a human.",
-  "fast_region_sha256": "2f4e052cfbfa4dd5eff79f5bb650230e383393131cb8d73270543356ec5692e0",
-  "full_region_sha256": "6a4cef4f2e4e2c042490aa5ee1bb3797c3a0f8a16ae86f56a87d1a0a8b424cb7",
-  "hook_body_sha256": "64816df4265803a6b6e1f7fa7b73c9e7bd79e196e2d0be223a00d39f197e73a5",
+  "fast_region_sha256": "b6fcf1a14cdbe614ff5fe9dbeefcf3b70ed02e06337ddc759557fab8b38ad5b2",
+  "full_region_sha256": "720a43a3604d78d589551936b9579a05fba0349404c3cdc8bb3f410d7e1e3c8b",
+  "hook_body_sha256": "73c4262b455ff83f8f3adc62fb0632ccb080552d0ce393b81d12dbd866898b72",
   "fast_leg_ids": [
     "gate-registry",
     "cargo-test-selectors",
@@ -32,6 +32,7 @@
     "trustcore-evidence-staleness",
     "crystal-revalidation-scope",
     "crystal-enum-tag-pin",
+    "crystal-fixture-pins",
     "a0a6-probe-transcription",
     "paragon-ratchet",
     "isabelle-ops-portability",
@@ -44,6 +45,7 @@
     "u2-battery",
     "source-frontier-battery",
     "everyday-battery",
+    "a0-census-selftest",
     "trust-verify-soundness"
   ],
   "hook_leg_ids": [
@@ -71,11 +73,12 @@
     "trustcore-evidence-staleness",
     "crystal-revalidation-scope",
     "crystal-enum-tag-pin",
+    "crystal-fixture-pins",
     "a0a6-probe-transcription",
     "paragon-ratchet",
     "isabelle-ops-portability",
     "aristotle-corpus-static",
     "trust-ir-axes-selftest"
   ],
-  "updated_utc_date": "2026-08-27"
+  "updated_utc_date": "2026-08-28"
 }

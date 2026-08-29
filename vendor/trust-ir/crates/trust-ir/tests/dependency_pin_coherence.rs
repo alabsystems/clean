@@ -90,11 +90,11 @@ const CLEAN_REPOSITORY: &str = "https://github.com/alabsystems/clean.git";
 // is TrustIR's exact local Clean authority. The cross-repository graph is an
 // SCC: predecessor backedges intentionally need not resolve this same commit.
 // The final epoch receipt attests those predecessor/successor identities.
-const CLEAN_REVISION: &str = "84c9ae5e2017debb80f58e1f6fec4cdd8cf5487e";
-const CLEAN_VERSION: &str = "0.4.0";
+const CLEAN_REVISION: &str = "4b0bd98cf8f9303c2d3ed1990482887880a6e1c2";
+const CLEAN_VERSION: &str = "0.5.0";
 const AY_REPOSITORY: &str = "https://github.com/alabsystems/ay.git";
-const AY_REVISION: &str = "09951c0e62934ccdec7525b0a08e37342d19aefb";
-const AY_VERSION: &str = "0.15.0";
+const AY_REVISION: &str = "d81752e07ad30cfca0fdf68ea5e9419a660b1884";
+const AY_VERSION: &str = "0.17.0";
 
 const TRUST_IR_MANIFEST: &str = include_str!("../Cargo.toml");
 const TRUST_IR_AY_MANIFEST: &str = include_str!("../../trust-ir-ay/Cargo.toml");

@@ -5,8 +5,15 @@ import Init
 -- 0/4 (RC-N, side-goal discharge landed 2026-08-06). These rows measure
 -- whether those landed fixes moved the family.
 
-theorem canary_env_g_auto_ring_positivity (as : List Nat) : as.reverse.reverse = as :=
-  List.reverse_reverse as
+-- Environment canary. BOTH facts are absent from Clean's builtin/stub prelude and
+-- present in real Init, so this declaration fails unless `import Init` genuinely
+-- loaded. Its discriminating power is re-proved on every run rather than assumed
+-- (family_gate.py --canary-check); the previous single-fact canary
+-- `List.reverse_reverse` was silently disarmed on 2026-08-23 by 3df6e4aad, which
+-- registered a kernel-proved copy of it INTO the builtin prelude.
+theorem canary_env_g_auto_ring_positivity (as bs : List Nat) (n m : Nat) :
+    (as ++ bs).reverse = bs.reverse ++ as.reverse ∧ n.succ - m.succ = n - m :=
+  And.intro (List.reverse_append as bs) (Nat.succ_sub_succ_eq_sub n m)
 
 theorem p_auto_ring_01 (a b : Nat) : (a + b) * (a + b) = a * a + 2 * (a * b) + b * b := by ring
 theorem p_auto_ring_02 (a : Nat) : 0 + a = a := by ring

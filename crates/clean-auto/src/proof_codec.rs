@@ -32,6 +32,7 @@ pub(crate) const TERM_MAX_BYTES: usize = 64 * 1024 * 1024;
 /// Contexts contain declarations only and are normally far smaller than their
 /// proof term; 16 MiB leaves substantial headroom without allowing an
 /// unauthenticated context to claim unbounded allocations.
+#[cfg(feature = "ay-smt")]
 pub(crate) const CONTEXT_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 /// Structural limits applied to one proof term.
@@ -41,6 +42,7 @@ pub(crate) const TERM_STRUCTURE_LIMITS: StructuralLimits = StructuralLimits {
 };
 
 /// Aggregate structural limits applied across one reduced context.
+#[cfg(feature = "ay-smt")]
 pub(crate) const CONTEXT_STRUCTURE_LIMITS: StructuralLimits = StructuralLimits {
     max_nodes: 500_000,
     max_depth: 4_096,
@@ -268,6 +270,7 @@ pub(crate) fn decode_term(bytes: &[u8]) -> Result<Expr, String> {
     )
 }
 
+#[cfg(feature = "ay-smt")]
 pub(crate) fn encode_context<T, F>(context: &T, validate: F) -> Result<Vec<u8>, String>
 where
     T: Serialize,
@@ -276,6 +279,7 @@ where
     encode_canonical::<_, CONTEXT_MAX_BYTES>(context, "reduced-context", validate)
 }
 
+#[cfg(feature = "ay-smt")]
 pub(crate) fn decode_context<T, F>(bytes: &[u8], validate: F) -> Result<T, String>
 where
     T: DeserializeOwned + Serialize,

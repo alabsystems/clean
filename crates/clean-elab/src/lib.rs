@@ -193,7 +193,8 @@ pub(crate) mod ffi_extern;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 pub(crate) mod codata_cmd;
-pub mod codata_seed;
+pub(crate) mod codata_seed;
+pub(crate) mod codata_variant;
 pub(crate) mod coinductive_surface;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod ffi_extern_ext;
@@ -327,6 +328,7 @@ pub mod notation;
 // pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
 #[cfg(test)]
 pub(crate) mod notation_ext;
+pub mod notation_imports;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -1513,6 +1515,9 @@ mod mutual_inductive_elab_tests;
 
 #[cfg(test)]
 mod codata_cmd_tests;
+
+#[cfg(test)]
+mod codata_variant_tests;
 
 #[cfg(test)]
 mod nested_local_lift_tests;

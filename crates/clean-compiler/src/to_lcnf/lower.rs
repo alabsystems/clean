@@ -560,6 +560,36 @@ pub(super) fn expr_to_let_value(
         // Types and proofs
         ExprKind::Sort(_) | ExprKind::SProp => Ok((LetValue::Erased, Expr::const_str("_"))),
 
+        // A `let` in VALUE position — the RHS of another let, or an argument.
+        // A-normalization already owns a statement stream (`ctx.pending`) that
+        // the enclosing `wrap_lets` emits in source order, so the binding is
+        // FLATTENED into it and the let's body supplies the value the caller
+        // asked for. Emitting the binding first is what makes the returned
+        // value well-scoped: it names `fvar`.
+        //
+        // This mirrors `expr_to_code`'s `Let` arm exactly, and its absence is
+        // why `for x in xs` / `let mut` did not compile. Lean lowers both
+        // through `ForIn.forIn` with the mutable accumulator threaded as the
+        // `ForInStep` accumulator; the elaborator already produced that term
+        // (`List.rec` + `ForInStep.rec` + `Bind.bind`), every part of which
+        // this backend could already lower. The reassignment `acc := acc + x`
+        // is a `let` in the step function, and `Id.run`'s inlining puts the
+        // whole `do` block in an ARGUMENT position — so the one form that
+        // stopped it was a `let` reached from here rather than from
+        // `expr_to_code`.
+        ExprKind::Let(_, ty, val, body, _) => {
+            let (value, _) = expr_to_let_value(ctx, val)?;
+            let fvar = ctx.add_let(Name::anon(), ty.as_ref().clone(), value);
+
+            // Bind the let variable for the body, and pop it on BOTH exits —
+            // an early `?` here would desynchronize `bvar_stack` from the
+            // binder depth and silently misresolve every outer de Bruijn index.
+            ctx.bvar_stack.push(fvar);
+            let result = expr_to_let_value(ctx, body);
+            ctx.bvar_stack.pop();
+            result
+        }
+
         // Other forms
         _ => Err(CompilerError::Unsupported(format!(
             "Expression form: {expr:?}"

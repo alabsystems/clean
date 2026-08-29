@@ -485,6 +485,21 @@ fn simp_expr_inner(
         }
     }
 
+    // POST-ORDER REWRITE (Lean parity, 2026-08-28): node-level lemma rewriting
+    // runs AFTER the node's children are simplified, matching Lean's
+    // post-method rewriting. Measured against real Lean v4.30.0-rc2
+    // (`trace.Meta.Tactic.simp.rewrite`, g_simp probe 30): on
+    // `(a && (a && b)) = (a && b)` Lean fires `Bool.and_self_left` INSIDE the
+    // equation and never applies the root-level `Bool.and_eq_right_iff_imp`,
+    // while node-first order fired the root iff lemma the moment the
+    // subtree-aware star skip made it visible, driving the goal into an
+    // implication normal form that neither Lean's simp nor Clean's can close.
+    // Children-first is the order that makes the two agree.
+    let result = simp_children(state, goal, result, lemmas, config, budget);
+    if budget.is_tripped() {
+        return result;
+    }
+
     // Try to apply simp lemmas at the top level (produces a real proof term).
     // Guard: skip matches that produce the same expression — this can happen when the
     // unifier WHNF-reduces the pattern (e.g. `Nat.add ?n 0` → `?n`) and the meta
@@ -501,6 +516,16 @@ fn simp_expr_inner(
             budget,
         ) {
             if new_expr != result.expr {
+                // Diagnostic sibling of `CLEAN_SIMP_HEAD_GUARD_TRACE`: print
+                // every FIRED lemma rewrite (stderr), so a non-converging
+                // fixpoint can be read as a sequence instead of inferred from
+                // refusal counts. Trace-only; never changes the verdict.
+                if std::env::var_os("CLEAN_SIMP_REWRITE_TRACE").is_some() {
+                    eprintln!(
+                        "simp-rewrite: lemma={} from={:?} to={new_expr:?}",
+                        lemma.name, result.expr
+                    );
+                }
                 let step = SimpResult {
                     expr: new_expr,
                     proof: Some(proof),
@@ -527,7 +552,21 @@ fn simp_expr_inner(
         }
     }
 
-    // Recurse into subexpressions, building congruence proofs
+    result
+}
+
+/// The child-recursion phase of one simp frame: recurse into subexpressions,
+/// building congruence proofs. Returns the frame's input `result` untouched
+/// when no child changed. Split out of `simp_expr_inner` so the node-level
+/// lemma/simproc rewriting can run AFTER it (post-order, Lean parity).
+fn simp_children(
+    state: &ProofState,
+    goal: &Goal,
+    result: SimpResult,
+    lemmas: &SimpLemmaSet,
+    config: &SimpConfig,
+    budget: &SimpBudget,
+) -> SimpResult {
     match result.expr.kind() {
         ExprKind::App(f, arg) => {
             // ite-condition congruence (dependent-`Decidable` aware). When the
@@ -1037,6 +1076,18 @@ fn binding_is_whnf_absorption(
     state.is_def_eq(goal, bound, source)
 }
 
+/// The canonical `Lit` behind a closed Nat numeral spelling: a raw literal is
+/// itself; the surface `@OfNat.ofNat Nat k (instOfNatNat k)` projection form
+/// yields its stored literal. `None` for everything else — deliberately NOT
+/// `Nat.zero`/`Nat.succ` towers, which need value arithmetic and whose
+/// tower-to-literal rewrites are genuine (order-decreasing) normalizations.
+fn numeral_spelling_lit(e: &Expr) -> Option<Expr> {
+    if matches!(e.kind(), ExprKind::Lit(_)) {
+        return Some(e.clone());
+    }
+    super::match_target::as_nat_ofnat_literal(e)
+}
+
 /// Is `e` a closed numeral spelling: a literal, `Nat.zero`, or a `Nat.succ`
 /// chain terminating in one? (See [`binding_is_whnf_absorption`].)
 fn is_numeral_shaped(e: &Expr) -> bool {
@@ -1153,6 +1204,13 @@ fn try_apply_simp_lemma_unguarded(
     // `proof_matches_rewrite` — is stated over THIS, never over the normalised
     // match target.
     let expr = target.source();
+    // Match-rejection tracer: CLEAN_SIMP_MATCH_TRACE=<name-substring> prints
+    // which exit dropped a candidate whose name matches the filter. Sibling of
+    // CLEAN_SIMP_HEAD_GUARD_TRACE; diagnostic only.
+    let mtrace = std::env::var("CLEAN_SIMP_MATCH_TRACE")
+        .ok()
+        .filter(|f| lemma.name.to_string().contains(f.as_str()))
+        .is_some();
     let mut metas = MetaState::new();
     // Pattern metas are scoped to the GOAL's locals (elab locals + goal ctx):
     // a pattern variable must be allowed to bind a goal subterm mentioning a
@@ -1177,6 +1235,26 @@ fn try_apply_simp_lemma_unguarded(
     let peeled_pattern =
         peel_pattern_to_target_head(state, goal, &pattern_with_metas, match_target);
     let match_pattern = peeled_pattern.as_ref().unwrap_or(&pattern_with_metas);
+
+    // Numeral-source guard (B103's sibling, measured 2026-08-28): a source
+    // subterm that IS a closed numeral spelling (`Lit` or the OfNat
+    // projection form) may only be rewritten by a lemma whose own stored LHS
+    // is numeral-spelled (`two_eq : 2 = x` legitimately rewrites a `2`). A
+    // constructor- or function-headed pattern (`Nat.succ ?n`) reaches a bare
+    // literal only through the unifier's value bridge
+    // (`Lit 1 ≡ Nat.succ (Lit 0)`), and the rewrite it then produces —
+    // `1 → 0 + 1`, measured firing INSIDE an `OfNat` spine, where the
+    // congrArg proof left the value-indexed instance stale and the kernel
+    // killed the whole declaration — is a de-normalization Lean's
+    // literal-keyed index never offers. Refusing here is offering-parity,
+    // stated at match time because Clean's always-offered unindexed buckets
+    // cannot express it at index time.
+    if numeral_spelling_lit(expr).is_some() && numeral_spelling_lit(&lemma.lhs).is_none() {
+        if mtrace {
+            eprintln!("simp-match: lemma={} REJECT numeral-source", lemma.name);
+        }
+        return None;
+    }
 
     let ctx = LocalContext::new();
     let unify_result = {
@@ -1280,6 +1358,9 @@ fn try_apply_simp_lemma_unguarded(
             // leaked meta means the match was spurious: bail to `None` and let
             // simp try another candidate / report NoProgress.
             if contains_unassigned_meta(&lhs_inst) {
+                if mtrace {
+                    eprintln!("simp-match: lemma={} REJECT lhs-meta-leak", lemma.name);
+                }
                 return None;
             }
 
@@ -1291,6 +1372,12 @@ fn try_apply_simp_lemma_unguarded(
                     .zip(expr_ty)
                     .is_some_and(|(lhs_ty, e_ty)| state.is_def_eq(goal, &lhs_ty, &e_ty));
                 if !lhs_ok || !state.is_def_eq(goal, &lhs_inst, expr) {
+                    if mtrace {
+                        eprintln!(
+                            "simp-match: lemma={} REJECT lhs-guard lhs_ok={lhs_ok}",
+                            lemma.name
+                        );
+                    }
                     return None;
                 }
             }
@@ -1310,6 +1397,9 @@ fn try_apply_simp_lemma_unguarded(
                 config,
                 budget,
             ) {
+                if mtrace {
+                    eprintln!("simp-match: lemma={} REJECT discharge", lemma.name);
+                }
                 return None;
             }
 
@@ -1319,6 +1409,9 @@ fn try_apply_simp_lemma_unguarded(
             let rhs_with_metas = substitute_bvars_with_metas(&lemma.rhs, &bvar_to_meta);
             let result = inst(&rhs_with_metas);
             if contains_unassigned_meta(&result) {
+                if mtrace {
+                    eprintln!("simp-match: lemma={} REJECT result-meta-leak", lemma.name);
+                }
                 return None;
             }
 
@@ -1361,7 +1454,47 @@ fn try_apply_simp_lemma_unguarded(
             if super::perm::is_permutative_pair(&lemma.lhs, &lemma.rhs)
                 && !super::perm::expr_order_lt(&result, &lhs_inst)
             {
+                if mtrace {
+                    eprintln!("simp-match: lemma={} REJECT perm-order", lemma.name);
+                }
                 return None;
+            }
+
+            // B103 (numeral-respell termination): a rewrite whose source and
+            // result are BOTH closed numeral spellings of the SAME literal is
+            // a pure re-spelling. Neither star-noise guard refuses the class:
+            // `Nat.sub_zero`'s hetero-op pattern absorbs the OfNat-form `1`
+            // with a numeral-shaped binding (the carve-out the locked iota
+            // rows need), and `Bool.false.sizeOf_spec` — whose closed LHS
+            // `sizeOf false` WHNF-computes to `1` — has no binding at all.
+            // The PAIR is a 2-cycle (OfNat form -> `Lit` -> OfNat form) that
+            // burned all 1000 `max_steps` re-spelling one literal, starving
+            // the closing lemma (measured: g_simp probe 27 / the minimal
+            // `Nat.succ (List.length l) = List.length l + 1`, 500 fires each
+            // way). The rule: a same-literal respell is REFUSED OUTRIGHT.
+            // Replacing one spelling of a literal with another spelling of
+            // the SAME literal can never make semantic progress — spelling
+            // bridging at MATCH time is already the job of [`MatchTarget`]'s
+            // OfNat collapse and the unifier's literal bridges — while every
+            // permitted direction was measured to break a goal family,
+            // because the elaborator's own spellings are MIXED (`0` arrives
+            // as a raw `Lit`, `1` as the OfNat projection form): allowing
+            // OfNat→`Lit` respelled `+ 1` goals away from every lemma RHS
+            // (`Nat.succ_eq_add_one`/`Nat.zero_add` churned 500 rounds on
+            // `simp [Nat.succ_eq_add_one]`), and allowing `Lit`→OfNat let
+            // `Nat.default_eq_zero`/`Bool.toNat_false` — closed compute
+            // lemmas whose LHS WHNFs to `0` — respell the `Lit 0` goals of
+            // `n + 0 + 0 = n` into forms the `Nat.add_zero` builtin then
+            // missed (three g_simp rows red). Both measured 2026-08-28.
+            if let (Some(src_lit), Some(res_lit)) =
+                (numeral_spelling_lit(expr), numeral_spelling_lit(&result))
+            {
+                if src_lit == res_lit {
+                    if mtrace {
+                        eprintln!("simp-match: lemma={} REJECT numeral-respell", lemma.name);
+                    }
+                    return None;
+                }
             }
 
             let proof = if let Some(proof_expr) = &lemma.proof_expr {
@@ -1382,9 +1515,18 @@ fn try_apply_simp_lemma_unguarded(
                     .map(|info| info.level_params.clone())
                     .unwrap_or_default();
                 if !declared.is_empty() && template_has_unsolved_level(&proof, &declared) {
+                    if mtrace {
+                        eprintln!("simp-match: lemma={} REJECT template-level", lemma.name);
+                    }
                     return None;
                 }
                 if !proof_matches_rewrite(state, goal, &proof, expr, &result) {
+                    if mtrace {
+                        eprintln!(
+                            "simp-match: lemma={} REJECT proof-mismatch-template",
+                            lemma.name
+                        );
+                    }
                     return None;
                 }
                 proof
@@ -1550,6 +1692,9 @@ fn try_apply_simp_lemma_unguarded(
                             && !solved_params.iter().any(|s| s == p))
                 });
                 if unsolved_leak {
+                    if mtrace {
+                        eprintln!("simp-match: lemma={} REJECT unsolved-level", lemma.name);
+                    }
                     return None;
                 }
                 let mut proof = Expr::const_(lemma.name.clone(), lemma_levels);
@@ -1571,6 +1716,12 @@ fn try_apply_simp_lemma_unguarded(
                     && !proof.has_loose_bvars()
                     && !proof_matches_rewrite(state, goal, &proof, expr, &result)
                 {
+                    if mtrace {
+                        eprintln!(
+                            "simp-match: lemma={} REJECT proof-mismatch-assembled",
+                            lemma.name
+                        );
+                    }
                     return None;
                 }
                 proof
@@ -1582,12 +1733,26 @@ fn try_apply_simp_lemma_unguarded(
             // instantiated metas, so a leak here mirrors a leak there; rejecting
             // keeps simp from emitting a term the kernel would reject.
             if contains_unassigned_meta(&proof) {
+                if mtrace {
+                    eprintln!("simp-match: lemma={} REJECT proof-meta-leak", lemma.name);
+                }
                 return None;
             }
 
+            if mtrace {
+                eprintln!("simp-match: lemma={} ACCEPT", lemma.name);
+            }
             Some((result, proof))
         }
-        UnifyResult::Failure(_) | UnifyResult::Stuck => None,
+        UnifyResult::Failure(_) | UnifyResult::Stuck => {
+            if mtrace {
+                eprintln!(
+                    "simp-match: lemma={} REJECT unify-fail result={unify_result:?} pattern={match_pattern:?} target={match_target:?}",
+                    lemma.name
+                );
+            }
+            None
+        }
     }
 }
 

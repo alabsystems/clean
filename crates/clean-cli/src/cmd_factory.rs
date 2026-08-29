@@ -990,8 +990,8 @@ as structured data for orchestration tools.",
     references: &[
         Reference {
             kind: RefKind::Doc,
-            label: "AI factory quick start",
-            target: "README.md#ai-factory-quick-start",
+            label: "Clean quick start",
+            target: "README.md#quick-start",
         },
         Reference {
             kind: RefKind::Doc,

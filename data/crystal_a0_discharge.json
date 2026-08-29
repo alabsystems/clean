@@ -1,28 +1,13 @@
 {
-  "schema": "clean.crystal.a0.discharge.v1",
-  "what_this_is": "The A0-SEMANTIC discharge table, adopted by owner ruling 2026-08-27 (R2 of workflow wf_1c3df27b's verdict; the ruling also adopted R3). For a target body, every callee its reachable-closure walk finds OUTSIDE the spliced instruction-bearing prefix must carry exactly one clause: (a) REACHED-AND-MODELLED -- an explicit model in the proof module with its residual NAMED, never a silence, and never counted as a proof; or (b) UNREACHABLE-AND-PROVED -- a kernel-checked theorem in the same calculus as A4/A5. scripts/crystal_a0_census.py --discharge validates this table against the walk FAIL-CLOSED: an escaping callee with no entry is a FAIL, and an entry naming a callee the walk does not find is a REFUSAL (a table wider than reality is how residuals hide).",
+  "schema": "clean.crystal.a0.discharge.v2",
+  "what_this_is": "The A0-SEMANTIC discharge table, adopted by owner ruling 2026-08-27 (R2 of workflow wf_1c3df27b's verdict; the ruling also adopted R3). SCHEMA v2 (2026-08-27, audit r2 pre-emption): escaping callees are keyed by CALLEE NAME as printed in the trust-ir text, not by numeric func_id -- ids renumber with every module change (measured: expect was 6516 on the 08-21 dump and 6547 at the landed tip) and the v1 id-keyed table was correctly REFUSED by its own wider-than-reality gate on the first fresh dump. Names are the durable identity; the walk maps its escaping ids to names before comparison, and the same fail-closed rules apply to the name-sets. For a target body, every callee its reachable-closure walk finds OUTSIDE the spliced instruction-bearing prefix must carry exactly one clause: (a) REACHED-AND-MODELLED -- an explicit model in the proof module with its residual NAMED, never a silence, and never counted as a proof; or (b) UNREACHABLE-AND-PROVED -- a kernel-checked theorem in the same calculus as A4/A5. scripts/crystal_a0_census.py --discharge validates this table against the walk FAIL-CLOSED: an escaping callee with no entry is a FAIL, and an entry naming a callee the walk does not find is a REFUSAL (a table wider than reality is how residuals hide).",
   "ruling": {
     "date": "2026-08-27",
     "by": "owner",
-    "what": "bodyful_reachable_closure as written demands a Rust body for a path that terminates at `_Unwind_RaiseException` (unsafe extern \"C-unwind\", unwind/src/libunwind.rs:290) -- a C symbol with no Rust body anywhere. Ruled a FLOOR, not a lowering gap (workflow wf_1c3df27b mechanism M2, plus M1/M3/M4 each independently sufficient). The semantic criterion replaces it AS THE COMPLETION CRITERION; the syntactic cell stays computed and reported beside it, unhidden."
+    "what": "bodyful_reachable_closure as written demands a Rust body for a path that terminates at `_Unwind_RaiseException` (unsafe extern \"C-unwind\", unwind/src/libunwind.rs:290) -- a C symbol with no Rust body on the deployed target, aarch64-apple-darwin (audit r1 correction 2026-08-28: library/ does carry ONE Rust definition -- the wasm backend's shim at unwind/src/wasm.rs:66 -- which is a different target's implementation and unreachable from this build). Ruled a FLOOR, not a lowering gap (workflow wf_1c3df27b mechanism M2, plus M1/M3/M4 each independently sufficient). The semantic criterion replaces it AS THE COMPLETION CRITERION; the syntactic cell stays computed and reported beside it, unhidden."
   },
   "targets": {
     "level::Level::is_zero": {
-      "escaping_callees": {
-        "6516": {
-          "def_path": "Option::<T>::expect",
-          "clause": "a",
-          "model": "ir_lzb_deref (function 1 of ir_lzb_module, crates/clean-verify/src/spec/core_spec/eval_ir_lzb.rs)",
-          "residual": "Option<Arc<Level>>'s None is the null niche, and as_deref().expect() is load + null-check + assert. The model is NOT total: ir_lzb_deref_refuses_none computes ub assert_failed on a null field, so the assumption is observable, not decorative.",
-          "beyond_this_callee": "expect's own failure branch (expect_failed -> panic_display -> panic_fmt -> panic_impl -> #[panic_handler] -> __rust_start_panic -> _Unwind_RaiseException) is clause (b): ir_lzb_panic_path_is_unreachable (eval_ir_lzb_correct.rs, DerivedProved, 0 axiom_deps) -- on a represented heap with enough fuel, halting at ub assert_failed derives every C : Type."
-        },
-        "7211": {
-          "def_path": "Option::<T>::as_deref",
-          "clause": "a",
-          "model": "ir_lzb_deref (same model; deref's two extern edges are one collapsed semantic assumption, deliberately -- splitting it would be three assumptions instead of one)",
-          "residual": "same as 6516; the two edges are the two halves of as_deref().expect()"
-        }
-      },
       "clause_b_theorems": [
         {
           "theorem": "ir_lzb_panic_path_is_unreachable",
@@ -30,7 +15,22 @@
           "status": "DerivedProved, 0 axiom_deps, kernel-checked (landed ab098943f)"
         }
       ],
-      "census_input": "data/crystal_a0_census_2026-08-22.json inputs (laneTU/wc-tip), entry 3905; deref = 3894"
+      "census_input": "data/crystal_a0_census_2026-08-22.json inputs (laneTU/wc-tip), entry 3905; deref = 3894",
+      "escaping_callees": {
+        "std::option::Option::<T>::expect": {
+          "clause": "a",
+          "model": "ir_lzb_deref (function 1 of ir_lzb_module, crates/clean-verify/src/spec/core_spec/eval_ir_lzb.rs)",
+          "residual": "Option<Arc<Level>>'s None is the null niche, and as_deref().expect() is load + null-check + assert. The model is NOT total: ir_lzb_deref_refuses_none computes ub assert_failed on a null field, so the assumption is observable, not decorative.",
+          "beyond_this_callee": "expect's own failure branch (expect_failed -> panic_display -> panic_fmt -> panic_impl -> #[panic_handler] -> __rust_start_panic -> _Unwind_RaiseException) is clause (b): ir_lzb_panic_path_is_unreachable (eval_ir_lzb_correct.rs, DerivedProved, 0 axiom_deps) -- on a represented heap with enough fuel, halting at ub assert_failed derives every C : Type.",
+          "v1_func_id_on_2026_08_21_dump": 6516
+        },
+        "std::option::Option::<T>::as_deref": {
+          "clause": "a",
+          "model": "ir_lzb_deref (same model; deref's two extern edges are one collapsed semantic assumption, deliberately -- splitting it would be three assumptions instead of one)",
+          "residual": "same as 6516; the two edges are the two halves of as_deref().expect()",
+          "v1_func_id_on_2026_08_21_dump": 7211
+        }
+      }
     }
   }
 }

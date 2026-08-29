@@ -2,6 +2,9 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
+#[path = "support/rustc.rs"]
+mod rustc_support;
+
 use serial_test::file_serial;
 use std::fs;
 use std::path::PathBuf;
@@ -75,15 +78,13 @@ fn compile_external_snippet(test_name: &str, source: &str) -> Output {
     let source_path = compile_dir.join("snippet.rs");
     fs::write(&source_path, source).expect("snippet source should be writable");
 
-    // TRUST OPT-OUT — see `clean-elab/src/tactic/native_decide_eval.rs` for the
-    // full rationale. `rustc` resolves through rustup from this repo's
-    // `rust-toolchain.toml`, pinned to `channel = "trust"`, so it ran Trust's
-    // obligation checker over this throwaway API-surface SNIPPET and failed the
-    // build ("Trust strict verification failed for `snippet::touch`"). The
-    // snippet exists only to prove a name is reachable; it is not a
-    // verification target. Probe, and fall back when the flag is not understood.
+    // TRUST OPT-OUT — use Cargo's selected `RUSTC` so this snippet and the
+    // linked crate metadata always share a compiler ABI. When that compiler is
+    // Trust, disable obligation checking for this throwaway API-surface probe;
+    // the snippet proves only that a public name is reachable. Fall back when
+    // the selected compiler does not understand Trust's opt-out flag.
     let run_rustc = |trust_opt_out: bool| {
-        let mut cmd = Command::new("rustc");
+        let mut cmd = Command::new(rustc_support::cargo_rustc());
         if trust_opt_out {
             cmd.arg("-Ztrust-verify=off");
         }

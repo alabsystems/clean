@@ -321,11 +321,21 @@ pub(crate) enum Commands {
     Lsp(clean_lsp::cli::LspArgs),
     /// Compile a Lean declaration through the clean-compiler pipeline
     ///
-    /// MVP surface for Epic #3436 Phase 4 (#3453). Accepts `<FILE>` and
-    /// `--decl <NAME>` plus `--emit <FORMAT>` and `--opt-level <N>`.
-    /// `Stability::Experimental` — the end-to-end file-to-emit pipeline is
-    /// an explicit non-goal for this MVP; the handler currently short-
-    /// circuits with a `NotYetImplemented` error.
+    /// Accepts `<FILE>` and `--decl <NAME>` plus `--emit <FORMAT>` and
+    /// `--opt-level <N>`. The file-to-emit pipeline RUNS: the declaration is
+    /// parsed, elaborated, kernel-checked and lowered through its compilable
+    /// dependency closure, and the selected format is written to stdout or
+    /// `-o`. `--emit l5ir`/`l5cnf` dump the IR structurally; `--emit c`/`rust`
+    /// emit source.
+    ///
+    /// `Stability::Experimental` because this verb emits source text only — it
+    /// does not link or run. That is `clean run`, which takes the same emit-C
+    /// closure through `cc` to a native binary and executes it.
+    ///
+    /// This text used to say the handler "short-circuits with a
+    /// `NotYetImplemented` error". It does not, and had not for some time:
+    /// that describes `clean_compiler::cli::run`, which the dispatch does not
+    /// call (see its own doc comment).
     Compile(CompileArgs),
     /// Build and run a `Nat`-returning or `IO` declaration natively.
     ///

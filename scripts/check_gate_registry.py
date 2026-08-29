@@ -121,7 +121,7 @@ for the three-step order, and the block above `EXEC_CTX` for the rule.
 
 Usage:
     scripts/check_gate_registry.py                 # check (fail-closed, ~ms)
-    scripts/check_gate_registry.py --selftest      # 28 mutation arms on itself
+    scripts/check_gate_registry.py --selftest      # 56 mutation arms on itself
     scripts/check_gate_registry.py --list          # the registry, as a table
     scripts/check_gate_registry.py --demonstrate   # replay every recorded arm
     scripts/check_gate_registry.py --demonstrate <id>
@@ -1847,8 +1847,30 @@ def cmd_list(root: Path) -> int:
 
 def _apply(root: Path, mut: dict) -> None:
     p = root / mut["file"]
-    text = p.read_text()
     op = mut["op"]
+    if op == "create":
+        # A PLANT, not an edit, and it must be handled BEFORE the read below.
+        # The whole point of an R2 INVENTORY arm is that the file is NOT in the
+        # tree, so `read_text()` raises FileNotFoundError -- which is not `Red`,
+        # so it escapes `demonstrate`'s `except Red` and kills the entire sweep
+        # with a traceback instead of one honest [FAIL].
+        #
+        # MEASURED 2026-08-28: the registry's OWN arm (recorded 2026-08-27,
+        # `scripts/check_demo_planted_gate.py`) was written with this op, which
+        # `_apply` never implemented. It had never been observed because a
+        # standing R7 red made every replay bail at the baseline check first --
+        # so the row that exists to prove gates are replayable carried an arm
+        # that could not run, and the masking red hid it.
+        if p.exists():
+            raise Red(
+                f"the arm creates {mut['file']}, which is already in the tree -- a "
+                f"plant that overwrites an existing file is an edit, and restoring "
+                f"it would not put the original back"
+            )
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(mut["content"])
+        return
+    text = p.read_text()
     if op == "regex-sub":
         new, n = re.subn(mut["pattern"], mut["replacement"], text, count=mut.get("count", 1))
         if n == 0:
@@ -1882,6 +1904,20 @@ def _apply(root: Path, mut: dict) -> None:
 def _restore(root: Path, rel: str) -> None:
     subprocess.run(["git", "checkout", "--", rel], cwd=root, check=False,
                    capture_output=True)
+    # `git checkout --` is a NO-OP for a path git does not track, so a `create`
+    # arm's plant would SURVIVE its own restore. That is not a cosmetic leak: the
+    # thing planted is by construction a gate-shaped file with no registry row,
+    # which is exactly what R2 INVENTORY refuses -- so the demonstration would
+    # leave the tree permanently RED for every other lane, and the next person to
+    # run the gate would be debugging a file the demonstrator dropped. Remove
+    # what git will not, and only that: a path git tracks is restored above, and
+    # `_dirty` has already refused the arm if anything was sitting here first.
+    p = root / rel
+    if p.is_file():
+        tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "--", rel],
+                                 cwd=root, check=False, capture_output=True)
+        if tracked.returncode != 0:
+            p.unlink()
 
 
 def _dirty(root: Path, rel: str) -> bool:
@@ -2020,10 +2056,17 @@ def repin(root: Path, rid: str) -> int:
 # ── self-test ────────────────────────────────────────────────────────────────
 #
 # The demonstrator has to demonstrate itself, or this file is instance number
-# seven. Thirty-three arms build a synthetic repo, mutate one thing, and
+# seven. Fifty-six arms build a synthetic repo, mutate one thing, and
 # require the named rule to fire. Arms 1, 25, 30 and 31 require the tree to be
 # GREEN, so an arm that reds for an unrelated reason cannot be mistaken for a
 # working rule.
+#
+# Arms 38-43 (`_selftest_mutations`) are a different KIND and that is the point:
+# they test the mutation ENGINE rather than a rule. Every other arm here proves
+# a rule can say no; those six prove the machinery that REPLAYS the recorded
+# arms can still apply and undo a mutation at all. The gap was real -- an arm
+# recorded with an op `_apply` did not implement crashed the sweep instead of
+# failing it.
 # ~0.1 s, and it runs FIRST on every gate invocation.
 
 
@@ -2139,6 +2182,101 @@ def _reg(root: Path) -> dict:
 
 def _put(root: Path, doc: dict) -> None:
     (root / "data/gate_registry.json").write_text(json.dumps(doc, indent=2))
+
+
+def _selftest_mutations() -> tuple[int, int]:
+    """Arms for the mutation ENGINE -- `_apply` and `_restore` themselves.
+
+    Recorded 2026-08-28, after the registry's own R2 arm was found unrunnable.
+    It was written with `op: "create"`, which `_apply` never implemented, and
+    the failure mode was an UNCAUGHT FileNotFoundError rather than a `Red`, so
+    it would have taken the whole `--demonstrate` sweep down with a traceback
+    instead of reporting one honest [FAIL]. Nobody had seen it because a
+    standing R7 red made every replay bail at the baseline check first.
+
+    Arms 38 and 39 are the two that would have caught it. The rest exist so the
+    fix cannot quietly widen into "any op writes anywhere": 40 keeps `create` a
+    plant rather than an overwrite, 41 and 42 are the pre-existing refusals
+    (unknown op, and the no-op regex that is the vacuity guard), and 43 is the
+    control that `_restore` still restores a file git DOES track -- the path the
+    untracked-cleanup could most easily have broken.
+    """
+    failures = 0
+    arms = 0
+    plant = {"file": "scripts/check_planted.py", "op": "create",
+             "content": "#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n"}
+
+    def run(name, fn):
+        nonlocal failures, arms
+        arms += 1
+        with tempfile.TemporaryDirectory() as td:
+            root = _mini(Path(td))
+            _git_run(root, "init", "-q", "-b", "main")
+            _git_run(root, "add", "-A")
+            _git_run(root, "commit", "-qm", "green")
+            try:
+                fn(root)
+            except AssertionError as exc:
+                print(f"  [FAIL] {name}: {exc}")
+                failures += 1
+                return
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [FAIL] {name}: unexpected {type(exc).__name__}: {exc}")
+                failures += 1
+                return
+        print(f"  [ok]   {name}")
+
+    def a_create(root):
+        p = root / plant["file"]
+        assert not p.exists(), "precondition: the plant must not already be there"
+        _apply(root, plant)
+        assert p.is_file(), "`create` did not write the file"
+        assert p.read_text() == plant["content"], "`create` wrote the wrong bytes"
+
+    def a_restore_untracked(root):
+        _apply(root, plant)
+        _restore(root, plant["file"])
+        assert not (root / plant["file"]).exists(), (
+            "`_restore` left an untracked plant behind -- every later run is R2 red")
+
+    def a_create_refuses_existing(root):
+        try:
+            _apply(root, {**plant, "file": "scripts/check_alpha.py"})
+        except Red:
+            return
+        raise AssertionError("`create` overwrote a file that was already in the tree")
+
+    def a_unknown_op(root):
+        try:
+            _apply(root, {"file": "scripts/check_alpha.py", "op": "teleport"})
+        except Red:
+            return
+        raise AssertionError("an unknown mutation op was not refused")
+
+    def a_regex_noop(root):
+        try:
+            _apply(root, {"file": "scripts/check_alpha.py", "op": "regex-sub",
+                          "pattern": "ZZZ_not_present", "replacement": "x"})
+        except Red:
+            return
+        raise AssertionError("a no-op regex mutation was not refused")
+
+    def a_restore_tracked(root):
+        p = root / "scripts/check_alpha.py"
+        before = p.read_text()
+        _apply(root, {"file": "scripts/check_alpha.py", "op": "append",
+                      "text": "# edit\n"})
+        assert p.read_text() != before, "precondition: the edit must land"
+        _restore(root, "scripts/check_alpha.py")
+        assert p.read_text() == before, "`_restore` no longer restores a TRACKED file"
+
+    run("38 _apply `create` plants a file that is not in the tree", a_create)
+    run("39 _restore removes an untracked plant", a_restore_untracked)
+    run("40 `create` refuses a file that already exists", a_create_refuses_existing)
+    run("41 an unknown mutation op is refused", a_unknown_op)
+    run("42 a no-op regex mutation is refused", a_regex_noop)
+    run("43 _restore still restores a TRACKED file", a_restore_tracked)
+    return arms, failures
 
 
 def selftest() -> int:
@@ -2279,8 +2417,9 @@ def selftest() -> int:
         os.environ["CLEAN_PUSH_RANGES"] = inherited
     git_arms, git_failures = _selftest_pushed()
     wire_arms, wire_failures = _selftest_wiring()
-    total = len(arms) + git_arms + wire_arms
-    failures += git_failures + wire_failures
+    mut_arms, mut_failures = _selftest_mutations()
+    total = len(arms) + git_arms + wire_arms + mut_arms
+    failures += git_failures + wire_failures + mut_failures
     print(f"GATE_REGISTRY_SELFTEST arms={total} failed={failures}")
     return 1 if failures else 0
 

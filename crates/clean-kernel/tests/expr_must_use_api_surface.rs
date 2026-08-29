@@ -2,6 +2,9 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
+#[path = "support/rustc.rs"]
+mod rustc_support;
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -74,18 +77,13 @@ fn compile_external_snippet(test_name: &str, source: &str) -> Output {
     let source_path = compile_dir.join("snippet.rs");
     fs::write(&source_path, source).expect("snippet source should be writable");
 
-    // TRUST OPT-OUT -- the same probe-and-fall-back the clean-auto API-surface
-    // tests already carry. `rustc` resolves through rustup from this repo's
-    // `rust-toolchain.toml` (`channel = "trust"`), so a BARE invocation runs
-    // Trust's obligation checker over this throwaway snippet: the compile then
-    // fails on a runtime-checked obligation instead of the `must_use` lint, and
-    // the fragment assertion below reports a missing diagnostic that the lint
-    // never got a chance to emit. The crate's own builds are compiled with this
-    // exact flag (`.cargo/config.toml`, [target.aarch64-apple-darwin]); the
-    // snippet exists only to prove a lint fires and is not a verification
-    // target. Probe, and fall back when the flag is not understood.
+    // TRUST OPT-OUT -- use Cargo's selected `RUSTC` so this snippet and the
+    // linked crate metadata always share a compiler ABI. When that compiler is
+    // Trust, disable obligation checking: the snippet proves only that the
+    // `must_use` lint fires. Fall back when the selected compiler does not
+    // understand Trust's opt-out flag.
     let run_rustc = |trust_opt_out: bool| {
-        let mut cmd = Command::new("rustc");
+        let mut cmd = Command::new(rustc_support::cargo_rustc());
         if trust_opt_out {
             cmd.arg("-Ztrust-verify=off");
         }

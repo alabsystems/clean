@@ -9,7 +9,7 @@ use clean_kernel::{Declaration, Expr, Level, Name, TypeChecker};
 use clean_parser::parse_decl;
 use std::collections::HashSet;
 
-use super::{AxiomCategory, ProofStatus, SpecDefinition, SpecError, Specification};
+use super::{decl_budget, AxiomCategory, ProofStatus, SpecDefinition, SpecError, Specification};
 
 impl Specification {
     /// Add an inductive type definition using the elaborator
@@ -37,6 +37,12 @@ impl Specification {
     /// | pi : KExpr → KExpr → KExpr", "Kernel expression type")?;
     /// ```
     pub fn add_inductive(&mut self, source: &str, description: &str) -> Result<(), SpecError> {
+        decl_budget::begin_declaration();
+        let outcome = self.add_inductive_inner(source, description);
+        decl_budget::finish_declaration(description, outcome)
+    }
+
+    fn add_inductive_inner(&mut self, source: &str, description: &str) -> Result<(), SpecError> {
         let decl = parse_decl(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
         let ind_name = source
             .split_whitespace()
@@ -344,6 +350,16 @@ impl Specification {
     ///   ```
     /// * `description` - Human-readable description for tracking
     pub fn add_recursive_def(&mut self, source: &str, description: &str) -> Result<(), SpecError> {
+        decl_budget::begin_declaration();
+        let outcome = self.add_recursive_def_inner(source, description);
+        decl_budget::finish_declaration(description, outcome)
+    }
+
+    fn add_recursive_def_inner(
+        &mut self,
+        source: &str,
+        description: &str,
+    ) -> Result<(), SpecError> {
         let decl = parse_decl(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
 
         let result = elaborate_decl_and_register(&mut self.env, &decl).map_err(|e| {

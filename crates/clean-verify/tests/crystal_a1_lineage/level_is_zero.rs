@@ -491,3 +491,44 @@ fn regex_lite_const_i64(text: &str) -> Vec<(&str, u64)> {
         })
         .collect()
 }
+
+/// The `ir_lzb_deref` model's LAYOUT premise, pinned as a compiled assertion.
+///
+/// The clause-(a) residual (owner ruling 2026-08-27, `data/crystal_a0_discharge.json`)
+/// states: *"`Option<Arc<Level>>`'s `None` is the null niche, and
+/// `as_deref().expect()` is load + null-check + assert."* The second half is
+/// checked by `ir_lzb_deref_refuses_none` (the model traps on a null field);
+/// the FIRST half was prose until this test. If `Option<Arc<Level>>` were not
+/// niche-packed — a discriminant byte beside the pointer — the emitted body's
+/// single 8-byte field load that the model mirrors would be reading the wrong
+/// thing, and every theorem over `ir_lzb_module` would be about a layout the
+/// machine does not use.
+///
+/// `Arc` is `NonNull`-based, so rustc packs `None` as the null pointer value
+/// and the whole `Option` occupies exactly one pointer. Assert that, plus the
+/// `LevelArc` wrapper being layout-transparent to it, so the receiver really is
+/// one pointer-sized cell at offset 0 — the cell the minted body geps from.
+#[test]
+fn deref_model_layout_premise_none_is_the_null_niche() {
+    use clean_kernel::level::{Level, LevelArc};
+    use std::mem::size_of;
+    use std::sync::Arc;
+    assert_eq!(
+        size_of::<Option<Arc<Level>>>(),
+        size_of::<Arc<Level>>(),
+        "Option<Arc<Level>> must be niche-packed: None IS the null pointer, \
+         no separate discriminant -- the ir_lzb_deref model's load+null-check \
+         premise depends on it"
+    );
+    assert_eq!(
+        size_of::<Arc<Level>>(),
+        size_of::<usize>(),
+        "Arc<Level> is one thin pointer"
+    );
+    assert_eq!(
+        size_of::<LevelArc>(),
+        size_of::<Option<Arc<Level>>>(),
+        "the LevelArc wrapper adds no bytes: the receiver is exactly the \
+         niche-packed Option cell the emitted body reads"
+    );
+}

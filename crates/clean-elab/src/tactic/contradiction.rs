@@ -319,9 +319,7 @@ pub fn eval_contradiction(ctx: &mut TacticCtx<'_>) -> TacticResult {
         return Ok(());
     }
 
-    Err(TacticError::NoProgress {
-        tactic: "contradiction".into(),
-    })
+    Err(TacticError::no_progress("contradiction"))
 }
 
 /// Enhanced `exfalso` tactic via `TacticCtx`.

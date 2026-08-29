@@ -3245,8 +3245,10 @@ fn run_bundle_stages(spec: &mut Specification, bundle: CoreSpecBundle) -> Result
     // guessing from the stack. Set CLEAN_SPEC_STAGE_TIMING=1 to get one line per
     // executed stage on stderr.
     let timing = std::env::var_os("CLEAN_SPEC_STAGE_TIMING").is_some();
-    let mut idx: usize = 0;
-    for stage in STAGES {
+    // `enumerate` rather than a hand-rolled counter: the index is the position in
+    // STAGES (it advanced on every iteration, included or not), so this is the
+    // same number with no counter to keep in sync. clippy::explicit_counter_loop.
+    for (idx, stage) in STAGES.iter().enumerate() {
         let include = match bundle {
             CoreSpecBundle::Full => true,
             CoreSpecBundle::Substitution => stage.in_substitution,
@@ -3283,7 +3285,6 @@ fn run_bundle_stages(spec: &mut Specification, bundle: CoreSpecBundle) -> Result
                 (stage.apply)(spec)?;
             }
         }
-        idx += 1;
     }
     Ok(())
 }

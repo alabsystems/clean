@@ -212,8 +212,8 @@ Five real fakes found by a fresh skeptical pass and patched:
   mode when ≥1000-constant stub shards are present.
 
 - `crates/clean-mathverse/tests/no_stub_shards.rs` and
-  `tests/structured_importers_refuse_stubs.rs` — six regression tests
-  that fail CI if any future change reintroduces a stub.
+  `crates/clean-mathverse/tests/structured_importers_refuse_stubs.rs` — six
+  regression tests that fail CI if any future change reintroduces a stub.
 
 - `crates/clean-mathverse/src/shard.rs` — added `expr_count`,
   `string_count`, `constant_count` getters on `ShardWriter` so importer

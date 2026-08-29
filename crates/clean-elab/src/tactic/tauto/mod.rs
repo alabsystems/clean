@@ -75,9 +75,7 @@ pub fn tauto(state: &mut ProofState) -> TacticResult {
         return Ok(());
     }
 
-    Err(TacticError::NoProgress {
-        tactic: "tauto".into(),
-    })
+    Err(TacticError::no_progress("tauto"))
 }
 
 /// Simplify the local context for propositional reasoning.

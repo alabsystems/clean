@@ -343,9 +343,7 @@ pub fn conv_rw(
     // Get the new target
     let new_target = conv.finish();
     if new_target == target {
-        return Err(TacticError::NoProgress {
-            tactic: "conv_rw".into(),
-        });
+        return Err(TacticError::no_progress("conv_rw"));
     }
 
     match state.replace_target_def_eq(new_target.clone()) {

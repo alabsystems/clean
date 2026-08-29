@@ -211,9 +211,7 @@ impl DeepConvState {
     pub fn apply_rewrite(&mut self, new_expr: Expr, proof: Expr) -> Result<(), TacticError> {
         let before = self.inner.focus.clone();
         if before == new_expr {
-            return Err(TacticError::NoProgress {
-                tactic: "conv apply_rewrite".into(),
-            });
+            return Err(TacticError::no_progress("conv apply_rewrite"));
         }
         let position = self.inner.path.clone();
         self.inner.focus = new_expr.clone();

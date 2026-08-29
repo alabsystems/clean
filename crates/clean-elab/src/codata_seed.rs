@@ -75,6 +75,65 @@ const SEED_SENTINEL: &str = "Codata.IMIntl";
 /// which only the `codata` command sets.
 const SEED_WITNESSES: &[&str] = &[SEED_SENTINEL, "Codata.ucorec", "Codata.IMcorec"];
 
+/// Start marker of the COINDUCTION section (see [`ensure_codata_coind_seeds`]).
+///
+/// The section is a mid-file SLICE, not a prefix, and that is the whole point:
+/// a prefix cut extended to cover `iM_coind` would drag the capstone demo layer
+/// along with it, taking seed injection from 0.75 s to 141.4 s (MEASURED —
+/// `ibind_tau_child` and `ibind_vis_child` alone are 138 s of that). The slice
+/// costs +2.15 s because the coinduction block references NOTHING from the demo
+/// layer. Both markers below are unique in the source and sit on blank-line
+/// declaration boundaries, so slicing needs no edit to the gate-pinned corpus.
+const COIND_START_MARKER: &str = "-- ── R4: bisimilarity IS equality in the tower model ──";
+
+/// End marker of the coinduction section (exclusive).
+const COIND_END_MARKER: &str = "-- ── generic-index corecursor observation laws";
+
+/// Witnesses for the coinduction section's fast idempotence path.
+const COIND_WITNESSES: &[&str] = &["Codata.iM_coind", "Codata.iM_ext", "Codata.icastM"];
+
+/// Every constant the coinduction section defines, unqualified.
+///
+/// Hardcoded rather than derived because it is the section's collision pre-scan
+/// (the base section's whole-namespace scan cannot be reused: once the base is
+/// injected, `Codata.*` is populated by construction, so a namespace-wide scan
+/// would make the second section an unconditional refusal). Drift in either
+/// direction is caught by `test_coind_section_names_are_exactly_the_section`,
+/// which pins the constant delta to this list's length.
+const COIND_NAMES: &[&str] = &[
+    "isubtype_ext",
+    "iM_ext",
+    "iM_bisim_of_eq",
+    "icastM",
+    "icastM_val",
+    "isigma_ext",
+    "iunit_eq",
+    "ival_zero_eq",
+    "icoind_b2",
+    "icoind_b1",
+    "icoind_elab",
+    "icoind_pos2",
+    "icoind_pos1",
+    "icoind_q2",
+    "icoind_p1",
+    "icoind_ih_eq",
+    "icoind_s1",
+    "icoind_s2",
+    "icoind_s3",
+    "icoind_s4",
+    "icoind_s5a",
+    "icoind_s5b",
+    "icoind_s6",
+    "icoind_s7",
+    "icoind_s8",
+    "snd12",
+    "snd34",
+    "snd678",
+    "icoind_snd",
+    "iM_coind_val",
+    "iM_coind",
+];
+
 /// The `Codata.*`-namespaced seed source (generic core only).
 fn seed_source() -> Result<String, ElabError> {
     let cut = MTYPE_INDEXED_SRC
@@ -86,6 +145,61 @@ fn seed_source() -> Result<String, ElabError> {
         })?;
     let core = MTYPE_INDEXED_SRC[..cut].trim_end();
     Ok(format!("namespace Codata\n\n{core}\n\nend Codata\n"))
+}
+
+/// The `Codata.*`-namespaced coinduction section source (mid-file slice).
+fn coind_source() -> Result<String, ElabError> {
+    let start =
+        MTYPE_INDEXED_SRC
+            .find(COIND_START_MARKER)
+            .ok_or_else(|| ElabError::Unsupported {
+                feature: "codata seed: coinduction start marker missing from \
+                          MTypeIndexedPoly2.lean — the graduation source layout \
+                          changed; update codata_seed.rs"
+                    .to_string(),
+            })?;
+    let end = MTYPE_INDEXED_SRC
+        .find(COIND_END_MARKER)
+        .ok_or_else(|| ElabError::Unsupported {
+            feature: "codata seed: coinduction end marker missing from \
+                      MTypeIndexedPoly2.lean — the graduation source layout \
+                      changed; update codata_seed.rs"
+                .to_string(),
+        })?;
+    if end <= start {
+        return Err(ElabError::Unsupported {
+            feature: "codata seed: coinduction markers are out of order in \
+                      MTypeIndexedPoly2.lean — the graduation source layout changed"
+                .to_string(),
+        });
+    }
+    let body = MTYPE_INDEXED_SRC[start..end].trim_end();
+    Ok(format!("namespace Codata\n\n{body}\n\nend Codata\n"))
+}
+
+/// Parse `src` and register every declaration into `env`, transactionally.
+///
+/// Shared by both sections: elaboration goes through the ordinary
+/// [`crate::elaborate_decl_and_register`] pipeline (full `add_decl`, so the
+/// unchecked-decl ratchet holds), into a candidate clone that is swapped in only
+/// after the LAST declaration lands. `what` names the section in diagnostics.
+fn inject_section(env: &mut Environment, src: &str, what: &str) -> Result<(), ElabError> {
+    let decls = clean_parser::parse_file(src).map_err(|e| ElabError::Unsupported {
+        feature: format!("codata seed ({what}): embedded source failed to parse: {e:?}"),
+    })?;
+    let mut candidate = env.clone();
+    for (i, decl) in decls.iter().enumerate() {
+        crate::elaborate_decl_and_register(&mut candidate, decl).map_err(|e| {
+            ElabError::Unsupported {
+                feature: format!(
+                    "codata seed ({what}): declaration {i} failed to elaborate/kernel-check \
+                     (env left untouched): {e:?}"
+                ),
+            }
+        })?;
+    }
+    *env = candidate;
+    Ok(())
 }
 
 /// Inject the `Codata.*` M-type seed library into `env` if absent.
@@ -123,23 +237,48 @@ pub(crate) fn ensure_codata_seeds(env: &mut Environment) -> Result<(), ElabError
             ),
         });
     }
-    let src = seed_source()?;
-    let decls = clean_parser::parse_file(&src).map_err(|e| ElabError::Unsupported {
-        feature: format!("codata seed: embedded source failed to parse: {e:?}"),
-    })?;
-    let mut candidate = env.clone();
-    for (i, decl) in decls.iter().enumerate() {
-        crate::elaborate_decl_and_register(&mut candidate, decl).map_err(|e| {
-            ElabError::Unsupported {
-                feature: format!(
-                    "codata seed: declaration {i} failed to elaborate/kernel-check \
-                     (env left untouched): {e:?}"
-                ),
-            }
-        })?;
+    inject_section(env, &seed_source()?, "core")
+}
+
+/// Inject the `Codata.*` COINDUCTION section (tower extensionality, `icastM`,
+/// and the `iM_coind` principle) on top of the core seed.
+///
+/// Call this only from paths that actually need coinduction — the coinductive
+/// companion tier of the variant-codata surface. Plain codata declaration must
+/// keep calling [`ensure_codata_seeds`] alone, so the +31 declarations / +2.15 s
+/// are paid on demand and never by a user who only wants constructors and
+/// destructors.
+///
+/// Ensures the core section first (the slice depends on it), then layers the
+/// coinduction slice with the same idempotence / transactional / fail-closed
+/// discipline.
+pub(crate) fn ensure_codata_coind_seeds(env: &mut Environment) -> Result<(), ElabError> {
+    ensure_codata_seeds(env)?;
+    if COIND_WITNESSES
+        .iter()
+        .all(|n| env.get_const(&clean_kernel::Name::from_string(n)).is_some())
+    {
+        return Ok(());
     }
-    *env = candidate;
-    Ok(())
+    // Collision pre-scan over THIS SECTION'S OWN names only. The base section's
+    // whole-namespace scan is deliberately not reused here: the base seed is
+    // present by the time this runs, so `Codata.*` is populated by construction
+    // and a namespace-wide scan would refuse unconditionally. Scanning the
+    // section's own names still gives the load-bearing guarantee — nothing
+    // shadows, and is not shadowed by, a seed constant.
+    if let Some(occupied) = COIND_NAMES
+        .iter()
+        .map(|n| format!("Codata.{n}"))
+        .find(|n| env.get_const(&clean_kernel::Name::from_string(n)).is_some())
+    {
+        return Err(ElabError::Unsupported {
+            feature: format!(
+                "codata seed: the coinduction section's name `{occupied}` is already \
+                 taken (and its witnesses are absent) — refusing to seed"
+            ),
+        });
+    }
+    inject_section(env, &coind_source()?, "coinduction")
 }
 
 #[cfg(test)]
@@ -232,6 +371,86 @@ mod tests {
         assert!(
             ensure_codata_seeds(&mut env).is_err(),
             "a squatted sentinel must NOT be mistaken for an injected seed"
+        );
+        assert_eq!(
+            env.num_constants(),
+            before,
+            "failed seeding must leave the env byte-identical (transactional)"
+        );
+    }
+
+    /// The coinduction section is NOT injected by the plain core seed.
+    ///
+    /// This is the cost guarantee as a test: a user who declares codata without
+    /// asking for a coinductive companion must not pay the +31 declarations.
+    #[test]
+    fn test_coind_section_is_not_in_the_core_seed() {
+        let mut env = Environment::with_prelude();
+        ensure_codata_seeds(&mut env).expect("core seed must inject");
+        for name in COIND_WITNESSES {
+            assert!(
+                env.get_const(&Name::from_string(name)).is_none(),
+                "{name} must NOT be present after a core-only seed"
+            );
+        }
+    }
+
+    /// The coinduction slice injects on demand, and `COIND_NAMES` is EXACTLY
+    /// the set it defines.
+    ///
+    /// Pinning the delta to the list length catches drift in both directions:
+    /// a declaration added to the slice upstream (delta > len) and one removed
+    /// or renamed (a missing name). The list is the section's collision
+    /// pre-scan, so a silent divergence would silently weaken that scan.
+    #[test]
+    fn test_coind_section_names_are_exactly_the_section() {
+        let mut env = Environment::with_prelude();
+        ensure_codata_seeds(&mut env).expect("core seed must inject");
+        let before = env.num_constants();
+        ensure_codata_coind_seeds(&mut env).expect("coinduction section must inject");
+        for n in COIND_NAMES {
+            assert!(
+                env.get_const(&Name::from_string(&format!("Codata.{n}")))
+                    .is_some(),
+                "coinduction constant Codata.{n} must register"
+            );
+        }
+        assert_eq!(
+            env.num_constants() - before,
+            COIND_NAMES.len(),
+            "COIND_NAMES must list exactly the constants the slice defines — \
+             a mismatch means the graduation source drifted and the section's \
+             collision pre-scan is now incomplete"
+        );
+    }
+
+    /// Second call to the coinduction section is a no-op.
+    #[test]
+    fn test_coind_section_idempotent() {
+        let mut env = Environment::with_prelude();
+        ensure_codata_coind_seeds(&mut env).expect("first injection must succeed");
+        let after_first = env.num_constants();
+        ensure_codata_coind_seeds(&mut env).expect("second call must be a no-op");
+        assert_eq!(
+            env.num_constants(),
+            after_first,
+            "idempotent re-entry must not change the env"
+        );
+    }
+
+    /// Squatting a coinduction-section name is refused, transactionally —
+    /// and the refusal must survive the base seed already being present.
+    #[test]
+    fn test_coind_section_collision_is_loud_and_transactional() {
+        let mut env = Environment::with_prelude();
+        ensure_codata_seeds(&mut env).expect("core seed must inject");
+        let decls = clean_parser::parse_file("def Codata.iM_bisim_of_eq : Nat := Nat.zero")
+            .expect("should parse");
+        crate::elaborate_decl_and_register(&mut env, &decls[0]).expect("user def must elaborate");
+        let before = env.num_constants();
+        assert!(
+            ensure_codata_coind_seeds(&mut env).is_err(),
+            "a squatted coinduction name must make seeding fail loudly"
         );
         assert_eq!(
             env.num_constants(),

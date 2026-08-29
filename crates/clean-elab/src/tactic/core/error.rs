@@ -34,6 +34,21 @@ impl RewriteCandidate {
     }
 }
 
+/// Render the trailing goal block of a `NoProgress` message.
+///
+/// Kept out of the `#[error(...)]` format string because the attribute cannot
+/// hold a multi-line expression, and because the empty case must add NOTHING —
+/// a bare `simp: no progress made` is still the right message when no goal was
+/// attached, and every existing assertion on that exact string must keep
+/// passing.
+#[must_use]
+fn render_goal_suffix(goal: Option<&str>) -> String {
+    match goal {
+        Some(g) if !g.is_empty() => format!(" on\n{g}"),
+        _ => String::new(),
+    }
+}
+
 /// Errors that can occur during tactic execution
 #[derive(Debug, Clone, Error)]
 #[non_exhaustive]
@@ -65,8 +80,26 @@ pub enum TacticError {
     #[error("{tactic}: requires {expected}")]
     MissingArgument { tactic: String, expected: String },
 
-    #[error("{tactic}: no progress made")]
-    NoProgress { tactic: String },
+    /// A tactic ran and changed nothing.
+    ///
+    /// `goal` carries the goal the tactic gave up on, rendered by
+    /// `tactic::display::format_goal`. It is `None` at the many INTERNAL sites
+    /// that use this variant as control flow — a closer that declines is
+    /// swallowed by `try_tactic_preserving_state` and never reaches a human, so
+    /// formatting a goal there is pure cost. It is `Some` at the sites where the
+    /// error genuinely escapes to the user.
+    ///
+    /// Why the field exists at all: measured over the 2026-08-25 source-elab
+    /// corpus, `simp: no progress made` accounted for 16 entries and
+    /// `grind: no progress made` for 11, and the message was the WHOLE entry —
+    /// no goal, no target, nothing to classify. 38 of that report's 74
+    /// `tactic failed` rows carried no payload for this reason. See
+    /// `docs/analysis/srcelab-bucket-decomposition-2026-08-28.md` §3.1.
+    #[error("{tactic}: no progress made{}", render_goal_suffix(goal.as_deref()))]
+    NoProgress {
+        tactic: String,
+        goal: Option<String>,
+    },
 
     #[error(
         "{tactic}: rewrite rule {rule} did not match focused subterm; searched for {searched_for} in {focus}"
@@ -177,6 +210,27 @@ pub enum TacticError {
 }
 
 impl TacticError {
+    /// `NoProgress` with no goal attached — for internal control-flow sites
+    /// whose error is swallowed by the caller and never shown.
+    #[must_use]
+    pub(crate) fn no_progress(tactic: impl Into<String>) -> Self {
+        Self::NoProgress {
+            tactic: tactic.into(),
+            goal: None,
+        }
+    }
+
+    /// `NoProgress` carrying the goal the tactic gave up on. Use this at every
+    /// site whose error can reach a human; `goal` is normally
+    /// `tactic::display::format_current_goal(state)`.
+    #[must_use]
+    pub(crate) fn no_progress_on(tactic: impl Into<String>, goal: impl Into<String>) -> Self {
+        Self::NoProgress {
+            tactic: tactic.into(),
+            goal: Some(goal.into()),
+        }
+    }
+
     #[must_use]
     pub(crate) fn is_recoverable_first_failure(&self) -> bool {
         matches!(

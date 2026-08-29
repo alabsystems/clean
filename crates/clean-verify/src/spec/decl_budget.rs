@@ -294,27 +294,37 @@ mod tests {
         // estimate, not a measurement — see the module docs.
         const ESTIMATED_FULL_SPEC_TOTAL_TICKS: u64 = 20_000_000_000;
 
-        assert!(
-            DEFAULT_SPEC_DECL_BUDGET / MEASURED_MATHLIB_MAX_TICKS >= 12_000,
-            "the spec budget must stay a loose ceiling over the measured \
-             per-declaration maximum, not a tight one"
-        );
-        assert!(
-            DEFAULT_SPEC_DECL_BUDGET / MEASURED_EVALIR_MAX_TICKS >= 275_000,
-            "…and a much looser one over the heaviest SPEC declaration measured \
-             so far, because the full spec's maximum is still unmeasured"
-        );
+        // `const` blocks: these are compile-time facts (clippy
+        // assertions_on_constants under the workspace `--all-targets` lint),
+        // and the const form evaluates them at compile time — a violated
+        // bound fails the BUILD, which is strictly earlier than the test run.
+        const {
+            assert!(
+                DEFAULT_SPEC_DECL_BUDGET / MEASURED_MATHLIB_MAX_TICKS >= 12_000,
+                "the spec budget must stay a loose ceiling over the measured \
+                 per-declaration maximum, not a tight one"
+            );
+        }
+        const {
+            assert!(
+                DEFAULT_SPEC_DECL_BUDGET / MEASURED_EVALIR_MAX_TICKS >= 275_000,
+                "…and a much looser one over the heaviest SPEC declaration measured \
+                 so far, because the full spec's maximum is still unmeasured"
+            );
+        }
         // THE LOAD-BEARING ONE. The budget is refilled per declaration, so one
         // declaration cannot cost more than the whole build; a limit above the
         // whole build's total therefore cannot fire on a build that terminates.
         // Lowering the constant under this line re-opens the possibility of
         // turning a working spec build red, which is worse than the hang it
         // replaced.
-        assert!(
-            DEFAULT_SPEC_DECL_BUDGET >= 5 * ESTIMATED_FULL_SPEC_TOTAL_TICKS,
-            "the budget must exceed the estimated total cost of a whole \
-             Specification::new(), with headroom on the estimate"
-        );
+        const {
+            assert!(
+                DEFAULT_SPEC_DECL_BUDGET >= 5 * ESTIMATED_FULL_SPEC_TOTAL_TICKS,
+                "the budget must exceed the estimated total cost of a whole \
+                 Specification::new(), with headroom on the estimate"
+            );
+        }
     }
 
     /// A malformed override must fail loudly. The silent-fallback version of

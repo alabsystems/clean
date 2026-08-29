@@ -213,9 +213,7 @@ pub fn cc_with_config(state: &mut ProofState, config: CCConfig) -> TacticResult 
     if cc_state.find(lhs_id) == cc_state.find(rhs_id) {
         rfl(state)
     } else {
-        Err(TacticError::NoProgress {
-            tactic: "cc".into(),
-        })
+        Err(TacticError::no_progress("cc"))
     }
 }
 

@@ -150,9 +150,7 @@ pub fn blast_with_config(state: &mut ProofState, config: BlastConfig) -> TacticR
     if state.is_complete() {
         Ok(())
     } else {
-        Err(TacticError::NoProgress {
-            tactic: "blast".into(),
-        })
+        Err(TacticError::no_progress("blast"))
     }
 }
 

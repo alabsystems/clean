@@ -405,7 +405,18 @@ impl<'a> ElabCtx<'a> {
             .filter(|p| !self.file_universe_params.contains(*p))
             .cloned()
             .collect();
-        self.decl_explicit_universes = (!explicit.is_empty()).then_some(explicit);
+        // Without a recorded file half the subtraction above subtracts
+        // NOTHING, and a file-scope `universe u` folded in by
+        // `preprocess_decl_with_context` is indistinguishable from a written
+        // `.{u}` list — refusing on that guess closed declarations that never
+        // wrote a list (measured 2026-08-28: `test_issue168_param_to_param_canonical`
+        // and every preprocess-then-context-free-register caller — the
+        // server's `check_decl_validation`, `codata_cmd`'s generated
+        // declarations). Classify only when the file half is KNOWN; the
+        // context-free entry keeps auto-generalization, and the file-driven
+        // production paths keep the strict Lean closed-list rule.
+        self.decl_explicit_universes =
+            (self.file_universe_scope_known && !explicit.is_empty()).then_some(explicit);
     }
 
     /// Install the file-scope `universe` names for the declaration about to be
@@ -414,10 +425,15 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Called from the file-driven entry point with
     /// `FileContext::current_universe_params`. Contexts built without a
-    /// `FileContext` leave it empty, which is exactly right: nothing could
-    /// have been merged into their declarations' lists.
+    /// `FileContext` leave it empty — and UNKNOWN: a context-free entry
+    /// cannot prove its declaration's params were never merged with
+    /// file-scope names (callers do pair `preprocess_decl_with_context` with
+    /// the context-free register entry), so only calling THIS setter arms the
+    /// explicitness classifier in
+    /// [`ElabCtx::set_decl_universe_params`].
     pub(crate) fn set_file_universe_params(&mut self, params: Vec<String>) {
         self.file_universe_params = params;
+        self.file_universe_scope_known = true;
     }
 
     /// The TOTAL role of a universe-level parameter NAME in this declaration

@@ -11182,30 +11182,25 @@ fn test_b125_bitvec_ofnat_wrong_value_rejected() {
 
 #[test]
 fn test_b125_bitvec_literal_const_indirection_gap() {
-    // HONEST GAP (loud, NOT silent-wrong): a `def`-const whose value is the
-    // OfNat-wrapped literal `@OfNat.ofNat (BitVec w) i (@instOfNatBitVec w i)`
-    // does NOT currently whnf-reduce when it is the deeply-nested major of the
-    // `Fin.rec` inside `BitVec.toNat` (i.e. `x.toNat = 5 := rfl` for
-    // `def x : BitVec 8 := 5`). The IDENTICAL inline term reduces
-    // (test_b125_bitvec_ofnat_computes b125_c5), and the `Fin` analogue
-    // `def xf : Fin 5 := 3; xf.val = 3 := rfl` reduces (B122) — the difference is
-    // a lazy-delta / recursor-major whnf limitation in the kernel reducer, not a
-    // registration defect. Directly-`BitVec.ofNat` consts DO reduce through
-    // `.toNat` (see below), isolating the gap to the extra OfNat-projection layer.
-    //
-    // This is the exact analogue of the USize sibling's documented honest gap
-    // (register_usize_of_nat: `(USize.ofNat 42).toNat = 42 := rfl` does not
-    // reduce). It is a LOUD completeness gap: the rfl is REJECTED, never a
-    // silently-accepted wrong value. This test pins the current behaviour so a
-    // future reducer improvement that closes it is caught and the story updated.
-    let gap = "def x : BitVec 8 := 5\ntheorem t : x.toNat = 5 := rfl";
-    assert!(
-        elab_file_prelude(gap).1.iter().any(|r| r.is_err()),
-        "const-indirection BitVec-literal .toNat rfl is a known LOUD whnf gap (rejected, not silent)",
+    // GAP CLOSED (2026-08-28). This test used to pin an HONEST LOUD gap: a
+    // `def`-const whose value is the OfNat-wrapped literal
+    // `@OfNat.ofNat (BitVec w) i (@instOfNatBitVec w i)` did not whnf-reduce
+    // as the deeply-nested major of the `Fin.rec` inside `BitVec.toNat`, and
+    // after e9a172f67 (the ofNat reducer firing on OfNat-wrapped operands)
+    // even the direct-`BitVec.ofNat` const wedged the same spine on a raw
+    // payload literal. Both routes now compute NATIVELY before any `Fin.rec`
+    // spine materializes: `reduce_bitvec_to_nat` structurally peels
+    // ofNat/ofNatLT/OfNat-instance operands, and the def-eq callsite gives
+    // the `toNat`/`toFin` conversions the same scoped operand pre-WHNF the
+    // closed-pipeline `ofNat` pass already had (delta_helpers.rs), so a
+    // computed BitVec operand arrives as its payload and leaves as the Nat
+    // literal it denotes. The wrong-value soundness tests directly above pin
+    // that this is still genuine `mod 2^w` computation, never identity.
+    let indirection = "def x : BitVec 8 := 5\ntheorem t : x.toNat = 5 := rfl";
+    assert_all_ok(
+        &elab_file_prelude(indirection).1,
+        "OfNat-instance const-indirection BitVec-literal reduces through .toNat",
     );
-    // But the direct-`BitVec.ofNat` const DOES reduce through `.toNat`, proving
-    // the value machinery is sound and the gap is purely the OfNat-projection
-    // layer under the const.
     let direct = "def bx : BitVec 8 := BitVec.ofNat 8 5\ntheorem t : bx.toNat = 5 := rfl";
     assert_all_ok(
         &elab_file_prelude(direct).1,

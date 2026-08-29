@@ -151,6 +151,17 @@ pub struct ElabCtx<'a> {
     /// is correct, because without one no `universe` command could have been
     /// merged in.
     file_universe_params: Vec<String>,
+    /// Whether [`ElabCtx::set_file_universe_params`] was called for this
+    /// declaration — i.e. whether `file_universe_params` is a real subtrahend
+    /// or just the constructor default. The two are DIFFERENT states: an
+    /// entry point without a `FileContext` cannot prove its declaration's
+    /// `universe_params` were never merged with file-scope names
+    /// (`preprocess_decl_with_context` folds them and callers may pair it
+    /// with the context-free register entry — the server's
+    /// `check_decl_validation` and `codata_cmd`'s generated declarations do),
+    /// so the explicitness classifier must refuse to classify rather than
+    /// mistake a file-scope `universe u` for a written `.{u}` list.
+    file_universe_scope_known: bool,
     /// The universe list the declaration WROTE (`def f.{u, v}`), or `None`
     /// when it wrote none.
     ///

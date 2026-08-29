@@ -195,6 +195,12 @@ pub(crate) mod ffi_extern;
 pub(crate) mod codata_cmd;
 pub(crate) mod codata_seed;
 pub(crate) mod codata_variant;
+pub(crate) mod codata_variant_coind;
+#[cfg(test)]
+mod codata_variant_coind_tests;
+pub(crate) mod codata_variant_companions;
+pub(crate) mod codata_variant_generate;
+pub(crate) mod codata_variant_plan;
 pub(crate) mod coinductive_surface;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod ffi_extern_ext;
@@ -1518,6 +1524,9 @@ mod codata_cmd_tests;
 
 #[cfg(test)]
 mod codata_variant_tests;
+
+#[cfg(test)]
+mod codata_variant_generate_tests;
 
 #[cfg(test)]
 mod nested_local_lift_tests;

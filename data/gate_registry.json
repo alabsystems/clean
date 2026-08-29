@@ -1853,6 +1853,23 @@
       "note": "Front-run since 2026-08-25 by the `fmt-changed` hook leg (scripts/check_fmt_changed.py), which checks the .rs files a push TOUCHES in 1.37 s in-hook instead of the whole workspace. This row stays: it is the only thing that sees a file the push did not touch. `fmt --all --check` measured 26.4 s warm here \u2014 the 555 s in data/suite_state is a full-sweep-under-load figure, not the gate's cost. It had gone RED three times, each found by a later sweep rather than by the author; the leg is the fix for that, and it was verified to refuse the exact commit (45b313095) that caused the most recent one."
     },
     {
+      "id": "gate::leancross",
+      "path": "",
+      "kind": "suite-row",
+      "claims": "soundness",
+      "wired_by": [
+        "scripts/verify_runner.py"
+      ],
+      "demonstrated": null,
+      "waiver": {
+        "owner": "lane-self-verification",
+        "expires": "2026-10-28",
+        "reason": "THE GATE IS A LIVE RED, SO A DEMONSTRATION ON THIS TREE WOULD PROVE NOTHING -- the same shape as axiom_audit_release_check's waiver: `--demonstrate` needs a GREEN baseline, and a red arm on an already-red tree is not evidence that the arm fired. ADDED 2026-08-28 for the fourth time the same reason has come up: NOTHING RAN IT. scripts/self_verify_crosscheck.sh is the referee-runnable form of SELF_VERIFICATION_CERTIFICATE.md section 4 and had NO runner and NO registry row; the certificate says 'keep re-running at each release checkpoint' and in practice a human had to remember. Last run 2026-08-11 (5,211 declarations, 5,871 coverage 100%, 3 axioms, ZERO skips, zero Lean errors). RE-RUN 2026-08-28 at 2d023a11d on pinned leanprover/lean4:v4.30.0-rc2: RED, rc=1, on invariant 3. SKIPPED (746). Seventeen days of silent non-greenness, which is the window this row closes. ROOT-CAUSED, not guessed: 712 of the 746 are cascade ('depends on skipped X'); computing which names are depended-on but never a left-hand side gives exactly 12 TRUE ROOTS, every one failing `literal Nat(Small(N)) exceeds ctor-normal-form cap 4096` -- 4294967295 (u32::MAX, ir_br_*), 2147483648 (ir_mt_neg_b0), 9223372036854775808 = 2^63 (ir_f64_sign_bit), 1114112 (Unicode max, ir_vc_c3), 55296 (0xD800, ir_vc_b0/ir_vc_m1), 4200 (ir_nat_*), Nat(Big) (ir_f64_junk_bound). NOT AN EXPORTER REGRESSION, established from history: MAX_NAT_LITERAL=4096 arrived WITH the exporter at 7e5006961 -- the same commit that established 100% coverage -- and printer.rs has not changed since; what moved is the spec, incl. c7587ef74 (2026-08-21) migrating is_valid_char at width 64, precisely the ir_vc_* root family. The surface outgrew the instrument. THE OBVIOUS FIX IS WRONG AND MUST NOT BE TAKEN QUIETLY: printer.rs emits over a MIRROR Nat (CleanVerify.Nat, a locally declared inductive) because that is 'the form Clean's kernel treats the literal as definitionally equal to'; emitting a bare numeral would silently switch to Lean's builtin Nat and break the fidelity contract that makes this cross-check worth anything, and 2^63 as a succ-tower is not representable at any cap. DISCHARGE THIS WAIVER by fixing the encoding (a logarithmic encoding over the mirror Nat, an OfNat instance for it, or an explicitly justified builtin-Nat correspondence -- each with an open question about whether downstream defeq forces normalisation), confirming the row GREEN, and only then recording a mutation-record: the cheapest arm is to mint an extra axiom into the export roots and require the 'exactly 3 foundational axioms' invariant to refuse it, which exercises the soundness half rather than the coverage half that is red today."
+      },
+      "implemented_by": "scripts/self_verify_crosscheck.sh",
+      "note": "The ONLY gate here in which a checker with a DISJOINT implementation judges Clean's spec -- every other row is Clean checking Clean, so no amount of in-tree gating substitutes for it. Asserts INVARIANTS, not counts (Lean accepts everything / exactly the 3 foundational axioms / zero skips / 100% coverage / flagship closures reach no axiom), so it stays meaningful as the spec grows instead of going stale the way a pinned total would. _extra_paths carries the harness AND all three lean_export sources, because the exporter decides what is emittable at all -- the printer's Nat cap is what turned this row red -- so an edit to either demotes a recorded green rather than leaving it reading fresh."
+    },
+    {
       "id": "gate::masquerade",
       "path": "",
       "kind": "suite-row",

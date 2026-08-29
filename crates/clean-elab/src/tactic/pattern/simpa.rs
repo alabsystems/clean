@@ -65,9 +65,7 @@ pub fn simpa_with_config(
                     }
                 }
             }
-            return Err(TacticError::NoProgress {
-                tactic: "simpa".into(),
-            });
+            return Err(TacticError::no_progress("simpa"));
         }
         // Try assumption
         return assumption(state);

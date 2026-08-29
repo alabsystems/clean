@@ -53,6 +53,8 @@ pub(crate) mod names {
     name!(pub(crate) BITVEC_TO_FIN = "BitVec.toFin");
     name!(pub(crate) BITVEC_OF_FIN = "BitVec.ofFin");
     name!(pub(crate) BITVEC_OF_NAT_LT = "BitVec.ofNatLT");
+    name!(pub(crate) INST_OF_NAT_BITVEC = "instOfNatBitVec");
+    name!(pub(crate) BITVEC = "BitVec");
     name!(pub(crate) FIN_MK = "Fin.mk");
 
     // BitVec arithmetic / logic / shift / comparison operations. These compute
@@ -234,8 +236,26 @@ pub(crate) fn reduce_bitvec_of_nat(args: &[&Expr]) -> Option<Expr> {
     if args.len() < 2 {
         return None;
     }
-    let width = get_nat_lit(args[0])?.to_u64()?;
-    let value = bignat_to_u128(get_nat_lit(args[1])?)?;
+    // BARE literals only — deliberately NOT `get_nat_lit`'s OfNat-wrapped
+    // read. The payload world (raw `Lit` operands, produced and consumed by
+    // the sibling native reducers) is closed under this reducer; an
+    // OfNat-WRAPPED operand is a structural-world term, and firing on it
+    // injects a raw payload into a δι spine mid-reduction, where `Fin.rec`
+    // needs a constructor and wedges (measured: b125's direct-const
+    // `def bx := BitVec.ofNat 8 5; bx.toNat = 5 := rfl`, red from e9a172f67
+    // — the commit that widened these reads — until this narrowing).
+    // Wrapped shapes are served at the CONSUMER boundary instead, where
+    // peeling is sound: `reduce_bitvec_to_nat`'s structural
+    // ofNat/ofNatLT/OfNat-instance peel reads them via [`get_nat_lit`].
+    // Multi-limb bare literals keep reducing (that read stays `BigNat`-wide).
+    let ExprKind::Lit(Literal::Nat(width_lit)) = args[0].kind() else {
+        return None;
+    };
+    let width = width_lit.to_u64()?;
+    let ExprKind::Lit(Literal::Nat(value_lit)) = args[1].kind() else {
+        return None;
+    };
+    let value = bignat_to_u128(value_lit)?;
     // BitVec.ofNat w i = i % 2^w. `value < 2^128` (read cap), so for w ≥ 128 no
     // truncation is needed; for w < 128 keep the low w bits (= i mod 2^w).
     let result = if width >= 128 {
@@ -274,13 +294,31 @@ pub(crate) fn reduce_bitvec_to_nat(args: &[&Expr]) -> Option<Expr> {
         return Some(arg.clone());
     }
     // Stuck `BitVec.ofNat w n` / `BitVec.ofNatLT w n pf`: compute `n mod 2^w`.
-    let ExprKind::Const(name, _) = arg.get_app_fn().kind() else {
+    // The instance spelling `@OfNat.ofNat (BitVec w) i (@instOfNatBitVec w i)`
+    // is the SAME value one wrapper out (`instOfNatBitVec` is defined as
+    // `OfNat.mk (BitVec.ofNat w i)`, `env/data_types_bitvec.rs`), and it is
+    // what the elaborator emits for a `(i : BitVec w)` literal — without this
+    // arm the δι fallback unfolds `toNat` to its `Fin.rec` spine FIRST, the
+    // inner `ofNat` then native-reduces to the raw payload literal mid-spine,
+    // and the recursor wedges on a payload where it needs a constructor
+    // (measured: b125_c5, red from e9a172f67 — the commit that made `ofNat`
+    // fire on OfNat-wrapped operands — until this arm). Same discipline as
+    // the Nat-level peel: read the INSTANCE's own argument, and require the
+    // `OfNat` index to agree so an ill-typed wrapper parks.
+    let peeled = peel_ofnat_bitvec(arg).unwrap_or(arg);
+    let ExprKind::Const(name, _) = peeled.get_app_fn().kind() else {
         return None;
     };
-    if *name != *names::BITVEC_OF_NAT && *name != *names::BITVEC_OF_NAT_LT {
+    // `instOfNatBitVec w i` (the peel's result) carries the same `[w, i]`
+    // argument layout as `BitVec.ofNat w i` — `instOfNatBitVec` is DEFINED as
+    // `OfNat.mk (BitVec.ofNat w i)` — so the three heads share one read.
+    if *name != *names::BITVEC_OF_NAT
+        && *name != *names::BITVEC_OF_NAT_LT
+        && *name != *names::INST_OF_NAT_BITVEC
+    {
         return None;
     }
-    let inner = arg.get_app_args();
+    let inner = peeled.get_app_args();
     let width = get_nat_lit(inner.first()?)?.to_u64()?;
     let value = bignat_to_u128(get_nat_lit(inner.get(1)?)?)?;
     let result = if width >= 128 {
@@ -289,6 +327,47 @@ pub(crate) fn reduce_bitvec_to_nat(args: &[&Expr]) -> Option<Expr> {
         value & ((1u128 << width) - 1)
     };
     Some(Expr::nat_lit_u128(result))
+}
+
+/// Peel `@OfNat.ofNat (BitVec w) i (@instOfNatBitVec w i)` to the
+/// `BitVec.ofNat w i` application the instance's stored field denotes —
+/// returned as the SYNTHESIZED view of the instance's own arguments, i.e. the
+/// peel yields the instance application `@instOfNatBitVec w i`'s payload
+/// shape by re-reading `(w, i)` from the instance and requiring the `OfNat`
+/// index to be the same literal (the exact discipline of
+/// [`peel_ofnat_nat_lit`]). Returns the INSTANCE application itself, whose
+/// argument list `[w, i]` matches `BitVec.ofNat`'s `[w, i]` — the caller
+/// reads `inner[0]`/`inner[1]` identically for both shapes. `None` for any
+/// other shape; parking is always sound.
+fn peel_ofnat_bitvec(e: &Expr) -> Option<&Expr> {
+    if !head_const_is(e, &names::OF_NAT_OF_NAT) {
+        return None;
+    }
+    let args = e.get_app_args();
+    // args = [carrier `BitVec w`, index i, instance `@instOfNatBitVec w i`]
+    if args.len() != 3 {
+        return None;
+    }
+    if !head_const_is(args[0], &names::BITVEC) {
+        return None;
+    }
+    let inst = args[2];
+    if !head_const_is(inst, &names::INST_OF_NAT_BITVEC) {
+        return None;
+    }
+    let inst_args = inst.get_app_args();
+    if inst_args.len() != 2 {
+        return None;
+    }
+    // The index and the instance's value argument must be the SAME literal
+    // (bare or Nat-OfNat-wrapped), so an internally inconsistent wrapper
+    // parks instead of reducing to either half.
+    let idx = get_nat_lit(args[1])?;
+    let inst_val = get_nat_lit(inst_args[1])?;
+    if idx != inst_val {
+        return None;
+    }
+    Some(inst)
 }
 
 /// Native reducer for `BitVec.toFin (x : BitVec w) : Fin (2^w)`.

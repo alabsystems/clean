@@ -222,12 +222,42 @@ fn test_grind_resource_limit_diagnostics_are_stable() {
 
     assert!(matches!(
         grind_no_progress(GRIND_MAX_DEPTH_EXHAUSTED),
-        TacticError::NoProgress { tactic } if tactic == "grind/max-depth"
+        TacticError::NoProgress { tactic, .. } if tactic == "grind/max-depth"
     ));
     assert!(matches!(
         grind_no_progress(GRIND_SPLIT_LIMIT_EXHAUSTED),
-        TacticError::NoProgress { tactic } if tactic == "grind/split-limit"
+        TacticError::NoProgress { tactic, .. } if tactic == "grind/split-limit"
     ));
+}
+
+/// The goal-free helper stays goal-free, and renders exactly the string it
+/// always did.
+///
+/// `grind_no_progress` is what the three SWALLOWED sites use —
+/// `try_propext_bridge`, `try_funext_propext_bridge` (both called as
+/// `let _ = …`) and the automation engine inside `try_tactic_preserving_state`.
+/// Their errors never reach a human, so formatting a goal there would be pure
+/// cost. The escaping four in `grind_core` use `grind_no_progress_at`, whose
+/// rendering `tests::grind_no_progress_goal` pins end to end.
+#[test]
+fn test_grind_swallowed_sites_carry_no_goal() {
+    for tactic in [
+        GRIND_NO_PROGRESS,
+        GRIND_MAX_DEPTH_EXHAUSTED,
+        GRIND_SPLIT_LIMIT_EXHAUSTED,
+        GRIND_FUNEXT_NO_PROGRESS,
+    ] {
+        let err = grind_no_progress(tactic);
+        assert!(
+            matches!(&err, TacticError::NoProgress { goal: None, .. }),
+            "{tactic}: the goal-free helper must not attach a goal, got {err:?}"
+        );
+        assert_eq!(
+            err.to_string(),
+            format!("{tactic}: no progress made"),
+            "{tactic}: the goal-free rendering must not gain a suffix"
+        );
+    }
 }
 
 #[test]

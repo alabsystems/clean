@@ -499,8 +499,6 @@ pub fn reduce_eq(state: &mut ProofState) -> TacticResult {
             state.close_goal(&goal, proof)?;
             Ok(())
         }
-        None => Err(TacticError::NoProgress {
-            tactic: "reduce_eq".into(),
-        }),
+        None => Err(TacticError::no_progress("reduce_eq")),
     }
 }

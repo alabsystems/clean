@@ -250,9 +250,7 @@ pub fn delta(state: &mut ProofState) -> TacticResult {
     }
 
     if target == original_target {
-        return Err(TacticError::NoProgress {
-            tactic: "delta".into(),
-        });
+        return Err(TacticError::no_progress("delta"));
     }
 
     // Part of #2477: use replace_target_def_eq instead of in-place mutation.
@@ -283,9 +281,7 @@ pub fn whnf(state: &mut ProofState) -> TacticResult {
     let target = state.metas.instantiate(&goal.target);
     let reduced = state.whnf(&goal, &target);
     if reduced == target {
-        return Err(TacticError::NoProgress {
-            tactic: "whnf".into(),
-        });
+        return Err(TacticError::no_progress("whnf"));
     }
     // WHNF is definitionally equal to the target by construction.
     state.replace_target_def_eq(reduced)
@@ -308,9 +304,7 @@ pub fn reduce(state: &mut ProofState) -> TacticResult {
     let target = state.metas.instantiate(&goal.target);
     let reduced = state.normalize(&goal, &target);
     if reduced == target {
-        return Err(TacticError::NoProgress {
-            tactic: "reduce".into(),
-        });
+        return Err(TacticError::no_progress("reduce"));
     }
     state.replace_target_def_eq(reduced)
 }

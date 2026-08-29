@@ -65,9 +65,7 @@ pub fn push_neg(state: &mut ProofState) -> TacticResult {
     let result = push_neg_expr_with_proof(state, &goal, &target)?;
 
     if result.expr == target {
-        return Err(TacticError::NoProgress {
-            tactic: "push_neg".into(),
-        });
+        return Err(TacticError::no_progress("push_neg"));
     }
 
     let eq_proof = result.proof.ok_or_else(|| {

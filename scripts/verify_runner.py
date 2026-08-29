@@ -753,6 +753,51 @@ WORKSPACE_GATES = [
             "--", "masquerade",
         ],
     },
+    # The FOREIGN-KERNEL cross-check, added 2026-08-28 for the fourth time the
+    # same reason has come up: NOTHING RAN IT. `scripts/self_verify_crosscheck.sh`
+    # is the referee-runnable form of SELF_VERIFICATION_CERTIFICATE.md section 4 --
+    # it exports the whole live `Specification` environment as one self-contained
+    # Lean 4 file and has an INDEPENDENT kernel with a disjoint implementation
+    # re-check every emitted declaration. It is the strongest evidence in the
+    # programme that Clean's kernel is not systematically wrong in its own favour,
+    # and it is the one thing here that no amount of in-tree gating can substitute
+    # for, because every other gate is Clean checking Clean.
+    #
+    # It had no runner and no registry row. The certificate says "keep re-running
+    # at each release checkpoint" and the roadmap repeats it; in practice a human
+    # had to remember. It was last run 2026-08-11 and re-run 2026-08-28 -- and it
+    # was RED, on the zero-skip invariant, with 746 declarations no longer being
+    # independently checked. Seventeen days of silent non-greenness is exactly the
+    # window a registry row closes.
+    #
+    # `gate-measure`, like gate::srcelab: it lints nothing. It builds lean_export
+    # in release, runs it (which builds the live spec, ~19 min), then runs the
+    # PINNED Lean toolchain over the emitted file. The 43,200 s floor is what it
+    # needs; the heavy_gate slot is taken by the caller, not here.
+    #
+    # It asserts INVARIANTS, not counts -- Lean accepts everything, exactly the 3
+    # foundational axioms, zero skips, 100% coverage, flagship closures reach no
+    # axiom -- so it stays meaningful as the spec grows instead of going stale the
+    # way a pinned total would.
+    {
+        "id": "gate::leancross",
+        "package": "__workspace__",
+        "kind": "gate-measure",
+        "argv": ["scripts/self_verify_crosscheck.sh"],
+        # The spec content lives under crates/ and is covered by the workspace
+        # dirs, but the DECIDING logic does not: the harness holds the invariant
+        # thresholds and the pinned Lean toolchain, and the exporter decides what
+        # is emittable at all -- the 4096 ctor-normal-form Nat cap in printer.rs is
+        # what turned this row red. Without these an edit to the harness or the
+        # printer would leave a recorded green reading fresh, which is the precise
+        # failure `_dir_content_digest` exists to prevent.
+        "_extra_paths": [
+            "scripts/self_verify_crosscheck.sh",
+            "crates/clean-verify/src/bin/lean_export/main.rs",
+            "crates/clean-verify/src/bin/lean_export/emit.rs",
+            "crates/clean-verify/src/bin/lean_export/printer.rs",
+        ],
+    },
 ]
 
 

@@ -373,6 +373,34 @@ impl<'env> TypeChecker<'env> {
             return reducer(&args_ref);
         }
 
+        // Scoped operand pre-WHNF for the BitVec CONVERSIONS `toNat`/`toFin`.
+        // Their value operand is typically a COMPUTED BitVec — a `def`-const,
+        // an OfNat-instance literal, a composed re-embed — which declines the
+        // reducer as-spelled, so the conversion δ-unfolds into its `Fin.rec`
+        // projection spine; the payload literal that `BitVec.ofNat`'s own
+        // scoped pass (directly above) then produces MID-SPINE wedges the
+        // recursor, because payloads are confined to def-eq and have no
+        // constructor view (measured: b125's direct-const
+        // `def bx : BitVec 8 := BitVec.ofNat 8 5; bx.toNat = 5 := rfl`, stuck
+        // at `Fin.rec … (BitVec.toFin 8 bx)`). Pre-WHNF-ing the operand lets
+        // the conversion complete NATIVELY — payload in, literal out — before
+        // any structural spine materializes. Same soundness argument as every
+        // scoped pass above: WHNF is the kernel's own sound reduction, and a
+        // declining reducer leaves the ORIGINAL term to δι exactly as before.
+        // (The arith/cmp no-pre-WHNF note below is about reducers FIRING on
+        // collapsed `UInt*.toBitVec` operand forms inside proof-term
+        // arithmetic; a conversion that fires yields the same literal the δι
+        // tower denotes, and one that declines changes nothing.)
+        if (*name == *names_bitvec::BITVEC_TO_NAT || *name == *names_bitvec::BITVEC_TO_FIN)
+            && !args.is_empty()
+        {
+            let last = args.len() - 1;
+            let v_whnf = self.whnf_impl(args[last]);
+            let mut args_ref: Vec<&Expr> = args.iter().copied().collect();
+            args_ref[last] = &v_whnf;
+            return reducer(&args_ref);
+        }
+
         // NOTE: the BitVec arith/logic/shift/cmp reducers deliberately do NOT
         // get an operand pre-WHNF pass here. Eagerly WHNF-ing their operands
         // forces the reducer to fire on `UInt*.toBitVec a` projection forms and

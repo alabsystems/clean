@@ -1836,12 +1836,12 @@ fn test_elab_coinductive_golden_kernel_types() {
         ("Bisim.F", "(Str -> Str -> Prop) -> Str -> Str -> Prop", &[E, E, E]),
         ("Bisim.coind",
          "(f : Str -> Str -> Prop) -> ((s : Str) -> (s1 : Str) -> f s s1 -> Bisim.F f s s1) \
-          -> (s : Str) -> (s1 : Str) -> f s s1 -> Bisim s s1",
+          -> ((s : Str) -> (s1 : Str) -> f s s1 -> Bisim s s1)",
          &[E, E, E, E, E]),
         ("Bisim.F_mono",
          "(f : Str -> Str -> Prop) -> (f1 : Str -> Str -> Prop) \
           -> ((s : Str) -> (s1 : Str) -> f s s1 -> f1 s s1) \
-          -> (s : Str) -> (s1 : Str) -> Bisim.F f s s1 -> Bisim.F f1 s s1",
+          -> ((s : Str) -> (s1 : Str) -> Bisim.F f s s1 -> Bisim.F f1 s s1)",
          &[E, E, E, E, E, E]),
         ("Bisim.unfold",
          "(s : Str) -> (s1 : Str) -> Bisim s s1 -> Bisim.F Bisim s s1",
@@ -1850,7 +1850,7 @@ fn test_elab_coinductive_golden_kernel_types() {
          "(s : Str) -> (s1 : Str) -> Bisim.F Bisim s s1 -> Bisim s s1",
          &[E, E, E]),
         ("Bisim.step",
-         "(s : Str) -> (s1 : Str) -> Eq {1} Nat (shd s) (shd s1) \
+         "(s : Str) -> (s1 : Str) -> shd s = shd s1 \
           -> Bisim (stl s) (stl s1) -> Bisim s s1",
          &[I, I, E, E]),
         // PACO/ACCUMULATION RUNG (2026-08-26): two NEW companions join the
@@ -1862,23 +1862,16 @@ fn test_elab_coinductive_golden_kernel_types() {
         ("Bisim.acc",
          "(f : Str -> Str -> Prop) \
           -> ((s : Str) -> (s1 : Str) -> f s s1 \
-          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => Or (f s2 s3) (Bisim s2 s3)) s s1) \
-          -> (s : Str) -> (s1 : Str) -> f s s1 -> Bisim s s1",
+          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => f s2 s3 ∨ Bisim s2 s3) s s1) \
+          -> ((s : Str) -> (s1 : Str) -> f s s1 -> Bisim s s1)",
          &[E, E, E, E, E]),
         ("Bisim.coind_upto",
          "(f : (Str -> Str -> Prop) -> Str -> Str -> Prop) \
-          -> ((f1 : Str -> Str -> Prop) -> (f2 : Str -> Str -> Prop) \
-          -> ((s : Str) -> (s1 : Str) -> f1 s s1 -> f2 s s1) \
-          -> (s : Str) -> (s1 : Str) -> f f1 s s1 -> f f2 s s1) \
-          -> ((f1 : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) \
-          -> f (Bisim.F f1) s s1 -> Bisim.F (f f1) s s1) \
-          -> ((f1 : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) \
-          -> f (f f1) s s1 -> f f1 s s1) \
-          -> ((f1 : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) \
-          -> f1 s s1 -> f f1 s s1) \
-          -> (f1 : Str -> Str -> Prop) \
-          -> ((s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim.F (f f1) s s1) \
-          -> (s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim s s1",
+          -> ((f1 : Str -> Str -> Prop) -> (f2 : Str -> Str -> Prop) -> ((s : Str) -> (s1 : Str) -> f1 s s1 -> f2 s s1) -> ((s : Str) -> (s1 : Str) -> f f1 s s1 -> f f2 s s1)) \
+          -> ((f1 : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) -> f (Bisim.F f1) s s1 -> Bisim.F (f f1) s s1) \
+          -> ((f1 : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) -> f (f f1) s s1 -> f f1 s s1) \
+          -> ((f1 : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) -> f1 s s1 -> f f1 s s1) \
+          -> ((f1 : Str -> Str -> Prop) -> ((s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim.F (f f1) s s1) -> ((s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim s s1))",
          &[E, E, E, E, E, E, E, E, E, E]),
         // PACO PARAMETERIZED-TOWER RUNG (measured 2026-08-26): eight NEW
         // companions join the golden — the pinned family grows 9 -> 17.
@@ -1896,22 +1889,22 @@ fn test_elab_coinductive_golden_kernel_types() {
         ("Bisim.paco_coind",
          "(f : Str -> Str -> Prop) -> (f1 : Str -> Str -> Prop) \
           -> ((s : Str) -> (s1 : Str) -> f1 s s1 \
-          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => Or (f1 s2 s3) (f s2 s3)) s s1) \
-          -> (s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim.paco f s s1",
+          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => f1 s2 s3 ∨ f s2 s3) s s1) \
+          -> ((s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim.paco f s s1)",
          &[E, E, E, E, E, E]),
         ("Bisim.paco_unfold",
          "(f : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) -> Bisim.paco f s s1 \
-          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => Or (Bisim.paco f s2 s3) (f s2 s3)) s s1",
+          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => Bisim.paco f s2 s3 ∨ f s2 s3) s s1",
          &[E, E, E, E]),
         ("Bisim.paco_fold",
          "(f : Str -> Str -> Prop) -> (s : Str) -> (s1 : Str) \
-          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => Or (Bisim.paco f s2 s3) (f s2 s3)) s s1 \
+          -> Bisim.F (fun (s2 : Str) => fun (s3 : Str) => Bisim.paco f s2 s3 ∨ f s2 s3) s s1 \
           -> Bisim.paco f s s1",
          &[E, E, E, E]),
         ("Bisim.paco_mon",
          "(f : Str -> Str -> Prop) -> (f1 : Str -> Str -> Prop) \
           -> ((s : Str) -> (s1 : Str) -> f s s1 -> f1 s s1) \
-          -> (s : Str) -> (s1 : Str) -> Bisim.paco f s s1 -> Bisim.paco f1 s s1",
+          -> ((s : Str) -> (s1 : Str) -> Bisim.paco f s s1 -> Bisim.paco f1 s s1)",
          &[E, E, E, E, E, E]),
         ("Bisim.paco_bot",
          "(s : Str) -> (s1 : Str) \
@@ -1924,8 +1917,8 @@ fn test_elab_coinductive_golden_kernel_types() {
         ("Bisim.paco_acc",
          "(f : Str -> Str -> Prop) -> (f1 : Str -> Str -> Prop) \
           -> ((s : Str) -> (s1 : Str) -> f1 s s1 \
-          -> Bisim.paco (fun (s2 : Str) => fun (s3 : Str) => Or (f s2 s3) (f1 s2 s3)) s s1) \
-          -> (s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim.paco f s s1",
+          -> Bisim.paco (fun (s2 : Str) => fun (s3 : Str) => f s2 s3 ∨ f1 s2 s3) s s1) \
+          -> ((s : Str) -> (s1 : Str) -> f1 s s1 -> Bisim.paco f s s1)",
          &[E, E, E, E, E, E]),
     ];
 
@@ -2869,8 +2862,11 @@ fn test_elab_coinductive_equation_orientation_pin() {
         .expect("InfDesc.cases must be registered")
         .type_
         .to_string();
+    // `Display for Expr` renders `Eq` infix since 6d1663115: the LEFT
+    // orientation now reads `Nat.succ n1 = n` (target on the left), not the
+    // old prefix `Eq {1} Nat (Nat.succ …)` spelling.
     assert!(
-        cases_ty.contains("Eq {1} Nat (Nat.succ"),
+        cases_ty.contains("Nat.succ n1 = n"),
         "the arm equation must spell the written target on the LEFT: {cases_ty}"
     );
 }
@@ -3401,7 +3397,6 @@ fn test_elab_coinductive_decl_param_flagship_congr() {
     use BinderInfo::{Default as E, Implicit as I};
     // The head probe `x 0` elaborates its literal through `OfNat`; the
     // printer spells that out. One binding keeps the pinned lines readable.
-    let zero = "(OfNat.ofNat {0} Nat Nat(Small(0)) (instOfNatNat Nat(Small(0))))";
     #[rustfmt::skip]
     let expected: Vec<(&str, String, Vec<BinderInfo>)> = vec![
         ("Congr", "(Nat -> Nat) -> CN -> CN -> Prop".to_string(), vec![E, E, E]),
@@ -3411,25 +3406,21 @@ fn test_elab_coinductive_decl_param_flagship_congr() {
         ("Congr.coind",
          "(f : Nat -> Nat) -> (f1 : CN -> CN -> Prop) \
           -> ((c : CN) -> (c1 : CN) -> f1 c c1 -> Congr.F f f1 c c1) \
-          -> (c : CN) -> (c1 : CN) -> f1 c c1 -> Congr f c c1".to_string(),
+          -> ((c : CN) -> (c1 : CN) -> f1 c c1 -> Congr f c c1)".to_string(),
          vec![E, E, E, E, E, E]),
         ("Congr.unfold",
          "(f : Nat -> Nat) -> (c : CN) -> (c1 : CN) -> Congr f c c1 \
           -> Congr.F f (Congr f) c c1".to_string(),
          vec![E, E, E, E]),
         ("Congr.step",
-         format!(
-             "(f : Nat -> Nat) -> (c : CN) -> (c1 : CN) \
-              -> Eq {{1}} Nat (f (c {zero})) (f (c1 {zero})) \
-              -> Congr f (pred c) (pred c1) -> Congr f c c1"
-         ),
+         "(f : Nat -> Nat) -> (c : CN) -> (c1 : CN) \
+          -> f (c 0) = f (c1 0) \
+          -> Congr f (pred c) (pred c1) -> Congr f c c1".to_string(),
          vec![E, I, I, E, E]),
         ("Congr.cases",
-         format!(
-             "(f : Nat -> Nat) -> (c : CN) -> (c1 : CN) -> Congr f c c1 \
-              -> (p : Prop) -> (Eq {{1}} Nat (f (c {zero})) (f (c1 {zero})) \
-              -> Congr f (pred c) (pred c1) -> p) -> p"
-         ),
+         "(f : Nat -> Nat) -> (c : CN) -> (c1 : CN) -> Congr f c c1 \
+          -> ((p : Prop) -> (f (c 0) = f (c1 0) \
+          -> Congr f (pred c) (pred c1) -> p) -> p)".to_string(),
          vec![I, I, I, E, E, E]),
     ];
     for (name, want_ty, want_spine) in &expected {

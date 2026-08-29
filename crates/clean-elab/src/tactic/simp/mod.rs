@@ -79,6 +79,7 @@ use super::{
 
 use self::expr::{extract_eq_parts, simp_expr_budgeted, try_apply_simp_lemma_with_proof};
 use self::match_target::MatchTarget;
+use crate::tactic::display::no_progress_with_goal;
 
 /// Simplification tactic that rewrites the goal using a set of lemmas.
 ///
@@ -353,9 +354,7 @@ fn simp_impl(
         if !config.only_simplify && try_simp_closers(state) {
             return Ok(());
         }
-        Err(TacticError::NoProgress {
-            tactic: "simp".into(),
-        })
+        Err(no_progress_with_goal(state, "simp"))
     }
 }
 
@@ -421,9 +420,7 @@ fn close_refl_reducible(state: &mut ProofState) -> TacticResult {
             if state.is_def_eq_reducible(&goal, &lhs, &rhs) {
                 rfl(state)
             } else {
-                Err(TacticError::NoProgress {
-                    tactic: "simp".into(),
-                })
+                Err(TacticError::no_progress("simp"))
             }
         }
         Err(_) => rfl(state),
@@ -440,9 +437,7 @@ fn close_true_goal(state: &mut ProofState) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = state.whnf(&goal, &goal.target);
     if !is_true_const(&target) {
-        return Err(TacticError::NoProgress {
-            tactic: "simp".into(),
-        });
+        return Err(TacticError::no_progress("simp"));
     }
     let proof = Expr::const_(Name::from_string("True.intro"), vec![]);
     state.close_goal(&goal, proof)
@@ -467,17 +462,13 @@ fn close_constructor_diseq_implication(state: &mut ProofState) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = state.whnf(&goal, &goal.target);
     let ExprKind::Pi(_bi, domain, codomain) = target.kind() else {
-        return Err(TacticError::NoProgress {
-            tactic: "simp".into(),
-        });
+        return Err(TacticError::no_progress("simp"));
     };
 
     let false_expr = Expr::const_(Name::from_string("False"), vec![]);
     let codomain_whnf = state.whnf(&goal, codomain);
     if !state.is_def_eq(&goal, &codomain_whnf, &false_expr) {
-        return Err(TacticError::NoProgress {
-            tactic: "simp".into(),
-        });
+        return Err(TacticError::no_progress("simp"));
     }
 
     let (eq_type, lhs, rhs, eq_levels) = match_equality(domain)?;
@@ -508,9 +499,7 @@ fn close_constructor_diseq_implication(state: &mut ProofState) -> TacticResult {
         &rhs_norm,
         &eq_level,
     ) else {
-        return Err(TacticError::NoProgress {
-            tactic: "simp".into(),
-        });
+        return Err(TacticError::no_progress("simp"));
     };
 
     state.close_goal(&goal, proof)
@@ -721,9 +710,7 @@ pub(super) fn simp_at_with_lemmas(
     let new_ty = simp_result.expr;
 
     if new_ty == old_ty {
-        return Err(TacticError::NoProgress {
-            tactic: format!("simp at {hyp_name}"),
-        });
+        return Err(no_progress_with_goal(state, format!("simp at {hyp_name}")));
     }
 
     // Create a fresh fvar for the simplified hypothesis

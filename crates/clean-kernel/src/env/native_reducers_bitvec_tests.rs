@@ -118,19 +118,23 @@ fn nat_result_u128(result: Option<Expr>) -> u128 {
 }
 
 #[test]
-fn test_bitvec_of_nat_peels_ofnat_wrapped_value() {
-    // The island parser spells a `Nat` numeral as
-    // `@OfNat.ofNat Nat n (instOfNatNat n)`. The reducer must read it identically
-    // to a bare literal (a targeted structural peel — pure evaluation, since
-    // `instOfNatNat n = ⟨n⟩`), so a wrapped operand no longer PARKS.
+fn test_bitvec_of_nat_parks_on_ofnat_wrapped_value() {
+    // REVERSED PIN (2026-08-28): the wrapped-operand read this test used to
+    // assert (e9a172f67) injected raw payload literals into δι spines
+    // mid-reduction — `Fin.rec` needs a constructor and wedged (b125's
+    // direct-const case). An OfNat-WRAPPED operand now PARKS here and is
+    // served at the consumer boundary instead
+    // (`reduce_bitvec_to_nat`'s structural peel); the δι tower handles the
+    // rest soundly, exactly as before the widening.
     let wrapped = Environment::ofnat_nat_lit(42);
-    assert_nat_result(reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &wrapped]), 42);
-    // Wrapping wraps around too: OfNat 259 at width 8 → 259 % 256 = 3.
-    let wrapped259 = Environment::ofnat_nat_lit(259);
-    assert_nat_result(reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &wrapped259]), 3);
-    // An OfNat-wrapped WIDTH is also read.
+    assert!(reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &wrapped]).is_none());
     let w = Environment::ofnat_nat_lit(8);
-    assert_nat_result(reduce_bitvec_of_nat(&[&w, &Expr::nat_lit(259)]), 3);
+    assert!(reduce_bitvec_of_nat(&[&w, &Expr::nat_lit(259)]).is_none());
+    // Bare literals keep firing — the payload world is unchanged.
+    assert_nat_result(
+        reduce_bitvec_of_nat(&[&Expr::nat_lit(8), &Expr::nat_lit(259)]),
+        3,
+    );
 }
 
 #[test]
@@ -574,4 +578,50 @@ fn test_reduce_native_fires_for_uint32_of_bitvec() {
     );
     let result = tc.reduce_native_for_test(&expr);
     assert_nat_result(result, 1000000);
+}
+
+// --- BitVec.toNat OfNat-instance peel (b125_c5 shape) ---
+
+/// Build `@OfNat.ofNat (BitVec w) i (@instOfNatBitVec w i')` — the elaborated
+/// spelling of a `(i : BitVec w)` literal (consistent when `i == i'`).
+fn ofnat_bitvec(w: u64, idx: u64, inst_val: u64) -> Expr {
+    Expr::apps(
+        Expr::const_(Name::from_string("OfNat.ofNat"), vec![]),
+        [
+            Expr::app(
+                Expr::const_(Name::from_string("BitVec"), vec![]),
+                Expr::nat_lit(w),
+            ),
+            Expr::nat_lit(idx),
+            Expr::apps(
+                Expr::const_(Name::from_string("instOfNatBitVec"), vec![]),
+                [Expr::nat_lit(w), Expr::nat_lit(inst_val)],
+            ),
+        ],
+    )
+}
+
+#[test]
+fn test_bitvec_to_nat_peels_ofnat_instance_wrapper() {
+    // `BitVec.toNat 8 (@OfNat.ofNat (BitVec 8) 5 (@instOfNatBitVec 8 5))` = 5.
+    // Without the peel the δι fallback unfolds `toNat` to its `Fin.rec` spine
+    // first, the inner `ofNat` native-reduces to the raw payload mid-spine,
+    // and the recursor wedges (b125_c5, red from e9a172f67).
+    assert_nat_result(
+        reduce_bitvec_to_nat(&[&Expr::nat_lit(8), &ofnat_bitvec(8, 5, 5)]),
+        5,
+    );
+    // The wrap case: width 2, value 5 → 5 % 4 = 1 — value-distinguishing, so
+    // the peel proves genuine `mod`, not identity on the index.
+    assert_nat_result(
+        reduce_bitvec_to_nat(&[&Expr::nat_lit(2), &ofnat_bitvec(2, 5, 5)]),
+        1,
+    );
+}
+
+#[test]
+fn test_bitvec_to_nat_refuses_inconsistent_ofnat_instance() {
+    // Index and instance value disagree: an ill-typed wrapper parks — the
+    // reducer must never pick either half.
+    assert!(reduce_bitvec_to_nat(&[&Expr::nat_lit(8), &ofnat_bitvec(8, 5, 6)]).is_none());
 }

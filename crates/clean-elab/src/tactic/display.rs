@@ -389,9 +389,6 @@ pub(crate) fn format_local_context(
 /// REQUIRES: `goal` is a valid Goal from a ProofState
 /// ENSURES: returned string always contains the `⊢` turnstile line
 #[must_use]
-// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
-// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_goal(goal: &Goal, env: &Environment) -> String {
     let config = ExprFormatter::default();
     format_goal_with_config(goal, env, &config)
@@ -399,9 +396,6 @@ pub(crate) fn format_goal(goal: &Goal, env: &Environment) -> String {
 
 /// Format a goal with explicit formatter configuration.
 #[must_use]
-// Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
-// production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_goal_with_config(
     goal: &Goal,
     env: &Environment,
@@ -425,6 +419,63 @@ pub(crate) fn format_goal_with_config(
     write!(buf, "\u{22a2} {target_str}").expect("infallible: write to String");
 
     buf
+}
+
+/// Render the goal a tactic is about to give up on, for an error message.
+///
+/// Returns `None` when there is no current goal — a caller with nothing to show
+/// must emit the bare message rather than an empty goal block, so that
+/// `TacticError::no_progress` stays the honest choice at those sites.
+///
+/// Metavariables are instantiated first: a `no progress` message whose target
+/// still reads `?m.7` names the metavariable rather than the goal, which is the
+/// failure mode this whole path exists to remove.
+///
+/// The instantiated context is BUILT, not written into a clone. A `decl.ty = …`
+/// here would be a local-declaration rewrite, and `bypass_ratchet`'s
+/// `local_decl_rewrite_source_site_ratchet` is right to refuse one even on a
+/// throwaway copy — the carve-out list is for sites that genuinely need to
+/// mutate, and rendering is not one of them.
+#[must_use]
+pub(crate) fn format_current_goal(state: &ProofState) -> Option<String> {
+    let goal = state.current_goal()?;
+    let instantiated = Goal {
+        meta_id: goal.meta_id,
+        target: state.metas.instantiate(&goal.target),
+        local_ctx: goal
+            .local_ctx
+            .iter()
+            .map(|decl| LocalDecl {
+                fvar: decl.fvar,
+                name: decl.name.clone(),
+                ty: state.metas.instantiate(&decl.ty),
+                value: decl.value.as_ref().map(|v| state.metas.instantiate(v)),
+            })
+            .collect(),
+        tag: goal.tag.clone(),
+    };
+    Some(format_goal(&instantiated, state.env()))
+}
+
+/// Build a `NoProgress` error that carries the goal the tactic gave up on.
+///
+/// Use this at any site whose error can reach a human. Sites whose error is
+/// swallowed as control flow — every closer wrapped in
+/// `try_tactic_preserving_state`, for instance — must keep using
+/// `TacticError::no_progress`, which renders exactly the message it always did
+/// and pays no formatting cost.
+///
+/// Degrades to the bare message when there is no current goal, so this is
+/// always safe to substitute.
+#[must_use]
+pub(crate) fn no_progress_with_goal(
+    state: &ProofState,
+    tactic: impl Into<String>,
+) -> crate::tactic::TacticError {
+    match format_current_goal(state) {
+        Some(goal) => crate::tactic::TacticError::no_progress_on(tactic, goal),
+        None => crate::tactic::TacticError::no_progress(tactic),
+    }
 }
 
 // =============================================================================

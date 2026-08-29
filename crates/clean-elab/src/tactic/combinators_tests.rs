@@ -65,9 +65,7 @@ fn succeed_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
 /// A tactic that always fails.
 fn fail_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
     let _ = ctx;
-    Err(TacticError::NoProgress {
-        tactic: "fail".into(),
-    })
+    Err(TacticError::no_progress("fail"))
 }
 
 /// A tactic that closes the current goal by assigning it a dummy proof.

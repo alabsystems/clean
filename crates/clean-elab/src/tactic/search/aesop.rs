@@ -255,9 +255,7 @@ pub(super) fn aesop_try_close(state: &mut ProofState) -> TacticResult {
         if trivial(s).is_ok() && s.goals().is_empty() {
             Ok(())
         } else {
-            Err(TacticError::NoProgress {
-                tactic: "trivial".into(),
-            })
+            Err(TacticError::no_progress("trivial"))
         }
     }) {
         return Ok(());

@@ -256,9 +256,7 @@ pub fn dec_trivial(state: &mut ProofState) -> TacticResult {
         return Ok(());
     }
 
-    Err(TacticError::NoProgress {
-        tactic: "dec_trivial".into(),
-    })
+    Err(TacticError::no_progress("dec_trivial"))
 }
 
 // ============================================================================
@@ -417,9 +415,7 @@ pub fn rfl_closure(state: &mut ProofState) -> TacticResult {
                 }
             }
         }
-        Err(TacticError::NoProgress {
-            tactic: "rfl_closure/Iff".into(),
-        })
+        Err(TacticError::no_progress("rfl_closure/Iff"))
     }) {
         return Ok(());
     }
@@ -441,16 +437,12 @@ pub fn rfl_closure(state: &mut ProofState) -> TacticResult {
                 }
             }
         }
-        Err(TacticError::NoProgress {
-            tactic: "rfl_closure/HEq".into(),
-        })
+        Err(TacticError::no_progress("rfl_closure/HEq"))
     }) {
         return Ok(());
     }
 
-    Err(TacticError::NoProgress {
-        tactic: "rfl_closure".into(),
-    })
+    Err(TacticError::no_progress("rfl_closure"))
 }
 
 /// Normalize the goal by applying beta/eta reduction.
@@ -471,9 +463,7 @@ pub fn norm_beta(state: &mut ProofState) -> TacticResult {
     let normalized = state.whnf(&goal, target);
 
     if normalized == *target {
-        return Err(TacticError::NoProgress {
-            tactic: "norm_beta".into(),
-        });
+        return Err(TacticError::no_progress("norm_beta"));
     }
 
     // Part of #2477: use replace_target_def_eq instead of in-place mutation.

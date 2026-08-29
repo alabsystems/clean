@@ -2,19 +2,26 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Tests for the VARIANT `codata` body — brick VC-1 of
-//! `designs/2026-08-28-variant-codata-surface.md`.
+//! Tests for the VARIANT `codata` body — bricks VC-1 (parse + refuse) and
+//! VC-2 (the plan) of `designs/2026-08-28-variant-codata-surface.md`.
+//! Generation is `codata_variant_generate_tests`.
 //!
-//! VC-1 generates nothing, so every test here is a REFUSAL test plus the
-//! two invariants that make the refusal worth having: the body parses as a
-//! variant (so the diagnostic is about variants, not about "0 fields"), and
-//! nothing whatsoever reaches the environment — not the family, not even
-//! the lazy `Codata.*` seed.
+//! Two halves. The refusal half: every envelope violation reaches its own
+//! diagnostic, the body parses as a variant (so the diagnostic is about
+//! variants, not about "0 fields"), and a refused declaration leaves the
+//! environment byte-identical — not the family, not even the lazy
+//! `Codata.*` seed. The plan half: `validate_variant` resolves the whole
+//! lowering PURELY, and its output is golden-tested on the ITree shape and
+//! on a mixed shape whose payload projections are not the identity.
 
-use crate::codata_variant::{validate_variant, CtorArg};
+use crate::codata_variant::validate_variant;
+use crate::codata_variant_plan::{ArgPlan, VariantShape};
 use crate::elaborate_decl_and_register;
 use clean_kernel::Environment;
-use clean_parser::{parse_file, CodataBody, DeclModifiers, SurfaceDecl};
+use clean_parser::{
+    parse_file, CodataBody, DeclModifiers, LevelExpr, Projection, SurfaceDecl, SurfaceExpr,
+    UniverseExpr,
+};
 
 const ITREE_SRC: &str = r"
 codata ITr (E : Type) (R : Type) (Ans : E → Type) where
@@ -154,9 +161,10 @@ fn test_field_after_clauses_is_absorbed_but_still_fails_closed() {
             refusals += 1;
             let text = format!("{e:?}");
             assert!(
-                !text.contains("lowering is not implemented yet"),
-                "a mangled clause must not be reported as the terminal \
-                 not-yet-implemented refusal; got: {text}"
+                !text.contains("must return `T` applied to exactly its declared")
+                    || text.contains("`Tau`"),
+                "the mangled clause must be refused by NAME, not anonymously; \
+                 got: {text}"
             );
         }
     }
@@ -164,15 +172,20 @@ fn test_field_after_clauses_is_absorbed_but_still_fails_closed() {
         refusals > 0,
         "a field after `|` clauses must be refused somewhere, never accepted"
     );
+    assert!(
+        env.get_const(&clean_kernel::Name::from_string("T"))
+            .is_none(),
+        "no carrier may be registered for a mangled variant body"
+    );
 }
 
 // ────────────────────── fail-closed registration ──────────────────────
 
-/// The load-bearing VC-1 invariant: an in-envelope variant codata is
-/// refused by name and the environment is byte-identical afterwards — no
-/// family, and not even the lazy `Codata.*` seed.
+/// The load-bearing fail-closed invariant: a variant codata the envelope
+/// REFUSES leaves the environment byte-identical — no family, and not even
+/// the lazy `Codata.*` seed.
 #[test]
-fn test_in_envelope_variant_registers_nothing() {
+fn test_refused_variant_registers_nothing() {
     let mut env = Environment::with_prelude();
     // MEASURED: `elaborate_decl_and_register` runs a per-declaration
     // prologue (`env.init_pprod()` plus the B101 `instH*` bridge seeding,
@@ -183,18 +196,20 @@ fn test_in_envelope_variant_registers_nothing() {
     let warmup = parse_file("def variantWarmup : Nat := Nat.zero").expect("should parse");
     elaborate_decl_and_register(&mut env, &warmup[0]).expect("warmup def must elaborate");
     let before = env.num_constants();
-    let decls = parse_file(ITREE_SRC).expect("should parse");
+    // Nested occurrence: in the envelope's own vocabulary, `List ITr` is
+    // neither `ITr` at its parameters nor `D → ITr`.
+    let src = r"
+codata ITr (E : Type) (R : Type) (Ans : E → Type) where
+  | Tau : ITr E R Ans → ITr E R Ans
+  | Nest : List (ITr E R Ans) → ITr E R Ans
+";
+    let decls = parse_file(src).expect("should parse");
     let err = elaborate_decl_and_register(&mut env, &decls[0])
-        .expect_err("VC-1 must refuse an in-envelope variant codata");
+        .expect_err("a nested occurrence must be refused");
     let text = format!("{err:?}");
     assert!(
-        text.contains("lowering is not implemented yet"),
-        "an in-envelope declaration must get the TERMINAL refusal, not an \
-         envelope refusal; got: {text}"
-    );
-    assert!(
-        text.contains("2026-08-28-variant-codata-surface.md"),
-        "the refusal must name the design doc; got: {text}"
+        text.contains("occurs neither as `ITr` at its own parameters"),
+        "the refusal must name the envelope violation; got: {text}"
     );
     assert_eq!(
         env.num_constants(),
@@ -279,6 +294,14 @@ fn test_variant_envelope_refusals() {
             "codata T (A : Type) where\n  | Vary : T Nat → T A\n",
             "occurs neither as `T` at its own parameters",
         ),
+        (
+            "codata T (A : Type) where\n  | Shadow : (A : Nat) → T A → T A\n",
+            "SHADOWS the parameter",
+        ),
+        (
+            "codata T where\n  | Twice : (n : Nat) → (n : Bool) → T → T\n",
+            "twice",
+        ),
     ];
     let mut env = Environment::with_prelude();
     for (src, want) in cases {
@@ -288,9 +311,14 @@ fn test_variant_envelope_refusals() {
             "source:\n{src}\nexpected diagnostic containing {want:?}, got:\n{text}"
         );
         assert!(
-            !text.contains("lowering is not implemented yet"),
-            "source:\n{src}\nan envelope violation must not be reported as the \
-             not-yet-implemented terminal refusal; got:\n{text}"
+            text.contains("variant codata"),
+            "source:\n{src}\nthe refusal must come from the VARIANT lane and say \
+             so, never from the record lane's field validator; got:\n{text}"
+        );
+        assert!(
+            env.get_const(&clean_kernel::Name::from_string("T"))
+                .is_none(),
+            "source:\n{src}\na refused variant codata must not register a carrier"
         );
     }
 }
@@ -314,22 +342,57 @@ end
         "mutual variant codata must be refused by name; got: {text}"
     );
     assert!(
-        !text.contains("lowering is not implemented yet"),
-        "the mutual path must report the mutual refusal, not the terminal one; \
-         got: {text}"
+        env.get_const(&clean_kernel::Name::from_string("A"))
+            .is_none()
+            && env
+                .get_const(&clean_kernel::Name::from_string("B"))
+                .is_none(),
+        "a refused mutual block must register neither member"
     );
 }
 
-// ─────────────────────── classification (the plan) ───────────────────────
+// ─────────────────────────── VC-2: the plan ───────────────────────────
 
-/// The classification VC-2 will lower from: `Ret`'s argument is payload,
-/// `Tau`'s is a bare child, and `Vis` is a payload plus a child FAMILY
-/// whose domain is `Ans e`. Getting `Vis` wrong is the silent-miscompile
-/// this whole lane exists to prevent, so it is pinned here, one brick
-/// before anything can be generated from it.
-#[test]
-fn test_itree_classification() {
-    let decls = parse_file(ITREE_SRC).expect("should parse");
+/// A compact textual form of a plan expression, for golden assertions.
+/// Covers exactly the node kinds the plan can contain; anything else
+/// renders as `<?>` so a surprise shows up as a diff rather than passing
+/// silently.
+fn render(e: &SurfaceExpr) -> String {
+    match e {
+        SurfaceExpr::Ident(_, id) => id.clone(),
+        SurfaceExpr::Universe(_, UniverseExpr::Type) => "Type".to_string(),
+        SurfaceExpr::Paren(_, inner) => render(inner),
+        SurfaceExpr::Explicit(_, inner) => format!("@{}", render(inner)),
+        SurfaceExpr::App(_, h, args) => {
+            let rendered: Vec<String> = args.iter().map(|a| render(&a.expr)).collect();
+            format!("({} {})", render(h), rendered.join(" "))
+        }
+        SurfaceExpr::Arrow(_, a, b) => format!("({} -> {})", render(a), render(b)),
+        SurfaceExpr::Pi(_, bs, body) => {
+            let names: Vec<String> = bs.iter().map(|b| b.name.clone()).collect();
+            format!("(forall {}, {})", names.join(" "), render(body))
+        }
+        SurfaceExpr::Lambda(_, bs, body) => {
+            let names: Vec<String> = bs.iter().map(|b| b.name.clone()).collect();
+            format!("(fun {} => {})", names.join(" "), render(body))
+        }
+        SurfaceExpr::Proj(_, inner, Projection::Index(i)) => format!("{}.{i}", render(inner)),
+        SurfaceExpr::UniverseInst(_, inner, ls) => {
+            let levels: Vec<String> = ls
+                .iter()
+                .map(|l| match l {
+                    LevelExpr::Lit(n) => n.to_string(),
+                    other => format!("{other:?}"),
+                })
+                .collect();
+            format!("{}.{{{}}}", render(inner), levels.join(" "))
+        }
+        _ => "<?>".to_string(),
+    }
+}
+
+/// Validate the single `codata` declaration in `src`.
+fn plan_of(decls: &[SurfaceDecl]) -> VariantShape<'_> {
     let SurfaceDecl::Codata {
         name,
         universe_params,
@@ -345,7 +408,7 @@ fn test_itree_classification() {
     let CodataBody::Variant(ctors) = body else {
         panic!("expected a variant body");
     };
-    let shape = validate_variant(
+    validate_variant(
         name,
         universe_params,
         binders,
@@ -354,38 +417,213 @@ fn test_itree_classification() {
         deriving,
         &DeclModifiers::default(),
     )
-    .expect("the ITree shape is inside the VC1 envelope");
+    .expect("the shape is inside the VC1 envelope")
+}
+
+/// The ITree plan, resolved: `Ret` is one payload and no child, `Tau` is
+/// one bare child, `Vis` is a payload plus a child FAMILY.
+#[test]
+fn test_itree_plan_is_fully_resolved() {
+    let decls = parse_file(ITREE_SRC).expect("should parse");
+    let shape = plan_of(&decls);
 
     assert_eq!(shape.name, "ITr");
     assert_eq!(shape.binders.len(), 3);
     assert_eq!(shape.ctors.len(), 3);
+    // P₁ = R, P₂ = PUnit.{1} (no payload), P₃ = E.
+    assert_eq!(render(&shape.shape_ty), "(Sum R (Sum PUnit.{1} E))");
+    // The tags: `Sum.inr`ᵏ `Sum.inl`, and a bare `Sum.inr`ⁿ⁻¹ last.
+    let ret_arg = shape.ctors[0].args[0].arg_name().to_string();
+    assert_eq!(
+        render(&shape.tag(0, shape.ctors[0].payload_value())),
+        format!("(Sum.inl {ret_arg})")
+    );
+    assert_eq!(
+        render(&shape.tag(1, shape.ctors[1].payload_value())),
+        "(Sum.inr (Sum.inl PUnit.unit))"
+    );
+    assert_eq!(
+        render(&shape.tag(2, shape.ctors[2].payload_value())),
+        "(Sum.inr (Sum.inr e))"
+    );
 
     let ret = &shape.ctors[0];
     assert_eq!(ret.name, "Ret");
-    assert!(matches!(ret.args.as_slice(), [CtorArg::Payload { .. }]));
+    assert!(matches!(ret.args.as_slice(), [ArgPlan::Payload(_)]));
+    assert_eq!(render(&ret.payload_ty), "R");
+    assert_eq!(render(&ret.pos_ty_in_shape), "PEmpty.{1}");
 
     let tau = &shape.ctors[1];
     assert_eq!(tau.name, "Tau");
-    assert!(matches!(tau.args.as_slice(), [CtorArg::Child { .. }]));
+    assert!(matches!(tau.args.as_slice(), [ArgPlan::Child(_)]));
+    assert_eq!(render(&tau.payload_ty), "PUnit.{1}");
+    assert_eq!(render(&tau.pos_ty_in_shape), "PUnit.{1}");
 
     let vis = &shape.ctors[2];
     assert_eq!(vis.name, "Vis");
-    let [CtorArg::Payload {
-        name: Some("e"), ..
-    }, CtorArg::ChildFamily { domain, .. }] = vis.args.as_slice()
-    else {
+    let [ArgPlan::Payload(e), ArgPlan::Child(k)] = vis.args.as_slice() else {
         panic!(
             "Vis must be payload `e : E` then a child FAMILY, got {:?}",
             vis.args
         );
     };
-    // The family's position type must be `Ans e` — the payload-DEPENDENT
-    // domain. A lowering that dropped the dependence would still typecheck
-    // its own `rfl` laws and be silently wrong.
-    let domain_text = format!("{domain:?}");
-    assert!(
-        domain_text.contains("\"Ans\"") && domain_text.contains("\"e\""),
-        "Vis's child domain must be `Ans e`, got: {domain_text}"
+    assert_eq!(e.arg_name, "e", "a NAMED clause binder keeps its name");
+    assert_eq!(render(e.ty), "E");
+    assert_eq!(
+        k.arg_name, "a1",
+        "an arrow-style (anonymous) argument gets a generated name from its \
+         position in the telescope"
+    );
+    assert_eq!(render(&vis.payload_ty), "E");
+}
+
+/// THE anti-vacuity check of this brick. `Vis`'s child domain is `Ans e`,
+/// where `e` is a CONSTRUCTOR binder — a name that does not exist inside
+/// `posF`, whose branch sees only the shape value. The plan must resolve
+/// that domain to `Ans <projection of the shape>`.
+///
+/// A lowering that left `e` free would still elaborate whenever a
+/// parameter happened to be called `e` (capturing it), and every `rfl`
+/// computation law would still pass, because they are all stated against
+/// the same wrong `posF`. Nothing downstream catches it. So it is pinned
+/// here, on the pure plan, from three directions: the shape variable is a
+/// name the source never mentions; the resolved domain mentions it; and
+/// the resolved domain does NOT mention the constructor binder.
+#[test]
+fn test_vis_child_domain_resolves_to_a_projection_not_a_free_variable() {
+    let decls = parse_file(ITREE_SRC).expect("should parse");
+    let shape = plan_of(&decls);
+    let vis = &shape.ctors[2];
+    let [_, ArgPlan::Child(k)] = vis.args.as_slice() else {
+        panic!("Vis must end in a child family");
+    };
+    let family = k.family.as_ref().expect("Vis's child is a FAMILY");
+
+    // As written, in the constructor's scope: the payload binder by name.
+    assert_eq!(render(family.source), "(Ans e)");
+    // Resolved, in `posF`'s scope: the projection of the bound shape. With
+    // one payload `Pₖ` is the bare type, so the path is the identity — but
+    // it is the identity ON THE SHAPE VARIABLE, which is what makes the
+    // difference between correct and free.
+    assert_ne!(
+        vis.shape_var, "e",
+        "the shape binder must not coincide with the payload name, or this \
+         test could not tell a projection from a free variable"
+    );
+    assert_eq!(render(&family.in_shape), format!("(Ans {})", vis.shape_var));
+    assert_eq!(
+        render(&vis.pos_ty_in_shape),
+        format!("(Ans {})", vis.shape_var)
+    );
+    assert_eq!(render(&vis.pos_ty_in_args), "(Ans e)");
+    let [ArgPlan::Payload(e), _] = vis.args.as_slice() else {
+        panic!("Vis starts with a payload");
+    };
+    assert_eq!(render(&e.projection), vis.shape_var);
+}
+
+/// The mixed shape: a nullary constructor, a TWO-payload constructor whose
+/// child domain mentions the SECOND payload, and a two-bare-child
+/// constructor. This is where the projection path stops being the identity
+/// — `Ans e` must resolve to `Ans s.2`, and `s.1` / `s.2` are the
+/// right-nested `PProd` paths of `PProd Nat E`.
+#[test]
+fn test_mixed_shape_plan_projects_through_pprod() {
+    let src = r"
+codata Mix (E : Type) (Ans : E → Type) where
+  | Stop : Mix E Ans
+  | Two : (n : Nat) → (e : E) → (Ans e → Mix E Ans) → Mix E Ans
+  | Fork : Mix E Ans → Mix E Ans → Mix E Ans
+";
+    let decls = parse_file(src).expect("should parse");
+    let shape = plan_of(&decls);
+    assert_eq!(
+        render(&shape.shape_ty),
+        "(Sum PUnit.{1} (Sum (PProd Nat E) PUnit.{1}))"
+    );
+
+    let stop = &shape.ctors[0];
+    assert!(stop.args.is_empty());
+    assert_eq!(render(&stop.payload_ty), "PUnit.{1}");
+    assert_eq!(render(&stop.pos_ty_in_shape), "PEmpty.{1}");
+
+    let two = &shape.ctors[1];
+    let s = &two.shape_var;
+    assert_eq!(render(&two.payload_ty), "(PProd Nat E)");
+    assert_eq!(render(&two.payload_value()), "(PProd.mk n e)");
+    let [ArgPlan::Payload(n), ArgPlan::Payload(e), ArgPlan::Child(k)] = two.args.as_slice() else {
+        panic!(
+            "Two must be payload, payload, child family; got {:?}",
+            two.args
+        );
+    };
+    assert_eq!(render(&n.projection), format!("{s}.1"));
+    assert_eq!(render(&e.projection), format!("{s}.2"));
+    let family = k.family.as_ref().expect("the third argument is a family");
+    assert_eq!(render(family.source), "(Ans e)");
+    assert_eq!(render(&family.in_shape), format!("(Ans {s}.2)"));
+    assert_eq!(render(&two.pos_ty_in_shape), format!("(Ans {s}.2)"));
+
+    let fork = &shape.ctors[2];
+    assert_eq!(render(&fork.payload_ty), "PUnit.{1}");
+    assert_eq!(render(&fork.pos_ty_in_shape), "(Sum PUnit.{1} PUnit.{1})");
+    assert_eq!(fork.children().count(), 2);
+}
+
+/// The generator's own binder names are freshened against the source, so a
+/// codata whose parameters are called `a`, `b`, `f`, `x` and `s0` cannot be
+/// shadowed by them. (The generated declarations put the parameters and
+/// these names in the same scope; see `GenNames`.)
+#[test]
+fn test_generated_binder_names_dodge_the_parameters() {
+    let src = r"
+codata Coll (a : Type) (b : Type) (f : Type) (x : Type) (s0 : Type) where
+  | One : a → Coll a b f x s0 → Coll a b f x s0
+";
+    let decls = parse_file(src).expect("should parse");
+    let shape = plan_of(&decls);
+    let g = &shape.gen_names;
+    let params = ["a", "b", "f", "x", "s0"];
+    let mut minted: Vec<String> = vec![
+        g.shape_arg.clone(),
+        g.pos_arg.clone(),
+        g.child_arg.clone(),
+        g.value_arg.clone(),
+        g.state_arg.clone(),
+        g.index_arg.clone(),
+        g.coalg_arg.clone(),
+        g.init_arg.clone(),
+        g.default_arg.clone(),
+        g.eq_arg.clone(),
+    ];
+    minted.extend(g.scruts.iter().cloned());
+    // The ALTERNATE argument names (VC-5) share a scope with the parameters
+    // too — `T.C_inj` binds the parameters, BOTH telescopes and the
+    // hypothesis in one list.
+    minted.extend(
+        shape
+            .ctors
+            .iter()
+            .flat_map(|c| c.args.iter().map(|a| a.alt_name().to_string())),
+    );
+    for name in minted
+        .iter()
+        .chain(shape.ctors.iter().map(|c| &c.shape_var))
+    {
+        assert!(
+            !params.contains(&name.as_str()),
+            "generated binder `{name}` collides with a parameter"
+        );
+    }
+    // …and, unlike the per-branch shape binders, they are distinct from ONE
+    // ANOTHER, which is what makes them safe to put in a single binder list.
+    let mut sorted = minted.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(
+        sorted.len(),
+        minted.len(),
+        "two generated binder names coincide: {minted:?}"
     );
 }
 
@@ -432,11 +670,22 @@ fn test_variant_lowering_target_kernel_checks() {
         "ITr.child_Vis",
         "ITr.child_Br_left",
         "ITr.child_Br_right",
+        // the corecursor tier (VC-4)
+        "ITr.Step",
+        "ITr.step_Ret",
+        "ITr.step_Tau",
+        "ITr.step_Vis",
+        "ITr.step_Br",
+        "ITr.corec",
+        "ITr.head_corec",
+        "ITr.child_corec",
         "ITr.spin",
         // the anti-vacuity witnesses: without them a lowering that
-        // collapsed two constructor tags would pass every law above
+        // collapsed two constructor tags would pass every law above, and a
+        // corecursor that returned a FINITE value would pass `head_spin`
         "ITr.Ret_ne_Tau",
         "ITr.Ret_ne_spin",
+        "ITr.child_spin",
     ] {
         assert!(
             env.get_const(&clean_kernel::Name::from_string(name))

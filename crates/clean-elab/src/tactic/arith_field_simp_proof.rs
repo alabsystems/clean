@@ -35,9 +35,7 @@ impl FieldSimpTheorem {
             (true, false) => Ok(Self::DivEqIff),
             (false, true) => Ok(Self::EqDivIffMulEq),
             (true, true) => Ok(Self::DivEqDivIff),
-            (false, false) => Err(TacticError::NoProgress {
-                tactic: "field_simp".to_string(),
-            }),
+            (false, false) => Err(TacticError::no_progress("field_simp")),
         }
     }
 

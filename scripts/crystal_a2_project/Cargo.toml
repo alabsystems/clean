@@ -16,8 +16,8 @@
 #   cargo build --locked --release --manifest-path scripts/crystal_a2_project/Cargo.toml
 #   ./target/release/a2project <crate.trust-ir.bin> <fn-name> <out-dir> [slug]
 #
-# Nothing in the Clean test suite runs it. `tests/crystal_a2_mint.rs` checks its
-# OUTPUT against two independent in-tree readers, which is the whole point: a
+# Nothing in the Clean test suite runs it. `crates/clean-verify/tests/crystal_a2_mint.rs`
+# checks its OUTPUT against two independent in-tree readers, which is the whole point: a
 # defect here shows up as a disagreement, not as a silent pass.
 
 [workspace]

@@ -243,7 +243,18 @@ impl<'a> ElabCtx<'a> {
             // candidate-side match have both returned `None`, so it can add
             // resolutions and never change one. See
             // `resolve_pi_goal_by_abstraction`.
-            if result.is_none() {
+            //
+            // `depth == 0`: the abstraction answers only the ELABORATOR's own
+            // goal, never a candidate's `[inst]` sub-goal. Without this a
+            // candidate like `instD : [(x : Nat) → C Nat] → D Nat` gets its
+            // sub-goal answered by the goal-side telescope and `D Nat`
+            // resolves — and the `decEq` bridge's `DecidableEq α` delegation
+            // would silently change the TERM of goals that already resolve.
+            // The boundary was documented by
+            // `test_goal_side_is_not_applied_to_an_internal_subgoal` on the
+            // day the stage landed (0c907dd23), but the guard itself never
+            // was — the test was born red (measured 2026-08-28).
+            if result.is_none() && depth == 0 {
                 result = self.resolve_pi_goal_by_abstraction(
                     &goal_ty,
                     goal_is_ground,

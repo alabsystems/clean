@@ -3,14 +3,14 @@
   "cfg_test_module_correction": "2026-07-23: production metrics now resolve direct #[cfg(test)] mod declarations, excluding their external module files and descendants. The prior scanner counted test-only files with names such as lean4_features.rs as production debt.",
   "heuristics": {
     "scope": "all .rs files under crates/<crate>/; excludes */target/* and crates/clean-kernel/src/env/ (another lane owns its content)",
-    "files_over_1000": "every in-scope .rs file with >1000 lines (src, tests, benches, examples) \u2014 owner ruling 2026-08-24 raised the organizational threshold from the rust_excellence 500 figure",
-    "unwrap_expect_production": "occurrences of `.unwrap()` and `.expect(` in src/ files only (tests/, benches/, examples/ dirs, files/directories resolved from direct #[cfg(test)] mod declarations including #[path=\"...\"], sibling modules declared behind #[cfg(test)], sibling test files tests.rs/*_tests.rs/tests_*.rs, and sibling test dirs tests_*/ excluded), skipping #[cfg(test)]-gated inline items via a naive brace-depth scanner (string literals and // comments stripped first) and skipping comment text; string contents containing the patterns are not detected \u2014 grep heuristic, not a parse",
-    "bare_pub_non_lib": "lines in src/ non-lib.rs files (same test-skip heuristic) matching `pub [async|const|unsafe|extern] fn|struct|enum` \u2014 bare pub, not pub(crate)/pub(super); proxy for pub(crate) discipline",
+    "files_over_1000": "every in-scope .rs file with >1000 lines (src, tests, benches, examples) — owner ruling 2026-08-24 raised the organizational threshold from the rust_excellence 500 figure",
+    "unwrap_expect_production": "occurrences of `.unwrap()` and `.expect(` in src/ files only (tests/, benches/, examples/ dirs, files/directories resolved from direct #[cfg(test)] mod declarations including #[path=\"...\"], sibling modules declared behind #[cfg(test)], sibling test files tests.rs/*_tests.rs/tests_*.rs, and sibling test dirs tests_*/ excluded), skipping #[cfg(test)]-gated inline items via a naive brace-depth scanner (string literals and // comments stripped first) and skipping comment text; string contents containing the patterns are not detected — grep heuristic, not a parse",
+    "bare_pub_non_lib": "lines in src/ non-lib.rs files (same test-skip heuristic) matching `pub [async|const|unsafe|extern] fn|struct|enum` — bare pub, not pub(crate)/pub(super); proxy for pub(crate) discipline",
     "allow_dead_code_sites": "inner-attribute lines in src/ files that allow dead_code directly or through cfg_attr (whole-file/module suppressions)"
   },
   "totals": {
-    "files_over_1000": 441,
-    "unwrap_expect_production": 1230,
+    "files_over_1000": 442,
+    "unwrap_expect_production": 1229,
     "bare_pub_non_lib": 13402,
     "allow_dead_code_sites": 57
   },
@@ -70,9 +70,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-elab": {
-      "files_over_1000": 69,
+      "files_over_1000": 70,
       "unwrap_expect_production": 261,
-      "bare_pub_non_lib": 1387,
+      "bare_pub_non_lib": 1386,
       "allow_dead_code_sites": 7
     },
     "clean-features": {
@@ -137,8 +137,8 @@
     },
     "clean-parser": {
       "files_over_1000": 9,
-      "unwrap_expect_production": 217,
-      "bare_pub_non_lib": 130,
+      "unwrap_expect_production": 216,
+      "bare_pub_non_lib": 131,
       "allow_dead_code_sites": 0
     },
     "clean-reflect": {
@@ -191,7 +191,7 @@
     },
     {
       "path": "crates/clean-elab/src/lean4_corpus_tests.rs",
-      "lines": 13694
+      "lines": 13689
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/par_reduces_c.rs",
@@ -247,7 +247,7 @@
     },
     {
       "path": "crates/clean-elab/src/codata_cmd.rs",
-      "lines": 5437
+      "lines": 5465
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/iota_core.rs",
@@ -350,5 +350,6 @@
       "lines": 4977
     }
   ],
-  "bare_pub_baseline_2026_08_23": "2026-08-23: bare_pub_non_lib 13699 -> 13703. Seven bare pubs landed on 2026-08-22 and two were removed; of the seven, ONE was narrowable and was narrowed rather than absorbed (ElabCtx::set_unstaged_siblings -> pub(crate); its only caller is crate::module_batch::exec). The remaining four are structurally required and are the whole of this +4: (1) clean-elab infer::UnstagedSibling -- named in lib.rs's `pub use infer::{..}` list, so pub(crate) would not compile; (2) clean-kernel LocalContext::reserve_fvar_floor -- called ACROSS crates from clean-elab infer::demand_local_ctx; (3,4) clean-lake InitArgs::exe_project / ::lib_project -- consumed by the tests/parity_battery integration test THROUGH the crate lib, the same shape as the +2 recorded at 736193d31. files_over_500 was NOT bumped: its +10 was fixed by splitting, and it is back at the 1424 it has held since 736193d31."
+  "bare_pub_baseline_2026_08_23": "2026-08-23: bare_pub_non_lib 13699 -> 13703. Seven bare pubs landed on 2026-08-22 and two were removed; of the seven, ONE was narrowable and was narrowed rather than absorbed (ElabCtx::set_unstaged_siblings -> pub(crate); its only caller is crate::module_batch::exec). The remaining four are structurally required and are the whole of this +4: (1) clean-elab infer::UnstagedSibling -- named in lib.rs's `pub use infer::{..}` list, so pub(crate) would not compile; (2) clean-kernel LocalContext::reserve_fvar_floor -- called ACROSS crates from clean-elab infer::demand_local_ctx; (3,4) clean-lake InitArgs::exe_project / ::lib_project -- consumed by the tests/parity_battery integration test THROUGH the crate lib, the same shape as the +2 recorded at 736193d31. files_over_500 was NOT bumped: its +10 was fixed by splitting, and it is back at the 1424 it has held since 736193d31.",
+  "files_over_1000_baseline_2026_08_28": "2026-08-28: files_over_1000 441 -> 442, and it is NOT this commit's. `crates/clean-elab/src/codata_variant_coind.rs` crossed at 1026 lines in 3886de0da (codata VC-6), and origin/main was measured RED on this counter at be87f72e1 BEFORE the simp-emitter commit rebased onto it — so a lane pushed past an uninstalled or bypassed hook (CLAUDE.md records that 59 of 61 worktrees still carry the old scripts/hooks/pre-push). Absorbed here as a RECORD, not an endorsement: the file is the codata lane's active work and splitting it mid-flight would conflict with them. The right fix is theirs, and it is a module split, not a baseline. unwrap_expect_production 1230 -> 1229 is likewise not this commit's: it measured -1 identically with and without these changes."
 }

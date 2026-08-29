@@ -350,9 +350,7 @@ fn conv_focus_rewrite(
     };
 
     if !contains_expr(&target, &from) {
-        return Err(TacticError::NoProgress {
-            tactic: "rw".into(),
-        });
+        return Err(TacticError::no_progress("rw"));
     }
 
     let new_target = replace_expr(&target, &from, &to);

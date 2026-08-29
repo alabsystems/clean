@@ -64,7 +64,7 @@ The `convert_all` function sums these counts across all systems and writes `math
 - `KernelVerified` confidence means "verified by Lean 4's kernel," NOT "verified by Clean's kernel"
 - Scale: ~100,000+ constants round-trip through `.mathverse` shards
 
-**Source:** `crates/clean-mathverse/src/lean4_alpha.rs`, `crates/clean-mathverse/src/build_library.rs`
+**Source:** `crates/clean-mathverse/src/lean4/olean/alpha.rs`, `crates/clean-mathverse/src/build_library.rs`
 
 ### Tier 3: Coq — Two paths, neither connected to type-checker
 
@@ -77,7 +77,7 @@ The `convert_all` function sums these counts across all systems and writes `math
 - No code path feeds translated Coq declarations to `Environment::add_decl()` followed by type-checking
 - `MathverseVerify::verify_foreign` (library.rs:564-567) contains: `"In a full implementation this would run the kernel type-checker; here we accept and store with Translated confidence."`
 
-**Source:** `crates/clean-mathverse/src/coq_alpha.rs`, `crates/clean-kernel/src/coq_import/translate/translator.rs`
+**Source:** `crates/clean-mathverse/src/coq/alpha.rs`, `crates/clean-kernel/src/coq_import/translate/translator.rs`
 
 ### Tier 4: Structured Parse — String names extracted, immediately discarded (5 systems)
 
@@ -170,7 +170,7 @@ released assets; they will ship in the next release.
 
 ### Native Theorem Export Pipeline
 
-Adds a **reverse pipeline**: Clean-proved kernel `Declaration` objects can be exported to `.mathverse` shards via `mathverse export` / `mathverse_shard build-native`. This closes the Math-to-Mathverse-to-Math loop, allowing Clean to both consume and produce verified mathematics in the `.mathverse` format. Source: `crates/clean-mathverse/src/build_library_native.rs`, `crates/clean-mathverse/src/native_export.rs`, `crates/clean-mathverse/src/bin/mathverse_shard/native_build.rs`.
+Adds a **reverse pipeline**: Clean-proved kernel `Declaration` objects can be exported to `.mathverse` shards via `mathverse export` / `mathverse_shard build-native`. This closes the Math-to-Mathverse-to-Math loop, allowing Clean to both consume and produce verified mathematics in the `.mathverse` format. Source: `crates/clean-mathverse/src/build_library_native.rs`, `crates/clean-mathverse/src/export/native_export/mod.rs`, `crates/clean-mathverse/src/bin/mathverse_shard/native_build.rs`.
 
 | Direction | Pipeline | Status |
 |-----------|----------|--------|

@@ -20,23 +20,24 @@
 //! (`data/graduation/clean-mtype/proof/ITreeEco.lean:754-855`) instead of
 //! declared. This module is the lane that closes that seam.
 //!
-//! **VC-1 validates fully and generates NOTHING.** Every envelope
-//! violation gets its own named [`ElabError::Unsupported`]; a declaration
-//! that passes the whole envelope is *still* refused, by
-//! [`NOT_YET_IMPLEMENTED`], because the lowering (VC-3) is not built. That
-//! ordering is deliberate: the thing worth preventing first is a silent
-//! wrong lowering, and the second-worst outcome is the MEASURED status quo
-//! — a variant `codata` body parsing as zero fields and reporting
-//! "codata needs at least one observation field … got 0 field(s)" while
-//! the `|` clauses fall out to top-level parse recovery.
+//! **This module decides what is ALLOWED.** Every envelope violation gets
+//! its own named [`ElabError::Unsupported`] (VC-1), and the telescope of
+//! each surviving constructor is classified into [`CtorArg`]s. What it
+//! BECOMES is [`crate::codata_variant_plan`] (VC-2) — `Pₖ`, `Qₖ`, the
+//! projection path of every payload, every binder name — and
+//! [`crate::codata_variant_generate`] (VC-3) turns that plan into
+//! declarations and registers them through a candidate clone. Neither this
+//! module nor the plan consults an environment.
 //!
-//! Nothing here touches the environment. The function takes no
-//! `&mut Environment` at all, so "a partial family never lands" is a
-//! property of the signature rather than of a rollback that has to be got
-//! right. VC-3 introduces the candidate-clone registration used by the
-//! record lane (`codata_cmd.rs:567`/`:580`).
+//! [`validate_variant`] takes no `&mut Environment`, so the refusing path
+//! cannot touch the environment even by accident; the accepting path's
+//! transactionality is the record lane's candidate-clone rollback
+//! (`codata_cmd.rs:567`/`:580`), reused verbatim.
 
 use crate::codata_cmd::{is_self_at_params, mentions, strip_parens};
+use crate::codata_variant_plan::{
+    gen_names, nest_right, resolve_ctor, VariantCtorPlan, VariantShape,
+};
 use crate::{ElabError, RegisteredElabResult};
 use clean_parser::{
     DeclModifiers, SurfaceBinder, SurfaceBinderInfo, SurfaceCtor, SurfaceExpr, UniverseExpr,
@@ -44,33 +45,14 @@ use clean_parser::{
 
 /// The single `ElabError` mint point for this lane (the
 /// `coinductive_surface.rs:297-301` discipline).
-fn unsupported(msg: impl Into<String>) -> ElabError {
+pub(crate) fn unsupported(msg: impl Into<String>) -> ElabError {
     ElabError::Unsupported {
         feature: msg.into(),
     }
 }
 
-/// The terminal refusal for an in-envelope variant codata.
-///
-/// Deliberately distinct from every envelope refusal so a caller can tell
-/// "your declaration is malformed" from "your declaration is fine and the
-/// lowering is not built yet" — and it echoes back the shape it just
-/// validated, so the author can see that the classification agreed with
-/// what they wrote before VC-3 exists to act on it.
-fn not_yet_implemented(shape: &VariantShape<'_>) -> ElabError {
-    let ctors: Vec<&str> = shape.ctors.iter().map(|c| c.name).collect();
-    unsupported(format!(
-        "variant codata `{}` ({} parameter(s), {} constructor(s): {}) parses and \
-         validates against the VC1 envelope, but its M-type lowering is not \
-         implemented yet (brick VC-3 of \
-         designs/2026-08-28-variant-codata-surface.md); refusing rather than \
-         registering a partial family",
-        shape.name,
-        shape.binders.len(),
-        ctors.len(),
-        ctors.join(", ")
-    ))
-}
+/// The one accepted `deriving` handle: the coinductive companion tier (VC-6).
+pub(crate) const DERIVE_COIND: &str = "Coind";
 
 /// Names the generator will mint under `T.` — a constructor may not take
 /// one. Kept in one place so VC-3 cannot drift from VC-1's refusal.
@@ -85,10 +67,31 @@ const RESERVED_COMPANIONS: &[&str] = &[
     "Step",
     "corec",
     "corecStep",
+    "head_corec",
+    "child_corec",
+    // VC-6 (`deriving Coind`). Reserved unconditionally, not only when the
+    // tier is requested: whether a name is legal must not depend on a
+    // modifier, or adding `deriving Coind` to a working declaration could
+    // break it.
+    "cast",
+    "ExtQ",
+    "ExtQ_hhead",
+    "ExtQ_of_eq",
+    "ext_unwrap",
+    "ch_cast_irrel",
+    "ext",
+    // VC-6b, the case tower. `cases` is the sharp one: a constructor named
+    // `cases` would both collide with the tower's own `T.cases` and generate
+    // `T.cases_cases`. That is caught downstream by `check_names_distinct`,
+    // but a VC-1 refusal names the problem where the user can see it.
+    "CasesP",
+    "sumCases",
+    "cases",
 ];
 
 /// One argument of a variant constructor, classified by how the carrier
-/// occurs in it.
+/// occurs in it. The raw classification; [`ArgPlan`] is what the generator
+/// consumes.
 #[derive(Debug)]
 pub(crate) enum CtorArg<'a> {
     /// Type does not mention the carrier: contributes to the constructor's
@@ -106,34 +109,13 @@ pub(crate) enum CtorArg<'a> {
     },
 }
 
-/// A validated variant constructor.
-#[derive(Debug)]
-pub(crate) struct VariantCtorPlan<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) args: Vec<CtorArg<'a>>,
-}
-
-impl VariantCtorPlan<'_> {
-    /// Does this constructor have at least one recursive position?
-    fn has_child(&self) -> bool {
-        self.args
-            .iter()
-            .any(|a| matches!(a, CtorArg::Child { .. } | CtorArg::ChildFamily { .. }))
-    }
-}
-
-/// A validated variant codata declaration. VC-2 turns this into the
-/// `Pₖ`/`Qₖ`/projection plan; VC-1 only proves it exists.
-#[derive(Debug)]
-pub(crate) struct VariantShape<'a> {
-    pub(crate) name: &'a str,
-    pub(crate) binders: &'a [SurfaceBinder],
-    pub(crate) ctors: Vec<VariantCtorPlan<'a>>,
-}
-
-/// Elaborate a variant-bodied `codata`. In VC-1 this ALWAYS returns
-/// `Err`: either a specific envelope refusal or [`not_yet_implemented`].
+/// Elaborate a variant-bodied `codata`: validate the whole envelope (this
+/// function's `env` is untouched by [`validate_variant`], which takes
+/// none), then register the generated family through a candidate clone so
+/// a failure anywhere leaves `env` byte-identical.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn elab_variant_codata(
+    env: &mut clean_kernel::Environment,
     name: &str,
     universe_params: &[String],
     binders: &[SurfaceBinder],
@@ -151,7 +133,7 @@ pub(crate) fn elab_variant_codata(
         deriving,
         modifiers,
     )?;
-    Err(not_yet_implemented(&shape))
+    crate::codata_variant_generate::register(env, &shape)
 }
 
 /// The whole VC1 envelope, in one fail-closed pass.
@@ -165,12 +147,15 @@ pub(crate) fn validate_variant<'a>(
     deriving: &[String],
     modifiers: &DeclModifiers,
 ) -> Result<VariantShape<'a>, ElabError> {
-    if !deriving.is_empty() {
+    // `Coind` is the ONE accepted deriving handle: it asks for the coinductive
+    // companion tier (VC-6). Everything else stays a loud reject.
+    let derive_coind = deriving.iter().any(|d| d == DERIVE_COIND);
+    if let Some(other) = deriving.iter().find(|d| *d != DERIVE_COIND) {
         return Err(unsupported(format!(
-            "variant codata `{name}`: deriving {} is rejected — BEq/DecidableEq/Repr \
+            "variant codata `{name}`: deriving {other} is rejected — BEq/DecidableEq/Repr \
              have no sound derivation for M-encoded codata (potentially infinite \
-             values); this is a deliberate loud reject, not an omission",
-            deriving.join(", ")
+             values); this is a deliberate loud reject, not an omission. The only \
+             accepted handle is `deriving {DERIVE_COIND}` (extensionality + eta laws)"
         )));
     }
     if !modifiers.is_default() {
@@ -222,10 +207,16 @@ pub(crate) fn validate_variant<'a>(
     }
 
     let param_names: Vec<&str> = binders.iter().map(|b| b.name.as_str()).collect();
-    let plans = ctors
-        .iter()
-        .map(|c| validate_ctor(name, &param_names, c))
-        .collect::<Result<Vec<_>, _>>()?;
+    // Sequential, not `map`: each constructor's ALTERNATE binder names are
+    // minted fresh against every name the earlier constructors already
+    // claim, so `T.Cⱼ x⃗ = T.Cₖ y⃗ → False` can bind both telescopes at once.
+    let mut plans: Vec<VariantCtorPlan<'a>> = Vec::with_capacity(ctors.len());
+    let mut occupied: Vec<String> = Vec::new();
+    for c in ctors {
+        let plan = validate_ctor(name, &param_names, c, &occupied)?;
+        occupied.extend(plan.occupied_names());
+        plans.push(plan);
+    }
 
     // ANTI-VACUITY: a "codata" whose every constructor is a leaf has no
     // recursive positions at all. Its M-type carrier is isomorphic to a
@@ -241,10 +232,16 @@ pub(crate) fn validate_variant<'a>(
         )));
     }
 
+    let shape_ty = nest_right("Sum", plans.iter().map(|c| c.payload_ty.clone()).collect())
+        .ok_or_else(|| unsupported(format!("variant codata `{name}`: no constructors")))?;
+    let gen_names = gen_names(binders, &plans);
     Ok(VariantShape {
         name,
         binders,
         ctors: plans,
+        shape_ty,
+        gen_names,
+        derive_coind,
     })
 }
 
@@ -276,6 +273,7 @@ fn validate_ctor<'a>(
     name: &str,
     param_names: &[&str],
     ctor: &'a SurfaceCtor,
+    occupied: &[String],
 ) -> Result<VariantCtorPlan<'a>, ElabError> {
     let cname = ctor.name.as_str();
     let (arg_tys, ret) = flatten_telescope(&ctor.ty, name, cname)?;
@@ -334,6 +332,21 @@ fn validate_ctor<'a>(
             CtorArg::ChildFamily { name, .. } => (*name, true),
         };
         if let Some(n) = bound {
+            if param_names.contains(&n) {
+                return Err(unsupported(format!(
+                    "variant codata `{name}`: constructor `{cname}` binds `{n}`, \
+                     which SHADOWS the parameter `{n}` — the generated \
+                     declarations take the parameters as leading binders, so a \
+                     constructor argument may not reuse a parameter name"
+                )));
+            }
+            if payload_names.contains(&n) || child_names.contains(&n) {
+                return Err(unsupported(format!(
+                    "variant codata `{name}`: constructor `{cname}` binds `{n}` \
+                     twice — argument names must be distinct so payload \
+                     references resolve unambiguously"
+                )));
+            }
             if is_child {
                 child_names.push(n);
             } else {
@@ -343,7 +356,7 @@ fn validate_ctor<'a>(
         args.push(classified);
     }
 
-    Ok(VariantCtorPlan { name: cname, args })
+    resolve_ctor(name, param_names, cname, args, occupied)
 }
 
 /// Split a constructor type into `(argument binder name, argument type)`

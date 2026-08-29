@@ -58,7 +58,7 @@
 #   bash scripts/install-git-hooks.sh --uninstall # stop using the tracked hooks
 #
 # There is no environment-variable bypass. A leg that is legitimately red gets
-# an owned, expiring `WAIVED` row in `scripts/hooks/gate-legs.txt` that the hook
+# an owned, expiring `WAIVED` row in `scripts/githooks/gate-legs.txt` that the hook
 # reads -- visible, reviewed, and self-retiring. The only way past the hook is
 # `git push --no-verify`, which is git's own and shows up in the reflog rather
 # than in a habit.

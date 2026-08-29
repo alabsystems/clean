@@ -56,9 +56,7 @@ pub fn zify(state: &mut ProofState) -> TacticResult {
     let rewrote = rewrite_target_with_cast_lemmas(state, "zify", CastRewriteFlavor::Zify)?;
 
     if !rewrote {
-        return Err(TacticError::NoProgress {
-            tactic: "zify".into(),
-        });
+        return Err(TacticError::no_progress("zify"));
     }
 
     Ok(())
@@ -170,9 +168,7 @@ pub fn qify(state: &mut ProofState) -> TacticResult {
     let rewrote = rewrite_target_with_cast_lemmas(state, "qify", CastRewriteFlavor::Qify)?;
 
     if !rewrote {
-        return Err(TacticError::NoProgress {
-            tactic: "qify".into(),
-        });
+        return Err(TacticError::no_progress("qify"));
     }
 
     Ok(())

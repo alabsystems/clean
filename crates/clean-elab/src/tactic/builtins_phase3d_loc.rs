@@ -198,9 +198,7 @@ fn run_push_neg_wildcard(ps: &mut super::ProofState) -> Result<(), TacticError> 
     if worked {
         Ok(())
     } else {
-        Err(TacticError::NoProgress {
-            tactic: "push_neg".into(),
-        })
+        Err(TacticError::no_progress("push_neg"))
     }
 }
 

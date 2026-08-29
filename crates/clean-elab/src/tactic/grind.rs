@@ -156,9 +156,7 @@ fn try_propext_bridge(state: &mut ProofState) -> TacticResult {
         && args.len() == 3
         && matches!(args[0].kind(), ExprKind::Sort(l) if l.is_zero());
     if !is_eq_at_prop {
-        return Err(TacticError::NoProgress {
-            tactic: "grind/propext".into(),
-        });
+        return Err(TacticError::no_progress("grind/propext"));
     }
     apply(
         state,
@@ -261,7 +259,7 @@ fn grind_core(
     }
 
     if grind_max_depth_exceeded(depth, config) {
-        return Err(grind_no_progress(GRIND_MAX_DEPTH_EXHAUSTED));
+        return Err(grind_no_progress_at(state, GRIND_MAX_DEPTH_EXHAUSTED));
     }
 
     let trace = std::env::var_os("CLEAN_GRIND_TRACE").is_some();
@@ -291,7 +289,7 @@ fn grind_core(
 
     // Step 4: Case splitting — find a disjunction or ite to split on
     if *splits_remaining == 0 {
-        return Err(grind_no_progress(GRIND_SPLIT_LIMIT_EXHAUSTED));
+        return Err(grind_no_progress_at(state, GRIND_SPLIT_LIMIT_EXHAUSTED));
     }
 
     if trace {
@@ -311,7 +309,7 @@ fn grind_core(
         }
     }
 
-    Err(grind_no_progress(GRIND_NO_PROGRESS))
+    Err(grind_no_progress_at(state, GRIND_NO_PROGRESS))
 }
 
 fn grind_max_depth_exceeded(depth: usize, config: &GrindConfig) -> bool {
@@ -319,9 +317,24 @@ fn grind_max_depth_exceeded(depth: usize, config: &GrindConfig) -> bool {
 }
 
 fn grind_no_progress(tactic: &'static str) -> TacticError {
-    TacticError::NoProgress {
-        tactic: tactic.into(),
-    }
+    TacticError::no_progress(tactic)
+}
+
+/// The same diagnostic, carrying the goal `grind` gave up on.
+///
+/// Use this at the four `grind_core` exits, whose error propagates out of
+/// `grind_with_config` to the user; `grind_no_progress` stays for the sites
+/// swallowed as control flow (`try_propext_bridge`, `try_funext_propext_bridge`
+/// and the automation engine inside `try_tactic_preserving_state`), which never
+/// reach a human and must not pay to format a goal.
+///
+/// After a case split this reports the BRANCH grind actually died on, not the
+/// goal the user wrote — which is what the message says, and is the more useful
+/// of the two: the branch is the blocker. `grind_with_config` documents that
+/// state may be partially modified on failure, so no site here can report the
+/// original goal anyway.
+fn grind_no_progress_at(state: &ProofState, tactic: &'static str) -> TacticError {
+    crate::tactic::display::no_progress_with_goal(state, tactic)
 }
 
 // ============================================================================
@@ -514,9 +527,7 @@ fn try_automation_engine(state: &mut ProofState, config: &GrindConfig) -> bool {
         let engine = AutomationEngine::new();
         let proof_result = engine
             .auto_prove(s.env(), &target, timeout, Some(&local_ctx))
-            .ok_or_else(|| TacticError::NoProgress {
-                tactic: "grind/automation".into(),
-            })?;
+            .ok_or_else(|| TacticError::no_progress("grind/automation"))?;
 
         exact(s, proof_result.proof_term().clone())
     })
@@ -716,7 +727,7 @@ fn close_all_goals_recursive(
     if state.is_complete() {
         Ok(())
     } else {
-        Err(grind_no_progress(GRIND_NO_PROGRESS))
+        Err(grind_no_progress_at(state, GRIND_NO_PROGRESS))
     }
 }
 

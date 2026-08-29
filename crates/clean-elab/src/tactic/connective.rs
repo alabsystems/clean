@@ -786,9 +786,7 @@ pub fn contradiction(state: &mut ProofState) -> TacticResult {
         }
     }
 
-    Err(TacticError::NoProgress {
-        tactic: "contradiction".into(),
-    })
+    Err(TacticError::no_progress("contradiction"))
 }
 
 /// The `by_contra` tactic proves the goal by contradiction (classical reasoning).

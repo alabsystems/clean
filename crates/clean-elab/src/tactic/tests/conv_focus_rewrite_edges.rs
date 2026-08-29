@@ -273,7 +273,7 @@ fn test_conv_goal_compound_nonprop_lhs_reverse_rewrite_reports_no_progress() {
     assert!(
         matches!(
             &err,
-            TacticError::NoProgress { tactic } if tactic == "rw"
+            TacticError::NoProgress { tactic, .. } if tactic == "rw"
         ),
         "expected typed rw no-progress on reverse non-Prop focus miss, got: {err:?}"
     );

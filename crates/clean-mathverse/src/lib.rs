@@ -14,14 +14,15 @@
 //! Enforces trust boundaries so axiomatized proofs can't contaminate kernel-verified ones.
 //! Indexes the corpus for sub-millisecond retrieval across 4 search modes.
 //!
-//! Current downloadable release: `mathverse-v1.2.0` (2026-05-24) — 65 shards,
-//! 945 MB uncompressed, published as a `mathverse-library-v1.2.0.tar.zst` archive
-//! (195 MB) with an `mathverse-manifest.json` of BLAKE3 checksums (verified end to
-//! end against the release). Shards are not checked in: fetch the release with
-//! `clean mathverse download` (or `scripts/download_mathverse_library.sh`), or rebuild
-//! from the public upstream libraries with `clean mathverse build-library`.
-//!
-//! Design reference: `designs/2026-03-27-unified-math-library-v2.md`
+//! Current downloadable release: `mathverse-v1.3.0` (2026-06-22) — 1,052,886
+//! declarations across 14 shards, 538.9 MB uncompressed and 169.5 MB compressed,
+//! published as `mathverse-library-v1.3.0` GitHub Release assets with an
+//! `mathverse-manifest.json` of BLAKE3 checksums (verified end to end against the
+//! release). It supersedes v1.2.0's 5,773,496-declaration / 65-shard headline, which
+//! a name-only Isabelle stub and duplicate manifest entries had inflated. Shards are
+//! not checked in: fetch the release with `clean mathverse download` (or
+//! `scripts/download_mathverse_library.sh`), or rebuild from the public upstream
+//! libraries with `clean mathverse build-library`.
 
 pub mod types;
 

@@ -182,7 +182,7 @@ fn test_grind_funext_bridge_leaves_non_prop_fun_equality_untouched() {
 
     let result = try_funext_propext_bridge(&mut state);
     assert!(
-        matches!(&result, Err(TacticError::NoProgress { tactic }) if tactic == "grind/funext"),
+        matches!(&result, Err(TacticError::NoProgress { tactic, .. }) if tactic == "grind/funext"),
         "non-Prop codomain must not trigger the funext bridge, got {result:?}"
     );
 

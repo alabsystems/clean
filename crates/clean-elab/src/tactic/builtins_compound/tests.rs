@@ -69,12 +69,7 @@ fn test_state() -> ProofState {
 fn test_compound_first_retries_recoverable_error() {
     let mut eval = StubEval {
         calls: 0,
-        results: VecDeque::from([
-            Err(TacticError::NoProgress {
-                tactic: "assumption".into(),
-            }),
-            Ok(()),
-        ]),
+        results: VecDeque::from([Err(TacticError::no_progress("assumption")), Ok(())]),
         metas: MetaState::new(),
     };
     let mut state = test_state();
@@ -131,9 +126,7 @@ fn test_compound_first_propagates_last_branch_error() {
     let mut eval = StubEval {
         calls: 0,
         results: VecDeque::from([
-            Err(TacticError::NoProgress {
-                tactic: "assumption".into(),
-            }),
+            Err(TacticError::no_progress("assumption")),
             Err(TacticError::TypeCheckFailed("last branch".into())),
         ]),
         metas: MetaState::new(),

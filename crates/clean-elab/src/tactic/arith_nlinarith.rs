@@ -343,7 +343,5 @@ pub fn positivity(state: &mut ProofState) -> TacticResult {
     // Specific positivity rules could be added here
     // For now, fall back to sorry if we can't prove it
 
-    Err(TacticError::NoProgress {
-        tactic: "positivity".into(),
-    })
+    Err(TacticError::no_progress("positivity"))
 }

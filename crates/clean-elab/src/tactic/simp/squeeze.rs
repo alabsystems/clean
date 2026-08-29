@@ -13,6 +13,7 @@ use crate::tactic::{assumption, rfl};
 use super::budget::SimpBudget;
 use super::cache::collect_simp_lemmas_cached;
 use super::types::{SimpConfig, SimpResult};
+use crate::tactic::display::no_progress_with_goal;
 
 /// Configuration for squeeze_simp
 #[derive(Debug, Clone, Default)]
@@ -195,9 +196,7 @@ pub fn squeeze_simp_and_apply(state: &mut ProofState) -> TacticResult {
     if result.closed {
         Ok(())
     } else {
-        Err(TacticError::NoProgress {
-            tactic: "squeeze_simp".into(),
-        })
+        Err(no_progress_with_goal(state, "squeeze_simp"))
     }
 }
 

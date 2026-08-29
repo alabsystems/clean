@@ -24,9 +24,10 @@
 -- pipeline against the UNMODIFIED `Codata.*` seed; the leading record codata
 -- is only there to trigger the lazy seed injection.
 --
--- The last three theorems are the ANTI-VACUITY check: a lowering that
--- collapsed two constructor tags would still satisfy every `rfl` computation
--- law above and would fail only here.
+-- The `_ne_` theorems are the ANTI-VACUITY check: a lowering that collapsed
+-- two constructor tags would still satisfy every `rfl` computation law above
+-- and would fail only there. The corecursor tier carries its own:
+-- `ITr.child_spin` is the law a FINITE value cannot satisfy.
 --
 -- Replayed by `codata_variant_tests::test_variant_lowering_target_kernel_checks`.
 
@@ -125,15 +126,63 @@ theorem ITr.child_Br_right (E : Type) (R : Type) (Ans : E → Type) (l : ITr E R
     @Codata.IMchild PUnit.{1} (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans)
       PUnit.unit (ITr.Br E R Ans l r) (Sum.inr PUnit.unit) = r := rfl
 
+-- ── the corecursor tier (VC-4) ──
+-- `Step` names the coalgebra's codomain in the codata's own vocabulary; each
+-- `step_C` is the CONSTRUCTOR with the carrier replaced by the state, over
+-- `umkStep` instead of `IMmk ∘ mkStep`; `corec` is `ucorec` at this container.
+
+def ITr.Step (E : Type) (R : Type) (Ans : E → Type) (S : Type) (j : PUnit.{1}) : Type :=
+  Codata.isigmaStep (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) (Codata.uFam S) j
+
+def ITr.step_Ret (E : Type) (R : Type) (Ans : E → Type) (S : Type) (j : PUnit.{1}) (r : R) :
+    ITr.Step E R Ans S j :=
+  @Codata.umkStep (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) S j
+    (Sum.inl r) (fun b => @PEmpty.rec (fun _ => S) b)
+
+def ITr.step_Tau (E : Type) (R : Type) (Ans : E → Type) (S : Type) (j : PUnit.{1}) (t0 : S) :
+    ITr.Step E R Ans S j :=
+  @Codata.umkStep (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) S j
+    (Sum.inr (Sum.inl PUnit.unit)) (fun _ => t0)
+
+def ITr.step_Vis (E : Type) (R : Type) (Ans : E → Type) (S : Type) (j : PUnit.{1}) (e : E)
+    (k : Ans e → S) : ITr.Step E R Ans S j :=
+  @Codata.umkStep (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) S j
+    (Sum.inr (Sum.inr (Sum.inl e))) k
+
+def ITr.step_Br (E : Type) (R : Type) (Ans : E → Type) (S : Type) (j : PUnit.{1}) (l : S) (r : S) :
+    ITr.Step E R Ans S j :=
+  @Codata.umkStep (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) S j
+    (Sum.inr (Sum.inr (Sum.inr PUnit.unit)))
+    (fun b => @Sum.rec PUnit.{1} PUnit.{1} (fun _ => S) (fun _ => l) (fun _ => r) b)
+
+def ITr.corec (E : Type) (R : Type) (Ans : E → Type) (S : Type)
+    (g : (j : PUnit.{1}) → S → ITr.Step E R Ans S j) (st : S) : ITr E R Ans :=
+  @Codata.ucorec (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) S g st
+
+theorem ITr.head_corec (E : Type) (R : Type) (Ans : E → Type) (S : Type)
+    (g : (j : PUnit.{1}) → S → ITr.Step E R Ans S j) (st : S) :
+    ITr.head E R Ans (ITr.corec E R Ans S g st) = (g PUnit.unit st).1 := rfl
+
+theorem ITr.child_corec (E : Type) (R : Type) (Ans : E → Type) (S : Type)
+    (g : (j : PUnit.{1}) → S → ITr.Step E R Ans S j) (st : S)
+    (b : ITr.posF E R Ans PUnit.unit (ITr.head E R Ans (ITr.corec E R Ans S g st))) :
+    @Codata.IMchild PUnit.{1} (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans)
+      PUnit.unit (ITr.corec E R Ans S g st) b
+      = ITr.corec E R Ans S g ((g PUnit.unit st).2 b) := rfl
+
+-- the divergent computation: an infinite Tau chain, by corecursion over the
+-- one-point state. THE anti-vacuity value of this brick — the head law below
+-- would also hold of a finite `Tau` chain, the child law would not.
 def ITr.spin (E : Type) (R : Type) (Ans : E → Type) : ITr E R Ans :=
-  @Codata.ucorec (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) PUnit.{1}
-    (fun j _ =>
-      @Codata.umkStep (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans) PUnit.{1} j
-        (Sum.inr (Sum.inl PUnit.unit)) (fun _ => PUnit.unit))
-    PUnit.unit
+  ITr.corec E R Ans PUnit.{1} (fun j s => ITr.step_Tau E R Ans PUnit.{1} j s) PUnit.unit
 
 theorem ITr.head_spin (E : Type) (R : Type) (Ans : E → Type) :
     ITr.head E R Ans (ITr.spin E R Ans) = Sum.inr (Sum.inl PUnit.unit) := rfl
+
+theorem ITr.child_spin (E : Type) (R : Type) (Ans : E → Type)
+    (b : ITr.posF E R Ans PUnit.unit (Sum.inr (Sum.inl PUnit.unit))) :
+    @Codata.IMchild PUnit.{1} (ITr.shapeF E R Ans) (ITr.posF E R Ans) (ITr.tgtF E R Ans)
+      PUnit.unit (ITr.spin E R Ans) b = ITr.spin E R Ans := rfl
 
 def ITr.sumIsInl {X : Type} {Y : Type} (v : Sum X Y) : Prop :=
   @Sum.rec X Y (fun _ => Prop) (fun _ => True) (fun _ => False) v

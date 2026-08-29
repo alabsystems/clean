@@ -295,8 +295,12 @@ pub fn cert_simp_with_config(state: &mut ProofState, config: &CertSimpConfig) ->
                 detail: cert_simp_blocker_detail(state),
             })
         }
-        Err(TacticError::NoProgress { .. }) => Err(TacticError::NoProgress {
+        // Carry the inner goal forward rather than minting a bare message:
+        // `simp` already rendered the goal it gave up on, and re-wrapping it
+        // under the `cert_simp` name is what threw that away.
+        Err(TacticError::NoProgress { goal, .. }) => Err(TacticError::NoProgress {
             tactic: "cert_simp".to_string(),
+            goal,
         }),
         Err(err) => Err(err),
     }

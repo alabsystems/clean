@@ -125,7 +125,7 @@ installs).
 The persistent backend lived in `crates/mathbot/src/lean_repl_server.rs`.
 **That crate was retired 2026-06-17 (`480cf75a0`, "retire the orphaned mathbot
 crate") and is absent from this checkout**; the three `crates/mathbot/…` paths
-named in this section are historical.
+named here and in the stateless-mimic section below are historical.
 It drives `leanprover-community/repl` (the `lake exe repl` binary) via
 its JSON-line protocol — one Lean kernel process per session, with an
 `env` cursor (post-command environment) and a `proofState` cursor

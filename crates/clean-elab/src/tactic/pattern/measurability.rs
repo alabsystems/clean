@@ -152,9 +152,7 @@ pub fn measurability_with_config(
         }
     }
 
-    Err(TacticError::NoProgress {
-        tactic: "measurability".into(),
-    })
+    Err(TacticError::no_progress("measurability"))
 }
 
 /// Check if expression is a measurability goal

@@ -396,15 +396,18 @@ fn test_ascription_wrong_type() {
             ref expected,
             ref actual,
         } => {
-            // expected should mention Prop (Sort Zero)
+            // The mismatch fields render through `Display for Expr` since the
+            // `{:?}` sweep (79830ac16): `Sort 0` prints as `Prop`, `Sort 1`
+            // as `Type`. Assert the DISPLAY vocabulary — the rejection itself
+            // (the point of this test) is unchanged.
             assert!(
-                expected.contains("Sort") || expected.contains("Zero"),
-                "expected field should mention Sort/Zero, got: {expected}"
+                expected.contains("Prop"),
+                "expected field should mention Prop, got: {expected}"
             );
-            // actual should mention higher universe
+            // actual should mention the higher universe
             assert!(
-                actual.contains("Sort") || actual.contains("Succ"),
-                "actual field should mention Sort/Succ, got: {actual}"
+                actual.contains("Type") || actual.contains("Sort"),
+                "actual field should mention Type/Sort, got: {actual}"
             );
         }
         _ => panic!("(Type : Prop) should produce TypeMismatch, got: {err}"),

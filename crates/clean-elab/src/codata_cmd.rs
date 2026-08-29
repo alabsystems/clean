@@ -80,7 +80,7 @@ fn unsupported(msg: impl Into<String>) -> ElabError {
 /// polymorphic. Pinning `.{1}` (= Lean `Unit`) makes generated code
 /// byte-deterministic again; ctor VALUES (`PUnit.unit`) stay bare and
 /// solve from these pinned types.
-fn punit_ty() -> SurfaceExpr {
+pub(crate) fn punit_ty() -> SurfaceExpr {
     SurfaceExpr::UniverseInst(
         Span::dummy(),
         Box::new(ident("PUnit")),
@@ -129,12 +129,12 @@ fn set_uparams(mut decl: SurfaceDecl, poly: Option<&str>) -> SurfaceDecl {
     decl
 }
 
-fn ident(name: &str) -> SurfaceExpr {
+pub(crate) fn ident(name: &str) -> SurfaceExpr {
     SurfaceExpr::Ident(Span::dummy(), name.to_string())
 }
 
 /// `@name args…` — Explicit-marked head, positional args.
-fn at_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
+pub(crate) fn at_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
     let head = SurfaceExpr::Explicit(Span::dummy(), Box::new(ident(name)));
     if args.is_empty() {
         return head;
@@ -147,7 +147,7 @@ fn at_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
 }
 
 /// `name args…` — plain application (no @).
-fn plain_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
+pub(crate) fn plain_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
     if args.is_empty() {
         return ident(name);
     }
@@ -159,7 +159,7 @@ fn plain_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
 }
 
 /// `fun b1 b2 … => body` with untyped binders.
-fn lam(names: &[&str], body: SurfaceExpr) -> SurfaceExpr {
+pub(crate) fn lam(names: &[&str], body: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::Lambda(
         Span::dummy(),
         names
@@ -171,7 +171,7 @@ fn lam(names: &[&str], body: SurfaceExpr) -> SurfaceExpr {
 }
 
 /// `(name : ty) → body` (dependent) — a one-binder Pi.
-fn pi(name: &str, ty: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
+pub(crate) fn pi(name: &str, ty: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::Pi(
         Span::dummy(),
         vec![SurfaceBinder::new(
@@ -184,15 +184,15 @@ fn pi(name: &str, ty: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
 }
 
 /// `a → b` (non-dependent arrow).
-fn arrow(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
+pub(crate) fn arrow(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::Arrow(Span::dummy(), Box::new(a), Box::new(b))
 }
 
-fn type_universe() -> SurfaceExpr {
+pub(crate) fn type_universe() -> SurfaceExpr {
     SurfaceExpr::Universe(Span::dummy(), UniverseExpr::Type)
 }
 
-fn mk_def(
+pub(crate) fn mk_def(
     name: String,
     binders: Vec<SurfaceBinder>,
     ty: SurfaceExpr,
@@ -212,7 +212,7 @@ fn mk_def(
     }
 }
 
-fn mk_theorem(
+pub(crate) fn mk_theorem(
     name: String,
     binders: Vec<SurfaceBinder>,
     ty: SurfaceExpr,
@@ -472,15 +472,16 @@ pub(crate) fn elab_codata_decl(
     else {
         return Err(unsupported("elab_codata_decl: not a codata declaration"));
     };
-    // VARIANT body (`| Ret : R → T | …`) — its own lane, and in VC-1 a
-    // fully-validating but non-generating one: every envelope violation
-    // gets its own named refusal, and an in-envelope declaration is
-    // refused too, because the lowering is not built yet. Nothing is ever
-    // registered. See `designs/2026-08-28-variant-codata-surface.md`.
+    // VARIANT body (`| Ret : R → T | …`) — its own lane: the full envelope
+    // validation (which takes no environment at all), then the definitional
+    // tier generated into a candidate clone. Every envelope violation gets
+    // its own named refusal and nothing partial can land. See
+    // `designs/2026-08-28-variant-codata-surface.md`.
     let fields = match body {
         clean_parser::CodataBody::Record(fields) => fields,
         clean_parser::CodataBody::Variant(ctors) => {
             return crate::codata_variant::elab_variant_codata(
+                env,
                 name,
                 universe_params,
                 binders,

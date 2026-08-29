@@ -152,9 +152,7 @@ pub fn continuity_with_config(state: &mut ProofState, config: ContinuityConfig) 
         }
     }
 
-    Err(TacticError::NoProgress {
-        tactic: "continuity".into(),
-    })
+    Err(TacticError::no_progress("continuity"))
 }
 
 /// Check if expression is a continuity goal

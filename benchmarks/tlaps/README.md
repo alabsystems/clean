@@ -16,7 +16,9 @@ benchmarks/tlaps/
 
 ## Obligation Format
 
-Each JSON file represents a single proof obligation. See `designs/2026-01-16-tlaps-benchmark-schema.md` for the full schema specification.
+Each JSON file represents a single proof obligation. The schema is the serde surface of
+`TlaObligation` and friends in `crates/clean-tla/src/obligation.rs`, which is what these
+files deserialize into; read that for the authoritative field list.
 
 ### Example
 
@@ -49,7 +51,7 @@ clean tlaps bench benchmarks/tlaps/nat_induction/sum_formula.json
 ## Adding Benchmarks
 
 1. Create a new JSON file in the appropriate category directory
-2. Follow the schema from `designs/2026-01-16-tlaps-benchmark-schema.md`
+2. Follow the schema in `crates/clean-tla/src/obligation.rs`
 3. Run the benchmark to verify it parses correctly
 4. Update this README if adding a new category
 
@@ -100,7 +102,6 @@ nat_induction improved from 77.8% → 88.9% (14/18 → 16/18).
 - **Lexicographic**: `ackermann_base` - needs hypothesis specialization for operator application
 
 **Root cause:** All 3 failures share the same blocker - universally quantified hypotheses are not specialized.
-See `reports/research/2026-01-16-researcher-101-hypothesis-specialization-guide.md` for implementation details.
 
 ### Fixed: add_assoc (Triple-nested quantifiers)
 
@@ -174,6 +175,5 @@ Together these advances brought temporal to 100% (4/4) - target exceeded!
 
 ## References
 
-- Design doc: `designs/2026-01-16-tlaps-benchmark-schema.md`
-- Tactic implementations: `crates/clean-tla/src/tactic.rs`
-- Obligation types: `crates/clean-tla/src/obligation.rs`
+- Obligation schema and types: `crates/clean-tla/src/obligation.rs`
+- Tactic implementations: `crates/clean-tla/src/tactic/`

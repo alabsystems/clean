@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use super::cache::collect_simp_lemmas_cached;
 use super::types::SimpConfig;
 use super::{is_trivial_equality, is_true_const, simp_at, simp_at_with_lemmas, simp_default};
+use crate::tactic::display::no_progress_with_goal;
 use clean_kernel::Expr;
 
 use crate::tactic::{
@@ -134,9 +135,7 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
     if made_progress {
         Ok(())
     } else {
-        Err(TacticError::NoProgress {
-            tactic: "simp_all".into(),
-        })
+        Err(no_progress_with_goal(state, "simp_all"))
     }
 }
 
@@ -230,9 +229,7 @@ pub fn simp_at_all(state: &mut ProofState) -> TacticResult {
     if made_progress {
         Ok(())
     } else {
-        Err(TacticError::NoProgress {
-            tactic: "simp at *".into(),
-        })
+        Err(no_progress_with_goal(state, "simp at *"))
     }
 }
 

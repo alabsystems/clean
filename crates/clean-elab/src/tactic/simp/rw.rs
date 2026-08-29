@@ -13,6 +13,7 @@ use super::expr::{extract_eq_sides, simp_expr_budgeted};
 use super::lemmas::{extract_local_equality_template, mk_local_proof_template};
 use super::types::{SimpConfig, SimpIndexMode, SimpLemma};
 use crate::tactic::discr_tree::{mk_path, query_path_is_too_generic, IndexMode};
+use crate::tactic::display::no_progress_with_goal;
 use crate::tactic::{
     exprs_syntactically_equal, rfl, try_tactic_preserving_state, Goal, ProofState, TacticError,
     TacticResult,
@@ -181,9 +182,7 @@ pub fn simp_rw(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
 
         Ok(())
     } else {
-        Err(TacticError::NoProgress {
-            tactic: "simp_rw".into(),
-        })
+        Err(no_progress_with_goal(state, "simp_rw"))
     }
 }
 

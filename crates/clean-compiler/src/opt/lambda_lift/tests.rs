@@ -903,3 +903,219 @@ fn test_remap_fvars_in_code_rewrites_cases_result_type() {
         other => panic!("Expected cases code, got {:?}", other),
     }
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// Capture boundaries a call crosses
+// ────────────────────────────────────────────────────────────────────────
+
+/// Every id a lifted declaration's body reads must be one of its own
+/// parameters. A lifted declaration is top-level: nothing else is in scope,
+/// and a leftover id is exactly what `to_ir` refuses as
+/// `unbound to_ir variable`.
+fn assert_no_dangling_captures(result: &LiftResult) {
+    for lifted in &result.lifted {
+        let bound: HashSet<FVarId> = lifted.params.iter().map(|p| p.fvar_id).collect();
+        let DeclValue::Code(body) = &lifted.body else {
+            continue;
+        };
+        let free = free_vars_in_code(body, &bound);
+        assert!(
+            free.is_empty(),
+            "lifted `{}` reads {:?}, none of which are its parameters {:?}",
+            lifted.name,
+            free,
+            bound
+        );
+    }
+}
+
+/// A call that crosses TWO capture boundaries.
+///
+/// `go` captures `a` from the enclosing declaration; `k1`, declared inside
+/// `go`, captures it in turn; and `k2`, declared inside `k1`, CALLS `go`. Each
+/// frame renames the capture to a fresh parameter of its own, so the arguments
+/// the innermost call must prepend are `k1`'s ids — not `go`'s, which are no
+/// longer in scope by the time `k2`'s body is lifted.
+///
+/// Rewriting against one frame only is what dropped the nested-`for`
+/// declaration `grid` (`native_build`'s for-in/let-mut fixture), which the
+/// eliminator-IH sink first made reachable: the declaration failed to lower,
+/// was silently treated as an extern, and the link step reported the confusing
+/// `cannot satisfy prelude extern l_grid`.
+#[test]
+fn test_lift_call_crossing_two_capture_boundaries_binds_every_argument() {
+    // fun k2 (z) := let r := go z; return r
+    let k2 = FunDecl::new(
+        fvar(6),
+        name("k2"),
+        vec![Param::new(fvar(7), name("z"), nat_type())],
+        nat_type(),
+        Code::let_bind(
+            LetDecl::new(
+                fvar(8),
+                name("r"),
+                nat_type(),
+                LetValue::FVar {
+                    fvar: fvar(1),
+                    args: vec![Arg::FVar(fvar(7))],
+                },
+            ),
+            Code::ret(fvar(8)),
+        ),
+    );
+
+    // fun k1 (y) := fun k2 ..; let s := Nat.add y k2; return s
+    let k1 = FunDecl::new(
+        fvar(4),
+        name("k1"),
+        vec![Param::new(fvar(5), name("y"), nat_type())],
+        nat_type(),
+        Code::fun(
+            k2,
+            Code::let_bind(
+                LetDecl::new(
+                    fvar(9),
+                    name("s"),
+                    nat_type(),
+                    LetValue::Const {
+                        name: name("Nat.add"),
+                        levels: vec![],
+                        args: vec![Arg::FVar(fvar(5)), Arg::FVar(fvar(6))],
+                    },
+                ),
+                Code::ret(fvar(9)),
+            ),
+        ),
+    );
+
+    // fun go (x) := let w := Nat.add a x; fun k1 ..; let t := Nat.add w k1; return t
+    let go = FunDecl::new(
+        fvar(1),
+        name("go"),
+        vec![Param::new(fvar(2), name("x"), nat_type())],
+        nat_type(),
+        Code::let_bind(
+            LetDecl::new(
+                fvar(3),
+                name("w"),
+                nat_type(),
+                LetValue::Const {
+                    name: name("Nat.add"),
+                    levels: vec![],
+                    args: vec![Arg::FVar(fvar(0)), Arg::FVar(fvar(2))],
+                },
+            ),
+            Code::fun(
+                k1,
+                Code::let_bind(
+                    LetDecl::new(
+                        fvar(10),
+                        name("t"),
+                        nat_type(),
+                        LetValue::Const {
+                            name: name("Nat.add"),
+                            levels: vec![],
+                            args: vec![Arg::FVar(fvar(3)), Arg::FVar(fvar(4))],
+                        },
+                    ),
+                    Code::ret(fvar(10)),
+                ),
+            ),
+        ),
+    );
+
+    // def outer (a) := fun go ..; let u := go a; return u
+    let code = Code::fun(
+        go,
+        Code::let_bind(
+            LetDecl::new(
+                fvar(11),
+                name("u"),
+                nat_type(),
+                LetValue::FVar {
+                    fvar: fvar(1),
+                    args: vec![Arg::FVar(fvar(0))],
+                },
+            ),
+            Code::ret(fvar(11)),
+        ),
+    );
+    let decl = Decl::new(
+        name("outer"),
+        vec![],
+        nat_type(),
+        vec![Param::new(fvar(0), name("a"), nat_type())],
+        code,
+        false,
+    );
+
+    let result = lambda_lift_default(&decl);
+
+    assert_eq!(result.lifted.len(), 3, "go, k1 and k2 all lift");
+    assert_no_dangling_captures(&result);
+}
+
+/// The one-boundary case the two-boundary fix generalizes: a self-recursive
+/// `go` with a capture. Kept as the control — it passed before and must still.
+#[test]
+fn test_lift_self_recursive_capture_still_threads_one_boundary() {
+    // fun go (x) := let w := Nat.add a x; let r := go w; return r
+    let go = FunDecl::new(
+        fvar(1),
+        name("go"),
+        vec![Param::new(fvar(2), name("x"), nat_type())],
+        nat_type(),
+        Code::let_bind(
+            LetDecl::new(
+                fvar(3),
+                name("w"),
+                nat_type(),
+                LetValue::Const {
+                    name: name("Nat.add"),
+                    levels: vec![],
+                    args: vec![Arg::FVar(fvar(0)), Arg::FVar(fvar(2))],
+                },
+            ),
+            Code::let_bind(
+                LetDecl::new(
+                    fvar(4),
+                    name("r"),
+                    nat_type(),
+                    LetValue::FVar {
+                        fvar: fvar(1),
+                        args: vec![Arg::FVar(fvar(3))],
+                    },
+                ),
+                Code::ret(fvar(4)),
+            ),
+        ),
+    );
+
+    let code = Code::fun(
+        go,
+        Code::let_bind(
+            LetDecl::new(
+                fvar(5),
+                name("u"),
+                nat_type(),
+                LetValue::FVar {
+                    fvar: fvar(1),
+                    args: vec![Arg::FVar(fvar(0))],
+                },
+            ),
+            Code::ret(fvar(5)),
+        ),
+    );
+    let decl = Decl::new(
+        name("outer"),
+        vec![],
+        nat_type(),
+        vec![Param::new(fvar(0), name("a"), nat_type())],
+        code,
+        false,
+    );
+
+    let result = lambda_lift_default(&decl);
+    assert_eq!(result.lifted.len(), 1, "only `go` lifts");
+    assert_no_dangling_captures(&result);
+}

@@ -28,6 +28,7 @@
 #   heavy_gate.sh release <token>        # gives it back
 #   heavy_gate.sh run <gb> <label> -- cmd...   # acquire, run, release even on failure
 #   heavy_gate.sh status                 # what is in flight
+#   heavy_gate.sh peaks [n]              # what past jobs RESERVED vs what they USED
 #   heavy_gate.sh reap                   # drop tokens whose owner PID is gone
 #
 # A token records its owner PID. `reap` (run automatically on every acquire)
@@ -257,6 +258,109 @@ _inflight() {
   echo "$total"
 }
 
+# ------------------------------------------- observed peak vs the reservation
+#
+# WHY. Everything above guards ONE direction: a weight smaller than the job.
+# That is the direction that panicked this machine (2026-08-24: 31 targets
+# weighed more than the budget, the gate refused them, and they ran anyway).
+#
+# The OPPOSITE error had no guard at all, and it is not benign. A weight LARGER
+# than the job is silently converted by the arithmetic above into exclusive
+# admission -- `req=$BUDGET` -- so ONE over-weighted job turns a shared,
+# backfilling machine into a single-lane one for as long as it runs, and every
+# part of the gate still looks like it is working. MEASURED 2026-08-28:
+# `clean-verify::test::axiom_ratchet` reserved the whole 27 GB budget at
+# weight 44 (derived from a 28.87 GB recording), ran at a 9.11 GB peak, held
+# the machine 6h14m -- of which 2h41m was OTHER lanes' jobs queued behind it --
+# and nothing anywhere printed a number a reader could have doubted.
+#
+# So `run` now MEASURES what the job actually used and says so at exit. It is a
+# REPORT, not a policy: admission is untouched, no request is resized, and a
+# job whose peak is unknown (too short to sample) is never warned about. The
+# number is also appended to a machine-wide log so a stale weight is visible to
+# the next lane and not only to the one that happened to be watching stderr.
+#
+# The measurement is a sampled sum of RSS over this script's descendant tree.
+# Two known biases, both stated rather than corrected: summing RSS across a
+# process tree DOUBLE-COUNTS pages shared between its processes (a group sum can
+# therefore exceed physical RAM -- `kernel_core_red_env_fidelity` has a recorded
+# 57.26 GB peak on this 36 GB box), and a peak between two samples is missed.
+# Both bias the observed peak in directions that make this report CONSERVATIVE
+# about crying over-reservation, which is the safe way round for a report whose
+# only failure mode would be talking someone into a weight that is too small.
+PEAK_SAMPLE_S=${HEAVY_GATE_SAMPLE_S:-5}
+# Below this reservation the absolute waste is too small to be worth a line.
+PEAK_MIN_REPORT_GB=${HEAVY_GATE_PEAK_MIN_GB:-4}
+# An observed peak under this percentage of the reservation is called out.
+PEAK_LOW_PCT=${HEAVY_GATE_PEAK_LOW_PCT:-40}
+PEAKLOG="$GATE_DIR/peaks.log"
+
+# Sum of RSS (KB) over the descendants of $1, excluding the subtree rooted at $2.
+# Excluding the sampler's own subtree keeps the sampler from measuring itself;
+# it is a few MB, but a measurement that includes its own instrument is one more
+# thing a reader has to discount.
+_tree_rss_kb() {
+  ps -axo pid=,ppid=,rss= 2>/dev/null | awk -v root="$1" -v skip="${2:-0}" '
+    { pid[NR]=$1+0; par[NR]=$2+0; rss[NR]=$3+0; n=NR }
+    END {
+      # `ps` does not emit parents before children, so both closures are taken
+      # to a fixed point rather than in one pass.
+      skipm[skip]=1; changed=1
+      while (changed) { changed=0
+        for (i=1;i<=n;i++) if (!skipm[pid[i]] && skipm[par[i]]) { skipm[pid[i]]=1; changed=1 } }
+      mark[root]=1; changed=1
+      while (changed) { changed=0
+        for (i=1;i<=n;i++)
+          if (!mark[pid[i]] && !skipm[pid[i]] && mark[par[i]]) { mark[pid[i]]=1; changed=1 } }
+      t=0
+      for (i=1;i<=n;i++) if (mark[pid[i]] && pid[i]!=root && !skipm[pid[i]]) t+=rss[i]
+      printf "%d", t
+    }'
+}
+
+# One line per gated job, plus a warning when the reservation and the job
+# disagree -- in EITHER direction.
+_peak_report() {   # <reserved_gb> <label> <peakfile> <elapsed_s>
+  local gb=$1 label=$2 pf=$3 secs=$4 kb line
+  [ -n "$pf" ] && [ -s "$pf" ] || return 0     # never sampled: say nothing
+  kb=$(awk 'NR==1{print $1+0}' "$pf" 2>/dev/null)
+  [ -n "${kb:-}" ] && [ "$kb" -gt 0 ] || return 0
+  line=$(awk -v kb="$kb" -v gb="$gb" -v secs="$secs" -v lbl="$label" \
+             -v lowpct="$PEAK_LOW_PCT" -v minrep="$PEAK_MIN_REPORT_GB" '
+    BEGIN {
+      peak = kb / 1048576.0
+      pct  = (gb > 0) ? peak * 100.0 / gb : 0
+      h = int(secs/3600); m = int((secs%3600)/60)
+      dur = (h > 0) ? sprintf("%dh%02dm", h, m) : sprintf("%dm%02ds", m, secs%60)
+      printf "%s|%.2f|%.0f|%s|%d", lbl, peak, pct, dur,
+             (pct < lowpct && gb >= minrep) ? 1 : (peak > gb ? 2 : 0)
+    }')
+  local lbl peak pct dur verdict
+  IFS='|' read -r lbl peak pct dur verdict <<EOF
+$line
+EOF
+  mkdir -p "$GATE_DIR" 2>/dev/null
+  printf '%s %s reserved=%s peak_gb=%s pct=%s dur=%s\n' \
+    "$(date -u +%FT%TZ)" "$lbl" "$gb" "$peak" "$pct" "$dur" >> "$PEAKLOG" 2>/dev/null
+  [ -n "${HEAVY_GATE_QUIET:-}" ] || \
+    echo "heavy_gate: $lbl reserved ${gb} GB, observed peak ${peak} GB (${pct}% of it) over $dur" >&2
+  case "$verdict" in
+    1) echo "heavy_gate: OVER-RESERVED — $lbl held ${gb} GB and never used more than ${peak} GB." >&2
+       if [ "$gb" -gt "$BUDGET" ]; then
+         echo "            ${gb} GB is above the ${BUDGET} GB budget, so this job was admitted" >&2
+         echo "            EXCLUSIVELY: it held the WHOLE machine and every other lane queued" >&2
+         echo "            behind it for $dur. An over-sized weight makes this a single-lane box." >&2
+       else
+         echo "            That is ${gb} GB of a ${BUDGET} GB budget denied to other lanes for $dur." >&2
+       fi
+       echo "            Re-derive the weight from this measurement: peak x1.5 = $(awk -v p="$peak" \
+              'BEGIN{w=int(p*1.5); if (w<p*1.5) w++; if (w<1) w=1; printf "%d", w}') GB." >&2 ;;
+    2) echo "heavy_gate: UNDER-RESERVED — $lbl reserved ${gb} GB and peaked at ${peak} GB." >&2
+       echo "            The ledger under-counted this job; that is the direction that panicked this" >&2
+       echo "            box on 2026-08-19 and 2026-08-24. Raise the weight before running it again." >&2 ;;
+  esac
+}
+
 cmd=${1:-status}
 case "$cmd" in
   acquire)
@@ -344,9 +448,45 @@ case "$cmd" in
     gb=${2:?need gb}; label=${3:?need label}; shift 3
     [ "${1:-}" = "--" ] && shift
     tok=$("$0" acquire "$gb" "$label") || exit $?
-    trap 'rm -f "$tok"' EXIT INT TERM
+    peakf=""; spid=""
+    # The sampler runs as a separate invocation of this script, not as a `( ) &`
+    # subshell: this is bash 3.2 (macOS ships no newer /bin/bash), where a
+    # subshell's `$$` is still the PARENT's pid, so a subshell could not tell
+    # `_tree_rss_kb` which subtree to exclude -- itself.
+    peakf=$(mktemp "${TMPDIR:-/tmp}/heavy_gate_peak.XXXXXX" 2>/dev/null) || peakf=""
+    trap 'rm -f "$tok" ${peakf:+"$peakf"} 2>/dev/null; [ -n "${spid:-}" ] && kill "$spid" 2>/dev/null' EXIT INT TERM
+    if [ -n "$peakf" ]; then
+      "$0" __peak_watch $$ "$peakf" >/dev/null 2>&1 &
+      spid=$!
+    fi
+    _t0=$(date +%s)
+    # The wrapped command still runs in the FOREGROUND of this script, exactly
+    # as before: measuring a job must not change how it is executed (stdin,
+    # process group and signal delivery all stay put).
     "$@"; rc=$?
-    rm -f "$tok"; trap - EXIT INT TERM; exit $rc ;;
+    _t1=$(date +%s)
+    if [ -n "$spid" ]; then kill "$spid" 2>/dev/null; wait "$spid" 2>/dev/null; fi
+    _peak_report "$gb" "$label" "$peakf" $(( _t1 - _t0 ))
+    rm -f "$tok" ${peakf:+"$peakf"} 2>/dev/null
+    trap - EXIT INT TERM; exit $rc ;;
+  __peak_watch)
+    # INTERNAL (used by `run`): track the peak RSS of <root>'s descendant tree
+    # into <outfile> until <root> goes away. Never fails the job it watches.
+    _pw_root=${2:?need root pid}; _pw_out=${3:?need outfile}; _pw_best=0
+    while kill -0 "$_pw_root" 2>/dev/null; do
+      _pw_kb=$(_tree_rss_kb "$_pw_root" $$)
+      if [ -n "${_pw_kb:-}" ] && [ "$_pw_kb" -gt "$_pw_best" ]; then
+        _pw_best=$_pw_kb; echo "$_pw_best" > "$_pw_out" 2>/dev/null
+      fi
+      sleep "$PEAK_SAMPLE_S"
+    done
+    exit 0 ;;
+  peaks)
+    # What every gated job on this machine actually used against what it
+    # reserved. `status` answers "what is in flight"; this answers "were those
+    # numbers right", which is the question a stale weight hides.
+    if [ -s "$PEAKLOG" ]; then tail -n "${2:-40}" "$PEAKLOG"
+    else echo "no peak measurements recorded yet ($PEAKLOG)"; fi ;;
   status)
     _reap; _qreap
     if [ "$SMALL_BOX" -eq 1 ]; then
@@ -419,8 +559,80 @@ case "$cmd" in
     # ps scan (which is nondeterministic on a loaded box).
     _st "128 GB box admits weight 200 EXCLUSIVELY" 0 \
       env HEAVY_GATE_DIR="$td/b" HEAVY_GATE_PHYS_GB=128 HEAVY_GATE_HOG_GB=4096 "$0" run 200 st-huge -- true
+
+    # ---- the peak-vs-reservation report (2026-08-28) --------------------
+    # These arms run REAL jobs with REAL memory and read the REAL sampler:
+    # nothing here injects a peak, because a report that can only be proved
+    # through a test seam has not been shown to work on a job.
+    _stg() {   # _stg <name> <expect|no:expect> <cmd...>
+      local name=$1 want=$2 err; shift 2
+      err=$("$@" 2>&1 >/dev/null)
+      case "$want" in
+        no:*) if printf '%s' "$err" | grep -q "${want#no:}"; then
+                echo "  selftest FAILED: $name (unexpected '${want#no:}'): $err"; fails=$((fails+1))
+              else echo "  selftest ok: $name"; fi ;;
+        *)    if printf '%s' "$err" | grep -q "$want"; then echo "  selftest ok: $name"
+              else echo "  selftest FAILED: $name (no '$want'): $err"; fails=$((fails+1)); fi ;;
+      esac
+    }
+    _pk="env HEAVY_GATE_DIR=$td/b HEAVY_GATE_PHYS_GB=128 HEAVY_GATE_SAMPLE_S=2"
+    # 1. A tiny job holding a big reservation IS called out. This is the
+    #    2026-08-28 axiom_ratchet shape: weight 44, peak 9.11 GB, 6h12m of
+    #    exclusive hold, and not one line of output saying so.
+    _stg "over-reservation is REPORTED" "OVER-RESERVED" \
+      $_pk "$0" run 8 st-overres -- sleep 7
+    # 2. ... and a right-sized reservation is NOT, or the report is noise
+    #    everyone learns to ignore. Same job, threshold moved under it.
+    _stg "right-sized reservation is SILENT" "no:OVER-RESERVED" \
+      $_pk HEAVY_GATE_PEAK_LOW_PCT=0 "$0" run 8 st-rightsized -- sleep 7
+    # 3. The other direction -- the one that panicked this box -- is reported
+    #    too: a real 1.5 GB allocation against a 1 GB reservation.
+    _stg "under-reservation is REPORTED" "UNDER-RESERVED" \
+      $_pk "$0" run 1 st-underres -- python3 -c \
+      'import time
+b = bytearray(1610612736)
+for i in range(0, len(b), 4096): b[i] = 1
+time.sleep(8)'
+    # 4. A job too short to sample says NOTHING. An unmeasured peak must never
+    #    be reported as a small one -- that is how a real weight gets cut.
+    _stg "an unsampled job is not reported" "no:observed peak" \
+      $_pk "$0" run 8 st-short -- true
+    # 4a. A GRANDCHILD's memory counts. Cargo trees are deep -- cargo spawns
+    #     rustc spawns its codegen workers -- so a measurement that stopped at
+    #     the direct child would read ~0 on every job this gate exists for.
+    #     The parent here is a small python that merely WAITS: all 1 GiB is in
+    #     the grandchild, so only a transitive closure can see it. (Do not
+    #     write this arm with nested `sh -c`: a single-command `sh -c` execs
+    #     rather than forks, the chain collapses to one direct child, and the
+    #     arm passes against a direct-children-only measurement -- measured
+    #     2026-08-28 by planting exactly that mutation.)
+    _stg "a GRANDCHILD's memory IS counted" "UNDER-RESERVED" \
+      $_pk "$0" run 1 st-deep -- python3 -c 'import subprocess, sys
+child = subprocess.Popen([sys.executable, "-c", """
+import time
+b = bytearray(1073741824)
+for i in range(0, len(b), 4096): b[i] = 1
+time.sleep(9)
+"""])
+child.wait()'
+    # 4b. ... and a process OUTSIDE the job's tree does not. This is the arm
+    #     that fails if `_tree_rss_kb` is ever 'simplified' to a process-GROUP
+    #     sum: without job control every sibling this shell started shares the
+    #     group, so a co-tenant's 1.5 GB would be billed to a `sleep`.
+    python3 -c 'import time
+b = bytearray(1610612736)
+for i in range(0, len(b), 4096): b[i] = 1
+time.sleep(30)' & _sib=$!
+    sleep 4
+    _stg "a sibling process is NOT counted" "no:UNDER-RESERVED" \
+      $_pk "$0" run 1 st-isolation -- sleep 9
+    kill "$_sib" 2>/dev/null; wait "$_sib" 2>/dev/null
+    # 5. The wrapper still passes the job's exit code through untouched. The
+    #    sampler is bookkeeping around `"$@"`, and must stay that way.
+    _st "run passes a nonzero exit code through" 7 \
+      env HEAVY_GATE_DIR="$td/b" HEAVY_GATE_PHYS_GB=128 "$0" run 4 st-rc -- sh -c 'exit 7'
     rm -rf "$td"
     if [ "$fails" -gt 0 ]; then echo "selftest: $fails arm(s) FAILED"; exit 1; fi
     echo "selftest: all arms green"; exit 0 ;;
-  *) echo "usage: $0 {acquire <gb> <label>|release <token>|run <gb> <label> -- cmd...|status|reap|selftest}" >&2; exit 64 ;;
+  *) echo "usage: $0 {acquire <gb> <label>|release <token>|run <gb> <label> -- cmd...|status|peaks [n]|reap|selftest}" >&2; exit 64 ;;
 esac

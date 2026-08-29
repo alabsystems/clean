@@ -314,13 +314,15 @@ fn classify<'a, 'b>(
         _ => {
             if let Some(c) = children.iter().find(|c| c.family.is_some()) {
                 return Err(unsupported(format!(
-                    "variant codata `{shape_name}`: `deriving Coind` cannot yet build the \
-                     eta law for constructor `{}` — it has {} recursive arguments and `{}` \
-                     is an INDEXED family, so the position type is a Sum with a dependent \
-                     summand. The k-fold branch template is only validated for Sums of \
-                     bare children (designs/2026-08-28-variant-codata-surface.md §9). This \
-                     is a named gap, not a silent one: the definitional tier (VC-3/4/5) \
-                     still works for this constructor — drop `deriving Coind`",
+                    "variant codata `{shape_name}`: `deriving Coind` does not support \
+                     constructor `{}` — it has {} recursive arguments and `{}` is an \
+                     INDEXED family, so the position type is a Sum with a dependent \
+                     summand. MEASURED, not assumed (§12): the eta half GENERALIZES to \
+                     this shape — dependent branch binder and all, computation pins \
+                     included — but the N-ary case tower does not. The refusal sits here, \
+                     covering both, rather than silently emitting a tier whose `cases` is \
+                     missing. A named gap, not a silent one: the definitional tier \
+                     (VC-3/4/5) still works for this constructor — drop `deriving Coind`",
                     ctor.name,
                     children.len(),
                     c.arg_name

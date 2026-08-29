@@ -535,6 +535,134 @@ mod tests {
         );
     }
 
+    /// RECURSION through a `do`-block: a list-printing program prints its
+    /// elements in list order, not reversed.
+    ///
+    /// The straight-line control above passed while this printed `c b a` with
+    /// status 0 — silent wrong output, the shape of every argv- or
+    /// list-printing Lean program. The recursor lowering materialized the arm's
+    /// induction hypothesis (`dump rest`) as a `let` at the HEAD of the arm,
+    /// ahead of `IO.println s`; under the eager-effect `IO` model of
+    /// [`crate::native_build`] a hoisted self-call is a hoisted EFFECT, so the
+    /// whole tail printed before the head. Fixed in `to_lcnf::sink_ih`, which
+    /// puts the IH back inside the bind continuation that consumes it.
+    ///
+    /// Note what this asserts and why it is not C-implementation-defined: the
+    /// emitted effects are separate C STATEMENTS, never operands of one call,
+    /// so their order is fixed by the emitted sequence and no C compiler is
+    /// free to choose it.
+    #[test]
+    fn test_run_io_recursive_do_block_over_list_prints_in_list_order() {
+        if !cc_available() {
+            eprintln!(
+                "skipping test_run_io_recursive_do_block_over_list_prints_in_list_order: no cc"
+            );
+            return;
+        }
+        let (_dir, file) = write_temp_lean(
+            "def dump : List String -> IO Unit\n  \
+             | [] => pure ()\n  \
+             | s :: rest => do\n    \
+             IO.println s\n    \
+             dump rest\n\
+             def main : IO Unit := dump [\"a\", \"b\", \"c\"]\n",
+        );
+        let outcome = build_and_run_io_entry(&file, "main").expect("build+link+run recursive dump");
+        assert_eq!(outcome.exit_code, 0, "exit code");
+        assert_eq!(
+            outcome.stdout, "a\nb\nc\n",
+            "a recursive do-block must print in list order, not reversed"
+        );
+    }
+
+    /// The same defect on the `Nat` arm of the recursor lowering, which binds
+    /// its induction hypothesis at a second site (`build_nat_succ_arm_body`).
+    /// Measured reversed (`0 1 2`) before the fix.
+    #[test]
+    fn test_run_io_recursive_do_block_over_nat_counts_down_in_source_order() {
+        if !cc_available() {
+            eprintln!(
+                "skipping test_run_io_recursive_do_block_over_nat_counts_down_in_source_order: no cc"
+            );
+            return;
+        }
+        let (_dir, file) = write_temp_lean(
+            "def countdown : Nat -> IO Unit\n  \
+             | 0 => pure ()\n  \
+             | n + 1 => do\n    \
+             IO.println (toString n)\n    \
+             countdown n\n\
+             def main : IO Unit := countdown 3\n",
+        );
+        let outcome =
+            build_and_run_io_entry(&file, "main").expect("build+link+run recursive countdown");
+        assert_eq!(outcome.exit_code, 0, "exit code");
+        assert_eq!(
+            outcome.stdout, "2\n1\n0\n",
+            "each iteration must print before it recurses"
+        );
+    }
+
+    /// THREE statements in the recursive arm, not two: the IH sinks through a
+    /// continuation nested inside another continuation, so `sink_ih` has to
+    /// walk past a `Fun` and keep descending rather than stop at the first one.
+    ///
+    /// Measured scope, so this is not read as more than it is: with
+    /// `lambda_lift`'s capture-boundary swap restricted back to the self entry
+    /// this case still PASSES — the shape that needs two boundaries is a
+    /// recursion nested inside another recursion, pinned by
+    /// `lambda_lift::tests::test_lift_call_crossing_two_capture_boundaries_binds_every_argument`
+    /// and by `native_build`'s nested-`for` fixture. What this pins is the sink
+    /// reaching the innermost continuation.
+    #[test]
+    fn test_run_io_recursive_do_block_with_two_statements_per_arm_runs() {
+        if !cc_available() {
+            eprintln!(
+                "skipping test_run_io_recursive_do_block_with_two_statements_per_arm_runs: no cc"
+            );
+            return;
+        }
+        let (_dir, file) = write_temp_lean(
+            "def dump2 : List String -> IO Unit\n  \
+             | [] => pure ()\n  \
+             | s :: rest => do\n    \
+             IO.println s\n    \
+             IO.println \"-\"\n    \
+             dump2 rest\n\
+             def main : IO Unit := dump2 [\"a\", \"b\"]\n",
+        );
+        let outcome = build_and_run_io_entry(&file, "main").expect("build+link+run nested arm");
+        assert_eq!(outcome.exit_code, 0, "exit code");
+        assert_eq!(
+            outcome.stdout, "a\n-\nb\n-\n",
+            "both statements run before the recursive call, once per element"
+        );
+    }
+
+    /// The order fix must not disturb a PURE recursion, whose induction
+    /// hypothesis is consumed directly in the arm and therefore never moves.
+    #[test]
+    fn test_run_io_pure_recursion_results_are_unchanged_by_the_order_fix() {
+        if !cc_available() {
+            eprintln!(
+                "skipping test_run_io_pure_recursion_results_are_unchanged_by_the_order_fix: no cc"
+            );
+            return;
+        }
+        let (_dir, file) = write_temp_lean(
+            "def sumList : List Nat -> Nat\n  \
+             | [] => 0\n  \
+             | x :: rest => x + sumList rest\n\
+             def main : IO Unit := IO.println (toString (sumList [1, 2, 3, 4]))\n",
+        );
+        let outcome = build_and_run_io_entry(&file, "main").expect("build+link+run pure recursion");
+        assert_eq!(outcome.exit_code, 0, "exit code");
+        assert_eq!(
+            outcome.stdout, "10\n",
+            "a directly-consumed IH still computes"
+        );
+    }
+
     /// `pure ()` is a no-op IO action: nothing printed, exit 0.
     #[test]
     fn test_run_io_pure_unit_exits_zero_no_output() {

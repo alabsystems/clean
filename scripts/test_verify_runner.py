@@ -13,10 +13,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import subprocess
 import threading
+import time
+import types
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -318,6 +321,30 @@ class TestTimeoutPolicy(unittest.TestCase):
         budget, basis = vr.timeout_for(self.TEST_ENTRY, rec)
         self.assertEqual(budget, int(5000.0 * vr.TIMEOUT_HEADROOM) + 1)
         self.assertIn("5000.0s", basis)
+
+    def test_the_budget_is_derived_from_execution_not_from_queue_wait(self):
+        """`duration_s` starts when the worker picks a row up, not when it runs.
+
+        The budget it feeds bounds `proc.wait`, which starts only AFTER
+        heavy_gate admits -- so deriving it from `duration_s` pays 4x headroom
+        on time the target spent QUEUEING. Measured 2026-08-28: the
+        `axiom_ratchet` row reads 22444.2 s wall against a 12799 s timeout,
+        because 9,645 s of it (2h41m) was the block at the gate.
+        """
+        rec = record(status=vr.STATUS_GREEN, source="measured",
+                     duration_s=22444.2, gate_wait_s=9645.0, exec_duration_s=12799.2)
+        budget, basis = vr.timeout_for(self.TEST_ENTRY, rec)
+        self.assertEqual(budget, int(12799.2 * vr.TIMEOUT_HEADROOM) + 1)
+        self.assertIn("12799.2s", basis)
+        self.assertIn("queue wait excluded", basis)
+        self.assertNotIn("22444.2s", basis)
+
+    def test_a_record_without_the_new_field_keeps_its_old_basis(self):
+        """No existing budget may move because a new field was added."""
+        rec = record(status=vr.STATUS_GREEN, duration_s=5000.0, source="measured")
+        budget, basis = vr.timeout_for(self.TEST_ENTRY, rec)
+        self.assertEqual(budget, int(5000.0 * vr.TIMEOUT_HEADROOM) + 1)
+        self.assertIn("this target last took here", basis)
 
     def test_short_measured_duration_does_not_shrink_below_the_floor(self):
         rec = record(status=vr.STATUS_GREEN, duration_s=3.0, source="measured")
@@ -1098,14 +1125,102 @@ class MemoryAdmissionTests(unittest.TestCase):
             start_new_session=True,
         )
         stop = threading.Event()
-        out: list[float] = []
-        t = threading.Thread(target=lambda: out.append(vr._peak_rss_gb(proc.pid, stop)))
+        out: list[vr.RssProfile] = []
+        t = threading.Thread(target=lambda: out.append(vr._rss_profile(proc.pid, stop)))
         t.start()
         proc.wait()
         stop.set()
         t.join(timeout=10)
-        self.assertGreater(out[0], 0.2)      # saw the ~300 MB allocation
-        self.assertLess(out[0], 4.0)         # and did not invent a number
+        self.assertGreater(out[0].peak_gb, 0.2)      # saw the ~300 MB allocation
+        self.assertLess(out[0].peak_gb, 4.0)         # and did not invent a number
+        self.assertGreater(out[0].samples, 0)        # and says how many samples it is
+
+    def test_a_group_sum_above_physical_ram_is_clamped_and_kept(self):
+        """A resident set larger than the machine is the instrument, not the job.
+
+        Summing `ps rss` across a process group double-counts pages shared
+        between its processes. That is not theoretical: the committed record
+        `clean-verify__test__kernel_core_red_env_fidelity.json` reads a 57.26 GB
+        peak on a 36 GB box -- 1.59x physical RAM -- and 1.5x THAT is the weight
+        it then reserved. The clamp is a bound the machine itself supplies, so
+        it is not a guess; the unclamped sum is kept rather than discarded.
+        """
+        stop = threading.Event()
+        stop.set()                          # one pass, then return
+
+        with mock.patch.object(vr, "_phys_ram_gb", return_value=36.0), \
+             mock.patch.object(vr.subprocess, "run") as run:
+            run.return_value = types.SimpleNamespace(stdout="30000000\n30000000\n")
+            stop2 = threading.Event()
+            done = threading.Event()
+            out: list[vr.RssProfile] = []
+
+            def sample():
+                out.append(vr._rss_profile(4242, stop2))
+                done.set()
+
+            t = threading.Thread(target=sample)
+            t.start()
+            time.sleep(0.3)
+            stop2.set()
+            done.wait(timeout=10)
+            t.join(timeout=10)
+
+        # 2 x 30,000,000 kB = 57.22 GB summed; the box is 36 GB.
+        self.assertGreater(out[0].raw_peak_gb, 36.0)
+        self.assertEqual(out[0].peak_gb, 36.0)
+        self.assertLessEqual(out[0].p50_gb, 36.0)
+
+    def test_the_budget_copy_agrees_with_heavy_gate_itself(self):
+        """`weights` says which rows run ALONE; that answer is heavy_gate's.
+
+        The threshold is duplicated here so a read-only view need not shell out
+        to the gate, and a duplicated constant drifts. This compares the copy
+        against `heavy_gate.sh status` on THIS machine, so the two cannot
+        disagree without a test failing -- which matters because the whole
+        point of the `EXCL` column is that a weight one gigabyte over the line
+        stops every other lane.
+        """
+        gate = Path(__file__).resolve().parent / "heavy_gate.sh"
+        if not gate.exists():                     # pragma: no cover
+            self.skipTest("heavy_gate.sh absent")
+        out = subprocess.run(["bash", str(gate), "status"],
+                             capture_output=True, text=True, timeout=60).stdout
+        match = re.search(r"budget (\d+) GB", out)
+        self.assertIsNotNone(match, f"heavy_gate status did not state a budget: {out!r}")
+        self.assertEqual(vr._gate_budget_gb(), int(match.group(1)))
+
+    def test_over_and_under_reservation_are_stated_in_words(self):
+        """The record already held both numbers and said nothing about them.
+
+        Measured 2026-08-28: `clean-verify::test::axiom_ratchet` reserved 44 GB
+        -- clamped by heavy_gate to the whole 27 GB budget, so exclusively --
+        and ran at a 9.11 GB peak for 6h14m with six lanes queued behind it.
+        `gate_weight_gb` and `peak_rss_gb` were both in the artifact the whole
+        time. Nothing put them side by side.
+        """
+        big_weight_small_job = vr._reservation_verdict(
+            44, vr.RssProfile(peak_gb=9.11, raw_peak_gb=9.11, p50_gb=1.02, samples=6000))
+        self.assertIsNotNone(big_weight_small_job)
+        self.assertIn("OVER-RESERVED", big_weight_small_job)
+        self.assertIn("14 GB", big_weight_small_job)      # ceil(9.11 * 1.5)
+
+        # The panic direction is louder, not quieter.
+        under = vr._reservation_verdict(
+            8, vr.RssProfile(peak_gb=23.0, raw_peak_gb=23.0, p50_gb=20.0, samples=900))
+        self.assertIsNotNone(under)
+        self.assertIn("UNDER-RESERVED", under)
+
+        # A right-sized reservation, a reservation too small to matter, and a
+        # run that measured nothing all say NOTHING. A verdict on every row is
+        # a verdict nobody reads, and an unmeasured peak is not a small one.
+        for weight, profile in (
+            (14, vr.RssProfile(9.11, 9.11, 8.0, 6000)),        # 65% -- fine
+            (2, vr.RssProfile(0.1, 0.1, 0.1, 40)),             # tiny reservation
+            (44, vr.RssProfile(0.0, 0.0, 0.0, 0)),             # never sampled
+        ):
+            self.assertIsNone(vr._reservation_verdict(weight, profile),
+                              f"weight {weight} / {profile} should be silent")
 
 
 

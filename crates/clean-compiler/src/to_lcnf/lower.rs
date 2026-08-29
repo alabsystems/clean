@@ -5,6 +5,7 @@
 //! LCNF lowering: erasure analysis, expression conversion, and recursion detection.
 
 use super::mentions::{code_called_constant_names, expr_called_constant_names};
+use super::sink_ih::sink_ih_bindings;
 use super::LcnfContext;
 use crate::error::CompilerError;
 use crate::lcnf::{Alt, Arg, Cases, Code, Decl, FunDecl, LetDecl, LetValue, Param};
@@ -3029,7 +3030,11 @@ fn build_rec_arm_body(
     match result {
         Ok(body) => {
             ctx.restore_pending(outer_pending);
-            Ok(body)
+            // The IH bindings above sit at the head of the arm, ahead of every
+            // effect the minor premise performs. Under the eager-effect `IO`
+            // model that is a REORDERED effect, not a pre-computed value — put
+            // each one back where the source put it. See `sink_ih`.
+            Ok(sink_ih_bindings(body, &ih_fvars))
         }
         Err(err) => {
             ctx.abandon_pending(outer_pending);
@@ -3108,7 +3113,8 @@ fn build_nat_succ_arm_body(
     match result {
         Ok(body) => {
             ctx.restore_pending(outer_pending);
-            Ok(body)
+            // Same eager-effect reordering as the generic arm; see `sink_ih`.
+            Ok(sink_ih_bindings(body, &[ih_fvar]))
         }
         Err(err) => {
             ctx.abandon_pending(outer_pending);

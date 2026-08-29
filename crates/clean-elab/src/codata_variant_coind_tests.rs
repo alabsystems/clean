@@ -223,6 +223,12 @@ theorem ITr.spin_unfolds (E : Type) (R : Type) (Ans : E → Type) :
 /// (whose `Pₖ` is a `PProd`, so the `T.cases` leaf recovers payloads by
 /// projection and hands the eta law `tag (PProd.mk p.1 p.2)` against a bound
 /// `p` — which type-checks only because structure eta is definitional).
+///
+/// It also covers the two `cases_tower` branches ITr cannot reach: a
+/// SINGLE-constructor codata (no `Sum` exists, so no `sumCases` is emitted
+/// and the head equation is `rfl` rather than a folded chain) and a
+/// three-way codata whose LAST constructor carries payloads (ITr's `Br`
+/// carries none, so the last-leaf projection path had only run at arity 0).
 #[test]
 fn test_corner_shapes_check() {
     let src = include_str!("../data/variant_codata/corner_shapes.lean");
@@ -234,6 +240,13 @@ fn test_corner_shapes_check() {
         // the nullary constructor gets an eta law but NO extractor
         "Two.Nil_eta",
         "Two.PairChild",
+        // single-constructor codata: the no-`Sum` branch of the tower
+        "Stream1.cases_used",
+        "Stream1.eta_used",
+        "Stream1.CasesP",
+        // three constructors, the LAST carrying payloads
+        "Tri.cases_used",
+        "Tri.three_eta_used",
     ] {
         assert!(
             env.get_const(&Name::from_string(n)).is_some(),
@@ -248,6 +261,12 @@ fn test_corner_shapes_check() {
         env.get_const(&Name::from_string("Two.cases_Nil_inner1"))
             .is_none(),
         "a nullary constructor needs no hoisted inner existential"
+    );
+    assert!(
+        env.get_const(&Name::from_string("Stream1.sumCases"))
+            .is_none(),
+        "a single-constructor codata has no `Sum` to dispatch on, so the tower \
+         must not emit `sumCases` for it"
     );
 }
 

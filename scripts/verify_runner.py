@@ -155,7 +155,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 SCHEMA = "clean.suite_state/v1"
 PLAN_SCHEMA = "clean.suite_shard_plan/v1"
@@ -366,12 +366,23 @@ def timeout_for(
             prev = int(record["timeout_s"])
             budget = min(max(prev * 2, floor), TIMEOUT_HARD_CEILING)
             return budget, f"previous run was KILLED at {prev}s; doubled, floored at the {kind} floor {floor}s"
-        duration = record.get("duration_s")
+        # `exec_duration_s` when the record has it, `duration_s` otherwise. The
+        # budget this returns bounds `proc.wait`, which starts AFTER the gate
+        # admits -- so deriving it from `duration_s`, which starts BEFORE, pays
+        # 4x headroom on time the target spent QUEUEING rather than running.
+        # Measured 2026-08-28: axiom_ratchet's row reads 22444.2 s of which
+        # 9,645 s was the block at heavy_gate. Records written before this field
+        # existed keep the old basis, so no existing budget moves.
+        duration = record.get("exec_duration_s")
+        basis = "of execution (queue wait excluded)"
+        if not isinstance(duration, (int, float)):
+            duration = record.get("duration_s")
+            basis = "this target last took here"
         if record.get("status") in (STATUS_GREEN, STATUS_RED) and isinstance(duration, (int, float)):
             scaled = int(duration * TIMEOUT_HEADROOM) + 1
             budget = min(max(scaled, floor), TIMEOUT_HARD_CEILING)
             return budget, (
-                f"{TIMEOUT_HEADROOM:g}x the {duration:.1f}s this target last took here, "
+                f"{TIMEOUT_HEADROOM:g}x the {duration:.1f}s {basis}, "
                 f"floored at the {kind} floor {floor}s"
             )
 
@@ -1676,24 +1687,70 @@ DEFAULT_TARGET_GB = 12                 # unmeasured target: above the 8.8 GB spe
 MIN_TARGET_GB = 1
 
 
-def _peak_rss_gb(pgid: int, stop: threading.Event) -> float:
-    """Poll the child's whole process group and keep the maximum total RSS.
+def _phys_ram_gb() -> float:
+    """Physical RAM, or 0.0 when it cannot be read (then nothing is clamped)."""
+    try:
+        return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 1073741824.0
+    except (ValueError, OSError, AttributeError):
+        return 0.0
+
+
+class RssProfile(NamedTuple):
+    """What a run cost in memory, and how sure we are of it.
+
+    `peak_gb` is the number the gate weight is derived from. The other three
+    exist because ONE number could not distinguish the two ways this
+    measurement misleads, and both were live:
+
+    * `raw_peak_gb` -- summing `ps rss` across a process group DOUBLE-COUNTS
+      pages shared between its processes, so the sum can exceed physical RAM.
+      That is not a hypothesis: `clean-verify::test::kernel_core_red_env_fidelity`
+      has a recorded 57.26 GB peak on a 36 GB box (1.59x physical). A resident
+      set larger than the machine is an artifact of the instrument, so
+      `peak_gb` is clamped at physical RAM and the unclamped sum is kept here
+      rather than quietly discarded.
+    * `p50_gb` -- the MEDIAN sample, i.e. what the job cost for most of its
+      life. `cargo test -p clean-verify --test X` is a build followed by a much
+      longer run, one process group, one peak: a three-minute rustc spike sets
+      the weight that is then held for six hours of 1 GB test execution. Peak
+      and median together say which shape a target is; peak alone cannot.
+      Measured 2026-08-28: `axiom_ratchet` recorded 28.87 GB on a cold sweep
+      and 9.11 GB warm, with nothing in either record to tell them apart.
+    * `samples` -- a peak from two samples is not a peak. A row with a handful
+      of samples is a lower bound, and a reader must be able to see that.
+    """
+
+    peak_gb: float
+    raw_peak_gb: float
+    p50_gb: float
+    samples: int
+
+
+def _rss_profile(pgid: int, stop: threading.Event) -> RssProfile:
+    """Poll the child's whole process group; return its memory profile.
 
     Polling rather than getrusage: cargo spawns rustc and the test binary into
     the group, and the peak we care about is the SUM across the group at one
     instant, which getrusage(RUSAGE_CHILDREN) cannot give.
     """
-    peak = 0.0
+    phys = _phys_ram_gb()
+    samples: list[float] = []
     while not stop.is_set():
         try:
             out = subprocess.run(["ps", "-o", "rss=", "-g", str(pgid)],
                                  capture_output=True, text=True, timeout=5).stdout
             total_kb = sum(int(x) for x in out.split() if x.isdigit())
-            peak = max(peak, total_kb / 1048576.0)
+            samples.append(total_kb / 1048576.0)
         except Exception:
             pass
         stop.wait(2.0)
-    return peak
+    if not samples:
+        return RssProfile(0.0, 0.0, 0.0, 0)
+    raw_peak = max(samples)
+    peak = min(raw_peak, phys) if phys > 0 else raw_peak
+    ordered = sorted(samples)
+    p50 = ordered[len(ordered) // 2]
+    return RssProfile(peak, raw_peak, min(p50, phys) if phys > 0 else p50, len(samples))
 
 
 def _prior_peak_rss_gb(target_id: str) -> float | None:
@@ -1718,6 +1775,62 @@ def _prior_peak_rss_gb(target_id: str) -> float | None:
         if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
             return float(value)
     return None
+
+
+def _gate_budget_gb() -> int:
+    """The machine-wide budget, mirroring `heavy_gate.sh`'s own arithmetic.
+
+    A DUPLICATE, and knowingly so: this is used only to say whether a weight
+    would be admitted exclusively, and importing it would mean shelling out to
+    the gate for a read-only view. `heavy_gate.sh status` remains authoritative,
+    and a test compares the two so the copy cannot drift in silence.
+    """
+    phys = _phys_ram_gb()
+    if phys <= 0:
+        return 0
+    budget = int(phys - max(phys / 4, 8))
+    if budget < 4:                      # heavy_gate's small-box floor
+        budget = max(1, int(phys / 2))
+    return budget
+
+
+# A reservation below this is not worth a sentence however wrong it is.
+RESERVATION_MIN_REPORT_GB = 4
+# Below this fraction of its reservation, a job is called over-reserved.
+RESERVATION_LOW_FRACTION = 0.4
+
+
+def _reservation_verdict(weight_gb: int, profile: RssProfile) -> str | None:
+    """Did the weight this row reserved match what the row actually used?
+
+    A REPORT, deliberately: it changes no admission and resizes no request. It
+    exists because the artifact already held both numbers and said nothing,
+    and a reservation nobody can see is wrong is the same shape as a gate
+    nobody has seen fail.
+
+    `None` when there is nothing to say -- no samples, or a reservation small
+    enough that being wrong about it costs the machine nothing.
+    """
+    if profile.samples <= 0 or profile.peak_gb <= 0:
+        return None
+    if profile.peak_gb > weight_gb:
+        return (
+            f"UNDER-RESERVED: reserved {weight_gb} GB, peaked at "
+            f"{profile.peak_gb:.2f} GB. This is the direction that panicked "
+            f"this machine on 2026-08-19 and 2026-08-24."
+        )
+    if weight_gb < RESERVATION_MIN_REPORT_GB:
+        return None
+    if profile.peak_gb >= weight_gb * RESERVATION_LOW_FRACTION:
+        return None
+    return (
+        f"OVER-RESERVED: reserved {weight_gb} GB, peaked at "
+        f"{profile.peak_gb:.2f} GB ({profile.peak_gb / weight_gb * 100:.0f}%), "
+        f"median {profile.p50_gb:.2f} GB over {profile.samples} samples. A "
+        f"weight above the machine budget is admitted EXCLUSIVELY, so an "
+        f"over-sized one makes this a single-lane box for the whole run; "
+        f"peak x1.5 = {max(MIN_TARGET_GB, math.ceil(profile.peak_gb * 1.5))} GB."
+    )
 
 
 def _gate_weight_gb(target_id: str) -> int:
@@ -2625,6 +2738,14 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         # Peak RSS of the child's whole process group, sampled at 2 s. Feeds the
         # NEXT run's gate weight, so the runner learns each target's real cost.
         "peak_rss_gb": None,
+        # The same measurement's provenance -- see RssProfile. `peak_rss_gb` is
+        # clamped at physical RAM; the unclamped group sum, the median sample
+        # and the sample count are kept so a reader can tell a real 28 GB
+        # target from a three-minute build spike held for six hours, and can
+        # tell either from a peak taken over four samples.
+        "rss_group_sum_peak_gb": None,
+        "rss_p50_gb": None,
+        "rss_samples": None,
         # The last peak this target cost here, carried forward so a run that is
         # killed cannot downgrade its own retry to the unmeasured default. It is
         # provenance for the weight, never a claim that THIS run measured
@@ -2635,11 +2756,25 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         # Whether the machine-wide gate actually reserved that weight. False
         # means the row ran with NO reservation -- see _gate_acquire.
         "gate_admitted": None,
+        # How that reservation compared to what the job actually used, in
+        # WORDS, so a stale weight is a thing the artifact SAYS and not a thing
+        # a reader has to derive from two other fields. See _reservation_verdict.
+        "reservation_verdict": None,
+        # `duration_s` is wall time from the moment the worker picked this row
+        # up, so it INCLUDES the block at heavy_gate. These two split it.
+        # Measured 2026-08-28: axiom_ratchet's ERROR row reads duration 22444.2s
+        # against a 12799s timeout -- 9,645 s of it, 2h41m, was queueing. Every
+        # cross-sweep "this got slower" comparison drawn from `duration_s`, and
+        # the next run's timeout budget, were reading that queue.
+        "gate_wait_s": None,
+        "exec_duration_s": None,
         "notes": "",
     }
     write_record(record)
 
+    gate_wait_started = time.time()
     gate_token, gate_admitted, gate_refused = _gate_acquire(gate_weight, entry["id"])
+    record["gate_wait_s"] = round(time.time() - gate_wait_started, 1)
     record["gate_admitted"] = gate_admitted
     if gate_refused:
         # A refusal is never a licence to run ungated -- see _gate_acquire and
@@ -2667,7 +2802,8 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
             f"(script absent, or acquire failed {GATE_ACQUIRE_ATTEMPTS} times)"
         write_record(record)
     rss_stop = threading.Event()
-    rss_future: list[float] = []
+    rss_future: list[RssProfile] = []
+    exec_started = time.time()
 
     try:
         with open(log_path, "w", encoding="utf-8") as handle:
@@ -2686,7 +2822,7 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
             with _LIVE_LOCK:
                 _LIVE_CHILDREN.add(proc.pid)
             sampler = threading.Thread(
-                target=lambda: rss_future.append(_peak_rss_gb(proc.pid, rss_stop)),
+                target=lambda: rss_future.append(_rss_profile(proc.pid, rss_stop)),
                 daemon=True,
             )
             sampler.start()
@@ -2721,8 +2857,14 @@ def run_one(entry: dict[str, Any], timeout: int, timeout_basis: str = "caller-su
         return record
 
     _gate_release(gate_token)
+    record["exec_duration_s"] = round(time.time() - exec_started, 1)
     if rss_future:
-        record["peak_rss_gb"] = round(rss_future[0], 2)
+        profile = rss_future[0]
+        record["peak_rss_gb"] = round(profile.peak_gb, 2)
+        record["rss_group_sum_peak_gb"] = round(profile.raw_peak_gb, 2)
+        record["rss_p50_gb"] = round(profile.p50_gb, 2)
+        record["rss_samples"] = profile.samples
+        record["reservation_verdict"] = _reservation_verdict(gate_weight, profile)
 
     text = log_path.read_text(errors="replace")
     final_line, counts = summarize_output(text, exit_code)
@@ -3032,6 +3174,12 @@ def _worker_loop(args: argparse.Namespace) -> int:
                 f"({result['duration_s']}s) {result['final_line']}",
                 flush=True,
             )
+            # Say it where a human is already looking. The record has carried
+            # both numbers for weeks; nothing ever put them side by side, and a
+            # 31x over-reservation held this machine single-lane for 6h12m
+            # without one line of output that could have been doubted.
+            if result.get("reservation_verdict"):
+                print(f"[worker]      {target_id}: {result['reservation_verdict']}", flush=True)
     print(f"[worker] finished {now_iso()}", flush=True)
     return 0
 
@@ -3446,6 +3594,64 @@ def supersede_monolith_record(parent: str, plan: dict[str, Any]) -> None:
     )
 
 
+def cmd_weights(args: argparse.Namespace) -> int:
+    """Show the memory weight each target would reserve, and what it used.
+
+    The mirror of `policy` for the OTHER resource. A weight nobody can inspect
+    is a magic number with extra steps -- and unlike a timeout, an over-sized
+    one is invisible while it does damage: above the machine budget the gate
+    admits EXCLUSIVELY, so one stale weight turns a shared box into a
+    single-lane one and every part of the gate still looks like it is working.
+
+    Read the `EXCL` column first. It is not a warning about this target; it is
+    the number of other lanes that can run while it does, and that number is
+    zero.
+    """
+    phys = _phys_ram_gb()
+    budget = _gate_budget_gb()
+    inventory = [e for e in select(build_inventory(args.packages), args.only)
+                 if e["kind"] != KIND_ROLLUP]
+    rows = []
+    for entry in inventory:
+        record = load_record(entry["id"]) or {}
+        weight = _gate_weight_gb(entry["id"])
+        rows.append(
+            {
+                "target": entry["id"],
+                "weight_gb": weight,
+                "exclusive": bool(budget and weight > budget),
+                "peak_rss_gb": record.get("peak_rss_gb"),
+                "rss_p50_gb": record.get("rss_p50_gb"),
+                "rss_group_sum_peak_gb": record.get("rss_group_sum_peak_gb"),
+                "rss_samples": record.get("rss_samples"),
+                "measured_at": record.get("finished_at"),
+                "verdict": record.get("reservation_verdict"),
+            }
+        )
+    if args.json:
+        print(json.dumps({"schema": SCHEMA, "generated_at": now_iso(),
+                          "physical_ram_gb": round(phys, 1), "gate_budget_gb": budget,
+                          "targets": rows}, indent=2))
+        return 0
+    width = max((len(r["target"]) for r in rows), default=10)
+    print(f"physical RAM {phys:.0f} GB, gate budget ~{budget} GB "
+          f"(a weight above it runs ALONE)")
+    print(f"{'TARGET':<{width}}  WEIGHT  EXCL   PEAK    P50  SAMPLES  MEASURED")
+    for row in sorted(rows, key=lambda r: (-r["weight_gb"], r["target"])):
+        peak = f"{row['peak_rss_gb']:.2f}" if isinstance(row["peak_rss_gb"], (int, float)) else "-"
+        p50 = f"{row['rss_p50_gb']:.2f}" if isinstance(row["rss_p50_gb"], (int, float)) else "-"
+        samples = row["rss_samples"] if row["rss_samples"] is not None else "-"
+        print(f"{row['target']:<{width}}  {row['weight_gb']:>5} GB  {'YES' if row['exclusive'] else '   '}"
+              f"  {peak:>6} {p50:>6}  {str(samples):>7}  {row['measured_at'] or 'never'}")
+    excl = sum(1 for r in rows if r["exclusive"])
+    print()
+    print(f"{excl} of {len(rows)} targets reserve more than the budget and therefore run ALONE.")
+    unmeasured = sum(1 for r in rows if r["rss_p50_gb"] is None)
+    print(f"{unmeasured} of {len(rows)} have no median/sample provenance yet: their weight comes from "
+          f"a PEAK alone, which for a `cargo test` row is usually its rustc build and not the row.")
+    return 0
+
+
 def cmd_policy(args: argparse.Namespace) -> int:
     """Show the budget each target would get and the basis for it.
 
@@ -3604,6 +3810,11 @@ def main() -> int:
     p_policy = sub.add_parser("policy", help="print the timeout each target would get, and why")
     p_policy.add_argument("--json", action="store_true")
     p_policy.set_defaults(func=cmd_policy)
+
+    p_weights = sub.add_parser(
+        "weights", help="print the memory weight each target would reserve, and what it used")
+    p_weights.add_argument("--json", action="store_true")
+    p_weights.set_defaults(func=cmd_weights)
 
     p_seed = sub.add_parser("seed", help="import externally-reported results as UNKNOWN")
     p_seed.add_argument("--file", required=True)

@@ -227,6 +227,8 @@ fn lift_code(
             }
             collect_free_vars_from_expr(&fun_decl.ty, &param_bound, &mut free);
 
+            let free = resolve_lifted_callees(free, &fun_decl.body, state);
+
             // Filter to variables that are actually in scope (bound in outer context)
             // Sort to ensure deterministic ordering across builds
             let mut captured: Vec<FVarId> = free
@@ -308,23 +310,43 @@ fn lift_code(
                 let remapped_body = remap_fvars_in_code(&fun_decl.body, &capture_remap);
                 let lifted_bound_types = params_to_bound_types(&all_params);
 
-                // While lifting the (remapped) body, a RECURSIVE self-call
-                // must prepend the REMAPPED capture ids — inside the lifted
-                // declaration the captures are its own fresh parameters; the
+                // While lifting the (remapped) body, a call to ANY lifted
+                // function whose captures cross this capture boundary must
+                // prepend the REMAPPED ids — inside the lifted declaration
+                // those captures are its own fresh parameters, and the
                 // original outer fvars are not in scope there. The
-                // continuation (below) still needs the ORIGINAL ids, so swap
-                // the capture_map entry around the body lift. (R1: the
-                // synthesized-eliminator `go` functions are the first
-                // recursive local functions with captures to reach this
-                // path — previously the self-call args dangled.)
-                let remapped_captures: Vec<FVarId> =
-                    captured.iter().map(|cap| capture_remap[cap]).collect();
-                state
+                // continuation (below) still needs the ORIGINAL ids, so the
+                // affected `capture_map` entries are swapped around the body
+                // lift and restored after.
+                //
+                // This used to swap the SELF entry only (R1: the
+                // synthesized-eliminator `go` functions were the first
+                // recursive local functions with captures to reach this path,
+                // and their self-call args dangled). Self is still covered —
+                // `captured` is exactly the key set of `capture_remap` — but
+                // one frame is not enough once a call can cross two: a `go`
+                // called from a lambda inside a lambda inside `go` rewrote to
+                // the MIDDLE frame's ids, which the inner frame has already
+                // remapped away, and `to_ir` refused the declaration with
+                // `unbound to_ir variable`.
+                let crossing: Vec<(FVarId, Vec<FVarId>)> = state
                     .capture_map
-                    .insert(fun_decl.fvar_id, remapped_captures);
+                    .iter()
+                    .filter(|(_, caps)| caps.iter().any(|cap| capture_remap.contains_key(cap)))
+                    .map(|(callee, caps)| (*callee, caps.clone()))
+                    .collect();
+                for (callee, caps) in &crossing {
+                    let remapped: Vec<FVarId> = caps
+                        .iter()
+                        .map(|cap| *capture_remap.get(cap).unwrap_or(cap))
+                        .collect();
+                    state.capture_map.insert(*callee, remapped);
+                }
                 let lifted_body_code =
                     lift_code(&remapped_body, &param_bound, &lifted_bound_types, state);
-                state.capture_map.insert(fun_decl.fvar_id, captured.clone());
+                for (callee, caps) in crossing {
+                    state.capture_map.insert(callee, caps);
+                }
 
                 // Create the lifted declaration
                 let lifted_decl = Decl {
@@ -430,6 +452,49 @@ fn lift_code(
 
         Code::Unreachable(expr) => Code::Unreachable(expr.clone()),
     }
+}
+
+/// Rewrite an inner local function's free-variable set for the outer local
+/// functions it CALLS.
+///
+/// A nested local function may call an enclosing one — the shape
+/// `to_lcnf::sink_ih` produces when a recursive arm's induction hypothesis
+/// moves into the `do` continuation that uses it:
+///
+/// ```text
+/// fun go (xs) := cases xs | cons => ..
+///   fun k (_) := let ih := go(rest); return ih      -- `go` called from inside `k`
+/// ```
+///
+/// `go` has no value form in `k`'s scope: it is being lifted to a top-level
+/// declaration, and [`lift_value`] rewrites `let ih := go(..)` into a DIRECT
+/// call to the lifted name when `k`'s body is lifted just below. Capturing
+/// `go` as if it were a variable therefore emitted a closure argument nothing
+/// binds, which `to_ir` rejected with `unbound to_ir variable`.
+///
+/// So drop such a callee from the capture set and put what the direct call
+/// will actually reference in its place: the callee's own captures, which are
+/// in scope here and become captures of the inner function instead. A callee
+/// used as a first-class VALUE (not just called) keeps the existing treatment
+/// — it genuinely needs a closure, and that is a separate gap.
+fn resolve_lifted_callees(
+    free: HashSet<FVarId>,
+    inner_body: &Code,
+    state: &LiftState,
+) -> HashSet<FVarId> {
+    let mut resolved = HashSet::with_capacity(free.len());
+    for fvar in free {
+        let call_only =
+            state.lift_map.contains_key(&fvar) && !code_references_fvar_as_value(inner_body, fvar);
+        if call_only {
+            if let Some(captures) = state.capture_map.get(&fvar) {
+                resolved.extend(captures.iter().copied());
+            }
+            continue;
+        }
+        resolved.insert(fvar);
+    }
+    resolved
 }
 
 fn bind_lifted_function_value_if_needed(

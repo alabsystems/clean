@@ -32,6 +32,9 @@
 pub mod codata_recognize;
 mod lower;
 pub(crate) mod mentions;
+mod sink_ih;
+#[cfg(test)]
+mod sink_ih_tests;
 #[cfg(test)]
 mod tests;
 

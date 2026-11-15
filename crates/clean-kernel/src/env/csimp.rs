@@ -83,7 +83,7 @@ pub fn constant_replacement(ty: &Expr) -> Option<(Name, Name)> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LocalRule(u64);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum Event {
     Activate {
         rule: Rule,
@@ -146,7 +146,7 @@ impl PersistentExtEntry for Entry {
         Some(decoded.map(Self::Portable).unwrap_or(Self::Invalid))
     }
 }
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct View {
     module: Option<Name>,
     visible: HashSet<Name>,
@@ -162,7 +162,7 @@ impl View {
         }
     }
 }
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct State {
     events: Arc<Vec<Event>>,
     imported_bodies: Arc<HashMap<Name, Vec<Rule>>>,
@@ -365,11 +365,101 @@ pub fn has_invalid_metadata(env: &Environment) -> bool {
     env.get_ext_state::<State>(index())
         .is_some_and(|s| s.invalid)
 }
+/// The extension's registry name; `fact_delta` lists it as a carried state.
+pub(crate) const CSIMP_SOURCE_EXTENSION: &str = "Clean.compiler.csimpSource";
+
 fn index() -> ExtensionIdx {
     static INDEX: OnceLock<ExtensionIdx> = OnceLock::new();
-    *INDEX.get_or_init(|| {
-        register_persistent_ext::<State>(Name::from_string("Clean.compiler.csimpSource"))
-    })
+    *INDEX
+        .get_or_init(|| register_persistent_ext::<State>(Name::from_string(CSIMP_SOURCE_EXTENSION)))
+}
+
+/// The typed state, an empty one when the extension holds nothing, or `Err`
+/// while imported entries are still unfolded (the typed state would then
+/// not say what the environment holds).
+fn folded<'a>(env: &'a Environment, empty: &'a State) -> Result<&'a State, &'static str> {
+    match env.get_ext_state::<State>(index()) {
+        Some(state) => Ok(state),
+        None if env.has_unfolded_extension_entries(CSIMP_SOURCE_EXTENSION) => {
+            Err("the csimp source state's imported entries are not folded")
+        }
+        None => Ok(empty),
+    }
+}
+
+/// The rules a recorded body resolves to, or `None` for a name with no
+/// compilation point. The elaboration record digests this per name.
+pub(crate) fn recorded_body_rules(env: &Environment, name: &Name) -> Option<Vec<Rule>> {
+    let state = env.get_ext_state::<State>(index())?;
+    (state.cutoffs.contains_key(name) || state.imported_bodies.contains_key(name))
+        .then(|| state.body_rules(name))
+}
+
+/// The compilation points `after` recorded since `before`, each with the
+/// rules its body resolves to, when recording them is the ONLY change to the
+/// csimp state: `before`'s state plus [`record_compiled`] of those names must
+/// equal `after`'s state in every field (events, imports, views, modules,
+/// scoped rules, validity, and each cutoff's position and view). Any other
+/// change (a rule event, a module or scoped entry, an import) is `Err`: a
+/// local fact delta carries compilation points and nothing else.
+pub(crate) fn compiled_since(
+    before: &Environment,
+    after: &Environment,
+) -> Result<Vec<(Name, Vec<Rule>)>, &'static str> {
+    let empty = State::default();
+    let (was, now) = (folded(before, &empty)?, folded(after, &empty)?);
+    let mut names: Vec<Name> = now
+        .cutoffs
+        .keys()
+        .filter(|name| !was.cutoffs.contains_key(*name))
+        .cloned()
+        .collect();
+    names.sort();
+    let mut expected = was.clone();
+    for name in &names {
+        if was.imported_bodies.contains_key(name) {
+            return Err("a compilation point shadows an imported body");
+        }
+        expected.add_entry(&Entry::Compiled(name.clone()));
+    }
+    if expected != *now {
+        return Err("the csimp state changed by more than compilation points");
+    }
+    Ok(names
+        .into_iter()
+        .map(|name| {
+            let rules = now.body_rules(&name);
+            (name, rules)
+        })
+        .collect())
+}
+
+/// Whether recording `compiled` here gives each body the rules the producing
+/// elaboration resolved: the name has no compilation point or imported body
+/// yet, and the rules visible here now are the carried ones.
+pub(crate) fn compiled_fits(
+    env: &Environment,
+    compiled: &[(Name, Vec<Rule>)],
+) -> Result<(), String> {
+    if compiled.is_empty() {
+        return Ok(());
+    }
+    let empty = State::default();
+    let state = folded(env, &empty).map_err(str::to_string)?;
+    let visible = select(&state.events, &state.view);
+    for (name, rules) in compiled {
+        if state.cutoffs.contains_key(name) || state.imported_bodies.contains_key(name) {
+            return Err(format!(
+                "`{name}` already has a csimp compilation point here"
+            ));
+        }
+        if *rules != visible {
+            return Err(format!(
+                "the csimp rules visible to `{name}` are different here"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn rule(env: &Environment, theorem: &Name) -> Option<Rule> {

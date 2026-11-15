@@ -598,6 +598,115 @@ pub(super) fn observed_write_inst<O: ExecutionObserver>(
             observed_write_func_id(buf, *func)?;
             observed_write_vec_value_id(buf, canonical, captures)?;
         }
+        // v67 (tensor region): the result type, the operands in field order,
+        // then the batch and the contracted axis-pair lists — byte for byte
+        // the canonical writer's tag-71 spelling.
+        InstG::TensorContract {
+            ty,
+            lhs,
+            rhs,
+            batch,
+            contract,
+        } => {
+            observed_write_u8(buf, 71)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_projected_value_id(buf, canonical, *lhs)?;
+            observed_write_projected_value_id(buf, canonical, *rhs)?;
+            observed_write_axis_pairs(buf, "TensorContract batch pairs", batch)?;
+            observed_write_axis_pairs(buf, "TensorContract contract pairs", contract)?;
+        }
+        // v68 (tensor map, reduce and view): byte for byte the canonical
+        // writer's tag-72..=74 spellings.
+        InstG::TensorMap { ty, args, body } => {
+            observed_write_u8(buf, 72)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_vec_value_id(buf, canonical, args)?;
+            observed_write_count(buf, "TensorMap body", body.len())?;
+            for node in body {
+                buf.poll()?;
+                observed_write_tensor_map_node(buf, pool, node)?;
+            }
+        }
+        InstG::TensorReduce {
+            ty,
+            src,
+            op,
+            axes,
+            order,
+        } => {
+            observed_write_u8(buf, 73)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_projected_value_id(buf, canonical, *src)?;
+            observed_write_u8(buf, tensor_reduce_op_tag(*op))?;
+            observed_write_v32_list(buf, "TensorReduce axes", axes)?;
+            match order {
+                crate::TensorReduceOrder::RowMajor => observed_write_u8(buf, 0)?,
+            }
+        }
+        InstG::TensorView {
+            ty,
+            src,
+            params,
+            exprs,
+            shape,
+            index,
+            fill,
+        } => {
+            observed_write_u8(buf, 74)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_projected_value_id(buf, canonical, *src)?;
+            observed_write_vec_value_id(buf, canonical, params)?;
+            observed_write_count(buf, "TensorView exprs", exprs.len())?;
+            for expr in exprs {
+                buf.poll()?;
+                observed_write_u8(buf, tensor_index_expr_tag(expr))?;
+                match *expr {
+                    crate::TensorIndexExpr::Lit(n) => observed_write_v64(buf, n)?,
+                    crate::TensorIndexExpr::Param(k)
+                    | crate::TensorIndexExpr::SrcExtent(k)
+                    | crate::TensorIndexExpr::Coord(k) => observed_write_v32(buf, k)?,
+                    crate::TensorIndexExpr::Add(a, b)
+                    | crate::TensorIndexExpr::Sub(a, b)
+                    | crate::TensorIndexExpr::Mul(a, b)
+                    | crate::TensorIndexExpr::Div(a, b)
+                    | crate::TensorIndexExpr::Rem(a, b)
+                    | crate::TensorIndexExpr::Min(a, b)
+                    | crate::TensorIndexExpr::Max(a, b) => {
+                        observed_write_v32(buf, a)?;
+                        observed_write_v32(buf, b)?;
+                    }
+                }
+            }
+            observed_write_v32_list(buf, "TensorView shape", shape)?;
+            observed_write_v32_list(buf, "TensorView index", index)?;
+            match fill {
+                None => observed_write_u8(buf, 0)?,
+                Some(fill) => {
+                    observed_write_u8(buf, 1)?;
+                    observed_write_projected_value_id(buf, canonical, *fill)?;
+                }
+            }
+        }
+        // v69 (tensor gather and scatter): byte for byte the canonical
+        // writer's tag-75 and tag-76 spellings.
+        InstG::TensorGather { ty, data, coords } => {
+            observed_write_u8(buf, 75)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_projected_value_id(buf, canonical, *data)?;
+            observed_write_vec_value_id(buf, canonical, coords)?;
+        }
+        InstG::TensorScatter {
+            ty,
+            init,
+            src,
+            coords,
+        } => {
+            observed_write_u8(buf, 76)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_projected_value_id(buf, canonical, *init)?;
+            observed_write_projected_value_id(buf, canonical, *src)?;
+            observed_write_vec_value_id(buf, canonical, coords)?;
+        }
         InstG::DialectOp(op) => {
             observed_write_u8(buf, 44)?;
             observed_write_dialect_inst(buf, pool, canonical, op)?;
@@ -649,6 +758,97 @@ pub(super) fn observed_write_inst<O: ExecutionObserver>(
             observed_write_projected_value_id(buf, canonical, *dst)?;
             observed_write_projected_value_id(buf, canonical, *byte)?;
             observed_write_projected_value_id(buf, canonical, *bytes)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// A tensor contraction's axis-pair list (v67), as `write_axis_pairs` spells
+/// it: the count, then a `v32` left axis and a `v32` right axis per pair.
+fn observed_write_axis_pairs<O: ExecutionObserver>(
+    buf: &mut Output<'_, '_, O>,
+    what: &'static str,
+    pairs: &[(u32, u32)],
+) -> R {
+    buf.poll()?;
+    observed_write_count(buf, what, pairs.len())?;
+    for &(lhs, rhs) in pairs {
+        buf.poll()?;
+        observed_write_v32(buf, lhs)?;
+        observed_write_v32(buf, rhs)?;
+    }
+
+    Ok(())
+}
+
+/// A v32 list (v68), as `write_v32_list` spells it: the count, then each item.
+fn observed_write_v32_list<O: ExecutionObserver>(
+    buf: &mut Output<'_, '_, O>,
+    what: &'static str,
+    items: &[u32],
+) -> R {
+    buf.poll()?;
+    observed_write_count(buf, what, items.len())?;
+    for &item in items {
+        buf.poll()?;
+        observed_write_v32(buf, item)?;
+    }
+
+    Ok(())
+}
+
+/// One tensor map node (v68), as `write_tensor_map_node` spells it.
+fn observed_write_tensor_map_node<O: ExecutionObserver>(
+    buf: &mut Output<'_, '_, O>,
+    pool: &SealedPool,
+    node: &crate::TensorMapNode<NoExt>,
+) -> R {
+    use crate::TensorMapNode as N;
+    match node {
+        N::BinOp { op, ty, lhs, rhs } => {
+            observed_write_u8(buf, 0)?;
+            observed_write_binop(buf, op)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_v32(buf, *lhs)?;
+            observed_write_v32(buf, *rhs)?;
+        }
+        N::UnOp { op, ty, operand } => {
+            observed_write_u8(buf, 1)?;
+            observed_write_unop(buf, op)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_v32(buf, *operand)?;
+        }
+        N::ICmp { op, ty, lhs, rhs } => {
+            observed_write_u8(buf, 2)?;
+            observed_write_icmp_op(buf, op)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_v32(buf, *lhs)?;
+            observed_write_v32(buf, *rhs)?;
+        }
+        N::Select {
+            ty,
+            cond,
+            then_lane,
+            else_lane,
+        } => {
+            observed_write_u8(buf, 3)?;
+            observed_write_ty(buf, pool, ty)?;
+            observed_write_v32(buf, *cond)?;
+            observed_write_v32(buf, *then_lane)?;
+            observed_write_v32(buf, *else_lane)?;
+        }
+        N::Cast {
+            op,
+            src_ty,
+            dst_ty,
+            operand,
+        } => {
+            observed_write_u8(buf, 4)?;
+            observed_write_cast_op(buf, op)?;
+            observed_write_ty(buf, pool, src_ty)?;
+            observed_write_ty(buf, pool, dst_ty)?;
+            observed_write_v32(buf, *operand)?;
         }
     }
 

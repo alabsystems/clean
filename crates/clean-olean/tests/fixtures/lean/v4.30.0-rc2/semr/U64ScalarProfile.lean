@@ -10,12 +10,13 @@ structure View where
   literal : Nat
   name : List Nat
   target : Option TargetInfo
+  blobs : List (List Nat × List Nat)
 
 def function (view : View) : Func :=
   { SemRU64Addition.function view.literal with name := view.name }
 def module (view : View) : Module :=
   { funcTys := [SemRU64Addition.signature], enums := [],
-    functions := [function view], target := view.target }
+    functions := [function view], target := view.target, blobs := view.blobs }
 
 /-- An exact typed classifier over the REAL canonical decoder result. It
     retains the actual name and full target; every ID and operand is checked. -/
@@ -24,8 +25,8 @@ def classify : Module → Option View
       [⟨0, 0, 0, [⟨0, [(0, .int .u64)],
         [⟨.const (.int .u64) (.int literal), [1]⟩,
          ⟨.binop .add (.int .u64) 0 1, [2]⟩,
-         ⟨.ret [2], []⟩]⟩], name⟩], target, [], []⟩ =>
-      some ⟨literal, name, target⟩
+         ⟨.ret [2], []⟩]⟩], name⟩], target, [], [], blobs⟩ =>
+      some ⟨literal, name, target, blobs⟩
   | _ => none
 
 theorem classify_exact (m : Module) (view : View) (matched : classify m = some view) :
@@ -127,5 +128,14 @@ theorem no_bad (bytes : List Nat) (literal : Nat) (checked : Decodes bytes liter
     (initial view input depth Mem.empty) 3
     [.int .u64 ((input + view.literal) % modulus 64)]
     (run_exact view input depth Mem.empty valid)
+
+/-- This scalar body never reads the retained blob table. Keeping the table in
+    the exact module view does not restrict which unreferenced data it carries. -/
+theorem run_blob_table_independent (view : View) (blobs : List (List Nat × List Nat))
+    (input depth : Nat) (memory : Mem) (valid : input < modulus 64) :
+    run (module { view with blobs := blobs }) 3
+        (initial { view with blobs := blobs } input depth memory) =
+      run (module view) 3 (initial view input depth memory) := by
+  rw [run_exact _ _ _ _ valid, run_exact _ _ _ _ valid]
 
 end SemRU64ScalarProfile

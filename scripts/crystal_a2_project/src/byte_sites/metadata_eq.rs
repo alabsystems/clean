@@ -41,6 +41,7 @@ pub(super) fn ty_matches(a: &Ty, b: &Ty) -> bool {
         | (Ty::Unit, Ty::Unit)
         | (Ty::Never, Ty::Never) => true,
         (Ty::Vector(a, an), Ty::Vector(b, bn)) => an == bn && ty_matches(a, b),
+        (Ty::Tensor(a, an), Ty::Tensor(b, bn)) => an == bn && ty_matches(a, b),
         (Ty::FatPtr(a), Ty::FatPtr(b)) => fat_matches(a, b),
         (Ty::Storage(a), Ty::Storage(b)) => a == b,
         (Ty::Struct(a), Ty::Struct(b)) => a == b,
@@ -123,6 +124,7 @@ pub(super) fn ty_matches(a: &Ty, b: &Ty) -> bool {
             | Ty::Refine(_, _)
             | Ty::Dialect(_)
             | Ty::Storage(_)
+            | Ty::Tensor(_, _)
             | Ty::Handle(_)
             // trust-ir amendment S: uninhabited at level R, named so the arm stays exhaustive.
             | Ty::Ext(_),
@@ -166,6 +168,7 @@ pub(super) fn ty_matches(a: &Ty, b: &Ty) -> bool {
             | Ty::Refine(_, _)
             | Ty::Dialect(_)
             | Ty::Storage(_)
+            | Ty::Tensor(_, _)
             | Ty::Handle(_)
             // trust-ir amendment S: uninhabited at level R, named so the arm stays exhaustive.
             | Ty::Ext(_),

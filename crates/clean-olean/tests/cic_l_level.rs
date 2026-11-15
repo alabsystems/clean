@@ -7,8 +7,10 @@
 //!
 //! What a pass is evidence of is fixed by `cic_l_level/evidence.rs` (plan unit
 //! E2): the targets are the declarations of the theory's own modules, private
-//! ones included; the modules are `ORDER`'s; every theorem's statement is
-//! pinned; and the axiom closure is the observed one.
+//! ones included; the modules and `lakefile.toml` roots are `ORDER`'s in exact
+//! sequence; every theorem's statement is pinned; every non-theorem target's
+//! full kernel meaning is pinned (`cic_l_level/definition_pins.rs`); and the
+//! axiom closure is the observed one.
 
 #[path = "cic_l_level/evidence.rs"]
 mod evidence;
@@ -27,6 +29,9 @@ const THEORY_ROOT: &str = "CICL.ListSupportCases";
 
 #[path = "cic_l_level/negative_controls.rs"]
 mod negative_controls;
+
+#[path = "cic_l_level/definition_pins.rs"]
+mod definition_pins;
 
 #[path = "cic_l_level/tables.rs"]
 mod tables;
@@ -187,10 +192,8 @@ fn rule_witnesses_and_forged_controls(
     // C1: unlike the whole-theory convenience table, these two module rows
     // must be exhaustive. Read module-of-origin names, including private and
     // generated theorems, rather than a namespace prefix or source-text scan.
-    let modules = evidence::import_closure(
-        &clean_olean::test_support::compiled_fixture_dir("cic_l_level"),
-        THEORY_ROOT,
-    );
+    let compiled = clean_olean::test_support::compiled_fixture_dir("cic_l_level");
+    let modules = evidence::import_closure(&compiled, THEORY_ROOT);
     for module in ["CICL.LevelDecide", "CICL.LevelDecideCases"] {
         let declared: BTreeSet<String> = modules[module]
             .iter()
@@ -481,6 +484,7 @@ fn rule_witnesses_and_forged_controls(
     // reason for none) and the WfContext census, with their planted failures.
     negative_controls::run(env, &checker);
     drop(checker);
+    definition_pins::verify_and_run_controls(kernel.environment(), &compiled, &modules, inventory);
 
     for subject in THEOREMS {
         let closure = evidence::axiom_closure(kernel.environment(), &name(subject))

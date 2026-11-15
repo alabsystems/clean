@@ -16,6 +16,7 @@ mod variant_shape;
 
 pub mod alloc_bound;
 pub mod analysis;
+pub mod blob;
 pub mod bridge;
 pub mod build_info;
 pub mod bv_meaning;
@@ -115,7 +116,8 @@ pub use imports::{
 pub use inst::{
     AssertKind, AssertOverflowOp, AtomicRMWOp, BinOp, CallShape, CallTarget, CallUnwindDisposition,
     CastOp, Edge, EdgeKind, FCmpOp, ICmpOp, Inst, InstG, InstShape, Ordering, OverflowOp,
-    PanicLocation, PanicSite, SwitchCase, UnOp,
+    PanicLocation, PanicSite, SwitchCase, TensorIndexExpr, TensorMapNode, TensorReduceOp,
+    TensorReduceOrder, UnOp, tensor_view_index_phase,
 };
 pub use interpret::{
     ArrayValue, HostCalls, HostRcOp, HostRcRole, HostState, InterpretError, InterpretErrorCode,
@@ -1917,12 +1919,29 @@ pub struct ModuleG<X> {
     /// producer's declared image, not a recomputation.
     ///
     /// The table is part of canonical binary identity from wire version 58.
-    /// The sole trailing conditionally-skipped serde field.
+    /// Always emitted by serde since v70 appended [`Self::blobs`] after it
+    /// (`serde(default)` still decodes an older document without it).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub closure_layouts: Vec<ClosureLayoutDescriptor>,
+
+    /// The content-addressed weight blob table (wire v70, PKG-U13e;
+    /// `docs/SPEC_RATIFICATIONS.md` §27): the bytes each
+    /// [`Constant::TensorBlob`] names by digest, one row per digest, in the
+    /// canonical order of strictly ascending digest
+    /// ([`blob::blob_table_order_refusal`]). A module table: no function
+    /// body's identity reads it ([`Self::function_body_digest`]), while the
+    /// module's own identity ([`Self::stable_digest`]) carries every byte.
+    /// Build rows through [`Module::intern_blob`], which keeps the order and
+    /// stores identical bytes once.
+    ///
+    /// R3 #5 (the positional-serde rule): appended LAST as the one trailing
+    /// skipped field, so `closure_layouts` before it flipped to always-emitted
+    /// in the same change, and a legacy shorter array decodes with both empty.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
-    pub closure_layouts: Vec<ClosureLayoutDescriptor>,
+    pub blobs: Vec<blob::Blob>,
 }
 
 /// The level-R module: [`ModuleG`] with no extension.
@@ -2045,6 +2064,7 @@ impl<X> ModuleG<X> {
             completeness: None,
             drop_glue: Vec::new(),
             closure_layouts: Vec::new(),
+            blobs: Vec::new(),
         }
     }
 
@@ -2499,6 +2519,31 @@ impl Module {
     )
 )]
 impl Module {
+    /// Interns `data` in the content-addressed blob table ([`Self::blobs`],
+    /// PKG-U13e) and returns its digest, the key a [`Constant::TensorBlob`]
+    /// spells. Idempotent: bytes already in the table return their digest and
+    /// store nothing, so identical blobs are held once. A new row lands at its
+    /// canonical (strictly ascending digest) position.
+    pub fn intern_blob(&mut self, data: Vec<u8>) -> blob::BlobDigest {
+        let row = blob::Blob::new(data);
+        let digest = row.digest;
+        if let Err(position) = self
+            .blobs
+            .binary_search_by(|probe| probe.digest.cmp(&digest))
+        {
+            self.blobs.insert(position, row);
+        }
+        digest
+    }
+
+    /// The first blob table row keyed by `digest`, if any. Both engines
+    /// resolve a [`Constant::TensorBlob`] through it and then check that the
+    /// row's bytes hash to the digest; the table's order is the validator's
+    /// question, not the lookup's.
+    pub fn blob(&self, digest: &blob::BlobDigest) -> Option<&blob::Blob> {
+        self.blobs.iter().find(|row| row.digest == *digest)
+    }
+
     /// Interns a debug-info source-file path, returning its index for use in
     /// [`SourceSpan::file`]. Idempotent: a path already in the table returns
     /// its existing index rather than appending a duplicate.
@@ -3254,7 +3299,8 @@ impl Module {
     /// AGGREGATE SLOT ([`StructPassingPolicy`], `docs/SPEC_RATIFICATIONS.md`
     /// §17): after peeling one `Ty::Refine` to its base through `self.types`,
     /// a `Struct`, `Tuple`, `Array`, `Enum`, `Record`, `Sequence`, `Set`,
-    /// `Closure` or `Vector`.
+    /// `Closure`, `Vector` or `Tensor` (a run-time collection, as a sequence
+    /// is).
     ///
     /// ONE predicate, stated once: the validator's `AlwaysMemory` rule and its
     /// `pass = indirect` placement rule read it, and a consumer's
@@ -3285,6 +3331,7 @@ impl Module {
                 | Ty::Set(_, _)
                 | Ty::Closure(_)
                 | Ty::Vector(_, _)
+                | Ty::Tensor(_, _)
         )
     }
 
@@ -5324,6 +5371,7 @@ mod tests {
             (Ty::Set(scalar_ty, SetRepr::Boxed), true, "set"),
             (Ty::Closure(ClosureTyId::new(0)), true, "closure"),
             (Ty::Vector(Box::new(Ty::I32), 4), true, "vector"),
+            (Ty::Tensor(Box::new(Ty::I32), 2), true, "tensor"),
             (
                 Ty::Refine(struct_ty, PredId::new(0)),
                 true,

@@ -712,6 +712,7 @@ pub fn text_losses<X: crate::level::Extension>(module: &ModuleG<X>) -> Vec<TextL
         completeness: _,           // carried: `completeness ..` + `unlowered ..` rows
         drop_glue: _,              // carried: `drop_glue @func.N <ty>` rows
         closure_layouts: _,        // carried: `closure_layout closure.N ..` (v58)
+        blobs: _,                  // carried: `blob <digest> bytes<..>` rows (v70)
     } = module;
 
     let mut losses = Vec::new();
@@ -967,7 +968,9 @@ fn constant_is_spellable<X: crate::level::Extension>(constant: &ConstantG<X>) ->
         | ConstantG::FnDef(_)
         | ConstantG::PhantomData
         // Crystal lane (E3b): `uninit` is a bare keyword the parser reads back.
-        | ConstantG::Uninit => true,
+        | ConstantG::Uninit
+        // v70: `tensor_blob<hex>[dims]` spells no name.
+        | ConstantG::TensorBlob { .. } => true,
         ConstantG::Ext(_) => true,
     }
 }
@@ -999,7 +1002,8 @@ fn constant_has_unspellable_float<X: crate::level::Extension>(constant: &Constan
         | ConstantG::FnDef(_)
         | ConstantG::SymbolAddr { .. }
         | ConstantG::PhantomData
-        | ConstantG::Uninit => false,
+        | ConstantG::Uninit
+        | ConstantG::TensorBlob { .. } => false,
         ConstantG::Ext(_) => false,
     }
 }

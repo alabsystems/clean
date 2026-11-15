@@ -4,6 +4,7 @@ use super::*;
 
 enum BoxTag {
     Vector(u32),
+    Tensor(u32),
     Ref,
     RefMut,
     PtrConst,
@@ -18,6 +19,7 @@ impl State<'_> {
     ) -> R {
         let tag = match parent {
             Ty::Vector(_, lanes) => BoxTag::Vector(*lanes),
+            Ty::Tensor(_, rank) => BoxTag::Tensor(*rank),
             Ty::Ref(_) => BoxTag::Ref,
             Ty::RefMut(_) => BoxTag::RefMut,
             Ty::PtrConst(_) => BoxTag::PtrConst,
@@ -32,6 +34,7 @@ impl State<'_> {
             let child = Box::new(child);
             let value = match tag {
                 BoxTag::Vector(lanes) => Ty::Vector(child, lanes),
+                BoxTag::Tensor(rank) => Ty::Tensor(child, rank),
                 BoxTag::Ref => Ty::Ref(child),
                 BoxTag::RefMut => Ty::RefMut(child),
                 BoxTag::PtrConst => Ty::PtrConst(child),

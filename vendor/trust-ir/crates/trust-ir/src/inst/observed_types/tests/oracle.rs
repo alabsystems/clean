@@ -33,6 +33,11 @@ fn visit_instruction_types<'a>(inst: &'a Inst, mut visit: impl FnMut(&'a Ty)) {
         | Inst::CmpXchg { ty, .. }
         | Inst::MakeAggregate { ty, .. }
         | Inst::ArraySplat { ty, .. }
+        | Inst::TensorContract { ty, .. }
+        | Inst::TensorReduce { ty, .. }
+        | Inst::TensorView { ty, .. }
+        | Inst::TensorGather { ty, .. }
+        | Inst::TensorScatter { ty, .. }
         | Inst::ExtractField { ty, .. }
         | Inst::InsertField { ty, .. }
         | Inst::ExtractElement { ty, .. }
@@ -45,6 +50,14 @@ fn visit_instruction_types<'a>(inst: &'a Inst, mut visit: impl FnMut(&'a Ty)) {
         Inst::Cast { src_ty, dst_ty, .. } => {
             visit(src_ty);
             visit(dst_ty);
+        }
+        Inst::TensorMap { ty, body, .. } => {
+            visit(ty);
+            for node in body {
+                for node_ty in node.types() {
+                    visit(node_ty);
+                }
+            }
         }
         Inst::GEP { pointee_ty, .. } => visit(pointee_ty),
         Inst::PtrData { ptr_ty, .. } => visit(ptr_ty),

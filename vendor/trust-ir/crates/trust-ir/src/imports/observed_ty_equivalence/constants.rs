@@ -60,6 +60,19 @@ pub(super) fn pair<'a, O: ExecutionObserver>(
             },
         ) => s.last = w.text(a.as_bytes(), b.as_bytes())? && aa == ab,
         (PhantomData, PhantomData) | (Uninit, Uninit) => (),
+        (
+            TensorBlob {
+                digest: da,
+                dims: ma,
+            },
+            TensorBlob {
+                digest: db,
+                dims: mb,
+            },
+        ) => {
+            w.admit(1 + ma.len(), 0)?;
+            s.last = da == db && ma == mb;
+        }
         (Ext(extension), _) => extension.unreachable(),
         _ => s.last = false,
     }
@@ -128,6 +141,7 @@ fn tag(value: &Constant) -> u8 {
         Constant::SymbolAddr { .. } => 14,
         Constant::PhantomData => 15,
         Constant::Uninit => 16,
+        Constant::TensorBlob { .. } => 17,
         Constant::Ext(extension) => extension.unreachable(),
     }
 }

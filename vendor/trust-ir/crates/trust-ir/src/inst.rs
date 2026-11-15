@@ -1917,6 +1917,564 @@ pub enum InstG<X> {
         func: FuncId,
         captures: Vec<ValueId>,
     },
+    /// A general tensor contraction (the tensor region, PKG-U13a; Trust
+    /// `docs/design/2026-11-12-one-software.md` §6), in XLA `DotGeneral`'s
+    /// shape: matrix multiply is the instance `batch: []`,
+    /// `contract: [(1, 0)]`.
+    ///
+    /// `lhs: tensor<E, p>` and `rhs: tensor<E, q>` share one INTEGER element
+    /// type `E`; `ty` is the result `tensor<E, r>`. Each `(a, b)` pair names a
+    /// left axis `a < p` and a right axis `b < q`; no axis is named twice on
+    /// one side, and `r = |batch| + (p - |batch| - |contract|) + (q - |batch| -
+    /// |contract|)`. The result's axes are the batch axes (in pair order),
+    /// then the left free axes, then the right free axes (each ascending), and
+    /// each result element is the wrapping (`BinOp::Add`/`BinOp::Mul`) sum,
+    /// over the contracted multi-index in row-major order starting from 0, of
+    /// the products of the paired elements. Paired axes of different extents,
+    /// and a result with more elements than `usize` holds, are undefined
+    /// behaviour: shape agreement is a precondition of the operation, never a
+    /// type. One fuel unit, as every node.
+    ///
+    /// Text: `tensor_contract tensor<i32, 2> %a, %b batch [] contract [1:0]`.
+    /// Wire: Inst tag 71, read-gated on v67 (`TENSOR_FORMAT_VERSION`).
+    TensorContract {
+        /// The result tensor type.
+        ty: TyG<X>,
+        lhs: ValueId,
+        rhs: ValueId,
+        /// Batch axis pairs `(lhs axis, rhs axis)`, in result order.
+        batch: Vec<(u32, u32)>,
+        /// Contracted axis pairs `(lhs axis, rhs axis)`.
+        contract: Vec<(u32, u32)>,
+    },
+    /// An elementwise tensor map with a scalar body (PKG-U13c; Trust
+    /// `docs/design/2026-11-12-one-software.md` §6).
+    ///
+    /// `ty` is the result `tensor<E, r>`. Each operand is either a tensor
+    /// `tensor<E_i, r>` of the result's rank (at least one is) or an integer
+    /// or `Bool` scalar, which every coordinate reads. The body is a non-empty
+    /// list of [`TensorMapNode`]s over LANES: with `n = args.len()`, lane
+    /// `i < n` is operand `i` at the coordinate (a tensor's element there, a
+    /// scalar itself), and lane `n + j` is node `j`'s value; node `j` reads
+    /// only lanes below `n + j`. Each node is a scalar instruction (`BinOp`,
+    /// `UnOp`, `ICmp`, `Select`, `Cast`) with that instruction's typing and
+    /// semantics, its verdicts included (a division by zero in a node is that
+    /// undefined behaviour). The result element is the LAST node's value, of
+    /// type `E`. Tensor operands whose extents differ are undefined
+    /// behaviour: shape agreement is a precondition, never a type. The
+    /// coordinates run in row-major order. One fuel unit.
+    ///
+    /// Text: `tensor_map tensor<i32, 1> (%a, %b) { add i32 $0, $1 }`.
+    /// Wire: Inst tag 72, read-gated on v68
+    /// (`TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION`).
+    TensorMap {
+        /// The result tensor type.
+        ty: TyG<X>,
+        /// The operands: tensors of the result's rank, or scalars.
+        args: Vec<ValueId>,
+        /// The scalar body; the last node is the result element.
+        body: Vec<TensorMapNode<X>>,
+    },
+    /// A tensor reduction (PKG-U13c): `src: tensor<E, s>` reduced over
+    /// `axes` (strictly ascending, each below `s`) by `op`, into `ty =
+    /// tensor<E, s - |axes|>` whose extents are the source's at the kept
+    /// axes, in order. Each result element is a left fold from `op`'s
+    /// identity over the reduced multi-index in the order `order` names
+    /// ([`TensorReduceOrder::RowMajor`]: row-major, the first reduced axis
+    /// outermost), so an empty reduced extent gives the identity. Integer
+    /// elements only; no undefined behaviour beyond a poison operand. One
+    /// fuel unit.
+    ///
+    /// Text: `tensor_reduce add tensor<i32, 1> %x axes [1] order row_major`.
+    /// Wire: Inst tag 73, read-gated on v68.
+    TensorReduce {
+        /// The result tensor type.
+        ty: TyG<X>,
+        /// The reduced tensor.
+        src: ValueId,
+        /// The combining operator.
+        op: TensorReduceOp,
+        /// The reduced axes, strictly ascending.
+        axes: Vec<u32>,
+        /// The fold order.
+        order: TensorReduceOrder,
+    },
+    /// A tensor view given as a coordinate function (PKG-U13c), so reshape,
+    /// slice, pad, transpose and broadcast are one instruction.
+    ///
+    /// `ty` is `tensor<E, r>` and `src` a `tensor<E, s>`. `exprs` is a node
+    /// list of [`TensorIndexExpr`]s over the integers, each arithmetic node
+    /// reading only nodes before it; `params` are `usize` operands the nodes
+    /// read. The result's extents are the values of the `shape` nodes (`r` of
+    /// them, none depending on a coordinate); at each result coordinate (row
+    /// major), the source coordinate along source axis `j` is the value of
+    /// node `index[j]`. Where some source coordinate is outside its axis the
+    /// element is `fill` (a scalar `E`), or, with no fill, undefined
+    /// behaviour. A node value outside `[-2^127, 2^127)`, a division by zero,
+    /// a result extent that is negative or does not fit `usize`, and a result
+    /// count at or past `2^pointer_bits` are undefined behaviour. One fuel
+    /// unit.
+    ///
+    /// Text: `tensor_view tensor<i32, 2> %x params [] exprs [src_extent(1),
+    /// src_extent(0), coord(1), coord(0)] shape [$0, $1] index [$2, $3]`
+    /// (a transpose). Wire: Inst tag 74, read-gated on v68.
+    TensorView {
+        /// The result tensor type.
+        ty: TyG<X>,
+        /// The viewed tensor.
+        src: ValueId,
+        /// The `usize` operands `TensorIndexExpr::Param` reads.
+        params: Vec<ValueId>,
+        /// The coordinate function's nodes.
+        exprs: Vec<TensorIndexExpr>,
+        /// The node of each result extent.
+        shape: Vec<u32>,
+        /// The node of each source coordinate.
+        index: Vec<u32>,
+        /// The element read where a source coordinate is out of range.
+        fill: Option<ValueId>,
+    },
+    /// A tensor gather in coordinate form (PKG-U13d; Trust
+    /// `docs/design/2026-11-12-one-software.md` §6, SPEC_RATIFICATIONS §26).
+    ///
+    /// `ty` is `tensor<E, r>` and `data` a `tensor<E, s>` with `s >= 1`.
+    /// `coords` has exactly `s` operands, one COORDINATE TENSOR per data
+    /// axis (axis `j` at position `j`), each a tensor of rank `r` with its
+    /// own integer element, read as the integer its type denotes (signed
+    /// types two's complement, `isize`/`usize` at the module's pointer
+    /// width). The result's extents are the coordinate tensors' (which must
+    /// all be equal: undefined behaviour otherwise), and at each result
+    /// coordinate `p` (row major) the element is `data`'s at `(coords[0][p],
+    /// .., coords[s-1][p])`. A coordinate outside its axis (negative, or at
+    /// or past the extent) at any `p` is undefined behaviour: the
+    /// instruction's BOUNDS PRECONDITION, stated as a `BoundsCheck`
+    /// obligation sited on it. One fuel unit.
+    ///
+    /// Text: `tensor_gather tensor<i32, 1> %x coords [%c0, %c1]`.
+    /// Wire: Inst tag 75, read-gated on v69
+    /// (`TENSOR_GATHER_SCATTER_FORMAT_VERSION`).
+    TensorGather {
+        /// The result tensor type.
+        ty: TyG<X>,
+        /// The tensor read.
+        data: ValueId,
+        /// One coordinate tensor per data axis, in axis order.
+        coords: Vec<ValueId>,
+    },
+    /// A tensor scatter in coordinate form (PKG-U13d, SPEC_RATIFICATIONS
+    /// §26): `src` written over a copy of `init`.
+    ///
+    /// `ty` is `tensor<E, s>` with `s >= 1`, `init` has type `ty`, and `src`
+    /// is a `tensor<E, r>`. `coords` has exactly `s` operands, one coordinate
+    /// tensor per axis of `init` (axis `j` at position `j`), each a tensor of
+    /// rank `r` with its own integer element, read as [`InstG::TensorGather`]
+    /// reads one. Every coordinate tensor's extents must equal `src`'s, and
+    /// every coordinate at every source position must be inside its axis of
+    /// `init` (undefined behaviour otherwise, decided before any element is
+    /// written; the bounds precondition is a `BoundsCheck` obligation sited
+    /// on the instruction). The result has `init`'s extents and starts as
+    /// `init`'s elements; then, for each source position `p` in row-major
+    /// order, the element at `(coords[0][p], .., coords[s-1][p])` becomes
+    /// `src`'s at `p`, so where several positions name one coordinate the
+    /// row-major-last write wins. That order is part of the instruction's
+    /// meaning, never a scheduling choice. One fuel unit.
+    ///
+    /// Text: `tensor_scatter tensor<i32, 1> %init, %src coords [%c]`.
+    /// Wire: Inst tag 76, read-gated on v69.
+    TensorScatter {
+        /// The result tensor type (also `init`'s).
+        ty: TyG<X>,
+        /// The tensor written over.
+        init: ValueId,
+        /// The elements written.
+        src: ValueId,
+        /// One coordinate tensor per axis of `init`, in axis order.
+        coords: Vec<ValueId>,
+    },
+}
+
+/// One node of an [`InstG::TensorMap`] body (PKG-U13c): a scalar
+/// instruction over the map's LANES (operand elements and earlier nodes),
+/// with that instruction's fields, typing and semantics. Wire: the
+/// `TensorMapNode` tag space (one tag byte, then the fields in order).
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TensorMapNode<X> {
+    /// [`InstG::BinOp`] at lanes `lhs`, `rhs`.
+    BinOp {
+        op: BinOp,
+        ty: TyG<X>,
+        lhs: u32,
+        rhs: u32,
+    },
+    /// [`InstG::UnOp`] at lane `operand`.
+    UnOp { op: UnOp, ty: TyG<X>, operand: u32 },
+    /// [`InstG::ICmp`] at lanes `lhs`, `rhs`; its value is a `Bool`.
+    ICmp {
+        op: ICmpOp,
+        ty: TyG<X>,
+        lhs: u32,
+        rhs: u32,
+    },
+    /// [`InstG::Select`] at lanes `cond`, `then_lane`, `else_lane`.
+    Select {
+        ty: TyG<X>,
+        cond: u32,
+        then_lane: u32,
+        else_lane: u32,
+    },
+    /// [`InstG::Cast`] at lane `operand`.
+    Cast {
+        op: CastOp,
+        src_ty: TyG<X>,
+        dst_ty: TyG<X>,
+        operand: u32,
+    },
+}
+
+impl<X: Clone> TensorMapNode<X> {
+    /// The lanes this node reads, in field order.
+    #[must_use]
+    pub fn lanes(&self) -> Vec<u32> {
+        match self {
+            TensorMapNode::BinOp { lhs, rhs, .. } | TensorMapNode::ICmp { lhs, rhs, .. } => {
+                vec![*lhs, *rhs]
+            }
+            TensorMapNode::UnOp { operand, .. } | TensorMapNode::Cast { operand, .. } => {
+                vec![*operand]
+            }
+            TensorMapNode::Select {
+                cond,
+                then_lane,
+                else_lane,
+                ..
+            } => vec![*cond, *then_lane, *else_lane],
+        }
+    }
+
+    /// The type of this node's value: `ty` for `BinOp`, `UnOp` and `Select`,
+    /// `Bool` for `ICmp`, `dst_ty` for `Cast`.
+    #[must_use]
+    pub fn value_ty(&self) -> TyG<X> {
+        match self {
+            TensorMapNode::BinOp { ty, .. }
+            | TensorMapNode::UnOp { ty, .. }
+            | TensorMapNode::Select { ty, .. } => ty.clone(),
+            TensorMapNode::ICmp { .. } => TyG::Bool,
+            TensorMapNode::Cast { dst_ty, .. } => dst_ty.clone(),
+        }
+    }
+}
+
+impl<X> TensorMapNode<X> {
+    /// Every type this node spells, in field order.
+    pub fn types(&self) -> Vec<&TyG<X>> {
+        match self {
+            TensorMapNode::BinOp { ty, .. }
+            | TensorMapNode::UnOp { ty, .. }
+            | TensorMapNode::ICmp { ty, .. }
+            | TensorMapNode::Select { ty, .. } => vec![ty],
+            TensorMapNode::Cast { src_ty, dst_ty, .. } => vec![src_ty, dst_ty],
+        }
+    }
+}
+
+impl TensorMapNode<crate::level::NoExt> {
+    /// Rule M4's operation half (PKG-U13c, SPEC_RATIFICATIONS §25): whether
+    /// this node's operation applies at the types it names, or the reason it
+    /// does not. The one statement of the rule: the validator
+    /// (`InvalidTensorMap`), the reference interpreter (a type error before
+    /// any element is read) and SemR's `mapNodeOpOk` all apply it.
+    ///
+    /// `BinOp`'s Bool connectives apply only at `Bool`, `and`/`or`/`xor` at
+    /// an integer or `Bool`, its arithmetic, division, shifts and rotations
+    /// only at an integer; every `UnOp` only at an integer (`not` of a `Bool`
+    /// is spelled `bxor`, as the scalar rule says); `ICmp` and `Select` at
+    /// any lane type. A cast is `trunc` from an integer to a narrower integer
+    /// or `Bool`, `zext`/`sext` from an integer or `Bool` to a wider integer,
+    /// or `bitcast` to the same type or between integers of one width, with
+    /// `isize`/`usize` at `pointer_bits` (`Bool` is one bit). That cast rule
+    /// is stricter than the scalar `Cast` rule, which admits a resize in
+    /// either direction: each cast it admits, both engines execute without a
+    /// type error. A float operation is refused by name. The caller has
+    /// already checked that every type the node names is an integer or `Bool`.
+    #[must_use]
+    pub fn op_refusal(&self, pointer_bits: u32) -> Option<String> {
+        match self {
+            TensorMapNode::BinOp { op, ty, .. } => {
+                let applies = match op {
+                    BinOp::Add
+                    | BinOp::Sub
+                    | BinOp::Mul
+                    | BinOp::UDiv
+                    | BinOp::SDiv
+                    | BinOp::URem
+                    | BinOp::SRem
+                    | BinOp::Shl
+                    | BinOp::LShr
+                    | BinOp::AShr
+                    | BinOp::RotL
+                    | BinOp::RotR => ty.is_integer(),
+                    BinOp::BAnd | BinOp::BOr | BinOp::BXor => *ty == Ty::Bool,
+                    BinOp::And | BinOp::Or | BinOp::Xor => true,
+                    BinOp::FAdd
+                    | BinOp::FSub
+                    | BinOp::FMul
+                    | BinOp::FDiv
+                    | BinOp::FRem
+                    | BinOp::FMin
+                    | BinOp::FMax
+                    | BinOp::FCopySign => {
+                        return Some(format!("{op} is a float operation"));
+                    }
+                };
+                (!applies).then(|| format!("{op} does not apply at {ty}"))
+            }
+            TensorMapNode::UnOp { op, ty, .. } => match op {
+                UnOp::Neg
+                | UnOp::Not
+                | UnOp::CtPop
+                | UnOp::CtLz
+                | UnOp::CtTz
+                | UnOp::BSwap
+                | UnOp::BitReverse => {
+                    (!ty.is_integer()).then(|| format!("{op} does not apply at {ty}"))
+                }
+                UnOp::FNeg
+                | UnOp::FAbs
+                | UnOp::FSqrt
+                | UnOp::FFloor
+                | UnOp::FCeil
+                | UnOp::FTrunc => Some(format!("{op} is a float operation")),
+            },
+            TensorMapNode::ICmp { .. } | TensorMapNode::Select { .. } => None,
+            TensorMapNode::Cast {
+                op, src_ty, dst_ty, ..
+            } => {
+                let widths = (
+                    src_ty.bit_width_with(pointer_bits),
+                    dst_ty.bit_width_with(pointer_bits),
+                );
+                let applies = match (op, widths) {
+                    (CastOp::Trunc, (Some(sw), Some(dw))) => src_ty.is_integer() && sw > dw,
+                    (CastOp::ZExt | CastOp::SExt, (Some(sw), Some(dw))) => {
+                        dst_ty.is_integer() && sw < dw
+                    }
+                    (CastOp::Bitcast, (Some(sw), Some(dw))) => {
+                        src_ty == dst_ty || (src_ty.is_integer() && dst_ty.is_integer() && sw == dw)
+                    }
+                    (CastOp::Trunc | CastOp::ZExt | CastOp::SExt | CastOp::Bitcast, _) => false,
+                    _ => return Some(format!("{op} is not an integer cast")),
+                };
+                (!applies).then(|| format!("{op} does not cast {src_ty} to {dst_ty}"))
+            }
+        }
+    }
+}
+
+impl<X: crate::level::Extension> core::fmt::Display for TensorMapNode<X> {
+    /// The scalar instruction's own text spelling with `$lane` for `%value`.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            TensorMapNode::BinOp { op, ty, lhs, rhs } => write!(f, "{op} {ty} ${lhs}, ${rhs}"),
+            TensorMapNode::UnOp { op, ty, operand } => write!(f, "{op} {ty} ${operand}"),
+            TensorMapNode::ICmp { op, ty, lhs, rhs } => {
+                write!(f, "icmp {op} {ty} ${lhs}, ${rhs}")
+            }
+            TensorMapNode::Select {
+                ty,
+                cond,
+                then_lane,
+                else_lane,
+            } => write!(f, "select {ty} ${cond}, ${then_lane}, ${else_lane}"),
+            TensorMapNode::Cast {
+                op,
+                src_ty,
+                dst_ty,
+                operand,
+            } => write!(f, "{op} {src_ty} ${operand} to {dst_ty}"),
+        }
+    }
+}
+
+/// The combining operator of an [`InstG::TensorReduce`] (PKG-U13c), on
+/// integer elements: `Add`/`Mul` wrap as `BinOp::Add`/`BinOp::Mul` do;
+/// `And`/`Or`/`Xor` are bitwise; `SMin`/`SMax` compare signed and
+/// `UMin`/`UMax` unsigned. Wire: the `TensorReduceOp` tag space, in this
+/// order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TensorReduceOp {
+    Add,
+    Mul,
+    And,
+    Or,
+    Xor,
+    SMin,
+    SMax,
+    UMin,
+    UMax,
+}
+
+impl TensorReduceOp {
+    /// Every operator, in tag order.
+    pub const ALL: [TensorReduceOp; 9] = [
+        TensorReduceOp::Add,
+        TensorReduceOp::Mul,
+        TensorReduceOp::And,
+        TensorReduceOp::Or,
+        TensorReduceOp::Xor,
+        TensorReduceOp::SMin,
+        TensorReduceOp::SMax,
+        TensorReduceOp::UMin,
+        TensorReduceOp::UMax,
+    ];
+
+    /// The text spelling (`add`, `mul`, `and`, `or`, `xor`, `smin`, `smax`,
+    /// `umin`, `umax`).
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            TensorReduceOp::Add => "add",
+            TensorReduceOp::Mul => "mul",
+            TensorReduceOp::And => "and",
+            TensorReduceOp::Or => "or",
+            TensorReduceOp::Xor => "xor",
+            TensorReduceOp::SMin => "smin",
+            TensorReduceOp::SMax => "smax",
+            TensorReduceOp::UMin => "umin",
+            TensorReduceOp::UMax => "umax",
+        }
+    }
+}
+
+impl core::fmt::Display for TensorReduceOp {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// The fold order of an [`InstG::TensorReduce`] (PKG-U13c). The order is part
+/// of the instruction, never a scheduling choice (Trust
+/// `docs/design/2026-11-12-one-software.md` §6.1, Exact). Wire: the
+/// `TensorReduceOrder` tag space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TensorReduceOrder {
+    /// A left fold from the identity over the reduced multi-index in
+    /// row-major order, the first reduced axis outermost.
+    RowMajor,
+}
+
+impl core::fmt::Display for TensorReduceOrder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            TensorReduceOrder::RowMajor => "row_major",
+        })
+    }
+}
+
+/// One node of an [`InstG::TensorView`]'s coordinate function (PKG-U13c):
+/// an integer, over the unbounded integers. An arithmetic node names the ids
+/// of two earlier nodes. `Div` and `Rem` are Euclidean (the remainder is in
+/// `[0, |divisor|)`). Wire: the `TensorIndexExpr` tag space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TensorIndexExpr {
+    /// A literal.
+    Lit(u64),
+    /// The `usize` operand `params[k]`, unsigned.
+    Param(u32),
+    /// The source's extent along axis `j`.
+    SrcExtent(u32),
+    /// The result coordinate along axis `i`.
+    Coord(u32),
+    Add(u32, u32),
+    Sub(u32, u32),
+    Mul(u32, u32),
+    /// Euclidean quotient.
+    Div(u32, u32),
+    /// Euclidean remainder.
+    Rem(u32, u32),
+    Min(u32, u32),
+    Max(u32, u32),
+}
+
+impl TensorIndexExpr {
+    /// The node ids an arithmetic node reads (none for an atom).
+    #[must_use]
+    pub const fn operands(self) -> Option<(u32, u32)> {
+        match self {
+            TensorIndexExpr::Lit(_)
+            | TensorIndexExpr::Param(_)
+            | TensorIndexExpr::SrcExtent(_)
+            | TensorIndexExpr::Coord(_) => None,
+            TensorIndexExpr::Add(a, b)
+            | TensorIndexExpr::Sub(a, b)
+            | TensorIndexExpr::Mul(a, b)
+            | TensorIndexExpr::Div(a, b)
+            | TensorIndexExpr::Rem(a, b)
+            | TensorIndexExpr::Min(a, b)
+            | TensorIndexExpr::Max(a, b) => Some((a, b)),
+        }
+    }
+
+    /// The text name of an arithmetic node, or of an atom.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            TensorIndexExpr::Lit(_) => "lit",
+            TensorIndexExpr::Param(_) => "param",
+            TensorIndexExpr::SrcExtent(_) => "src_extent",
+            TensorIndexExpr::Coord(_) => "coord",
+            TensorIndexExpr::Add(..) => "add",
+            TensorIndexExpr::Sub(..) => "sub",
+            TensorIndexExpr::Mul(..) => "mul",
+            TensorIndexExpr::Div(..) => "div",
+            TensorIndexExpr::Rem(..) => "rem",
+            TensorIndexExpr::Min(..) => "min",
+            TensorIndexExpr::Max(..) => "max",
+        }
+    }
+}
+
+impl core::fmt::Display for TensorIndexExpr {
+    /// `lit(3)`, `param(0)`, `src_extent(1)`, `coord(0)`, `add($0, $1)`.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match *self {
+            TensorIndexExpr::Lit(n) => write!(f, "lit({n})"),
+            TensorIndexExpr::Param(k)
+            | TensorIndexExpr::SrcExtent(k)
+            | TensorIndexExpr::Coord(k) => {
+                write!(f, "{}({k})", self.name())
+            }
+            other => {
+                let (a, b) = other.operands().unwrap_or_default();
+                write!(f, "{}(${a}, ${b})", other.name())
+            }
+        }
+    }
+}
+
+/// Which nodes of a [`InstG::TensorView`]'s coordinate function are
+/// INDEX-PHASE (PKG-U13c): a `Coord` node, and an arithmetic node with an
+/// index-phase operand. Every other node is shape-phase: it has one value for
+/// the whole view. An operand id at or past its own node's (a malformed
+/// list) reads as shape-phase here; the validator refuses it separately.
+#[must_use]
+pub fn tensor_view_index_phase(exprs: &[TensorIndexExpr]) -> Vec<bool> {
+    let mut phase: Vec<bool> = Vec::with_capacity(exprs.len());
+    for expr in exprs {
+        let index = match *expr {
+            TensorIndexExpr::Coord(_) => true,
+            other => other.operands().is_some_and(|(a, b)| {
+                phase.get(a as usize).copied().unwrap_or(false)
+                    || phase.get(b as usize).copied().unwrap_or(false)
+            }),
+        };
+        phase.push(index);
+    }
+    phase
 }
 
 /// The level-R instruction: [`InstG`] with no extension.
@@ -2069,6 +2627,12 @@ variant_shape! {
         DropInvoke,
         InvokeIndirect,
         MakeClosure,
+        TensorContract,
+        TensorMap,
+        TensorReduce,
+        TensorView,
+        TensorGather,
+        TensorScatter,
     }
 }
 
@@ -2375,6 +2939,47 @@ impl Inst {
             }
             // ONE operand, visited once: the lane count is in the type.
             Inst::ArraySplat { value, .. } => try_visit!(*value),
+            // The two tensors, in field order; the axis pairs are not values.
+            Inst::TensorContract { lhs, rhs, .. } => {
+                try_visit!(*lhs);
+                try_visit!(*rhs);
+            }
+            // The operands in order; the body's lanes are not values.
+            Inst::TensorMap { args, .. } => {
+                for &argument in args {
+                    try_visit!(argument);
+                }
+            }
+            Inst::TensorReduce { src, .. } => try_visit!(*src),
+            // The source, the parameters in order, then the fill.
+            Inst::TensorView {
+                src, params, fill, ..
+            } => {
+                try_visit!(*src);
+                for &param in params {
+                    try_visit!(param);
+                }
+                if let Some(fill) = fill {
+                    try_visit!(*fill);
+                }
+            }
+            // The data, then the coordinate tensors in axis order.
+            Inst::TensorGather { data, coords, .. } => {
+                try_visit!(*data);
+                for &coord in coords {
+                    try_visit!(coord);
+                }
+            }
+            // The initial tensor, the source, then the coordinate tensors.
+            Inst::TensorScatter {
+                init, src, coords, ..
+            } => {
+                try_visit!(*init);
+                try_visit!(*src);
+                for &coord in coords {
+                    try_visit!(coord);
+                }
+            }
             Inst::ExtractField { aggregate, .. } => try_visit!(*aggregate),
             Inst::InsertField {
                 aggregate, value, ..
@@ -2714,6 +3319,12 @@ impl Inst {
             | Inst::MakeAggregate { .. }
             | Inst::MakeClosure { .. }
             | Inst::ArraySplat { .. }
+            | Inst::TensorContract { .. }
+            | Inst::TensorMap { .. }
+            | Inst::TensorReduce { .. }
+            | Inst::TensorView { .. }
+            | Inst::TensorGather { .. }
+            | Inst::TensorScatter { .. }
             | Inst::CallCannotUnwind { .. }
             | Inst::CallIndirectCannotUnwind { .. } => Vec::new(),
         }
@@ -2936,6 +3547,27 @@ impl Inst {
             // statically typed (the validator's element rule is its side
             // condition), no memory access — pure like `MakeAggregate`.
             Inst::ArraySplat { .. } => false,
+
+            // A tensor contraction computes a fresh tensor value out of two
+            // register tensors: no memory access, no trap. Its extent
+            // agreement is a PRECONDITION (a violation is undefined
+            // behaviour, as a division by zero in `BinOp` is), never a
+            // checked effect, so an unused result is freely removable.
+            Inst::TensorContract { .. } => false,
+
+            // The map, the reduction and the view compute a fresh tensor
+            // value out of register operands: no memory access, no trap.
+            // Their preconditions (equal extents, in-range coordinates, a
+            // map node's own, such as a nonzero divisor) are undefined
+            // behaviour when violated, never checked effects.
+            Inst::TensorMap { .. } | Inst::TensorReduce { .. } | Inst::TensorView { .. } => false,
+
+            // The gather and the scatter compute a fresh tensor value out of
+            // register tensors: no memory access, no trap. Equal extents and
+            // in-range coordinates are preconditions (undefined behaviour
+            // when violated, a `BoundsCheck` obligation when stated), never
+            // checked effects.
+            Inst::TensorGather { .. } | Inst::TensorScatter { .. } => false,
 
             // An assumption only ADDS information. Dropping it can lose a
             // proof, never change observable behavior.
@@ -4488,6 +5120,15 @@ mod tests {
             Inst::ArraySplat {
                 ty: Ty::Array(crate::TyId::new(0), 1 << 40),
                 value: v(0),
+            },
+            // A matrix multiply as a contraction: a fresh tensor value out
+            // of two register tensors, extent agreement a precondition.
+            Inst::TensorContract {
+                ty: Ty::Tensor(Box::new(Ty::I32), 2),
+                lhs: v(0),
+                rhs: v(1),
+                batch: Vec::new(),
+                contract: vec![(1, 0)],
             },
             Inst::ExtractElement {
                 ty: Ty::I32,

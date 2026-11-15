@@ -34,6 +34,7 @@ impl<'a> State<'a> {
                     match ty {
                         Ty::Storage(_) => {}
                         Ty::Vector(inner, _)
+                        | Ty::Tensor(inner, _)
                         | Ty::Ref(inner)
                         | Ty::RefMut(inner)
                         | Ty::PtrConst(inner)

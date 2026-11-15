@@ -71,7 +71,8 @@ fn leaf<O: ExecutionObserver>(ty: &Ty, mode: Width, work: &mut Work<'_, '_, O>) 
         | Ty::Record(_)
         | Ty::Closure(_)
         | Ty::Refine(_, _)
-        | Ty::Dialect(_) => None,
+        | Ty::Dialect(_)
+        | Ty::Tensor(_, _) => None,
         Ty::Vector(_, _) => return Err(ObservedValueError::InvalidRange),
         Ty::Ext(extension) => extension.unreachable(),
     })

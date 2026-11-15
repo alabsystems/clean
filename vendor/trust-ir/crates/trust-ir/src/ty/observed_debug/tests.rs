@@ -82,6 +82,8 @@ fn types() -> Vec<Ty> {
         Ty::Unit,
         Ty::Never,
         Ty::Vector(Box::new(Ty::Bool), u32::MAX),
+        Ty::Tensor(Box::new(Ty::I32), 2),
+        Ty::Tensor(Box::new(Ty::Tensor(Box::new(Ty::U8), 0)), u32::MAX),
         Ty::Tuple(vec![]),
         Ty::Tuple(vec![Ty::Bool, Ty::I32]),
         Ty::Struct(StructId::new(7)),

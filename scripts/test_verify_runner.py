@@ -3176,6 +3176,64 @@ class TestHostProvenance(unittest.TestCase):
 
 
 
+class RequiredTestsKeepReservationHistory(unittest.TestCase):
+    def _record(self, **updates):
+        return record(**{"status": vr.STATUS_GREEN, "kind": "test", "peak_rss_gb": 0.1,
+                         "prior_peak_rss_gb": 20.0, "build_peak_rss_gb": 0.1,
+                         "run_peak_rss_gb": 0.1, "build_rss_samples": 40, "rss_samples": 40,
+                         "must_pass": ["required::test"], "passed_tests": ["other::test"],
+                         "counts": {"passed": 1, "failed": 0, "result_lines": 1}, **updates})
+
+    def test_missing_required_names_cannot_lower_prior_cost(self):
+        rec = self._record()
+        self.assertEqual(vr.derive({**ENTRY, "_must_pass": rec["must_pass"]}, rec, DIGEST)["bucket"],
+                         vr.BUCKET_UNKNOWN)
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), 30)
+            self.assertEqual(vr._prior_peak_rss_gb("t"), 20.0)
+
+    def test_missing_required_names_without_prior_keep_the_default(self):
+        with mock.patch.object(vr, "load_record", return_value=self._record(prior_peak_rss_gb=None)):
+            self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+
+    def test_missing_required_names_cannot_size_separate_phases(self):
+        with mock.patch.object(vr, "load_record", return_value=self._record()):
+            self.assertEqual(vr._split_weights_gb("t"), (30, 30))
+            self.assertIsNone(vr._phase_peak_gb("t", "build_peak_rss_gb"))
+            self.assertIsNone(vr._phase_peak_gb("t", "run_peak_rss_gb"))
+
+    def test_non_libtest_gate_cannot_bypass_recorded_requirements(self):
+        rec = self._record(kind="gate", command="/bin/sh -c partial-gate",
+                           counts={"passed": 0, "failed": 0, "result_lines": 0})
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), 30)
+
+    def test_a_larger_partial_observation_still_raises_the_weight(self):
+        with mock.patch.object(vr, "load_record", return_value=self._record(peak_rss_gb=24.0)):
+            self.assertEqual(vr._gate_weight_gb("t"), 36)
+
+    def test_all_required_names_observed_still_learn_smaller_peaks(self):
+        with mock.patch.object(vr, "load_record", return_value=self._record(passed_tests=["required::test"])):
+            self.assertEqual(vr._gate_weight_gb("t"), vr.MIN_TARGET_GB)
+            self.assertEqual(vr._split_weights_gb("t"), (vr.MIN_TARGET_GB, vr.MIN_TARGET_GB))
+
+    def test_legacy_record_without_required_names_keeps_existing_learning(self):
+        rec = self._record()
+        del rec["must_pass"]
+        del rec["passed_tests"]
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), vr.MIN_TARGET_GB)
+
+    def test_malformed_requirement_metadata_cannot_size_a_smaller_job(self):
+        cases = (("must_pass", 7), ("must_pass", False), ("must_pass", "required::test"),
+                 ("must_pass", ["required::test", {}]), ("passed_tests", [ {} ]),
+                 ("passed_tests", {"required::test": True}), ("passed_tests", "required::test"))
+        for key, value in cases:
+            with self.subTest(key=key, value=value), \
+                 mock.patch.object(vr, "load_record", return_value=self._record(**{key: value})):
+                self.assertEqual(vr._gate_weight_gb("t"), 30)
+
+
 class SkippedRunsKeepReservationHistory(unittest.TestCase):
     def _record(self, **updates):
         return record(**{"status": vr.STATUS_SKIPPED, "kind": "gate",
@@ -4383,13 +4441,24 @@ class ParserInputCoverage(unittest.TestCase):
 class CheckerQualificationInputs(unittest.TestCase):
     CORE = "clean-olean::test::kcheck_core"
     SPEC = "clean-olean::test::kcheck_spec"
+    BINDING_NOT = "clean-olean::test::binding_not_review"
 
     def test_compiled_package_closures_are_declared(self):
         core = set(vr.TARGET_EXTRA_PATHS.get(self.CORE, ()))
         spec = set(vr.TARGET_EXTRA_PATHS.get(self.SPEC, ()))
+        binding_not = set(vr.TARGET_EXTRA_PATHS.get(self.BINDING_NOT, ()))
         self.assertTrue({"lean-toolchain", "theories/cic_l", "theories/kcheck"} <= core)
         self.assertTrue({"lean-toolchain", "theories/cic_l", "theories/cic_l_model",
                          "theories/kcheck_spec"} <= spec)
+        self.assertTrue({"crates/clean-ck0", "lean-toolchain", "theories/binding_not_review",
+                         "reports/2026-11-14-extension-binding-not-review"} <= binding_not)
+
+    def test_binding_not_review_repo_join_paths_are_scanned(self):
+        found = vr._crystal_extra_paths_owed()
+        owed = found.get(self.BINDING_NOT, set())
+        self.assertIn("theories/binding_not_review", owed)
+        self.assertIn("reports/self-proof-ck0-shared-2026-11-14/stock-build-inputs.json", owed)
+        self.assertTrue(owed <= set(vr.TARGET_EXTRA_PATHS.get(self.BINDING_NOT, ())))
 
     def test_fixture_order_theory_packages_are_covered(self):
         pin = (vr.REPO_ROOT / "lean-toolchain").read_text().strip().split(":")[-1]

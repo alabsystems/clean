@@ -22,6 +22,7 @@ impl<X> TyG<X> {
             match current {
                 TyG::Storage(_) => {}
                 TyG::Vector(inner, _)
+                | TyG::Tensor(inner, _)
                 | TyG::Ref(inner)
                 | TyG::RefMut(inner)
                 | TyG::PtrConst(inner)
@@ -153,6 +154,11 @@ impl<X> InstG<X> {
             | InstG::CmpXchg { ty, .. }
             | InstG::MakeAggregate { ty, .. }
             | InstG::ArraySplat { ty, .. }
+            | InstG::TensorContract { ty, .. }
+            | InstG::TensorReduce { ty, .. }
+            | InstG::TensorView { ty, .. }
+            | InstG::TensorGather { ty, .. }
+            | InstG::TensorScatter { ty, .. }
             | InstG::ExtractField { ty, .. }
             | InstG::InsertField { ty, .. }
             | InstG::ExtractElement { ty, .. }
@@ -165,6 +171,16 @@ impl<X> InstG<X> {
             InstG::Cast { src_ty, dst_ty, .. } => {
                 root(src_ty);
                 root(dst_ty);
+            }
+            // PKG-U13c: the result type, then each body node's types in
+            // node order (a cast node spells two).
+            InstG::TensorMap { ty, body, .. } => {
+                root(ty);
+                for node in body {
+                    for node_ty in node.types() {
+                        root(node_ty);
+                    }
+                }
             }
             InstG::GEP { pointee_ty, .. } => root(pointee_ty),
             InstG::PtrData { ptr_ty, .. } => root(ptr_ty),
@@ -378,6 +394,30 @@ mod tests {
         assert!(Ty::Tuple(vec![Ty::I8, Ty::Ref(Box::new(handle))]).contains_handle());
         // A table reference is not followed: the module walk decides that.
         assert!(!Ty::Array(crate::TyId::new(0), 1).contains_handle());
+    }
+
+    #[test]
+    fn a_tensor_element_is_an_inline_child_and_a_contraction_spells_its_type() {
+        use crate::shape::TyShape;
+        let handle = Ty::handle("Nat", "trust_bignum::Nat");
+        let tensor = Ty::Tensor(Box::new(handle), 2);
+        let mut seen = Vec::new();
+        tensor.visit_types(|child| seen.push(child.shape()));
+        assert_eq!(seen, [TyShape::Tensor, TyShape::Handle]);
+        assert!(tensor.contains_handle());
+        let contract = Inst::TensorContract {
+            ty: Ty::Tensor(Box::new(Ty::I32), 2),
+            lhs: crate::ValueId::new(0),
+            rhs: crate::ValueId::new(1),
+            batch: vec![],
+            contract: vec![(1, 0)],
+        };
+        let mut roots = Vec::new();
+        contract.visit_type_roots(|ty| roots.push(ty.clone()));
+        assert_eq!(roots, vec![Ty::Tensor(Box::new(Ty::I32), 2)]);
+        let mut all = Vec::new();
+        contract.visit_types(|ty| all.push(ty.clone()));
+        assert_eq!(all, vec![Ty::Tensor(Box::new(Ty::I32), 2), Ty::I32]);
     }
 
     #[test]

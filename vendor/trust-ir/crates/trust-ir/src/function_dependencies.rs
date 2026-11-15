@@ -518,7 +518,9 @@ fn constant_reach(constant: &Constant) -> ConstantReach<'_> {
         // Crystal lane (E3b): an unwritten lane names no identity.
         | Constant::Uninit
         // v50: the one element is a child the visitor reaches (once).
-        | Constant::Splat { .. } => ConstantReach::Nothing,
+        | Constant::Splat { .. }
+        // v70: a blob table key names data, never a function or a global.
+        | Constant::TensorBlob { .. } => ConstantReach::Nothing,
         Constant::Ext(e) => e.unreachable(),
     }
 }
@@ -693,7 +695,19 @@ fn instruction_reach<'module>(
         | Inst::Resume { .. }
         | Inst::MakeAggregate { .. }
         // v50: `n` copies of one register operand.
-        | Inst::ArraySplat { .. } => InstructionReach::Nothing,
+        | Inst::ArraySplat { .. }
+        // Two register tensors and an inline result type: no function, global
+        // or symbol (its types are scanned like any other node's).
+        | Inst::TensorContract { .. }
+        // PKG-U13c: register tensors, scalar lanes and `usize` parameters,
+        // with inline types: no function, global or symbol.
+        | Inst::TensorMap { .. }
+        | Inst::TensorReduce { .. }
+        | Inst::TensorView { .. }
+        // PKG-U13d: register tensors (data, coordinates, source) with an
+        // inline result type: no function, global or symbol.
+        | Inst::TensorGather { .. }
+        | Inst::TensorScatter { .. } => InstructionReach::Nothing,
     }
 }
 
@@ -1022,6 +1036,8 @@ impl<'module> Walker<'module> {
             | Ty::Unit
             | Ty::Never
             | Ty::Vector(..)
+            // The element is an inline child, visited by `visit_types` itself.
+            | Ty::Tensor(..)
             | Ty::Tuple(_)
             | Ty::Ref(_)
             | Ty::RefMut(_)

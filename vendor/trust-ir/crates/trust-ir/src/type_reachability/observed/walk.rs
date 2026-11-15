@@ -36,6 +36,7 @@ impl<'a> Inline<'a> {
                     match ty {
                         Ty::Storage(_) => {}
                         Ty::Vector(t, _)
+                        | Ty::Tensor(t, _)
                         | Ty::Ref(t)
                         | Ty::RefMut(t)
                         | Ty::PtrConst(t)

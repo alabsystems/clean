@@ -407,6 +407,17 @@ pub(super) fn observed_write_module_sections<O: ExecutionObserver>(
             }
         }
     }
+    // v70 (PKG-U13e): the blob table, after the v58 closure layouts, rows in
+    // the canonical (strictly ascending digest) order the module holds them in.
+    if pool.minimum_version() >= TENSOR_BLOB_FORMAT_VERSION {
+        observed_write_count(buf, "Module.blobs", module.blobs.len())?;
+        for blob in &module.blobs {
+            buf.poll()?;
+            buf.extend_from_slice(&blob.digest.0)?;
+            observed_write_count(buf, "Blob.data", blob.data.len())?;
+            buf.extend_from_slice(&blob.data)?;
+        }
+    }
 
     Ok(())
 }

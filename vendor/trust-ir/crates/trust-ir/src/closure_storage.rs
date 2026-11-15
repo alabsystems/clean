@@ -42,7 +42,10 @@ impl Module {
                     }
                 }
                 Ty::Tuple(fields) => pending.extend(fields),
-                Ty::Vector(element, _) => pending.push(*element),
+                // A tensor has no byte image, but its element is an inline
+                // child exactly as a vector's is: following it only adds
+                // closure types to check, which fails closed.
+                Ty::Vector(element, _) | Ty::Tensor(element, _) => pending.push(*element),
                 Ty::Array(element, _) => {
                     if let Some(element) = self.types.get(element.as_usize()) {
                         pending.push(element.clone());

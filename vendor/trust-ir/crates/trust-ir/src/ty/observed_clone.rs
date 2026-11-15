@@ -109,6 +109,7 @@ impl<'a> State<'a> {
                 self.task(Task::Tail(children), work)
             }
             Ty::Vector(child, _)
+            | Ty::Tensor(child, _)
             | Ty::Ref(child)
             | Ty::RefMut(child)
             | Ty::PtrConst(child)
@@ -179,6 +180,7 @@ fn leaf(ty: &Ty) -> R<Ty> {
         Ty::Ext(extension) => extension.unreachable(),
         Ty::Tuple(_)
         | Ty::Vector(_, _)
+        | Ty::Tensor(_, _)
         | Ty::Ref(_)
         | Ty::RefMut(_)
         | Ty::PtrConst(_)

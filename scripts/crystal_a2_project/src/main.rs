@@ -5331,6 +5331,7 @@ impl Projector {
             | Ty::Closure(_)
             | Ty::Refine(..)
             | Ty::Dialect(_)
+            | Ty::Tensor(..)
             | Ty::Storage(_)
             | Ty::Handle(_) => false,
         };
@@ -5382,6 +5383,7 @@ impl Projector {
             | Ty::Closure(_)
             | Ty::Refine(..)
             | Ty::Dialect(_)
+            | Ty::Tensor(..)
             | Ty::Storage(_)
             | Ty::Handle(_) => {
                 return Err(format!(
@@ -5661,6 +5663,7 @@ impl Projector {
             | Ty::Closure(_)
             | Ty::Refine(..)
             | Ty::Dialect(_)
+            | Ty::Tensor(..)
             | Ty::Storage(_)
             | Ty::Handle(_)) => return Err(no_ty_image(other)),
         })
@@ -5695,6 +5698,7 @@ impl Projector {
                 | Constant::SymbolAddr { .. }
                 | Constant::PhantomData
                 | Constant::Uninit
+                | Constant::TensorBlob { .. }
                 | Constant::Splat { .. }
                 | Constant::Ext(_),
             ) => e.unreachable(),
@@ -5764,6 +5768,7 @@ impl Projector {
                 | Ty::Refine(..)
                 | Ty::Dialect(_)
                 | Ty::Storage(_)
+                | Ty::Tensor(..)
                 | Ty::Handle(_),
                 other @ (Constant::Array(_)
                 | Constant::Int(_)
@@ -5834,12 +5839,65 @@ impl Projector {
                 | Ty::Refine(..)
                 | Ty::Dialect(_)
                 | Ty::Storage(_)
+                | Ty::Tensor(..)
                 | Ty::Handle(_),
                 Constant::Splat { .. },
             ) => Err(String::from(
                 "no Clean IRConst image for a global initializer of the form Splat: a uniform \
                  array (trust-ir v50) has no constant-size IRConst image, and this projector \
                  does not expand it element by element",
+            )),
+            // trust-ir v70: a content-addressed weight blob is a tensor value whose
+            // bytes live in the module's blob table; Clean's `IRConst` has no
+            // tensor image. Refused by name at every type, reading neither the
+            // digest nor the extents.
+            (
+                Ty::Array(..)
+                | Ty::Struct(_)
+                | Ty::Tuple(_)
+                | Ty::Ptr
+                | Ty::PtrConst(_)
+                | Ty::PtrMut(_)
+                | Ty::Ref(_)
+                | Ty::RefMut(_)
+                | Ty::I8
+                | Ty::I16
+                | Ty::I32
+                | Ty::I64
+                | Ty::I128
+                | Ty::U8
+                | Ty::U16
+                | Ty::U32
+                | Ty::U64
+                | Ty::U128
+                | Ty::Isize
+                | Ty::Usize
+                | Ty::Char
+                | Ty::Error
+                | Ty::F16
+                | Ty::F32
+                | Ty::F64
+                | Ty::Bool
+                | Ty::Unit
+                | Ty::Never
+                | Ty::Enum(_)
+                | Ty::Rc(_)
+                | Ty::Vector(..)
+                | Ty::FatPtr(_)
+                | Ty::Func(_)
+                | Ty::Set(..)
+                | Ty::Sequence(_)
+                | Ty::Record(_)
+                | Ty::Closure(_)
+                | Ty::Refine(..)
+                | Ty::Dialect(_)
+                | Ty::Storage(_)
+                | Ty::Tensor(..)
+                | Ty::Handle(_),
+                Constant::TensorBlob { .. },
+            ) => Err(String::from(
+                "no Clean IRConst image for a global initializer of the form TensorBlob: a \
+                 content-addressed tensor weight (trust-ir v70) has no IRConst image",
             )),
             // trust-ir D1b: the extension lane is uninhabited in this build.
             (
@@ -5883,6 +5941,7 @@ impl Projector {
                 | Ty::Refine(..)
                 | Ty::Dialect(_)
                 | Ty::Storage(_)
+                | Ty::Tensor(..)
                 | Ty::Handle(_),
                 Constant::Ext(e),
             ) => e.unreachable(),
@@ -5931,6 +5990,7 @@ impl Projector {
                 | Ty::Refine(..)
                 | Ty::Dialect(_)
                 | Ty::Storage(_)
+                | Ty::Tensor(..)
                 | Ty::Handle(_),
                 Constant::Uninit,
             ) => Err(String::from(
@@ -5997,6 +6057,13 @@ impl Projector {
                 "no Clean IRConst image for Constant::Uninit as an element of a global \
                  initializer: an unwritten aggregate lane (trust-ir v49) is admissible only \
                  as a direct lane of a struct/tuple `Const`, never in a global initializer",
+            )),
+            // trust-ir v70: a content-addressed weight blob is a tensor value
+            // whose bytes live in the module's blob table; EvalIR has no tensor
+            // value, so it is refused by name rather than handed to `cst`.
+            Constant::TensorBlob { .. } => Err(String::from(
+                "no Clean IRConst image for Constant::TensorBlob (a content-addressed tensor \
+                 weight, trust-ir v70) in a global initializer",
             )),
             Constant::Ext(e) => e.unreachable(),
         }
@@ -6066,6 +6133,15 @@ impl Projector {
                 return Err(String::from(
                     "no Clean IRConst image for Constant::Splat (a uniform array, trust-ir \
                      v50): an array constant has no image inside a `const` node",
+                ))
+            }
+            // trust-ir v70: a weight blob names tensor elements by digest;
+            // EvalIR has no tensor value. Neither the digest nor the extents
+            // are read.
+            Constant::TensorBlob { .. } => {
+                return Err(String::from(
+                    "no Clean IRConst image for Constant::TensorBlob (a content-addressed \
+                     tensor weight, trust-ir v70)",
                 ))
             }
         })
@@ -6269,6 +6345,12 @@ impl Projector {
             // trust-ir v47's destructor run is no atomic; `inst` refuses it.
             | Inst::Drop { .. }
             | Inst::MakeAggregate { .. }
+            | Inst::TensorContract { .. }
+            | Inst::TensorMap { .. }
+            | Inst::TensorReduce { .. }
+            | Inst::TensorView { .. }
+            | Inst::TensorGather { .. }
+            | Inst::TensorScatter { .. }
             | Inst::MakeClosure { .. } => return Ok(None),
         };
         self.seq_atomic_images += 1;
@@ -6354,6 +6436,12 @@ impl Projector {
             | Inst::DropInvoke { .. }
             | Inst::InvokeIndirect { .. }
             | Inst::MakeAggregate { .. }
+            | Inst::TensorContract { .. }
+            | Inst::TensorMap { .. }
+            | Inst::TensorReduce { .. }
+            | Inst::TensorView { .. }
+            | Inst::TensorGather { .. }
+            | Inst::TensorScatter { .. }
             | Inst::MakeClosure { .. } => return Ok(None),
         };
         let spec = trust_ir::dialect::trust_rust::decode_thread_local_addr(op).map_err(|e| {
@@ -6479,6 +6567,12 @@ impl Projector {
             | Inst::DropInvoke { .. }
             | Inst::InvokeIndirect { .. }
             | Inst::MakeAggregate { .. }
+            | Inst::TensorContract { .. }
+            | Inst::TensorMap { .. }
+            | Inst::TensorReduce { .. }
+            | Inst::TensorView { .. }
+            | Inst::TensorGather { .. }
+            | Inst::TensorScatter { .. }
             | Inst::MakeClosure { .. } => return Ok(None),
         };
         // Named matches, not a nested pattern (a `Cast` pattern naming `Bitcast` and `Ty::Ptr`
@@ -6534,6 +6628,7 @@ impl Projector {
                     | Constant::SymbolAddr { .. }
                     | Constant::PhantomData
                     | Constant::Uninit
+                    | Constant::TensorBlob { .. }
                     | Constant::Splat { .. },
                 ..
             } => return Ok(None),
@@ -6607,6 +6702,12 @@ impl Projector {
             | Inst::DropInvoke { .. }
             | Inst::InvokeIndirect { .. }
             | Inst::MakeAggregate { .. }
+            | Inst::TensorContract { .. }
+            | Inst::TensorMap { .. }
+            | Inst::TensorReduce { .. }
+            | Inst::TensorView { .. }
+            | Inst::TensorGather { .. }
+            | Inst::TensorScatter { .. }
             | Inst::MakeClosure { .. } => return Ok(None),
         };
         if *v >= 0 {
@@ -6653,6 +6754,7 @@ impl Projector {
             | Ty::Closure(_)
             | Ty::Refine(..)
             | Ty::Dialect(_)
+            | Ty::Tensor(..)
             | Ty::Storage(_)
             | Ty::Handle(_) => return Ok(None),
             Ty::Ext(e) => e.unreachable(),
@@ -6785,6 +6887,12 @@ impl Projector {
             | Inst::DropInvoke { .. }
             | Inst::InvokeIndirect { .. }
             | Inst::MakeAggregate { .. }
+            | Inst::TensorContract { .. }
+            | Inst::TensorMap { .. }
+            | Inst::TensorReduce { .. }
+            | Inst::TensorView { .. }
+            | Inst::TensorGather { .. }
+            | Inst::TensorScatter { .. }
             | Inst::MakeClosure { .. } => false,
         };
         if !halting {
@@ -7168,6 +7276,12 @@ impl Projector {
             | Inst::Resume { .. }
             | Inst::DialectOp(..)
             | Inst::MakeAggregate { .. }
+            | Inst::TensorContract { .. }
+            | Inst::TensorMap { .. }
+            | Inst::TensorReduce { .. }
+            | Inst::TensorView { .. }
+            | Inst::TensorGather { .. }
+            | Inst::TensorScatter { .. }
             | Inst::MakeClosure { .. } => {
                 return Err(format!(
                     "no Clean IRInst image for trust_ir::Inst::{}",
@@ -7211,7 +7325,9 @@ fn constant_may_name_function(c: &Constant) -> bool {
         | Constant::PhantomData
         // trust-ir v49's unwritten lane carries no payload at all, so it
         // cannot name a function.
-        | Constant::Uninit => false,
+        | Constant::Uninit
+        // trust-ir v70: a weight blob names bytes by digest, never a function.
+        | Constant::TensorBlob { .. } => false,
     }
 }
 
@@ -7983,6 +8099,7 @@ fn is_pointer_word(t: &Ty, d: &Definer<'_>, seen: &mut Vec<u32>) -> bool {
         | Ty::Closure(_)
         | Ty::Refine(..)
         | Ty::Dialect(_)
+        | Ty::Tensor(..)
         | Ty::Storage(_)
         | Ty::Handle(_) => false,
     }
@@ -8044,6 +8161,7 @@ fn is_zst(t: &Ty, structs: &[trust_ir::ty::StructDef]) -> bool {
         | Ty::Closure(_)
         | Ty::Refine(..)
         | Ty::Dialect(_)
+        | Ty::Tensor(..)
         | Ty::Storage(_)
         | Ty::Handle(_) => false,
     }
@@ -8503,6 +8621,7 @@ fn no_ty_image(t: &Ty) -> String {
         | Ty::Closure(_)
         | Ty::Refine(..)
         | Ty::Dialect(_)
+        | Ty::Tensor(..)
         | Ty::Storage(_)
         | Ty::Handle(_) => format!("no Clean IRTy image for trust_ir::Ty::{t:?}"),
     }
@@ -8838,6 +8957,12 @@ fn vt_node(i: &Inst) -> VtNode<'_> {
         | Inst::InvokeIndirect { .. }
         | Inst::DialectOp(..)
         | Inst::MakeAggregate { .. }
+        | Inst::TensorContract { .. }
+        | Inst::TensorMap { .. }
+        | Inst::TensorReduce { .. }
+        | Inst::TensorView { .. }
+        | Inst::TensorGather { .. }
+        | Inst::TensorScatter { .. }
         | Inst::MakeClosure { .. } => VtNode::Other,
     }
 }
@@ -8889,6 +9014,7 @@ fn vt_ty(t: &Ty) -> VtTy {
         | Ty::Closure(_)
         | Ty::Refine(..)
         | Ty::Dialect(_)
+        | Ty::Tensor(..)
         | Ty::Storage(_)
         | Ty::Handle(_) => VtTy::Other,
     }
@@ -8936,6 +9062,7 @@ fn fat_kind_of(t: &Ty) -> Option<&trust_ir::FatPtrKind> {
         | Ty::Closure(_)
         | Ty::Refine(..)
         | Ty::Dialect(_)
+        | Ty::Tensor(..)
         | Ty::Storage(_)
         | Ty::Handle(_) => None,
     }
@@ -9009,6 +9136,7 @@ fn ty_is_bare_ptr(t: &Ty) -> bool {
         | Ty::Closure(_)
         | Ty::Refine(..)
         | Ty::Dialect(_)
+        | Ty::Tensor(..)
         | Ty::Storage(_)
         | Ty::Handle(_) => false,
         Ty::Ext(e) => e.unreachable(),
@@ -9061,6 +9189,7 @@ fn inst_is_const_bool_false(i: &Inst) -> bool {
                 | Ty::Closure(_)
                 | Ty::Refine(..)
                 | Ty::Dialect(_)
+                | Ty::Tensor(..)
                 | Ty::Storage(_)
                 | Ty::Handle(_) => false,
                 Ty::Ext(e) => e.unreachable(),
@@ -9082,7 +9211,8 @@ fn inst_is_const_bool_false(i: &Inst) -> bool {
                 | Constant::FnDef(_)
                 | Constant::SymbolAddr { .. }
                 | Constant::PhantomData
-                | Constant::Uninit => false,
+                | Constant::Uninit
+                | Constant::TensorBlob { .. } => false,
                 Constant::Ext(e) => e.unreachable(),
             };
             bool_ty && false_value
@@ -9148,6 +9278,12 @@ fn inst_is_const_bool_false(i: &Inst) -> bool {
         | Inst::AssertInvoke { .. }
         | Inst::DialectOp(..)
         | Inst::MakeAggregate { .. }
+        | Inst::TensorContract { .. }
+        | Inst::TensorMap { .. }
+        | Inst::TensorReduce { .. }
+        | Inst::TensorView { .. }
+        | Inst::TensorGather { .. }
+        | Inst::TensorScatter { .. }
         | Inst::MakeClosure { .. }
         | Inst::ArraySplat { .. }
         | Inst::CallCannotUnwind { .. }
@@ -9217,6 +9353,7 @@ fn metadata_ty_key(t: &Ty) -> Option<u8> {
         | Ty::Closure(_)
         | Ty::Refine(..)
         | Ty::Dialect(_)
+        | Ty::Tensor(..)
         | Ty::Storage(_)
         | Ty::Handle(_) => None,
         Ty::Ext(e) => e.unreachable(),
@@ -9262,6 +9399,7 @@ fn const_int(c: &Constant) -> Option<i128> {
         | Constant::SymbolAddr { .. }
         | Constant::PhantomData
         | Constant::Uninit
+        | Constant::TensorBlob { .. }
         | Constant::Splat { .. } => None,
         Constant::Ext(e) => e.unreachable(),
     }
@@ -9394,6 +9532,12 @@ fn fold_in(primary: &mut trust_ir::Module, other: trust_ir::Module, path: &str) 
                     | Inst::InvokeIndirect { .. }
                     | Inst::AssertInvoke { .. }
                     | Inst::DropInvoke { .. }
+                    | Inst::TensorContract { .. }
+                    | Inst::TensorMap { .. }
+                    | Inst::TensorReduce { .. }
+                    | Inst::TensorView { .. }
+                    | Inst::TensorGather { .. }
+                    | Inst::TensorScatter { .. }
                     | Inst::MakeClosure { .. } => panic!(
                         "--merge {path}: `{}` carries a trust_ir::Inst::{}, which names a \
                          function or global this relocation does not move; refused rather \
@@ -9685,6 +9829,12 @@ fn call_target(inst: &mut Inst) -> Option<&mut trust_ir::value::FuncId> {
         | Inst::LandingPad { .. }
         | Inst::Resume { .. }
         | Inst::MakeAggregate { .. }
+        | Inst::TensorContract { .. }
+        | Inst::TensorMap { .. }
+        | Inst::TensorReduce { .. }
+        | Inst::TensorView { .. }
+        | Inst::TensorGather { .. }
+        | Inst::TensorScatter { .. }
         | Inst::MakeClosure { .. } => None,
     }
 }
@@ -10206,7 +10356,9 @@ mod reference {
             | InterpretValueKind::Unit
             | InterpretValueKind::Frame { .. }
             | InterpretValueKind::PartialBytes(_)
-            | InterpretValueKind::Handle { .. } => Img::Opaque(format!("{} value", v.ty)),
+            | InterpretValueKind::Handle { .. }
+            // trust-ir v67: a tensor value has no Clean word image.
+            | InterpretValueKind::Tensor { .. } => Img::Opaque(format!("{} value", v.ty)),
             // trust-ir v49: an UNWRITTEN aggregate lane is not a value, and no
             // Clean image of a stored word is one, so it can never EQUAL a
             // model image: the row it appears in disagrees rather than passes.
@@ -10516,6 +10668,7 @@ mod deep {
                 | Ty::Unit
                 | Ty::Never
                 | Ty::Dialect(_)
+                | Ty::Tensor(..)
                 | Ty::Storage(_)
                 | Ty::Handle(_) => {
                     let _ = write!(out, "{t:?}");

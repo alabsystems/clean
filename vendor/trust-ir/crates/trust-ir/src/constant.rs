@@ -217,6 +217,30 @@ pub enum ConstantG<X> {
     /// [`Constant`], so a parameter nested in an aggregate is unrepresentable.
     /// Appended last so every earlier serde discriminant is preserved.
     Ext(X),
+    /// A content-addressed tensor (wire v70, Constant tag 18, PKG-U13e;
+    /// `docs/SPEC_RATIFICATIONS.md` §27): the `Ty::Tensor(elem, rank)` whose
+    /// extents are `dims` and whose elements, in row-major order (last axis
+    /// fastest), are the little-endian `elem`-width words of the module blob
+    /// table row keyed by `digest` ([`crate::Module::blobs`]).
+    ///
+    /// A weight is an INPUT to the compiled code, never a constant baked into
+    /// it: the constant spells the digest and the shape, and the bytes live in
+    /// the module table, outside every function body's identity
+    /// ([`crate::Module::function_body_digest`] reads the digest, not the
+    /// bytes).
+    ///
+    /// PLACEMENT. Admitted only as the whole value of an `Inst::Const` whose
+    /// type is an integer `Ty::Tensor` of rank `dims.len()`; `validate_module`
+    /// refuses it anywhere else (`InvalidTensorBlob`), and both engines refuse
+    /// it there at run time. Each extent and their product are below
+    /// `2^pointer_bits`, and the row holds exactly `∏ dims × width/8` bytes.
+    /// Appended after `Ext` so every earlier serde discriminant is preserved.
+    TensorBlob {
+        /// The SHA-256 of the element bytes: the blob table key.
+        digest: crate::blob::BlobDigest,
+        /// The extent of each axis, outermost first.
+        dims: Vec<u64>,
+    },
 }
 
 /// The level-R constant: [`ConstantG`] with no extension.
@@ -371,6 +395,16 @@ impl<X: PartialEq> PartialEq for ConstantG<X> {
             (PhantomData, PhantomData) => true,
             (Uninit, Uninit) => true,
             (Ext(a), Ext(b)) => a == b,
+            (
+                TensorBlob {
+                    digest: da,
+                    dims: ma,
+                },
+                TensorBlob {
+                    digest: db,
+                    dims: mb,
+                },
+            ) => da == db && ma == mb,
             // Different variants are never equal.
             _ => false,
         }
@@ -413,6 +447,10 @@ impl<X: core::hash::Hash> core::hash::Hash for ConstantG<X> {
             }
             PhantomData | Uninit => {}
             Ext(x) => x.hash(state),
+            TensorBlob { digest, dims } => {
+                digest.hash(state);
+                dims.hash(state);
+            }
         }
     }
 }
@@ -475,7 +513,8 @@ impl Constant {
             | Self::FnDef(_)
             | Self::SymbolAddr { .. }
             | Self::PhantomData
-            | Self::Uninit => ConstantChildSlice::Values([].iter()),
+            | Self::Uninit
+            | Self::TensorBlob { .. } => ConstantChildSlice::Values([].iter()),
             Self::Ext(e) => e.unreachable(),
         };
         ConstantChildren { inner }

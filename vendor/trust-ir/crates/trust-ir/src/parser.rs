@@ -481,6 +481,21 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// A blob digest: exactly 64 hex digits (32 bytes), no separator. Serves
+    /// v70 `tensor_blob<..>` constants and `blob` module rows.
+    fn read_blob_digest(&mut self) -> Result<crate::blob::BlobDigest, ParseError> {
+        let mut digest = [0u8; 32];
+        for byte in &mut digest {
+            let hi = self.expect_hex_digit()?;
+            let lo = self.expect_hex_digit()?;
+            *byte = (hi << 4) | lo;
+        }
+        if self.peek_char().is_some_and(|c| c.is_ascii_hexdigit()) {
+            return Err(self.error("a blob digest is exactly 64 hex digits".to_string()));
+        }
+        Ok(crate::blob::BlobDigest(digest))
+    }
+
     fn expect_char(&mut self, ch: char) -> Result<(), ParseError> {
         self.skip_whitespace();
         match self.peek_char() {
@@ -903,6 +918,149 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Read a `tensor_contract` axis-pair list (PKG-U13a): `[a:b, c:d]`, each
+    /// pair `lhs axis:rhs axis` as two u32s; the empty list is `[]`. A pair
+    /// missing either axis or its `:`, a trailing `,`, or an unclosed list is
+    /// a `ParseError`. The printer is `display::write_axis_pairs`.
+    fn read_axis_pairs(&mut self) -> Result<Vec<(u32, u32)>, ParseError> {
+        self.expect_char('[')?;
+        let mut pairs = Vec::new();
+        if self.try_str("]") {
+            return Ok(pairs);
+        }
+        loop {
+            let lhs_axis = self.read_u32()?;
+            self.expect_char(':')?;
+            let rhs_axis = self.read_u32()?;
+            pairs.push((lhs_axis, rhs_axis));
+            if !self.try_str(",") {
+                break;
+            }
+        }
+        self.expect_char(']')?;
+        Ok(pairs)
+    }
+
+    /// Read a bracketed, comma-separated list of `item`s (PKG-U13c): `[a, b]`,
+    /// the empty list `[]`. A trailing `,` or an unclosed list is a
+    /// `ParseError`.
+    fn read_bracketed<T>(
+        &mut self,
+        mut item: impl FnMut(&mut Self) -> Result<T, ParseError>,
+    ) -> Result<Vec<T>, ParseError> {
+        self.expect_char('[')?;
+        let mut items = Vec::new();
+        if self.try_str("]") {
+            return Ok(items);
+        }
+        loop {
+            items.push(item(self)?);
+            if !self.try_str(",") {
+                break;
+            }
+        }
+        self.expect_char(']')?;
+        Ok(items)
+    }
+
+    /// Read a tensor map lane or a tensor view node reference: `$N`.
+    fn read_lane(&mut self) -> Result<u32, ParseError> {
+        self.expect_char('$')?;
+        self.read_u32()
+    }
+
+    /// Read one tensor map node (PKG-U13c): the scalar instruction's own
+    /// spelling with `$lane` for `%value` (`add i32 $0, $1`, `neg i32 $0`,
+    /// `icmp slt i32 $0, $1`, `select i32 $2, $0, $1`, `sext i8 $0 to i32`).
+    /// The printer is `TensorMapNode`'s `Display`.
+    fn parse_tensor_map_node<X: ParseExt>(
+        &mut self,
+    ) -> Result<crate::TensorMapNode<X>, ParseError> {
+        use crate::TensorMapNode as N;
+        let name = self.read_ident()?;
+        if name == "icmp" {
+            let op_name = self.read_ident()?;
+            let op = Self::parse_icmpop(&op_name)
+                .ok_or_else(|| self.error(format!("unknown icmp op: '{op_name}'")))?;
+            let ty = self.parse_ty()?;
+            let lhs = self.read_lane()?;
+            self.expect_char(',')?;
+            let rhs = self.read_lane()?;
+            return Ok(N::ICmp { op, ty, lhs, rhs });
+        }
+        if name == "select" {
+            let ty = self.parse_ty()?;
+            let cond = self.read_lane()?;
+            self.expect_char(',')?;
+            let then_lane = self.read_lane()?;
+            self.expect_char(',')?;
+            let else_lane = self.read_lane()?;
+            return Ok(N::Select {
+                ty,
+                cond,
+                then_lane,
+                else_lane,
+            });
+        }
+        if let Some(op) = Self::parse_binop(&name) {
+            let ty = self.parse_ty()?;
+            let lhs = self.read_lane()?;
+            self.expect_char(',')?;
+            let rhs = self.read_lane()?;
+            return Ok(N::BinOp { op, ty, lhs, rhs });
+        }
+        if let Some(op) = Self::parse_unop(&name) {
+            let ty = self.parse_ty()?;
+            let operand = self.read_lane()?;
+            return Ok(N::UnOp { op, ty, operand });
+        }
+        if let Some(op) = Self::parse_castop(&name) {
+            let src_ty = self.parse_ty()?;
+            let operand = self.read_lane()?;
+            self.expect_str("to")?;
+            let dst_ty = self.parse_ty()?;
+            return Ok(N::Cast {
+                op,
+                src_ty,
+                dst_ty,
+                operand,
+            });
+        }
+        Err(self.error(format!("unknown tensor map node: '{name}'")))
+    }
+
+    /// Read one tensor view node (PKG-U13c): `lit(N)`, `param(K)`,
+    /// `src_extent(J)`, `coord(I)`, or `OP($a, $b)` for `OP` in `add sub mul
+    /// div rem min max`. The printer is `TensorIndexExpr`'s `Display`.
+    fn parse_tensor_index_expr(&mut self) -> Result<crate::TensorIndexExpr, ParseError> {
+        use crate::TensorIndexExpr as E;
+        let name = self.read_ident()?;
+        self.expect_char('(')?;
+        let expr = match name.as_str() {
+            "lit" => E::Lit(self.read_u64()?),
+            "param" => E::Param(self.read_u32()?),
+            "src_extent" => E::SrcExtent(self.read_u32()?),
+            "coord" => E::Coord(self.read_u32()?),
+            "add" | "sub" | "mul" | "div" | "rem" | "min" | "max" => {
+                let a = self.read_lane()?;
+                self.expect_char(',')?;
+                let b = self.read_lane()?;
+                match name.as_str() {
+                    "add" => E::Add(a, b),
+                    "sub" => E::Sub(a, b),
+                    "mul" => E::Mul(a, b),
+                    "div" => E::Div(a, b),
+                    "rem" => E::Rem(a, b),
+                    "min" => E::Min(a, b),
+                    _ => E::Max(a, b),
+                }
+            }
+            _ => return Err(self.error(format!("unknown tensor view node: '{name}'"))),
+        };
+        self.expect_char(')')?;
+        Ok(expr)
+    }
+
     /// Try to parse ", align N" suffix. Returns Ok(Some(n)) if present.
     fn try_parse_align(&mut self) -> Result<Option<u64>, ParseError> {
         let saved_pos = self.pos;
@@ -1229,6 +1387,19 @@ impl<'a> Parser<'a> {
             return Ok(TyG::Handle(Box::new(ty)));
         }
 
+        // Tensor (PKG-U13a): tensor<ELEM, RANK>. The element is an INLINE
+        // type, as a vector's is; the grammar takes any element and any u32
+        // rank (rank 0 is the scalar tensor), and the integer-element rule is
+        // the validator's (`InvalidTensorType`), not the parser's.
+        if rem.starts_with("tensor<") {
+            self.advance(7)?;
+            let elem = self.parse_ty()?;
+            self.expect_char(',')?;
+            let rank = self.read_u32()?;
+            self.expect_char('>')?;
+            return Ok(TyG::Tensor(Box::new(elem), rank));
+        }
+
         // Keywords / compound type names
         let ident = self.read_ident()?;
         match ident.as_str() {
@@ -1477,6 +1648,29 @@ impl<'a> Parser<'a> {
                 return Err(self.error("utf8bytes constant carries invalid UTF-8".to_string()));
             }
             return Ok(ConstantG::Bytes { data, utf8 });
+        }
+
+        // v70 content-addressed tensor: `tensor_blob<DIGEST>[d0, d1, ..]`, the
+        // Display form. The bytes are the module's `blob` rows; whether the
+        // digest names one is the validator's question (`MissingBlob`).
+        if rem.starts_with("tensor_blob<") {
+            self.advance(12)?;
+            let digest = self.read_blob_digest()?;
+            self.expect_char('>')?;
+            self.expect_char('[')?;
+            let mut dims = Vec::new();
+            self.skip_whitespace();
+            if !self.try_str("]") {
+                loop {
+                    dims.push(self.read_u64()?);
+                    self.skip_whitespace();
+                    if self.try_str("]") {
+                        break;
+                    }
+                    self.expect_char(',')?;
+                }
+            }
+            return Ok(ConstantG::TensorBlob { digest, dims });
         }
 
         // Relocatable symbol address: symaddr<name> or symaddr<name + addend>.
@@ -3018,6 +3212,151 @@ impl<'a> Parser<'a> {
             let ty = self.parse_ty()?;
             let value = self.read_value_id()?;
             return Ok(InstG::ArraySplat { ty, value });
+        }
+
+        // PKG-U13a: "tensor_contract TY %lhs, %rhs batch [a:b, ...] contract
+        // [a:b, ...]". Both clauses are mandatory and in that order (an empty
+        // list is `[]`), exactly as `display::write_inst` prints them. Axis
+        // range, distinctness and the result rank are the validator's
+        // (`InvalidTensorContract`), not the grammar's.
+        if rem.starts_with("tensor_contract ") {
+            self.advance("tensor_contract ".len())?;
+            let ty = self.parse_ty()?;
+            let lhs = self.read_value_id()?;
+            self.expect_char(',')?;
+            let rhs = self.read_value_id()?;
+            self.expect_str("batch")?;
+            let batch = self.read_axis_pairs()?;
+            self.expect_str("contract")?;
+            let contract = self.read_axis_pairs()?;
+            return Ok(InstG::TensorContract {
+                ty,
+                lhs,
+                rhs,
+                batch,
+                contract,
+            });
+        }
+
+        // PKG-U13c: "tensor_map TY (%a, ...) { NODE; ... }". The operand
+        // list and the body are always written (`()` and `{ }` when empty);
+        // the typing and lane rules are the validator's (`InvalidTensorMap`).
+        if rem.starts_with("tensor_map ") {
+            self.advance("tensor_map ".len())?;
+            let ty = self.parse_ty()?;
+            self.expect_char('(')?;
+            let mut args = Vec::new();
+            if !self.try_str(")") {
+                args.push(self.read_value_id()?);
+                while self.try_str(",") {
+                    args.push(self.read_value_id()?);
+                }
+                self.expect_char(')')?;
+            }
+            self.expect_char('{')?;
+            let mut body = Vec::new();
+            if !self.try_str("}") {
+                body.push(self.parse_tensor_map_node()?);
+                while self.try_str(";") {
+                    body.push(self.parse_tensor_map_node()?);
+                }
+                self.expect_char('}')?;
+            }
+            return Ok(InstG::TensorMap { ty, args, body });
+        }
+
+        // PKG-U13c: "tensor_reduce OP TY %x axes [a, ...] order row_major".
+        // Both clauses are mandatory and in that order.
+        if rem.starts_with("tensor_reduce ") {
+            self.advance("tensor_reduce ".len())?;
+            let op_name = self.read_ident()?;
+            let op = crate::TensorReduceOp::ALL
+                .into_iter()
+                .find(|op| op.name() == op_name)
+                .ok_or_else(|| self.error(format!("unknown tensor_reduce op: '{op_name}'")))?;
+            let ty = self.parse_ty()?;
+            let src = self.read_value_id()?;
+            self.expect_str("axes")?;
+            let axes = self.read_bracketed(Self::read_u32)?;
+            self.expect_str("order")?;
+            let order_name = self.read_ident()?;
+            let order = match order_name.as_str() {
+                "row_major" => crate::TensorReduceOrder::RowMajor,
+                _ => return Err(self.error(format!("unknown tensor_reduce order: '{order_name}'"))),
+            };
+            return Ok(InstG::TensorReduce {
+                ty,
+                src,
+                op,
+                axes,
+                order,
+            });
+        }
+
+        // PKG-U13c: "tensor_view TY %src params [%p, ...] exprs [NODE, ...]
+        // shape [$i, ...] index [$j, ...]" and an optional "fill %f". Every
+        // list clause is mandatory and in that order; the node, phase and
+        // typing rules are the validator's (`InvalidTensorView`).
+        if rem.starts_with("tensor_view ") {
+            self.advance("tensor_view ".len())?;
+            let ty = self.parse_ty()?;
+            let src = self.read_value_id()?;
+            self.expect_str("params")?;
+            let params = self.read_bracketed(Self::read_value_id)?;
+            self.expect_str("exprs")?;
+            let exprs = self.read_bracketed(Self::parse_tensor_index_expr)?;
+            self.expect_str("shape")?;
+            let shape = self.read_bracketed(Self::read_lane)?;
+            self.expect_str("index")?;
+            let index = self.read_bracketed(Self::read_lane)?;
+            // The optional clause is looked for on this line only: the next
+            // line (a comment, a directive, the terminator) is never read as
+            // part of the view.
+            self.skip_whitespace_no_newline();
+            let fill = if self.remaining().starts_with("fill") && self.consume_keyword("fill") {
+                Some(self.read_value_id()?)
+            } else {
+                None
+            };
+            return Ok(InstG::TensorView {
+                ty,
+                src,
+                params,
+                exprs,
+                shape,
+                index,
+                fill,
+            });
+        }
+
+        // PKG-U13d: "tensor_gather TY %data coords [%c, ...]". The coordinate
+        // clause is mandatory (`[]` when empty); the rank and element rules
+        // are the validator's (`InvalidTensorGather`).
+        if rem.starts_with("tensor_gather ") {
+            self.advance("tensor_gather ".len())?;
+            let ty = self.parse_ty()?;
+            let data = self.read_value_id()?;
+            self.expect_str("coords")?;
+            let coords = self.read_bracketed(Self::read_value_id)?;
+            return Ok(InstG::TensorGather { ty, data, coords });
+        }
+
+        // PKG-U13d: "tensor_scatter TY %init, %src coords [%c, ...]"; the
+        // rules are the validator's (`InvalidTensorScatter`).
+        if rem.starts_with("tensor_scatter ") {
+            self.advance("tensor_scatter ".len())?;
+            let ty = self.parse_ty()?;
+            let init = self.read_value_id()?;
+            self.expect_char(',')?;
+            let src = self.read_value_id()?;
+            self.expect_str("coords")?;
+            let coords = self.read_bracketed(Self::read_value_id)?;
+            return Ok(InstG::TensorScatter {
+                ty,
+                init,
+                src,
+                coords,
+            });
         }
 
         // "extractfield TY %agg, FIELD"
@@ -6705,6 +7044,31 @@ fn parse_module_body<X: ParseExt>(p: &mut Parser<'_>) -> Result<ModuleG<X>, Pars
                 )));
             }
             module.drop_glue.push(crate::DropGlueEntry { glue, ty });
+        } else if rem.starts_with("blob ") {
+            // v70: "blob <DIGEST> bytes<HEX>", one row per line in the table's
+            // ONE order (strictly ascending digest, so each digest once).
+            // Another order is refused, never re-sorted, as the binary reader
+            // does. The recorded digest is read as written: whether the bytes
+            // hash to it is the validator's question (`InvalidBlobTable`).
+            p.expect_str("blob ")?;
+            p.skip_whitespace_no_newline();
+            let digest = p.read_blob_digest()?;
+            p.skip_whitespace_no_newline();
+            p.expect_str("bytes<")?;
+            let mut data = Vec::new();
+            loop {
+                p.skip_whitespace();
+                if p.try_str(">") {
+                    break;
+                }
+                let hi = p.expect_hex_digit()?;
+                let lo = p.expect_hex_digit()?;
+                data.push((hi << 4) | lo);
+            }
+            module.blobs.push(crate::blob::Blob { digest, data });
+            if let Some(reason) = crate::blob::blob_table_order_refusal(&module.blobs) {
+                return Err(p.error(reason));
+            }
         } else if rem.starts_with("closure_layout ") {
             p.expect_str("closure_layout closure.")?;
             let closure = crate::ClosureTyId::new(p.read_u32()?);
@@ -6816,6 +7180,16 @@ pub fn parse_function(input: &str) -> Result<Function, ParseError> {
     let (func, _) = p.parse_function()?;
     Ok(func)
 }
+
+#[cfg(test)]
+#[path = "parser/tensor_gather_scatter_text_tests.rs"]
+mod tensor_gather_scatter_text_tests;
+#[cfg(test)]
+#[path = "parser/tensor_map_reduce_view_text_tests.rs"]
+mod tensor_map_reduce_view_text_tests;
+#[cfg(test)]
+#[path = "parser/tensor_text_tests.rs"]
+mod tensor_text_tests;
 
 #[cfg(test)]
 mod tests {

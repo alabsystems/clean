@@ -72,7 +72,8 @@ class WrapperLifecycle(unittest.TestCase):
         self.env["PATH"] = str(self.stubs) + os.pathsep + os.environ["PATH"]
         return {"tool": tool, "real": real, "engine": code, "entry": entry.read_text(), "status": status}
 
-    def invoke(self, args, *, mode=(), tmp_present=False, fault=None, inherited_options=None, helper=None):
+    def invoke(self, args, *, mode=(), tmp_present=False, fault=None, inherited_options=None, helper=None,
+               function_source=None, stdin=None):
         env = dict(self.env)
         if tmp_present:
             env["TMP"] = str(self.parent_tmp)
@@ -80,11 +81,15 @@ class WrapperLifecycle(unittest.TestCase):
             env["SHELLOPTS"] = inherited_options
         selected_helper = HELPER if helper is None else helper
         argv = ["bash", *mode, str(selected_helper), *args]
-        p = subprocess.Popen(argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        if function_source is not None:
+            argv = ["bash", "-c", function_source + '\nexport -f q6_fixture\nexec "$@"',
+                    "exported-function-control", *argv]
+        p = subprocess.Popen(argv, env=env, stdin=subprocess.PIPE if stdin is not None else None,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              start_new_session=True)
         timed_out = False
         try:
-            out, err = p.communicate(timeout=60)
+            out, err = p.communicate(input=stdin, timeout=60)
         except subprocess.TimeoutExpired:
             timed_out = True
             os.killpg(p.pid, signal.SIGTERM)
@@ -101,6 +106,7 @@ class WrapperLifecycle(unittest.TestCase):
                              "inherited_SHELLOPTS": inherited_options,
                              "removed_ambient_shell_controls": ["SHELLOPTS", "BASHOPTS", "BASH_ENV"]},
                "exit": p.returncode, "stdout": digest(out), "stderr": digest(err),
+               "stdin": digest(stdin) if stdin is not None else None,
                "timed_out": timed_out, "payload_ran": self.flag.exists(),
                "leftovers_before_harness_cleanup": leftovers, "fault": fault}
         OBSERVATIONS.append(row)
@@ -320,6 +326,66 @@ class WrapperLifecycle(unittest.TestCase):
                         self.assertIn(b"Q6_SELFTEST_UNBOUND_CONTROL", err)
                     else:
                         self.assertIn(b"refusing to run -- its own self-test arms no longer fire", err)
+
+    def test_exported_function_honors_errexit(self):
+        source = "q6_fixture() { false; printf '%s\\n' " + shlex.quote(GOOD.decode().rstrip('\n')) + "; }"
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                row, out, err = self.invoke(["function", "--", "q6_fixture"], mode=mode,
+                                             function_source=source)
+                wanted = 1 if "-e" in mode else 0
+                self.assertEqual(row["exit"], wanted)
+                self.assertEqual(row["leftovers_before_harness_cleanup"], [])
+                if wanted:
+                    self.assertEqual(out, b"")
+                    self.assertNotIn(b"NONVACUOUS=ok", out + err)
+                else:
+                    self.assertTrue(out.startswith(GOOD))
+                    self.assertIn(b"NONVACUOUS=ok", out)
+
+    def test_exported_function_inherited_errexit(self):
+        source = "q6_fixture() { false; printf '%s\\n' " + shlex.quote(GOOD.decode().rstrip('\n')) + "; }"
+        options = "braceexpand:errexit:hashall:interactive-comments"
+        row, out, err = self.invoke(["function", "--", "q6_fixture"], function_source=source,
+                                     inherited_options=options)
+        self.assertEqual(row["exit"], 1)
+        self.assertEqual(out, b"")
+        self.assertNotIn(b"NONVACUOUS=ok", out + err)
+        self.assertEqual(row["leftovers_before_harness_cleanup"], [])
+
+    def test_exported_function_success_and_handled_failure(self):
+        for prefix in ("", "false || true; "):
+            source = "q6_fixture() { " + prefix + "printf '%s\\n' " + shlex.quote(GOOD.decode().rstrip('\n')) + "; }"
+            for mode in ((), ("-e",), ("-e", "-T", "-C")):
+                with self.subTest(prefix=prefix, mode=mode):
+                    row, out, _ = self.invoke(["function", "--", "q6_fixture"], mode=mode,
+                                              function_source=source)
+                    self.assertEqual(row["exit"], 0)
+                    self.assertTrue(out.startswith(GOOD))
+                    self.assertIn(b"NONVACUOUS=ok", out)
+                    self.assertEqual(row["leftovers_before_harness_cleanup"], [])
+
+    def test_exported_function_preserves_stdin_and_direct_failure(self):
+        for status in (0, 37):
+            source = "q6_fixture() { cat; return " + str(status) + "; }"
+            with self.subTest(status=status):
+                row, out, _ = self.invoke(["stdin", "--", "q6_fixture"], mode=("-e", "-T"),
+                                          function_source=source, stdin=GOOD)
+                self.assertEqual(row["exit"], status)
+                self.assertTrue(out.startswith(GOOD))
+                if status:
+                    self.assertEqual(out, GOOD)
+                self.assertEqual(row["leftovers_before_harness_cleanup"], [])
+
+    def test_signaled_child_status_and_cleanup(self):
+        for selected in (signal.SIGTERM, signal.SIGINT):
+            code = "import os,signal;signal.signal(" + str(int(selected)) + ",signal.SIG_DFL);os.kill(os.getpid()," + str(int(selected)) + ")"
+            for mode in ((), ("-e", "-T")):
+                with self.subTest(signal=selected.name, mode=mode):
+                    row, out, err = self.invoke(["signal", "--", sys.executable, "-B", "-c", code], mode=mode)
+                    self.assertEqual(row["exit"], 128 + int(selected))
+                    self.assertNotIn(b"NONVACUOUS=ok", out + err)
+                    self.assertEqual(row["leftovers_before_harness_cleanup"], [])
 
 
 def main():

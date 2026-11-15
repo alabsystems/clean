@@ -47,6 +47,7 @@ fn variant(node: &Constant) -> u8 {
         Constant::SymbolAddr { .. } => 14,
         Constant::PhantomData => 15,
         Constant::Uninit => 16,
+        Constant::TensorBlob { .. } => 17,
         Constant::Ext(e) => e.unreachable(),
     }
 }
@@ -83,6 +84,13 @@ pub(super) fn of<O: ExecutionObserver>(
                         number(i128::from(*addend) as u128, h, work)?;
                     }
                     Constant::PhantomData => {}
+                    Constant::TensorBlob { digest, dims } => {
+                        bytes(&digest.0, h, work)?;
+                        number(dims.len() as u128, h, work)?;
+                        for dim in dims {
+                            number(u128::from(*dim), h, work)?;
+                        }
+                    }
                     _ => return Err(ObservedValueError::InvalidRange),
                 }
             }

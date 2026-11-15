@@ -1252,9 +1252,13 @@ impl<'t> Checker<'t> {
             None => false,
         };
         let mut errors = Vec::new();
-        // T8 on types: no vector, sequence, set or refinement over a
-        // parameter-dependent type.
+        // T8 on types: no tensor at all (a type former of SemR's type
+        // fragment, `lean/semr/TY_FRAGMENT.tsv`, has no level-S role and no
+        // `TemplateTy` constructor yet: PKG-U13a), and no vector, sequence,
+        // set or refinement over a parameter-dependent type.
+        let tensor_ty = refuse_tensor::<TemplateRef>;
         let unsupported_ty = |ty: &TyG<TemplateRef>, at: &str, errors: &mut Vec<TemplateError>| {
+            tensor_ty(ty, at, errors);
             let mut bad = None;
             walk_ty(ty, &mut |t| match t {
                 TyG::Vector(inner, _) if rows.ty_is_generic(inner) => bad = Some("a vector"),
@@ -1273,6 +1277,52 @@ impl<'t> Checker<'t> {
         };
         for (index, ty) in module.types.iter().enumerate() {
             unsupported_ty(ty, &format!("type row {index}"), &mut errors);
+        }
+        // Every other table that spells a type: globals (at the template's
+        // level), and the ground record, closure-capture and drop-glue rows.
+        for (index, global) in module.globals.iter().enumerate() {
+            tensor_ty(&global.ty, &format!("global {index}"), &mut errors);
+        }
+        for (index, record) in module.records.iter().enumerate() {
+            for (field, def) in record.fields.iter().enumerate() {
+                refuse_tensor(
+                    &def.ty,
+                    &format!("record {index} field {field}"),
+                    &mut errors,
+                );
+            }
+        }
+        for (index, closure) in module.closure_types.iter().enumerate() {
+            for (capture, ty) in closure.captures.iter().enumerate() {
+                refuse_tensor(
+                    ty,
+                    &format!("closure type {index} capture {capture}"),
+                    &mut errors,
+                );
+            }
+        }
+        for (index, entry) in module.drop_glue.iter().enumerate() {
+            refuse_tensor(&entry.ty, &format!("drop-glue row {index}"), &mut errors);
+        }
+        for def in &module.structs {
+            for (index, field) in def.fields.iter().enumerate() {
+                tensor_ty(
+                    &field.ty,
+                    &format!("struct {} field {index}", def.id.0),
+                    &mut errors,
+                );
+            }
+        }
+        for def in &module.enums {
+            for (v, variant) in def.variants.iter().enumerate() {
+                for (index, ty) in variant.fields.iter().enumerate() {
+                    tensor_ty(
+                        ty,
+                        &format!("enum {} variant {v} field {index}", def.id.0),
+                        &mut errors,
+                    );
+                }
+            }
         }
         for (index, signature) in module.func_types.iter().enumerate() {
             for ty in signature.params.iter().chain(&signature.returns) {
@@ -1360,11 +1410,26 @@ fn host_answered_fact(function: &FunctionG<TemplateRef>) -> Option<&'static str>
     None
 }
 
+/// T8: a tensor anywhere in `ty` (inline, not through rows: each row is
+/// checked where it is declared) is refused, whatever its element. A type
+/// former of SemR's type fragment (`lean/semr/TY_FRAGMENT.tsv`) has no
+/// level-S role and no `TemplateTy` constructor yet (PKG-U13a).
+fn refuse_tensor<X>(ty: &TyG<X>, at: &str, errors: &mut Vec<TemplateError>) {
+    let mut tensor = false;
+    walk_ty(ty, &mut |t| tensor |= matches!(t, TyG::Tensor(..)));
+    if tensor {
+        errors.push(TemplateError::TemplateUnsupported {
+            what: format!("a tensor ({at}): the tensor region has no template role yet"),
+        });
+    }
+}
+
 /// Visit `ty` and every type nested in it (not through rows), in preorder.
-fn walk_ty(ty: &TyG<TemplateRef>, f: &mut dyn FnMut(&TyG<TemplateRef>)) {
+fn walk_ty<X>(ty: &TyG<X>, f: &mut dyn FnMut(&TyG<X>)) {
     f(ty);
     match ty {
         TyG::Vector(inner, _)
+        | TyG::Tensor(inner, _)
         | TyG::Ref(inner)
         | TyG::RefMut(inner)
         | TyG::PtrConst(inner)
@@ -1467,6 +1532,17 @@ fn inst_rule(
         InstG::SeqMapAddK { .. } | InstG::SeqMapNot { .. } | InstG::SeqMap { .. } => {
             unsupported("a sequence op")
         }
+        // PKG-U13a: the tensor region has no template role yet (its
+        // instantiation over a parameter-dependent element or rank is
+        // undecided), so a template carrying one fails closed.
+        InstG::TensorContract { .. } => unsupported("a tensor contraction"),
+        // PKG-U13c: likewise the map, the reduction and the view.
+        InstG::TensorMap { .. } => unsupported("a tensor map"),
+        InstG::TensorReduce { .. } => unsupported("a tensor reduction"),
+        InstG::TensorView { .. } => unsupported("a tensor view"),
+        // PKG-U13d: likewise the gather and the scatter.
+        InstG::TensorGather { .. } => unsupported("a tensor gather"),
+        InstG::TensorScatter { .. } => unsupported("a tensor scatter"),
         // Everything else transports its values, has no type field, or was
         // admitted above at a non-opaque type. Listed, not wildcarded: a new
         // instruction is a compile error here until its T4 role is decided.

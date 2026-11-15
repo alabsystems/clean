@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
-"""Run P3's patched-kernel control through Trust's island door and E9 lane (the Trust leg).
+"""Run P3's patched-kernel control through Trust's trust-certify mint sites (the Trust leg).
 
     scripts/heavy_gate.sh run 26 p3-trust-leg -- \\
         python3 scripts/patched_kernel_control_trust.py [--trust-repo DIR] \\
@@ -9,20 +9,31 @@
 
 `scripts/patched_kernel_control.py` measures Clean's own mint sites and the
 `clean-kernel` calls Trust makes; this script measures Trust's code on top of
-them: `trust-certify`'s island door, the island's reference gate and the E9
-lane, from the audited judgment through the fenced entry to the certificate
-the compiler's `Certified` mint reads back
-(`trust_certify::reference_certificate_for`). The test it runs is
-`scripts/p3_trust_leg/p3_planted_e9.rs` (its docs state the sites and the
-contract). The weight above is 1.3 times the 19.61 GB peak of one cold build
-of that test (2026-11-15); `scripts/heavy_gate.sh peaks` has the current one.
+them: `trust-certify`'s island doors (single and batched), the island's
+reference gate and judgment check, the E9 mints (the scalar one the compiler
+calls and the exact-domain one) with the grade the compiler reads, from the
+audited judgment through the fenced entry to the certificate the compiler's
+`Certified` mint reads back (`trust_certify::reference_certificate_for`), a
+calculus row over a stand-in VF5 family, and presented violation-refutation
+evidence. The test it runs is `scripts/p3_trust_leg/p3_planted_e9.rs` (its docs
+state the sites and the contract); it is built with Trust's
+`calculus-row-test-support` feature, a test door that gates only
+`calculus_row::test_support`. The weight above is 1.3 times the 19.82 GB peak
+of a run (2026-11-15); `scripts/heavy_gate.sh peaks` has the current one.
+
+Trust's tree is taken at `--trust-ref`. Every `first-party/*` gitlink there
+must be held by a complete local repository: when Trust's main pins a commit
+only a partial clone (or nobody) here holds, name an older `--trust-ref` whose
+gitlinks resolve and state why in the record's README.
 
 It never edits Trust's checkout or this repository's sources. It builds a
 scratch copy of Trust's tree at `--trust-ref` (`git archive`, every file stamped
 now) with each `first-party/*` gitlink filled from a local repository that
 holds the pinned commit (this repository for `first-party/clean`, then Trust's
-own submodule store, then a sibling checkout `../<name>`; a partial clone is
-skipped and no git call here may fetch: `GIT_NO_LAZY_FETCH=1`), copies the test
+own submodule store, then a sibling checkout `../<name>`, then any repository
+named for that path with `--gitlink-source PATH=DIR`; a partial clone is
+skipped wherever it is named and no git call here may fetch:
+`GIT_NO_LAZY_FETCH=1`; the record says which source was named), copies the test
 into `crates/trust-certify/tests/`, and clones the tree once more with P3's
 mutant M1 applied to `first-party/clean`'s `infer.rs` (the anchor and the
 replacement are `patched_kernel_control.py`'s). Three legs, each tree with its
@@ -34,8 +45,15 @@ own fresh target directory (never shared: P3's 2026-11-13 finding):
   undeclared  M1 again without the variable: must fail with `P3 WRONG ACCEPT`.
 
 A leg passes only when its exit status is the required one AND its printed
-rows name exactly the pinned sites, its controls all mint, and its kernel line
-declares the leg's kernel. The scratch root is deleted on exit, failure and
+rows name exactly the pinned sites with its binary's pinned outcomes (the
+undeclared leg runs the mutant's), its controls all mint, and its kernel line
+declares the leg's kernel. The undeclared leg must report `P3 WRONG ACCEPT` at
+the liveness check and at exactly the sites pinned to mint only under the
+mutant, and fail in no other way. The test runs with `TRUST_KR0_DEBUG=1`,
+Trust's measurement-only report of each reference-entry refusal: on the mutant
+binary the refutation's entry (lane `int`) must refuse exactly once, by a type
+mismatch, and on the unmodified binary it must not be reached (the open-term
+check refuses first). The scratch root is deleted on exit, failure and
 SIGTERM/SIGHUP/SIGINT included, unless `--keep`. With `--write-record` (this
 runner, P3's runner and the test committed and unmodified, before and after)
 the measurement is written to RECORD.
@@ -67,13 +85,29 @@ TEST = "p3_planted_e9"
 TEST_FN = "p3_planted_false_through_trust_certify_e9_lane"
 TEST_DEST = "crates/trust-certify/tests/p3_planted_e9.rs"
 CLEAN_GITLINK = "first-party/clean"
-CONTROL_STAGES = ["island", "audited", "reference", "registered"]
+CONTROL_STAGES = [
+    "island", "audited", "reference", "registered",
+    "domains.audited", "domains.reference", "domains.registered",
+    "grade", "island_judgment_universe", "calculus.certify", "calculus.registered",
+    "island_example", "batch_example",
+    "refutation.certify_vc", "refutation.replay", "refutation.linear_int",
+]
+# The test door the calculus rows need (it gates only `calculus_row::test_support`).
+FEATURES = "calculus-row-test-support"
 # leg -> (declare the mutant, required exit 0, kernel line printed by the test)
 LEGS = {
     "unmodified": (False, True, "declared=Unmodified\tlive=false"),
     "mutant": (True, True, "declared=Mutant\tlive=true"),
     "undeclared": (False, False, "declared=Unmodified\tlive=true"),
 }
+# The legs that run the mutant binary (the undeclared leg reuses the mutant's).
+MUTANT_BINARY = {"unmodified": False, "mutant": True, "undeclared": True}
+WRONG_ACCEPT = "P3 WRONG ACCEPT: "
+LIVENESS = WRONG_ACCEPT + p3.MODE_ENV + " is unset"
+# Trust's measurement-only report of a reference-entry refusal
+# (`reference_mint::note_miss`, on when `TRUST_KR0_DEBUG` is set; it never changes
+# a verdict). The refutation replay reports its entry's refusal as lane `int`.
+MISS_PREFIX = "TRUST_KR0_DEBUG REFERENCE-MISS lane="
 NO_FETCH = {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
 
 _children: list[subprocess.Popen] = []
@@ -120,15 +154,31 @@ def gitlinks(trust: Path, sha: str) -> dict[str, str]:
     return links
 
 
-def source_for(path: str, commit: str, trust: Path) -> Path:
-    """A complete local repository holding `commit`. Nothing is fetched."""
+def source_for(path: str, commit: str, trust: Path, named: dict[str, list[Path]] | None = None) -> tuple[Path, bool]:
+    """A complete local repository holding `commit`, and whether `--gitlink-source`
+    named it. The usual places come first; a named repository is held to the
+    same rules (not a partial clone, the commit present). Nothing is fetched."""
     name = path.removeprefix("first-party/")
-    candidates = list(dict.fromkeys(([ROOT] if path == CLEAN_GITLINK else []) + [trust / path, ROOT.parent / name, trust.parent / name]))
-    for repo in candidates:
+    usual = list(dict.fromkeys(repo.resolve() for repo in ([ROOT] if path == CLEAN_GITLINK else []) + [trust / path, ROOT.parent / name, trust.parent / name]))
+    chosen = (named or {}).get(path, [])
+    extra = [repo for repo in chosen if repo not in usual]
+    for repo in usual + extra:
         if has_commit(repo, commit):
-            return repo
-    fail(f"no complete local repository holds {path} at {commit} (looked in {', '.join(map(str, candidates))}; partial clones are skipped)")
+            # Marked whenever it was named, even where a usual place is the same directory.
+            return repo, repo in chosen
+    fail(f"no complete local repository holds {path} at {commit} (looked in {', '.join(map(str, usual + extra))}; partial clones are skipped)")
     raise AssertionError
+
+
+def named_sources(specs: list[str]) -> dict[str, list[Path]]:
+    """`--gitlink-source first-party/<name>=DIR`, repeatable."""
+    named: dict[str, list[Path]] = {}
+    for spec in specs:
+        path, sep, directory = spec.partition("=")
+        if not sep or not path.startswith("first-party/") or not directory:
+            fail(f"--gitlink-source wants first-party/<name>=DIR, not {spec!r}")
+        named.setdefault(path, []).append(Path(directory).resolve())
+    return named
 
 
 def shown_path(repo: Path, trust: Path) -> str:
@@ -149,16 +199,19 @@ def extract(repo: Path, commit: str, dest: Path) -> None:
         fail(f"extracting {repo} at {commit} into {dest} failed")
 
 
-def build_tree(dest: Path, trust: Path, sha: str, links: dict[str, str]) -> dict[str, dict[str, str]]:
+def build_tree(dest: Path, trust: Path, sha: str, links: dict[str, str],
+               named: dict[str, list[Path]] | None = None) -> dict[str, dict[str, object]]:
     extract(trust, sha, dest)
-    sources = {}
+    sources: dict[str, dict[str, object]] = {}
     for path, commit in sorted(links.items()):
-        repo = source_for(path, commit, trust)
+        repo, was_named = source_for(path, commit, trust, named)
         target = dest / path
         if target.exists():
             shutil.rmtree(target)
         extract(repo, commit, target)
         sources[path] = {"commit": commit, "from": shown_path(repo, trust)}
+        if was_named:
+            sources[path]["named_by"] = "--gitlink-source"
     installed = dest / TEST_DEST
     if installed.exists():
         fail(f"Trust already has {TEST_DEST}; this runner would overwrite it")
@@ -176,9 +229,11 @@ def clone_tree(src: Path, dest: Path) -> None:
 
 def run_leg(leg: str, tree: Path, target: Path, logs: Path, targo: str) -> dict:
     declare, _, _ = LEGS[leg]
-    command = [targo, "--unverified", "test", "--locked", "-p", PACKAGE, "--test", TEST, "--", "--exact", TEST_FN, "--nocapture"]
+    command = [targo, "--unverified", "test", "--locked", "-p", PACKAGE, "--features", FEATURES, "--test", TEST,
+               "--", "--exact", TEST_FN, "--nocapture"]
     env = {k: v for k, v in os.environ.items() if k != p3.MODE_ENV}
     env["CARGO_TARGET_DIR"] = str(target)
+    env["TRUST_KR0_DEBUG"] = "1"
     if declare:
         env[p3.MODE_ENV] = p3.MUTANT_ID
     log = logs / f"{leg}.log"
@@ -189,8 +244,13 @@ def run_leg(leg: str, tree: Path, target: Path, logs: Path, targo: str) -> dict:
         status = child.wait()
         _children.remove(child)
     text = log.read_text(errors="replace")
-    rows, control, pins, kernel = [], [], [], None
+    rows, control, pins, kernel, failures, misses = [], [], [], None, [], []
     for line in text.splitlines():
+        if line.startswith("P3 "):
+            failures.append(line)
+        elif line.startswith(MISS_PREFIX):
+            lane, _, miss = line[len(MISS_PREFIX):].partition(" ")
+            misses.append({"lane": lane, "miss": miss})
         cells = line.split("\t")
         if cells[0] == "P3_TRUST" and len(cells) == 4:
             rows.append({"site": cells[1], "outcome": cells[2], "detail": cells[3]})
@@ -203,8 +263,8 @@ def run_leg(leg: str, tree: Path, target: Path, logs: Path, targo: str) -> dict:
     shown = ["targo", *command[1:]]
     if declare:
         shown = [f"{p3.MODE_ENV}={p3.MUTANT_ID}", *shown]
-    return {"leg": leg, "command": " ".join(shown), "exit_status": status, "kernel": kernel,
-            "wrong_accept_reported": p3.WRONG_ACCEPT in text, "pins": pins, "control": control, "rows": rows, "log": text}
+    return {"leg": leg, "command": " ".join(shown), "exit_status": status, "kernel": kernel, "failures": failures,
+            "reference_misses": misses, "pins": pins, "control": control, "rows": rows, "log": text}
 
 
 def judge(leg: dict) -> list[str]:
@@ -220,13 +280,41 @@ def judge(leg: dict) -> list[str]:
         problems.append(f"measured sites {[row['site'] for row in leg['rows']]} are not the pinned sites {pinned}")
     if [c["stage"] for c in leg["control"]] != CONTROL_STAGES or any(c["outcome"] != "Minted" for c in leg["control"]):
         problems.append(f"controls {[(c['stage'], c['outcome']) for c in leg['control']]} are not all minted")
+    # Every leg's rows are its binary's pins: the undeclared leg runs the mutant's.
+    column = "mutant" if MUTANT_BINARY[leg["leg"]] else "unmodified"
+    for row, pin in zip(leg["rows"], leg["pins"]):
+        if row["outcome"] != pin[column]:
+            problems.append(f"{row['site']}: {row['outcome']}, pinned {pin[column]}")
     if passes:
-        column = "mutant" if declare else "unmodified"
-        for row, pin in zip(leg["rows"], leg["pins"]):
-            if row["outcome"] != pin[column]:
-                problems.append(f"{row['site']}: {row['outcome']}, pinned {pin[column]}")
-    elif not leg["wrong_accept_reported"]:
-        problems.append("no `P3 WRONG ACCEPT` in the output")
+        if leg["failures"]:
+            problems.append(f"failures printed: {leg['failures'][:3]}")
+    else:
+        # Exactly the liveness check and every site pinned to mint only under
+        # the mutant report `P3 WRONG ACCEPT`, and nothing else fails.
+        expected = {pin["site"] for pin in leg["pins"] if (pin["unmodified"], pin["mutant"]) == ("Refused", "Minted")}
+        reported, liveness, other = set(), False, []
+        for line in leg["failures"]:
+            site = line[len(WRONG_ACCEPT):].split(": ", 1)[0] if line.startswith(WRONG_ACCEPT) else None
+            if line.startswith(LIVENESS):
+                liveness = True
+            elif site in expected:
+                reported.add(site)
+            else:
+                other.append(line)
+        if not liveness:
+            problems.append("no `P3 WRONG ACCEPT` at the liveness check")
+        if reported != expected:
+            problems.append(f"`P3 WRONG ACCEPT` at {sorted(reported)}, required at {sorted(expected)}")
+        if other:
+            problems.append(f"other failures: {other[:3]}")
+    # Where the presented refutation evidence is refused: by the reference entry
+    # (one kernel type mismatch) on the mutant binary, before it otherwise.
+    int_misses = [miss["miss"] for miss in leg["reference_misses"] if miss["lane"] == "int"]
+    if MUTANT_BINARY[leg["leg"]]:
+        if len(int_misses) != 1 or not ("Refused(Kernel(" in int_misses[0] and "TypeMismatch" in int_misses[0]):
+            problems.append(f"the refutation's reference entry did not refuse exactly once by a type mismatch: {int_misses[:3]}")
+    elif int_misses:
+        problems.append(f"the refutation reached its reference entry on the unmodified binary: {int_misses[:3]}")
     return problems
 
 
@@ -239,6 +327,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--trust-repo", type=Path, default=ROOT.parent / "trust")
     parser.add_argument("--trust-ref", default="origin/main")
+    parser.add_argument("--gitlink-source", action="append", default=[], metavar="PATH=DIR",
+                        help="also look for first-party/<name> in DIR (complete clones only; recorded)")
     parser.add_argument("--work-dir", type=Path, help="scratch root; must not exist (default: a new temporary directory)")
     parser.add_argument("--keep", action="store_true", help="keep the scratch root")
     parser.add_argument("--write-record", action="store_true", help=f"write {RECORD}")
@@ -253,6 +343,10 @@ def main() -> int:
     trust = args.trust_repo.resolve()
     trust_sha = run("git", "-C", str(trust), "rev-parse", f"{args.trust_ref}^{{commit}}").strip()
     links = gitlinks(trust, trust_sha)
+    named = named_sources(args.gitlink_source)
+    unknown = sorted(set(named) - set(links))
+    if unknown:
+        fail(f"--gitlink-source names {', '.join(unknown)}, which Trust {trust_sha} does not pin")
     clean_pin = links[CLEAN_GITLINK]
     pinned_infer = run("git", "-C", str(ROOT), "show", f"{clean_pin}:{p3.MUTATION_FILE}")
     if pinned_infer.count(p3.ANCHOR) != 1:
@@ -276,7 +370,7 @@ def main() -> int:
         logs.mkdir()
 
         base = work / "unmodified" / "trust"
-        sources = build_tree(base, trust, trust_sha, links)
+        sources = build_tree(base, trust, trust_sha, links, named)
         if p3.sha256(base / TEST_DEST) != fixture_sha:
             fail("the installed test is not the fixture this run started from")
         mutant = work / "mutant" / "trust"
@@ -314,7 +408,7 @@ def main() -> int:
                 fail("the runner, P3's runner or the test moved during the run; nothing recorded")
             record = {
                 "schema": "clean.p3-trust-leg/v1",
-                "what_this_is": "P3's planted proof of False through trust-certify's island door, its reference gate and its E9 lane, measured by " + RUNNER,
+                "what_this_is": "P3's planted proof of False through trust-certify's island doors, reference gate and judgment check, the E9 mints and grade, a calculus row over a stand-in family and presented refutation evidence (the sites are the pins), measured by " + RUNNER,
                 "measured_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "clean_commit": clean_commit,
                 "trust": {"ref": args.trust_ref, "commit": trust_sha, "gitlinks": sources},

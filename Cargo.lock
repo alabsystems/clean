@@ -1140,7 +1140,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "clean"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "blake3",
  "clean-cli",
@@ -1160,7 +1160,7 @@ dependencies = [
 
 [[package]]
 name = "clean-auto"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "ay",
@@ -1197,7 +1197,7 @@ dependencies = [
 
 [[package]]
 name = "clean-c-sem"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clap",
  "clean-auto",
@@ -1214,7 +1214,7 @@ dependencies = [
 
 [[package]]
 name = "clean-cake"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "blake3",
  "clean-kernel",
@@ -1225,7 +1225,7 @@ dependencies = [
 
 [[package]]
 name = "clean-ck0"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "num-bigint",
  "num-traits",
@@ -1238,7 +1238,7 @@ dependencies = [
 
 [[package]]
 name = "clean-cli"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "ark-std",
@@ -1281,7 +1281,7 @@ dependencies = [
 
 [[package]]
 name = "clean-compiler"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "bincode 1.3.3",
  "blake3",
@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "clean-discovery"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clap",
  "clean-auto",
@@ -1315,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "clean-elab"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "clean-features"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clap",
  "serde",
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "clean-fold"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "ark-bls12-381",
  "ark-ec",
@@ -1381,7 +1381,7 @@ dependencies = [
 
 [[package]]
 name = "clean-kernel"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1414,7 +1414,7 @@ dependencies = [
 
 [[package]]
 name = "clean-lake"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "blake3",
  "clap",
@@ -1435,7 +1435,7 @@ dependencies = [
 
 [[package]]
 name = "clean-lsp"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clap",
  "clean-elab",
@@ -1457,7 +1457,7 @@ dependencies = [
 
 [[package]]
 name = "clean-macro"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clean-kernel",
  "clean-parser",
@@ -1466,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "clean-math-project"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clean-kernel",
  "serde",
@@ -1478,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "clean-mathverse"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1518,7 +1518,7 @@ dependencies = [
 
 [[package]]
 name = "clean-native"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "clean-compiler",
@@ -1537,7 +1537,7 @@ dependencies = [
 
 [[package]]
 name = "clean-olean"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "ahash",
  "bincode 2.0.1",
@@ -1568,7 +1568,7 @@ dependencies = [
 
 [[package]]
 name = "clean-parser"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clean-kernel",
  "proptest",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "clean-runtime"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "tempfile",
  "thiserror 2.0.21",
@@ -1590,7 +1590,7 @@ dependencies = [
 
 [[package]]
 name = "clean-rust-sem"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "clap",
  "clean-elab",
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "clean-server"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "base64 0.22.1",
  "bincode 2.0.1",
@@ -1640,7 +1640,7 @@ dependencies = [
 
 [[package]]
 name = "clean-sys"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "cbindgen",
  "clean-kernel",
@@ -1649,7 +1649,7 @@ dependencies = [
 
 [[package]]
 name = "clean-verify"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "blake3",
  "clap",

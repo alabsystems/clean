@@ -50,11 +50,18 @@ import os
 import shutil
 import subprocess
 import sys
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = "scripts/check_gate_registry.py"
+
+# Execute the declared helper source; ignored bytecode is not an input.
+_transport = types.ModuleType("rederive_resource_transport")
+_transport.__file__ = str(ROOT / "scripts/resource_transport.py")
+exec(compile(Path(_transport.__file__).read_bytes(), _transport.__file__, "exec",
+             dont_inherit=True), _transport.__dict__)
 
 
 class Refused(RuntimeError):
@@ -72,19 +79,23 @@ class Context:
         """`argv` (a repo script and its flags) under this interpreter, in the tree.
         `stream` echoes the output as it comes (a replay runs for an hour)."""
         # Unbuffered, or a streamed replay's progress arrives in one block at its end.
-        env = {**os.environ, "PYTHONUNBUFFERED": "1"} if stream else None
+        env = dict(os.environ)
+        if stream:
+            env["PYTHONUNBUFFERED"] = "1"
         try:
             proc = subprocess.Popen([self.python, *argv], cwd=self.root, text=True, env=env,
-                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        except OSError as exc:
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    pass_fds=_transport.resource_fds(env))
+        except (OSError, RuntimeError) as exc:
             return 127, f"could not run {argv[0]}: {exc}"
         lines = []
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            lines.append(line)
-            if stream:
-                print(f"    {line}", end="", flush=True)
-        return proc.wait(), "".join(lines)
+        with proc:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                lines.append(line)
+                if stream:
+                    print(f"    {line}", end="", flush=True)
+            return proc.wait(), "".join(lines)
 
 
 def _tail(out: str, n: int = 3) -> str:

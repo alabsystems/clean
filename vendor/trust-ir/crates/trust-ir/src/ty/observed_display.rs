@@ -21,6 +21,8 @@ enum Task<'a> {
     Type(&'a Ty),
     Types(&'a [Ty], bool),
     Text(&'a str),
+    /// A fixed decimal written after a child type (a tensor's rank).
+    Number(u32),
 }
 
 #[derive(Default)]
@@ -89,6 +91,7 @@ impl<'a> State<'a> {
                     self.ty(ty, work)?;
                 }
                 Task::Text(text) => work.text(text, &mut self.output)?,
+                Task::Number(value) => work.number(u128::from(value), &mut self.output)?,
                 Task::Types(types, first) => {
                     work.admit(1, 0)?;
                     if let Some((head, tail)) = types.split_first() {

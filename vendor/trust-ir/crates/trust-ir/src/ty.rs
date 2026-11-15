@@ -624,6 +624,28 @@ pub enum TyG<X> {
     /// initialized-value authority.
     /// Appended after Ext to preserve existing serde discriminants.
     Storage(crate::StorageLayout),
+    /// A tensor (the tensor region, PKG-U13a; Trust
+    /// `docs/design/2026-11-12-one-software.md` §6): `Tensor(elem, rank)`.
+    ///
+    /// The type fixes ONLY the element type and the rank. **Shape is a value,
+    /// not a type**: each dimension is an ordinary `usize` value the tensor
+    /// carries at run time, so a dynamic dimension is the ordinary case and
+    /// shape agreement is a precondition of an operation (an obligation),
+    /// never a type equality. Rank 0 is a scalar tensor (one element).
+    ///
+    /// The element must be an integer type ([`TyG::is_integer`]); every other
+    /// element is refused by the validator (`InvalidTensorType`), a float one
+    /// by name until SemR has a float model (PKG-U15). A tensor has no memory
+    /// layout ([`crate::shape::TyShape::Tensor`] answers `UnsupportedTyShape`,
+    /// as `Sequence` does), no element ops, and is outside the
+    /// lowering-target subset. Its operations: `Inst::TensorContract` (v67),
+    /// `Inst::TensorMap`, `Inst::TensorReduce`, `Inst::TensorView` (v68),
+    /// `Inst::TensorGather` and `Inst::TensorScatter` (v69).
+    ///
+    /// Text: `tensor<i32, 2>`. Wire: Ty tag 41 (rank, then element),
+    /// read-gated on v67 (`TENSOR_FORMAT_VERSION`). Appended after `Storage`
+    /// to preserve existing serde discriminants.
+    Tensor(Box<TyG<X>>, u32),
 }
 
 /// The level-R type: [`TyG`] with no extension (`NoExt` is uninhabited).
@@ -656,7 +678,8 @@ impl Ty {
     /// `n == 0` or `types[e]` is trivially droppable.
     ///
     /// False for `Struct`, `Enum`, `Record`, `Closure`, `Rc`, `Handle`,
-    /// `Dialect`, `Sequence`, `Set`, `Refine` (a refinement is refused
+    /// `Dialect`, `Sequence`, `Set`, `Tensor` (its elements are a run-time
+    /// collection, as a sequence's are), `Refine` (a refinement is refused
     /// separately: a drop is spelled at its base) and `Error`. `types`
     /// resolves `Array` element ids; an out-of-range id or a cycle through
     /// the table answers `false`. Iterative: no Rust stack in the nesting
@@ -732,6 +755,7 @@ impl Ty {
                 | Ty::Dialect(_)
                 | Ty::Sequence(_)
                 | Ty::Set(_, _)
+                | Ty::Tensor(_, _)
                 | Ty::Refine(_, _)
                 | Ty::Error => return false,
                 Ty::Ext(e) => e.unreachable(),
@@ -848,6 +872,7 @@ impl Ty {
         match self {
             Ty::Error => true,
             Ty::Vector(element, _)
+            | Ty::Tensor(element, _)
             | Ty::Ref(element)
             | Ty::RefMut(element)
             | Ty::PtrConst(element)
@@ -1156,6 +1181,7 @@ impl<X: crate::level::Extension> core::fmt::Display for TyG<X> {
             TyG::Storage(layout) => {
                 write!(f, "storage<{}, {}>", layout.size_bytes, layout.align_bytes)
             }
+            TyG::Tensor(elem, rank) => write!(f, "tensor<{elem}, {rank}>"),
         }
     }
 }
@@ -2047,6 +2073,7 @@ mod tests {
             Ty::handle("Nat", "trust_bignum::Nat"),
             Ty::Sequence(TyId::new(0)),
             Ty::Set(TyId::new(0), SetRepr::Bitset),
+            Ty::Tensor(Box::new(Ty::I32), 2),
             Ty::Refine(TyId::new(0), PredId::new(0)),
             Ty::Error,
             Ty::Tuple(vec![Ty::I32, Ty::Struct(StructId::new(0))]),
@@ -2218,6 +2245,24 @@ mod tests {
         assert_eq!(format!("{}", Ty::Struct(StructId::new(3))), "struct.3");
         assert_eq!(format!("{}", Ty::Array(TyId::new(1), 8)), "[ty.1 x 8]");
         assert_eq!(format!("{}", Ty::Func(FuncTyId::new(2))), "functy.2");
+    }
+
+    #[test]
+    fn tensor_display_debug_and_inline_queries() {
+        let tensor = Ty::Tensor(Box::new(Ty::I32), 2);
+        assert_eq!(format!("{tensor}"), "tensor<i32, 2>");
+        let scalar = Ty::Tensor(Box::new(Ty::U8), 0);
+        assert_eq!(format!("{scalar}"), "tensor<u8, 0>");
+        assert_eq!(format!("{tensor:?}"), "Tensor(I32, 2)");
+        // The element is an inline child: a leaked `Error` inside is found.
+        assert!(!tensor.contains_error());
+        assert!(Ty::Tensor(Box::new(Ty::Error), 1).contains_error());
+        // No context-free width, no element ops, not trivially droppable.
+        assert_eq!(tensor.bit_width(), None);
+        assert_eq!(tensor.bit_width_with(64), None);
+        assert!(!tensor.supports_element_ops());
+        assert!(!tensor.is_trivially_droppable(&[]));
+        assert!(!tensor.is_integer());
     }
 
     // --- NEW TYPE TESTS ---

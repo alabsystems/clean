@@ -45,8 +45,9 @@ fn every_constructible_type_variant_keeps_exact_ordinary_diagnostic_spelling() {
         Ty::Refine(TyId::new(5), PredId::new(6)),
         Ty::Dialect(Box::new(DialectTy::new("vector", "lanes", 1))),
         Ty::Handle(Box::new(HandleTy::new("Nat", "trust_bignum::Nat"))),
+        Ty::Tensor(Box::new(Ty::I32), 2),
     ];
-    assert_eq!(types.len(), 40); // Ext(NoExt) is unconstructible.
+    assert_eq!(types.len(), 41); // Ext(NoExt) is unconstructible.
     for ty in types {
         parity(&ty);
     }
@@ -69,6 +70,8 @@ fn all_fat_kinds_set_representations_and_maximum_ids_lengths_lanes_are_exact() {
     for ty in [
         Ty::Array(TyId::new(u32::MAX), u64::MAX),
         Ty::Vector(Box::new(Ty::U8), u32::MAX),
+        Ty::Tensor(Box::new(Ty::U8), u32::MAX),
+        Ty::Tensor(Box::new(Ty::Tensor(Box::new(Ty::I64), 0)), 3),
         Ty::Refine(TyId::new(u32::MAX), PredId::new(u32::MAX)),
     ] {
         parity(&ty);

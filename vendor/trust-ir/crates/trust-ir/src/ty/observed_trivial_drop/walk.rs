@@ -94,6 +94,7 @@ impl<'a> State<'a> {
                 | Ty::Dialect(_)
                 | Ty::Sequence(_)
                 | Ty::Set(_, _)
+                | Ty::Tensor(_, _)
                 | Ty::Refine(_, _)
                 | Ty::Error => return Ok(false),
                 Ty::Ext(e) => e.unreachable(),

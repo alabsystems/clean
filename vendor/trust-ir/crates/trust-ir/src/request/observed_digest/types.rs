@@ -161,6 +161,12 @@ fn write_head<'a, O: ExecutionObserver>(
             write_str(out, &ty.name)?;
             write_str(out, &ty.runtime)?;
         }
+        // PKG-U13a: tag 41, the rank, then the inline element (as `Vector`).
+        Ty::Tensor(elem, rank) => {
+            write_u8(out, 41)?;
+            write_u32(out, *rank)?;
+            out.push_value(tasks, TyTask::Value(elem))?;
+        }
         Ty::Ext(e) => e.unreachable(),
     }
     Ok(())

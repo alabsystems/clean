@@ -187,5 +187,6 @@ pub(super) fn all() -> Vec<E> {
     rows.extend(collections());
     rows.extend(sites());
     rows.push(E::EmptyRequests);
+    rows.push(E::DuplicateModuleObligationId(ProofId::new(u32::MAX)));
     rows
 }

@@ -25,6 +25,12 @@
 //
 // When a Lean toolchain is available, the real fix is to add the Lean
 // constructors + semantics and shrink these allowlists to empty.
+//
+// Since RM4 the `Inst`, `Ty` and `Constant` axes are SPLIT: a variant a SemR
+// ledger lists (`lean/semr/FRAGMENT.tsv`, `TY_FRAGMENT.tsv`,
+// `CONSTANT_FRAGMENT.tsv`) is judged against SemR (`lean/semr/SemR.lean`), and
+// every other variant keeps the old gate against lean/trust_ir-semantics. The
+// two halves partition the Rust variants.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -812,8 +818,22 @@ fn inst_and_castop_track_the_lean_model() {
     // no new operational rule because it is REPRESENTATION-PRESERVING — its
     // meaning is definitionally its base type's, so every existing semantic
     // rule already covers it through the base.
+    //
+    // Since the v67 tensor region (PKG-U13a) the variants in SemR's type
+    // fragment (`lean/semr/TY_FRAGMENT.tsv`) are judged by SemR
+    // (`ty_parity_reads_semr_for_its_type_fragment` below holds each row to a
+    // SemR `Ty` constructor, and the SemR differential judges the
+    // instructions over them), so this axis is the old gate for the REST, the
+    // same split the Inst axis made at RM4.
     const TY_ALLOWLIST: &[&str] = &[];
-    assert_parity("Ty", &rust_ty, &lean_ty_ctors, TY_ALLOWLIST);
+    let ty_fragment = semr_ty_fragment().unwrap_or_else(|e| panic!("{e}"));
+    let rest_ty = outside_semr_fragment(&rust_ty, &ty_fragment);
+    assert_parity(
+        "Ty (outside SemR's type fragment)",
+        &rest_ty,
+        &lean_ty_ctors,
+        TY_ALLOWLIST,
+    );
 
     // --- FatPtrKind ---
     // `Ty::FatPtr` carries a sub-enum, and the `Ty` axis above sees only the
@@ -945,10 +965,13 @@ fn constant_tracks_the_lean_model() {
     let constant_rs =
         std::fs::read_to_string(manifest().join("src/constant.rs")).expect("constant.rs");
     let lean_constant = read_required(lean_dir().join("Constant.lean"));
-    let rust: BTreeSet<String> = rust_enum_variants(&constant_rs, "Constant")
-        .iter()
-        .map(|name| lower_first(name))
-        .collect();
+    // Since PKG-U13e the axis is split like `Inst` and `Ty`: a variant
+    // `CONSTANT_FRAGMENT.tsv` lists is judged against SemR's `Const`
+    // (`constant_parity_reads_semr_for_its_constant_fragment`), and only the
+    // remainder against TrustIr/Constant.lean.
+    let all = rust_enum_variants(&constant_rs, "Constant");
+    let fragment = semr_constant_fragment().unwrap_or_else(|e| panic!("{e}"));
+    let rust = old_gate_constants(&all, &fragment);
     let lean = lean_constructors_any_case(&lean_constant, "Constant");
     // EMPTY — every Rust `Constant` variant has a Lean constructor, and
     // `Value.ofConstant` (Semantics/Aggregate.lean) gives each the reference
@@ -956,14 +979,21 @@ fn constant_tracks_the_lean_model() {
     // fail-closed by every constant entry point instead (the `Const` step, a
     // global initializer, and a `Switch` case the in-order scan reaches).
     const CONSTANT_ALLOWLIST: &[&str] = &[];
-    assert_parity("Constant", &rust, &lean, CONSTANT_ALLOWLIST);
-    // 17 since v50 added `Constant::Splat` (Lean `Constant.splat`) after v49's `Uninit`.
-    assert_eq!(
-        rust.len(),
-        17,
-        "Constant: the Rust enum no longer has 17 variants (15 + the crystal lane's `Uninit` \
-         + v50's `Splat`) — re-check this axis parses it"
+    assert_parity(
+        "Constant (outside SemR's constant fragment)",
+        &rust,
+        &lean,
+        CONSTANT_ALLOWLIST,
     );
+    // 18 since v70 added `Constant::TensorBlob` (SemR `Const.tensorBlob`)
+    // after v50's `Splat` (Lean `Constant.splat`) and v49's `Uninit`.
+    assert_eq!(
+        all.len(),
+        18,
+        "Constant: the Rust enum no longer has 18 variants (15 + the crystal lane's `Uninit` \
+         + v50's `Splat` + v70's `TensorBlob`) — re-check this axis parses it"
+    );
+    assert_eq!(rust.len() + fragment.len(), all.len());
 
     // Presence, not correctness (only the Lean build gives correctness): the
     // fail-closed refusal of a link-time address must not vanish silently.
@@ -1034,10 +1064,8 @@ fn mutation_removing_lean_constant_bytes_fails_the_constant_axis() {
         lean_constant.lines().count(),
         "mutation applied"
     );
-    let rust: BTreeSet<String> = rust_enum_variants(&constant_rs, "Constant")
-        .iter()
-        .map(|name| lower_first(name))
-        .collect();
+    let fragment = semr_constant_fragment().expect("constant ledger");
+    let rust = old_gate_constants(&rust_enum_variants(&constant_rs, "Constant"), &fragment);
     let reason = parity_drift(
         "Constant",
         &rust,
@@ -1203,10 +1231,10 @@ fn review_mutations_renamed_binder_tuple_arity_and_new_rust_constant_are_caught(
         "unique PhantomData anchor"
     );
     let grown = constant_rs.replacen(unit, "    PhantomData,\n    Poison,\n", 1);
-    let rust: BTreeSet<String> = rust_enum_variants(&grown, "Constant")
-        .iter()
-        .map(|name| lower_first(name))
-        .collect();
+    let rust = old_gate_constants(
+        &rust_enum_variants(&grown, "Constant"),
+        &semr_constant_fragment().expect("constant ledger"),
+    );
     let reason = parity_drift(
         "Constant",
         &rust,
@@ -1215,6 +1243,7 @@ fn review_mutations_renamed_binder_tuple_arity_and_new_rust_constant_are_caught(
     )
     .expect_err("a Rust Constant variant with no Lean constructor must fail");
     assert!(reason.contains("\"poison\""), "{reason}");
+    assert!(!reason.contains("tensorBlob"), "{reason}");
 
     // (4) Drop a Lean calling convention: the `CallingConv` mirror axis fails.
     let lib_rs = std::fs::read_to_string(manifest().join("src/lib.rs")).expect("lib.rs");
@@ -1669,7 +1698,11 @@ fn giving_noext_a_variant_fails_the_ty_axis() {
         "NoExt has no variant on the tree"
     );
     let lean = lean_constructors(&lean_basic, "Ty");
-    let rust = rust_enum_variants_at_level(&ty_rs, "Ty", &level_rs);
+    let ty_fragment = semr_ty_fragment().expect("TY_FRAGMENT.tsv");
+    let rust = outside_semr_fragment(
+        &rust_enum_variants_at_level(&ty_rs, "Ty", &level_rs),
+        &ty_fragment,
+    );
     assert!(
         !rust.contains("Ext"),
         "Ext is excluded while NoExt is empty"
@@ -1680,7 +1713,10 @@ fn giving_noext_a_variant_fails_the_ty_axis() {
     assert_eq!(level_rs.matches(anchor).count(), 1, "unique NoExt anchor");
     let inhabited = level_rs.replacen(anchor, "pub enum NoExt {\n    Param(u32),\n}", 1);
     assert!(!noext_is_empty(&inhabited));
-    let rust = rust_enum_variants_at_level(&ty_rs, "Ty", &inhabited);
+    let rust = outside_semr_fragment(
+        &rust_enum_variants_at_level(&ty_rs, "Ty", &inhabited),
+        &ty_fragment,
+    );
     assert!(
         rust.contains("Ext"),
         "an inhabited NoExt keeps Ext on the axis"
@@ -1692,7 +1728,12 @@ fn giving_noext_a_variant_fails_the_ty_axis() {
 /// The `TemplateTy` axis of amendment S, as (Rust, Lean) constructor sets: a
 /// level-S type is every `TyG` variant but `Ext`, whose payload at level S is
 /// a `TemplateRef`, plus one constructor per `TemplateRef` variant
-/// (`Param` -> `param`, `Hole` -> `hole`, through `lower_first`).
+/// (`Param` -> `param`, `Hole` -> `hole`, through `lower_first`). A type
+/// former of SemR's type fragment (`TY_FRAGMENT.tsv`) is not a level-S type:
+/// `trust_ir::template` refuses every occurrence of one in a template (T8;
+/// `template_refuses_every_semr_fragment_type` in trust-ir-build's
+/// `tests/template_validation.rs`), so it has no
+/// `TemplateTy` constructor.
 fn template_ty_axis(
     ty_rs: &str,
     level_rs: &str,
@@ -1700,6 +1741,12 @@ fn template_ty_axis(
 ) -> (BTreeSet<String>, BTreeSet<String>) {
     let mut rust = rust_enum_variants_raw(ty_rs, "Ty");
     assert!(rust.remove("Ext"), "TyG carries its Ext variant");
+    for (variant, _) in semr_ty_fragment().unwrap_or_else(|e| panic!("{e}")) {
+        assert!(
+            rust.remove(&variant),
+            "TY_FRAGMENT.tsv row `{variant}` is a TyG variant"
+        );
+    }
     let refs = rust_enum_variants_raw(level_rs, "TemplateRef");
     assert!(refs.len() >= 2, "TemplateRef parsed: {refs:?}");
     rust.extend(refs.iter().map(|name| lower_first(name)));
@@ -1790,6 +1837,14 @@ fn semr_quoted_ledger() -> PathBuf {
     manifest().join("../../lean/semr/QUOTED_MODEL.tsv")
 }
 
+fn semr_ty_fragment_ledger() -> PathBuf {
+    manifest().join("../../lean/semr/TY_FRAGMENT.tsv")
+}
+
+fn semr_constant_fragment_ledger() -> PathBuf {
+    manifest().join("../../lean/semr/CONSTANT_FRAGMENT.tsv")
+}
+
 /// Constructor, canonical boundary control, decoder boundary, model scope.
 /// Private typed cells are explicitly not canonical byte-memory semantics.
 fn parse_semr_quoted(text: &str) -> Result<Vec<(String, String, String, String)>, String> {
@@ -1843,6 +1898,12 @@ fn parse_semr_quoted(text: &str) -> Result<Vec<(String, String, String, String)>
 /// the text is malformed: a row is two tab-separated names; `#` lines and blank
 /// lines are comments; a name listed twice is an error.
 fn parse_semr_fragment(text: &str) -> Result<Vec<(String, String)>, String> {
+    parse_semr_ledger("FRAGMENT.tsv", text)
+}
+
+/// [`parse_semr_fragment`]'s rules for the ledger named `ledger`
+/// (`FRAGMENT.tsv` for `Inst`, `TY_FRAGMENT.tsv` for `Ty`).
+fn parse_semr_ledger(ledger: &str, text: &str) -> Result<Vec<(String, String)>, String> {
     let mut rows: Vec<(String, String)> = Vec::new();
     let mut rust_seen = BTreeSet::new();
     let mut semr_seen = BTreeSet::new();
@@ -1856,28 +1917,49 @@ fn parse_semr_fragment(text: &str) -> Result<Vec<(String, String)>, String> {
             |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
         if fields.len() != 2 || !ident(fields[0]) || !ident(fields[1]) {
             return Err(format!(
-                "FRAGMENT.tsv line {}: expected `<RustVariant>\\t<semrConstructor>`, got `{line}`",
+                "{ledger} line {}: expected `<RustVariant>\\t<semrConstructor>`, got `{line}`",
                 i + 1
             ));
         }
         if !rust_seen.insert(fields[0].to_string()) {
             return Err(format!(
-                "FRAGMENT.tsv: Rust variant `{}` listed twice",
+                "{ledger}: Rust variant `{}` listed twice",
                 fields[0]
             ));
         }
         if !semr_seen.insert(fields[1].to_string()) {
             return Err(format!(
-                "FRAGMENT.tsv: SemR constructor `{}` listed twice",
+                "{ledger}: SemR constructor `{}` listed twice",
                 fields[1]
             ));
         }
         rows.push((fields[0].to_string(), fields[1].to_string()));
     }
     if rows.is_empty() {
-        return Err("FRAGMENT.tsv: no rows".into());
+        return Err(format!("{ledger}: no rows"));
     }
     Ok(rows)
+}
+
+fn semr_ty_fragment() -> Result<Vec<(String, String)>, String> {
+    parse_semr_ledger("TY_FRAGMENT.tsv", &read_required(semr_ty_fragment_ledger()))
+}
+
+fn semr_constant_fragment() -> Result<Vec<(String, String)>, String> {
+    parse_semr_ledger(
+        "CONSTANT_FRAGMENT.tsv",
+        &read_required(semr_constant_fragment_ledger()),
+    )
+}
+
+/// The `Constant` variants the old gate judges, in the Lean model's case:
+/// every Rust variant `CONSTANT_FRAGMENT.tsv` does not list (filtered by its
+/// Rust name before [`lower_first`]).
+fn old_gate_constants(all: &BTreeSet<String>, fragment: &[(String, String)]) -> BTreeSet<String> {
+    outside_semr_fragment(all, fragment)
+        .iter()
+        .map(|name| lower_first(name))
+        .collect()
 }
 
 fn semr_fragment() -> Result<Vec<(String, String)>, String> {
@@ -1899,10 +1981,16 @@ fn outside_semr_fragment(
 /// Constructors of SemR's `inductive Inst where`, including documented,
 /// multiline binder lists. Unrecognized indented declarations fail closed.
 fn semr_inst_constructors(src: &str) -> Result<BTreeSet<String>, String> {
+    semr_inductive_constructors(src, "Inst")
+}
+
+/// Constructors of SemR's `inductive <name> where`, by
+/// [`semr_inst_constructors`]'s rules.
+fn semr_inductive_constructors(src: &str, name: &str) -> Result<BTreeSet<String>, String> {
     let src = strip_lean_comments(src);
-    let needle = "inductive Inst where";
+    let needle = format!("inductive {name} where");
     let start = src
-        .find(needle)
+        .find(&needle)
         .ok_or_else(|| format!("SemR.lean: `{needle}` not found"))?;
     let mut out = BTreeSet::new();
     for line in src[start + needle.len()..].lines().skip(1) {
@@ -1923,22 +2011,104 @@ fn semr_inst_constructors(src: &str) -> Result<BTreeSet<String>, String> {
         }
         let Some(rest) = trimmed.strip_prefix('|') else {
             return Err(format!(
-                "SemR.lean: unparseable line `{trimmed}` in `inductive Inst`"
+                "SemR.lean: unparseable line `{trimmed}` in `inductive {name}`"
             ));
         };
-        let Some(name) = lean_ident_head(rest.trim_start()) else {
+        let Some(ctor) = lean_ident_head(rest.trim_start()) else {
             return Err(format!(
                 "SemR.lean: unparseable constructor line `{trimmed}`"
             ));
         };
-        if !out.insert(name.clone()) {
-            return Err(format!("SemR.lean: constructor `{name}` declared twice"));
+        if !out.insert(ctor.clone()) {
+            return Err(format!("SemR.lean: constructor `{ctor}` declared twice"));
         }
     }
     if out.is_empty() {
-        return Err("SemR.lean: `inductive Inst` has no constructors".into());
+        return Err(format!("SemR.lean: `inductive {name}` has no constructors"));
     }
     Ok(out)
+}
+
+/// `TY_FRAGMENT.tsv` agrees with the Rust `Ty` and SemR's `Ty`, or the
+/// reason: every row names a Rust variant that exists and a SemR constructor
+/// SemR.lean declares. (SemR's other `Ty` constructors carry level-R types the
+/// old gate already judges, `int` for twelve Rust variants among them, so the
+/// map is not onto.)
+fn semr_ty_fragment_drift(
+    rust: &BTreeSet<String>,
+    semr: &BTreeSet<String>,
+    fragment: &[(String, String)],
+) -> Result<(), String> {
+    let no_rust: Vec<&String> = fragment
+        .iter()
+        .map(|(r, _)| r)
+        .filter(|r| !rust.contains(*r))
+        .collect();
+    if !no_rust.is_empty() {
+        return Err(format!(
+            "SemR type fragment: TY_FRAGMENT.tsv names Rust Ty variants that do not exist: \
+             {no_rust:?}"
+        ));
+    }
+    let no_semr: Vec<&String> = fragment
+        .iter()
+        .map(|(_, s)| s)
+        .filter(|s| !semr.contains(*s))
+        .collect();
+    if !no_semr.is_empty() {
+        return Err(format!(
+            "SemR type fragment: TY_FRAGMENT.tsv names SemR Ty constructors SemR.lean does \
+             not declare (the type has no SemR semantics; drop the row, which returns the \
+             variant to the old gate, or add the constructor): {no_semr:?}"
+        ));
+    }
+    Ok(())
+}
+
+/// `CONSTANT_FRAGMENT.tsv` agrees with the Rust `Constant` and SemR's `Const`,
+/// or the reason: every row names a Rust variant that exists and a SemR
+/// constructor SemR.lean declares, and every SemR `Const` constructor is a
+/// row's or names an old-gate variant (`int`, `bool`, `aggregate`, `uninit`:
+/// constants the old gate already judges), so SemR declares no constant no
+/// gate accounts for.
+fn semr_constant_fragment_drift(
+    rust: &BTreeSet<String>,
+    semr: &BTreeSet<String>,
+    fragment: &[(String, String)],
+) -> Result<(), String> {
+    let no_rust: Vec<&String> = fragment
+        .iter()
+        .map(|(r, _)| r)
+        .filter(|r| !rust.contains(*r))
+        .collect();
+    if !no_rust.is_empty() {
+        return Err(format!(
+            "SemR constant fragment: CONSTANT_FRAGMENT.tsv names Rust Constant variants that \
+             do not exist: {no_rust:?}"
+        ));
+    }
+    let no_semr: Vec<&String> = fragment
+        .iter()
+        .map(|(_, s)| s)
+        .filter(|s| !semr.contains(*s))
+        .collect();
+    if !no_semr.is_empty() {
+        return Err(format!(
+            "SemR constant fragment: CONSTANT_FRAGMENT.tsv names SemR Const constructors \
+             SemR.lean does not declare (the constant has no SemR semantics; drop the row, \
+             which returns the variant to the old gate, or add the constructor): {no_semr:?}"
+        ));
+    }
+    let mut accounted = old_gate_constants(rust, fragment);
+    accounted.extend(fragment.iter().map(|(_, s)| s.clone()));
+    let unaccounted: Vec<&String> = semr.iter().filter(|s| !accounted.contains(*s)).collect();
+    if !unaccounted.is_empty() {
+        return Err(format!(
+            "SemR constant fragment: SemR.lean declares Const constructors that are neither \
+             a CONSTANT_FRAGMENT.tsv row nor an old-gate Constant variant: {unaccounted:?}"
+        ));
+    }
+    Ok(())
 }
 
 /// The ledger agrees with the Rust `Inst` and SemR's `Inst`, or the reason.
@@ -2005,6 +2175,233 @@ fn inst_parity_reads_semr_for_its_fragment() {
     // The two halves of the gate partition the Rust variants.
     let rest = outside_semr_fragment(&rust_inst, &fragment);
     assert_eq!(rest.len() + fragment.len(), rust_inst.len());
+}
+
+/// The `Ty` half of the SemR axis (v67 tensor region): every
+/// `TY_FRAGMENT.tsv` row is a Rust `Ty` variant and a SemR `Ty` constructor,
+/// and the rows and the old gate's remainder partition the Rust variants.
+#[test]
+fn ty_parity_reads_semr_for_its_type_fragment() {
+    let ty_rs = std::fs::read_to_string(manifest().join("src/ty.rs")).expect("ty.rs");
+    let rust_ty = rust_enum_variants(&ty_rs, "Ty");
+    let semr_ty = semr_inductive_constructors(&read_required(semr_source()), "Ty")
+        .unwrap_or_else(|e| panic!("{e}"));
+    let fragment = semr_ty_fragment().unwrap_or_else(|e| panic!("{e}"));
+    semr_ty_fragment_drift(&rust_ty, &semr_ty, &fragment).unwrap_or_else(|e| panic!("{e}"));
+    let rest = outside_semr_fragment(&rust_ty, &fragment);
+    assert_eq!(rest.len() + fragment.len(), rust_ty.len());
+    // The type former is judged in SemR, and its instruction is in FRAGMENT.tsv.
+    assert!(fragment.iter().any(|(r, s)| r == "Tensor" && s == "tensor"));
+    let inst_fragment = semr_fragment().unwrap_or_else(|e| panic!("{e}"));
+    assert!(inst_fragment.iter().any(|(r, _)| r == "TensorContract"));
+}
+
+/// The `Constant` half of the SemR axis (PKG-U13e, content-addressed weight
+/// blobs): every `CONSTANT_FRAGMENT.tsv` row is a Rust `Constant` variant and
+/// a SemR `Const` constructor, every SemR `Const` constructor is accounted
+/// for, and the rows and the old gate's remainder partition the Rust
+/// variants.
+#[test]
+fn constant_parity_reads_semr_for_its_constant_fragment() {
+    let constant_rs =
+        std::fs::read_to_string(manifest().join("src/constant.rs")).expect("constant.rs");
+    let rust = rust_enum_variants(&constant_rs, "Constant");
+    let semr = semr_inductive_constructors(&read_required(semr_source()), "Const")
+        .unwrap_or_else(|e| panic!("{e}"));
+    let fragment = semr_constant_fragment().unwrap_or_else(|e| panic!("{e}"));
+    semr_constant_fragment_drift(&rust, &semr, &fragment).unwrap_or_else(|e| panic!("{e}"));
+    let rest = outside_semr_fragment(&rust, &fragment);
+    assert_eq!(rest.len() + fragment.len(), rust.len());
+    // The blob is judged in SemR, over SemR's tensor type.
+    assert!(
+        fragment
+            .iter()
+            .any(|(r, s)| r == "TensorBlob" && s == "tensorBlob")
+    );
+    let ty_fragment = semr_ty_fragment().unwrap_or_else(|e| panic!("{e}"));
+    assert!(ty_fragment.iter().any(|(r, _)| r == "Tensor"));
+    assert!(
+        semr.contains("int") && semr.contains("aggregate"),
+        "the SemR Const parser saw the whole inductive: {semr:?}"
+    );
+}
+
+/// Mutation controls for the `Constant` half of the SemR axis: each drift is
+/// caught by name, and the unmutated ledger is the positive control.
+#[test]
+fn semr_constant_axis_mutations_are_caught() {
+    let constant_rs =
+        std::fs::read_to_string(manifest().join("src/constant.rs")).expect("constant.rs");
+    let rust = rust_enum_variants(&constant_rs, "Constant");
+    let semr_src = read_required(semr_source());
+    let semr = semr_inductive_constructors(&semr_src, "Const").expect("SemR Const");
+    let fragment = semr_constant_fragment().expect("ledger");
+    assert_eq!(
+        semr_constant_fragment_drift(&rust, &semr, &fragment),
+        Ok(())
+    );
+
+    // SemR loses its blob constructor: the row is caught.
+    let anchor = "  | tensorBlob (digest : List Nat) (dims : List Nat)\n";
+    assert_eq!(
+        semr_src.matches(anchor).count(),
+        1,
+        "unique SemR tensorBlob anchor"
+    );
+    let without = semr_inductive_constructors(&semr_src.replacen(anchor, "", 1), "Const")
+        .expect("SemR Const without tensorBlob");
+    let e = semr_constant_fragment_drift(&rust, &without, &fragment).unwrap_err();
+    assert!(e.contains("\"tensorBlob\""), "{e}");
+
+    // A row naming a Rust variant that does not exist (a rename).
+    let mut renamed = fragment.clone();
+    renamed[0].0 = "WeightBlob".into();
+    let e = semr_constant_fragment_drift(&rust, &semr, &renamed).unwrap_err();
+    assert!(e.contains("\"WeightBlob\""), "{e}");
+
+    // Dropping the row returns the variant to the old gate, which fails by
+    // name: the legacy Lean model has no blob; and SemR's constructor is then
+    // unaccounted for.
+    let lean_constant =
+        lean_constructors_any_case(&read_required(lean_dir().join("Constant.lean")), "Constant");
+    let dropped: Vec<(String, String)> = fragment
+        .iter()
+        .filter(|(r, _)| r != "TensorBlob")
+        .cloned()
+        .collect();
+    let reason = parity_drift(
+        "Constant",
+        &old_gate_constants(&rust, &dropped),
+        &lean_constant,
+        &[],
+    )
+    .expect_err("an unlisted TensorBlob fails the old gate");
+    assert!(reason.contains("\"tensorBlob\""), "{reason}");
+
+    // A SemR constant neither a row nor an old-gate variant is unaccounted.
+    let grown_semr = semr_src.replacen(anchor, &format!("{anchor}  | poison\n"), 1);
+    let grown = semr_inductive_constructors(&grown_semr, "Const").expect("grown SemR Const");
+    let e = semr_constant_fragment_drift(&rust, &grown, &fragment).unwrap_err();
+    assert!(e.contains("\"poison\""), "{e}");
+
+    // A new Rust Constant variant in neither half fails the old gate by name.
+    let unit = "    PhantomData,\n";
+    assert_eq!(
+        constant_rs.matches(unit).count(),
+        1,
+        "unique PhantomData anchor"
+    );
+    let grown = rust_enum_variants(
+        &constant_rs.replacen(unit, "    PhantomData,\n    Opaque,\n", 1),
+        "Constant",
+    );
+    let reason = parity_drift(
+        "Constant",
+        &old_gate_constants(&grown, &fragment),
+        &lean_constant,
+        &[],
+    )
+    .expect_err("an unjudged variant fails");
+    assert!(reason.contains("\"opaque\""), "{reason}");
+
+    // Malformed ledgers and SemR sources fail closed.
+    assert!(parse_semr_ledger("CONSTANT_FRAGMENT.tsv", "TensorBlob tensorBlob\n").is_err());
+    assert!(
+        parse_semr_ledger(
+            "CONSTANT_FRAGMENT.tsv",
+            "TensorBlob\ttensorBlob\nTensorBlob\tint\n"
+        )
+        .is_err()
+    );
+    assert!(
+        parse_semr_ledger("CONSTANT_FRAGMENT.tsv", "# only a comment\n")
+            .unwrap_err()
+            .contains("CONSTANT_FRAGMENT.tsv")
+    );
+    assert!(semr_inductive_constructors("inductive Ty where\n  | int\n", "Const").is_err());
+    assert!(semr_inductive_constructors("inductive Const where\n  ?? bad\n", "Const").is_err());
+}
+
+/// Mutation controls for the `Ty` half of the SemR axis: each drift is caught
+/// by name, and the unmutated ledger is the positive control.
+#[test]
+fn semr_ty_axis_mutations_are_caught() {
+    let ty_rs = std::fs::read_to_string(manifest().join("src/ty.rs")).expect("ty.rs");
+    let rust_ty = rust_enum_variants(&ty_rs, "Ty");
+    let semr_src = read_required(semr_source());
+    let semr_ty = semr_inductive_constructors(&semr_src, "Ty").expect("SemR Ty");
+    assert!(
+        semr_ty.contains("tensor") && semr_ty.contains("int"),
+        "{semr_ty:?}"
+    );
+    let fragment = semr_ty_fragment().expect("ledger");
+    assert_eq!(
+        semr_ty_fragment_drift(&rust_ty, &semr_ty, &fragment),
+        Ok(())
+    );
+
+    // SemR loses its tensor constructor: the row is caught.
+    let anchor = "  | tensor (elem : IntTy) (rank : Nat)\n";
+    assert_eq!(
+        semr_src.matches(anchor).count(),
+        1,
+        "unique SemR tensor anchor"
+    );
+    let without = semr_inductive_constructors(&semr_src.replacen(anchor, "", 1), "Ty")
+        .expect("SemR Ty without tensor");
+    let e = semr_ty_fragment_drift(&rust_ty, &without, &fragment).unwrap_err();
+    assert!(e.contains("\"tensor\""), "{e}");
+
+    // A row naming a Rust variant that does not exist (a rename).
+    let mut renamed = fragment.clone();
+    renamed[0].0 = "NdArray".into();
+    let e = semr_ty_fragment_drift(&rust_ty, &semr_ty, &renamed).unwrap_err();
+    assert!(e.contains("\"NdArray\""), "{e}");
+
+    // Dropping the row returns the variant to the old gate, which fails by
+    // name: the legacy Lean model has no tensor.
+    let lean_ty = lean_constructors(&read_required(lean_dir().join("Basic.lean")), "Ty");
+    let dropped: Vec<(String, String)> = fragment
+        .iter()
+        .filter(|(r, _)| r != "Tensor")
+        .cloned()
+        .collect();
+    let reason = parity_drift(
+        "Ty",
+        &outside_semr_fragment(&rust_ty, &dropped),
+        &lean_ty,
+        &[],
+    )
+    .expect_err("an unlisted Tensor fails the old gate");
+    assert!(reason.contains("Tensor"), "{reason}");
+
+    // A new Rust Ty variant in neither half fails the old gate by name.
+    let anchor = "pub enum TyG<X> {";
+    assert_eq!(ty_rs.matches(anchor).count(), 1, "unique TyG anchor");
+    let grown = rust_enum_variants(
+        &ty_rs.replacen(anchor, "pub enum TyG<X> {\n    Opaque,", 1),
+        "Ty",
+    );
+    let reason = parity_drift(
+        "Ty",
+        &outside_semr_fragment(&grown, &fragment),
+        &lean_ty,
+        &[],
+    )
+    .expect_err("an unjudged variant fails");
+    assert!(reason.contains("Opaque"), "{reason}");
+
+    // Malformed ledgers and SemR sources fail closed.
+    assert!(parse_semr_ledger("TY_FRAGMENT.tsv", "Tensor tensor\n").is_err());
+    assert!(parse_semr_ledger("TY_FRAGMENT.tsv", "Tensor\ttensor\nTensor\tint\n").is_err());
+    assert!(parse_semr_ledger("TY_FRAGMENT.tsv", "Tensor\ttensor\nVector\ttensor\n").is_err());
+    assert!(
+        parse_semr_ledger("TY_FRAGMENT.tsv", "# only a comment\n")
+            .unwrap_err()
+            .contains("TY_FRAGMENT.tsv")
+    );
+    assert!(semr_inductive_constructors("inductive Inst where\n  | nop\n", "Ty").is_err());
+    assert!(semr_inductive_constructors("inductive Ty where\n  ?? bad\n", "Ty").is_err());
 }
 
 /// Mutation controls for the SemR axis: each drift is caught by name, and the

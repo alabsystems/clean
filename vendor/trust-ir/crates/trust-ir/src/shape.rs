@@ -80,6 +80,9 @@ pub enum TyShape {
     /// Nominal opaque runtime handle (v43): one pointer word, not pointer-like.
     Handle,
     Storage,
+    /// A tensor (`Ty::Tensor`): no memory layout, as `Sequence` has none.
+    /// Appended last so earlier serde discriminants stay.
+    Tensor,
 }
 
 impl core::fmt::Display for TyShape {
@@ -119,6 +122,7 @@ impl core::fmt::Display for TyShape {
             TyShape::Dialect => f.write_str("dialect"),
             TyShape::Storage => f.write_str("storage"),
             TyShape::Handle => f.write_str("handle"),
+            TyShape::Tensor => f.write_str("tensor"),
         }
     }
 }
@@ -201,6 +205,7 @@ impl Ty {
             Ty::Dialect(_) => TyShape::Dialect,
             Ty::Handle(_) => TyShape::Handle,
             Ty::Storage(_) => TyShape::Storage,
+            Ty::Tensor(_, _) => TyShape::Tensor,
             Ty::Ext(e) => e.unreachable(),
         }
     }
@@ -1416,7 +1421,9 @@ pub(crate) fn leaf_layout(
             align_bits: None,
             kind: TyLayoutKind::Never,
         }),
-        Ty::Set(_, _) | Ty::Sequence(_) | Ty::Record(_) => {
+        // A tensor's extents are run-time values (shape is a value, not a
+        // type), so it has no memory layout, exactly as a sequence has none.
+        Ty::Set(_, _) | Ty::Sequence(_) | Ty::Record(_) | Ty::Tensor(_, _) => {
             Err(LayoutError::UnsupportedTyShape(ty.shape()))
         }
         // v58: a closure lays out through its DECLARED frame, which names its
@@ -1689,6 +1696,11 @@ pub enum ConstantShape {
     PhantomData,
     /// Crystal lane (E3b, v49): an unwritten struct/tuple lane (`Constant::Uninit`).
     Uninit,
+    /// v70: a content-addressed tensor (`Constant::TensorBlob`) of `rank`
+    /// extents.
+    TensorBlob {
+        rank: usize,
+    },
 }
 
 impl core::fmt::Display for ConstantShape {
@@ -1710,6 +1722,7 @@ impl core::fmt::Display for ConstantShape {
             ConstantShape::SymbolAddr => f.write_str("symaddr"),
             ConstantShape::PhantomData => f.write_str("phantomdata"),
             ConstantShape::Uninit => f.write_str("uninit"),
+            ConstantShape::TensorBlob { rank } => write!(f, "tensor_blob[{rank}]"),
         }
     }
 }
@@ -1738,6 +1751,7 @@ impl Constant {
             Constant::SymbolAddr { .. } => ConstantShape::SymbolAddr,
             Constant::PhantomData => ConstantShape::PhantomData,
             Constant::Uninit => ConstantShape::Uninit,
+            Constant::TensorBlob { dims, .. } => ConstantShape::TensorBlob { rank: dims.len() },
             Constant::Ext(e) => e.unreachable(),
         }
     }
@@ -1814,6 +1828,14 @@ impl Constant {
             // typing needs the module table and is checked by
             // `validate_constant_against_ty` (the same split as `Array`).
             (Constant::Splat { len, .. }, Ty::Array(_, n)) => len == n,
+            // v70: a content-addressed tensor fits an integer tensor of its
+            // rank. Whether its row exists and holds `∏ dims × width/8` bytes
+            // needs the module's blob table, and where it may stand (only the
+            // whole value of an `Inst::Const`) is `trust-ir-build`'s
+            // `InvalidTensorBlob` rule.
+            (Constant::TensorBlob { dims, .. }, Ty::Tensor(elem, rank)) => {
+                elem.is_integer() && u64::try_from(dims.len()).is_ok_and(|n| n == u64::from(*rank))
+            }
             (Constant::Vector(_), Ty::Vector(_, _)) => true,
             (Constant::Sequence(_), Ty::Sequence(_)) => true,
             (Constant::Set(_), Ty::Set(_, _)) => true,
@@ -2012,6 +2034,22 @@ mod tests {
         assert!(Ty::Func(FuncTyId::new(0)).is_thin_pointer_like());
         assert!(Ty::FatPtr(FatPtrKind::Slice(TyId::new(0))).is_fat_pointer());
         assert!(Ty::FatPtr(FatPtrKind::TraitObject { trait_id: 7 }).is_pointer_like());
+    }
+
+    #[test]
+    fn a_tensor_has_its_own_shape_and_no_memory_layout() {
+        assert_eq!(TyShape::Tensor.to_string(), "tensor");
+        let module = Module::new("tensor-layout");
+        for tensor in [
+            Ty::Tensor(Box::new(Ty::I32), 2),
+            Ty::Tensor(Box::new(Ty::U8), 0),
+        ] {
+            assert_eq!(tensor.shape(), TyShape::Tensor);
+            assert_eq!(
+                module.ty_layout_shape(&tensor),
+                Err(LayoutError::UnsupportedTyShape(TyShape::Tensor))
+            );
+        }
     }
 
     #[test]

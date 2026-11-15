@@ -333,6 +333,7 @@ fn ty_variant_total() -> usize {
         I8, I16, I32, I64, I128, U8, U16, U32, U64, U128, Isize, Usize, Char, Error, F16, F32, F64,
         Bool, Vector, Ptr, FatPtr, Unit, Never, Struct, Array, Tuple, Enum, Func, Ref, RefMut,
         PtrConst, PtrMut, Rc, Set, Sequence, Record, Closure, Refine, Dialect, Handle, Storage,
+        Tensor,
     )
 }
 

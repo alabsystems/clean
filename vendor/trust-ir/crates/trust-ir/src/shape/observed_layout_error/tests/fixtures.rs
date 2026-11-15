@@ -53,7 +53,7 @@ pub(super) fn errors(n: u32) -> [LayoutError; 23] {
         },
     ]
 }
-pub(super) fn shapes() -> [TyShape; 27] {
+pub(super) fn shapes() -> [TyShape; 28] {
     [
         TyShape::Int {
             signed: true,
@@ -85,6 +85,7 @@ pub(super) fn shapes() -> [TyShape; 27] {
         TyShape::Refine,
         TyShape::Dialect,
         TyShape::Handle,
+        TyShape::Tensor,
     ]
 }
 pub(super) fn metadata() -> [Option<PointerMetadataShape>; 8] {

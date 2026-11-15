@@ -548,14 +548,23 @@ const OUTSIDE_THE_ELABORATION_RECORD: &[(&str, &str)] = &[
 /// The per-name tables a delta carries as extension states
 /// ([`DELTA_CARRIED_EXTENSIONS`]), by the name the elaboration record digests
 /// them under.
-const CARRIED_EXTENSION_TABLES: &[&str] = &["value_forall_binder_names"];
+const CARRIED_EXTENSION_TABLES: &[&str] =
+    &["value_forall_binder_names", "csimp_compiled", "attr_tags"];
 
 #[test]
 fn every_carried_extension_is_digested_per_name() {
     use crate::env::content_digest::ELABORATION_RECORD_TABLES;
     assert_eq!(
         DELTA_CARRIED_EXTENSIONS,
-        &[super::super::value_binder_names::VALUE_BINDER_NAMES_EXTENSION]
+        &[
+            super::super::value_binder_names::VALUE_BINDER_NAMES_EXTENSION,
+            super::super::csimp::CSIMP_SOURCE_EXTENSION,
+            super::super::ext_attr::ATTR_EXT_NAME,
+        ]
+    );
+    assert_eq!(
+        DELTA_CARRIED_EXTENSIONS.len(),
+        CARRIED_EXTENSION_TABLES.len()
     );
     for table in CARRIED_EXTENSION_TABLES {
         assert!(ELABORATION_RECORD_TABLES.contains(table), "`{table}`");
@@ -648,4 +657,218 @@ fn the_elaboration_record_sees_a_field_table_the_kernel_record_does_not() {
         fields(&["width", "height"]).elaboration_record_digest(&pair)
     );
     assert_eq!(base.elaboration_record_digest(&n("tgSixAbsent")), None);
+}
+
+/// A csimp rule over two fresh `Nat` constants, registered as a global rule.
+fn csimp_rule(env: &mut Environment, tag: &str) {
+    let (from, to, theorem) = (format!("{tag}From"), format!("{tag}To"), format!("{tag}Eq"));
+    def(env, &from, c("Nat"), Expr::nat_lit(1));
+    def(env, &to, c("Nat"), Expr::nat_lit(1));
+    env.add_decl(Declaration::Axiom {
+        name: n(&theorem),
+        level_params: vec![],
+        type_: Expr::apps(
+            Expr::const_(n("Eq"), vec![crate::Level::succ(crate::Level::zero())]),
+            [c("Nat"), c(&from), c(&to)],
+        ),
+    })
+    .expect("the equality is well-typed");
+    assert!(crate::env::csimp::register(env, &n(&theorem)));
+}
+
+/// Clean 21233e7751 records a csimp compilation point for every elaborated
+/// declaration, which changes the csimp state's exported snapshot; a delta
+/// that refused it stored no fact for any island (Trust TG6). The point is
+/// carried and replays exactly, in a fresh copy of the environment the key
+/// names; a second record of the same name changes nothing.
+#[test]
+fn a_csimp_compilation_point_is_carried_and_replays_exactly() {
+    use crate::env::csimp;
+    let mut before = Environment::with_prelude();
+    csimp_rule(&mut before, "tgSixSeen");
+    let mut after = before.clone();
+    def(&mut after, "tgSixCompiled", c("Nat"), Expr::nat_lit(1));
+    csimp::record_compiled(&mut after, [n("tgSixCompiled")]);
+    csimp::record_compiled(&mut after, [n("tgSixCompiled")]);
+    let delta = after.local_fact_delta_since(&before).expect("carried");
+    assert_eq!(delta.csimp_compiled.len(), 1);
+    assert_eq!(
+        delta.csimp_compiled[0].1.len(),
+        1,
+        "the rule visible at the point"
+    );
+    let decoded = EnvFactDelta::decode(&delta.encode().expect("encodes")).expect("decodes");
+    let mut replayed = before.clone();
+    replayed.apply_local_fact_delta(&decoded).expect("fits");
+    assert_eq!(replayed.local_fact_difference(&after), None);
+    assert_eq!(
+        csimp::recorded_body_rules(&replayed, &n("tgSixCompiled")),
+        csimp::recorded_body_rules(&after, &n("tgSixCompiled")),
+    );
+    assert!(csimp::recorded_body_rules(&before, &n("tgSixCompiled")).is_none());
+    assert_ne!(
+        before.elaboration_record_digest(&n("tgSixCompiled")),
+        replayed.elaboration_record_digest(&n("tgSixCompiled")),
+        "the record digests the compilation point"
+    );
+}
+
+/// NEGATIVE CONTROL: every csimp change other than a compilation point still
+/// refuses, alone or beside one.
+#[test]
+fn a_csimp_rule_event_is_still_unrepresentable() {
+    use crate::env::csimp;
+    let before = Environment::with_prelude();
+    let refused = |after: &Environment| {
+        let refused = after.local_fact_delta_since(&before);
+        assert!(
+            matches!(&refused, Err(FactDeltaError::Unrepresentable(why))
+                if why.contains("more than compilation points")),
+            "{refused:?}"
+        );
+    };
+    let mut global = before.clone();
+    csimp_rule(&mut global, "tgSixGlobal");
+    refused(&global);
+    csimp::record_compiled(&mut global, [n("tgSixGlobalFrom")]);
+    refused(&global);
+    let mut local = before.clone();
+    csimp_rule(&mut local, "tgSixLocal");
+    let base = local.clone();
+    let token = csimp::register_local(&mut local, &n("tgSixLocalEq")).expect("a rule");
+    let delta = local.local_fact_delta_since(&base);
+    assert!(
+        matches!(&delta, Err(FactDeltaError::Unrepresentable(_))),
+        "{delta:?}"
+    );
+    csimp::retire_local(&mut local, token);
+    let delta = local.local_fact_delta_since(&base);
+    assert!(
+        matches!(&delta, Err(FactDeltaError::Unrepresentable(_))),
+        "{delta:?}"
+    );
+    let mut scoped = before.clone();
+    csimp_rule(&mut scoped, "tgSixScoped");
+    let base = scoped.clone();
+    assert!(csimp::define_scoped(
+        &mut scoped,
+        &n("TgSix"),
+        &n("tgSixScopedEq")
+    ));
+    let delta = scoped.local_fact_delta_since(&base);
+    assert!(
+        matches!(&delta, Err(FactDeltaError::Unrepresentable(_))),
+        "{delta:?}"
+    );
+}
+
+/// A carried compilation point applies only where it resolves to the rules
+/// the producing elaboration saw, and only once: an environment with another
+/// visible rule, or with the point already recorded, is not the one the
+/// fact's key names, and is left unchanged.
+#[test]
+fn a_csimp_compilation_point_refuses_a_different_base() {
+    use crate::env::csimp;
+    let before = Environment::with_prelude();
+    let mut after = before.clone();
+    def(&mut after, "tgSixCompiled", c("Nat"), Expr::nat_lit(1));
+    csimp::record_compiled(&mut after, [n("tgSixCompiled")]);
+    let delta = after.local_fact_delta_since(&before).expect("carried");
+
+    let mut other_rules = before.clone();
+    csimp_rule(&mut other_rules, "tgSixOther");
+    let untouched = other_rules.clone();
+    let refused = other_rules.apply_local_fact_delta(&delta);
+    assert!(
+        matches!(&refused, Err(FactDeltaError::BaseMismatch(why)) if why.contains("csimp")),
+        "{refused:?}"
+    );
+    assert_eq!(other_rules.local_fact_difference(&untouched), None);
+
+    let mut already = before.clone();
+    csimp::record_compiled(&mut already, [n("tgSixCompiled")]);
+    let refused = already.apply_local_fact_delta(&delta);
+    assert!(
+        matches!(&refused, Err(FactDeltaError::BaseMismatch(why))
+            if why.contains("already has a csimp compilation point")),
+        "{refused:?}"
+    );
+}
+
+fn tag(env: &mut Environment, decl: &str, attr: &str) {
+    use crate::env::{attr_ext_idx, AttrExtEntry, AttrExtState};
+    env.add_ext_entry::<AttrExtState>(
+        attr_ext_idx(),
+        &AttrExtEntry {
+            decl_name: n(decl),
+            attr_name: n(attr),
+            priority: 0,
+        },
+    );
+}
+
+/// Clean 493d4c3aac tags a theorem proved by bare `rfl` with `defeq` and
+/// `backward_defeq` in the exported attribute extension, which refused the
+/// delta of every such island. Appended registrations are carried, in an
+/// order that rebuilds both indexes, whatever order the declarations were
+/// tagged in, and the record digests them per name.
+#[test]
+fn appended_attribute_tags_are_carried_and_replay_exactly() {
+    use crate::env::ext_attr;
+    let mut before = Environment::with_prelude();
+    def(&mut before, "tgSixOld", c("Nat"), Expr::nat_lit(1));
+    tag(&mut before, "tgSixOld", "backward_defeq");
+    let mut after = before.clone();
+    for name in ["tgSixZ", "tgSixA", "tgSixM"] {
+        def(&mut after, name, c("Nat"), Expr::nat_lit(1));
+        tag(&mut after, name, "defeq");
+        tag(&mut after, name, "backward_defeq");
+    }
+    tag(&mut after, "tgSixOld", "defeq");
+    let delta = after.local_fact_delta_since(&before).expect("carried");
+    assert_eq!(delta.attr_tags.len(), 7);
+    let decoded = EnvFactDelta::decode(&delta.encode().expect("encodes")).expect("decodes");
+    let mut replayed = before.clone();
+    replayed.apply_local_fact_delta(&decoded).expect("fits");
+    assert_eq!(replayed.local_fact_difference(&after), None);
+    assert!(ext_attr::same_registrations(&replayed, &after));
+    assert_eq!(
+        replayed.export_extension_states(),
+        after.export_extension_states(),
+        "equal states export equally, however they were built"
+    );
+    assert!(!ext_attr::same_registrations(&replayed, &before));
+    assert_ne!(
+        before.elaboration_record_digest(&n("tgSixOld")),
+        after.elaboration_record_digest(&n("tgSixOld")),
+        "the record digests a declaration's tags"
+    );
+    // A base whose touched declaration holds other tags is refused, unchanged.
+    let mut other = before.clone();
+    tag(&mut other, "tgSixOld", "simp");
+    let untouched = other.clone();
+    let refused = other.apply_local_fact_delta(&decoded);
+    assert!(
+        matches!(&refused, Err(FactDeltaError::BaseMismatch(why)) if why.contains("tgSixOld")),
+        "{refused:?}"
+    );
+    assert_eq!(other.local_fact_difference(&untouched), None);
+}
+
+/// NEGATIVE CONTROL: `local_fact_difference` still sees an attribute tag one
+/// side lacks, so a hit that dropped one disagrees with real elaboration.
+#[test]
+fn a_missing_attribute_tag_is_a_difference() {
+    let before = Environment::with_prelude();
+    let mut after = before.clone();
+    def(&mut after, "tgSixTagged", c("Nat"), Expr::nat_lit(1));
+    let untagged = after.clone();
+    tag(&mut after, "tgSixTagged", "defeq");
+    let difference = untagged.local_fact_difference(&after);
+    assert!(
+        difference
+            .as_deref()
+            .is_some_and(|why| why.contains("attrExtension")),
+        "{difference:?}"
+    );
 }

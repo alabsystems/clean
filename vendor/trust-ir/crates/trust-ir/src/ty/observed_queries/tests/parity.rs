@@ -135,3 +135,27 @@ fn nonsemantic_handle_and_dialect_payload_sizes_are_not_copied_or_scanned() {
         }
     }
 }
+#[test]
+fn a_tensor_element_is_an_inline_child_and_a_tensor_has_no_width() {
+    for ty in [
+        Ty::Tensor(Box::new(Ty::I32), 2),
+        Ty::Tensor(Box::new(Ty::Bool), 1),
+        Ty::Tensor(Box::new(Ty::handle("Nat", "trust_bignum::Nat")), 0),
+        Ty::Tensor(
+            Box::new(Ty::Dialect(Box::new(DialectTy::new("vector", "lanes", 1)))),
+            3,
+        ),
+    ] {
+        for query in ALL {
+            parity(&ty, query);
+        }
+        for bits in [0, 1, 64, u32::MAX] {
+            parity(&ty, Query::Target(bits));
+        }
+    }
+    let handle = Ty::Tensor(Box::new(Ty::handle("Nat", "trust_bignum::Nat")), 0);
+    assert_eq!(parity(&handle, Query::Handle), Answer::Bool(true));
+    let plain = Ty::Tensor(Box::new(Ty::U8), 4);
+    assert_eq!(parity(&plain, Query::Width), Answer::Width(None));
+    assert_eq!(parity(&plain, Query::Target(64)), Answer::Width(None));
+}

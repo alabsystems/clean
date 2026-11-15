@@ -2136,6 +2136,7 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "theories/cic_l/lean-toolchain",
     ],
     "clean-olean::test::cic_l_model": [
+        "data/cic_l_rule_inventory.json",
         "lean-toolchain",
         "theories/cic_l/CICL",
         "theories/cic_l/ORDER",
@@ -2192,6 +2193,17 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "theories/kcheck_labelled/axiom_closures.json",
         "theories/kcheck_labelled/expected_output.txt",
         "theories/kcheck_labelled/statement_pins.json",
+    ],
+    # Bounded compiled-byte qualification of `theories/binding_not_review` across
+    # pinned Lean, fenced Clean, and the hash-qualified stock ck0 binary.
+    "clean-olean::test::binding_not_review": [
+        "crates/clean-ck0",
+        "lean-toolchain",
+        "reports/2026-11-14-extension-binding-not-review",
+        "reports/2026-11-14-extension-binding-not-review/artifact",
+        "reports/2026-11-14-extension-binding-not-review/generated/BindingNotReviewCensus.lean",
+        "reports/self-proof-ck0-shared-2026-11-14/stock-build-inputs.json",
+        "theories/binding_not_review",
     ],
     # Parser-only test inputs outside the crate. These are not library inputs:
     # parse_world.rs reads the pin/table under cfg(test), and the grammar tests
@@ -2753,7 +2765,7 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "clean-olean::test::cic_l_model",
         ("@reach:crates/clean-olean/tests/cic_l_model.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain|data/[A-Za-z0-9_.-]+\.json)",
     ),
     # The kcheck qualification tests `include_str!` their package's ORDER, pins,
     # closures and (for the checkers) expected output.
@@ -2776,6 +2788,11 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "clean-olean::test::kcheck_labelled",
         ("@reach:crates/clean-olean/tests/kcheck_labelled.rs",),
         r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    (
+        "clean-olean::test::binding_not_review",
+        ("@reach:crates/clean-olean/tests/binding_not_review.rs",),
+        r'repo\.join\(\s*"([A-Za-z0-9_./-]+)"',
     ),
 )
 
@@ -4055,6 +4072,18 @@ def _run_was_cut_short(record: dict[str, Any]) -> bool:
         return True
     if record.get("timed_out") is True:
         return True
+    # Required-name evidence was captured with this measurement. Missing or
+    # malformed observations cannot size a smaller complete workload.
+    required = record.get("must_pass")
+    if required is not None:
+        observed = record.get("passed_tests")
+        for names in (required, observed):
+            if names is not None and (
+                not isinstance(names, list) or any(not isinstance(name, str) for name in names)
+            ):
+                return True
+        if must_pass_missing({"_must_pass": required}, record):
+            return True
     # A failed or skipped invocation may only have reached a cheaper prefix.
     # It is evidence for raising a reservation, not for sizing a successful
     # retry below prior history or the unmeasured default.

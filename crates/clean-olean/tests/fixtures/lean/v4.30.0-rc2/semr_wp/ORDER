@@ -17,3 +17,5 @@ SemRScalarClaim
 SemRBooleanClaim
 SemRBooleanClaimText
 SemRScalarClaimAudit
+SemRNativeExecutionClaim
+SemRNativeExecutionClaimAudit

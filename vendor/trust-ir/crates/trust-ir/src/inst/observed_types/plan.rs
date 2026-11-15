@@ -8,6 +8,8 @@ pub(super) enum Plan<'a> {
     Pair(&'a Ty, &'a Ty),
     Slots(&'a [BindingSlot]),
     Types(&'a [Ty]),
+    /// A tensor map's result type, then each body node's types in order.
+    Map(&'a Ty, &'a [crate::TensorMapNode<crate::level::NoExt>]),
     Empty,
 }
 
@@ -33,6 +35,11 @@ pub(super) fn for_instruction(instruction: &Inst) -> Plan<'_> {
         | Inst::CmpXchg { ty, .. }
         | Inst::MakeAggregate { ty, .. }
         | Inst::ArraySplat { ty, .. }
+        | Inst::TensorContract { ty, .. }
+        | Inst::TensorReduce { ty, .. }
+        | Inst::TensorView { ty, .. }
+        | Inst::TensorGather { ty, .. }
+        | Inst::TensorScatter { ty, .. }
         | Inst::ExtractField { ty, .. }
         | Inst::InsertField { ty, .. }
         | Inst::ExtractElement { ty, .. }
@@ -57,6 +64,7 @@ pub(super) fn for_instruction(instruction: &Inst) -> Plan<'_> {
         } => Plan::Pair(ptr_ty, metadata_ty),
         Inst::OpenFrame { def } => Plan::Slots(&def.slots),
         Inst::DialectOp(op) => Plan::Types(&op.result_tys),
+        Inst::TensorMap { ty, body, .. } => Plan::Map(ty, body),
         // No wildcard: a new instruction must be explicitly classified.
         Inst::MakeClosure { .. }
         | Inst::Fence { .. }

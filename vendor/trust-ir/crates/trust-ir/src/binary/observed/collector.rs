@@ -24,7 +24,10 @@ pub(super) fn observed_collect_type_strings<O: ExecutionObserver>(
                 TypeTask::Value(ty) => {
                     observed_collect_type_identity_strings(ty, pool, out)?;
                     match ty {
+                        // The tensor element (v67) is an inline child, as a
+                        // vector's is.
                         Ty::Vector(inner, _)
+                        | Ty::Tensor(inner, _)
                         | Ty::Ref(inner)
                         | Ty::RefMut(inner)
                         | Ty::PtrConst(inner)
@@ -115,6 +118,7 @@ fn constant_head<'a, O: ExecutionObserver>(
             pool.intern(symbol, out)?;
         }
         Constant::Uninit => pool.raise_to(UNINIT_LANE_FORMAT_VERSION),
+        Constant::TensorBlob { .. } => pool.raise_to(TENSOR_BLOB_FORMAT_VERSION),
         _ => {}
     }
     Ok(())
@@ -128,6 +132,25 @@ pub(super) fn observed_collect_inst_strings<O: ExecutionObserver>(
     out.poll()?;
     if matches!(inst, InstG::MakeClosure { .. }) {
         pool.raise_to(MAKE_CLOSURE_FORMAT_VERSION);
+    }
+    // v67: Inst tag 71 is read-gated, so a contraction raises the header even
+    // before its (tensor) result type does below.
+    if matches!(inst, InstG::TensorContract { .. }) {
+        pool.raise_to(TENSOR_FORMAT_VERSION);
+    }
+    // v68: Inst tags 72..=74 are read-gated likewise.
+    if matches!(
+        inst,
+        InstG::TensorMap { .. } | InstG::TensorReduce { .. } | InstG::TensorView { .. }
+    ) {
+        pool.raise_to(TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION);
+    }
+    // v69: Inst tags 75 and 76 are read-gated likewise.
+    if matches!(
+        inst,
+        InstG::TensorGather { .. } | InstG::TensorScatter { .. }
+    ) {
+        pool.raise_to(TENSOR_GATHER_SCATTER_FORMAT_VERSION);
     }
 
     if matches!(
@@ -246,6 +269,11 @@ fn collect_instruction_types<O: ExecutionObserver>(
             | InstG::CmpXchg { ty, .. }
             | InstG::MakeAggregate { ty, .. }
             | InstG::ArraySplat { ty, .. }
+            | InstG::TensorContract { ty, .. }
+            | InstG::TensorReduce { ty, .. }
+            | InstG::TensorView { ty, .. }
+            | InstG::TensorGather { ty, .. }
+            | InstG::TensorScatter { ty, .. }
             | InstG::ExtractField { ty, .. }
             | InstG::InsertField { ty, .. }
             | InstG::ExtractElement { ty, .. }
@@ -258,6 +286,15 @@ fn collect_instruction_types<O: ExecutionObserver>(
             InstG::Cast { src_ty, dst_ty, .. } => {
                 observed_collect_type_strings(src_ty, pool, out)?;
                 observed_collect_type_strings(dst_ty, pool, out)?;
+            }
+            // v68: the result type, then every type the body spells, in order.
+            InstG::TensorMap { ty, body, .. } => {
+                observed_collect_type_strings(ty, pool, out)?;
+                for node in body {
+                    for node_ty in node.types() {
+                        observed_collect_type_strings(node_ty, pool, out)?;
+                    }
+                }
             }
             InstG::GEP { pointee_ty, .. } => observed_collect_type_strings(pointee_ty, pool, out)?,
             InstG::PtrData { ptr_ty, .. } => observed_collect_type_strings(ptr_ty, pool, out)?,

@@ -129,9 +129,17 @@ import shlex
 import shutil
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Execute the pinned helper bytes; a matching .pyc is not a declared input.
+RESOURCE_TRANSPORT = "scripts/resource_transport.py"
+_transport = types.ModuleType("lint_coverage_resource_transport")
+_transport.__file__ = str(ROOT / RESOURCE_TRANSPORT)
+exec(compile((ROOT / RESOURCE_TRANSPORT).read_bytes(), _transport.__file__, "exec",
+             dont_inherit=True), _transport.__dict__)
 
 # Tracked crates that are deliberately (or, historically, accidentally) outside
 # `[workspace] members`. SHRINK-ONLY: a stale entry — one that has become a
@@ -253,6 +261,14 @@ class CoverageFailure(RuntimeError):
     """A tracked crate or a gate site no longer matches the documented gate."""
 
 
+def custody_fds(env: dict[str, str]) -> tuple[int, ...]:
+    """Keep advertised transport alive; only the native owner authenticates it."""
+    try:
+        return _transport.resource_fds(env)
+    except RuntimeError as exc:
+        raise CoverageFailure(f"lint resource transport refused: {exc}") from exc
+
+
 def resolve_targo(env: dict[str, str] | None = None) -> str:
     """The targo every run of this check uses, from `scripts/rust_frontend.sh --targo`.
 
@@ -260,12 +276,13 @@ def resolve_targo(env: dict[str, str] | None = None) -> str:
     symlink ahead of the Trust sysroot on PATH, targo refuses to run as a
     symlink, and until 2026-09-29 this leg was RED on every tree for a pusher
     whose PATH had that order and GREEN for one whose PATH did not. The rule
-    (an explicit `$TARGO`, else `$(rustc +trust --print sysroot)/bin/targo`)
+    (an explicit `$TARGO`, else `$(rustc +trust --print=sysroot)/bin/targo`)
     lives in the frontend, once; this asks it, with the caller's environment,
     and fails closed on its refusal."""
+    child_env = dict(os.environ if env is None else env)
     try:
         proc = subprocess.run(["bash", str(ROOT / FRONTEND), "--targo"], cwd=ROOT,
-                              env=dict(os.environ if env is None else env),
+                              env=child_env, pass_fds=custody_fds(child_env),
                               capture_output=True, check=False)
     except OSError as exc:
         raise CoverageFailure(f"{FRONTEND} --targo could not run: {exc}") from exc
@@ -278,9 +295,11 @@ def resolve_targo(env: dict[str, str] | None = None) -> str:
 
 def cargo_metadata() -> dict:
     """Workspace shape from cargo itself (authoritative, ~0.04s, no build)."""
+    child_env = dict(os.environ)
     proc = subprocess.run(
-        [resolve_targo(), "metadata", "--locked", "--no-deps", "--format-version", "1"],
+        [resolve_targo(child_env), "metadata", "--locked", "--no-deps", "--format-version", "1"],
         cwd=ROOT,
+        env=child_env, pass_fds=custody_fds(child_env),
         capture_output=True,
         text=True,
         check=False,
@@ -753,6 +772,16 @@ ENV_ALLOW = frozenset({
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
     "DEVELOPER_DIR", "SDKROOT",
     "CLEAN_FRONTEND_ATTEMPTS", "CLEAN_FRONTEND_BACKOFF",
+    # Preserve routing and backed limits exactly, never infer authority from them.
+    "CARGO_MAKEFLAGS", "MAKEFLAGS", "MFLAGS", "CARGO_JOBSERVER_HANDOFF",
+    "TRUST_CPU_HANDOFF", "TRUST_FIXED_CLAIM_HANDOFF_V1", "TRUST_CPU_IMPLICIT_FD",
+    "ATERM_SDK_LEASE_V3", "ATERM_WORKLOAD_CPU_FDS_V1",
+    "ATERM_WORKLOAD_HOST_STORE_FD_V1", "ATERM_WORKLOAD_HOST_CONTROL_FDS_V1",
+    "BUILD_SLOT_HELD", "BUILD_SLOT_CPU_PROTOCOL", "BUILD_SLOT_CPU_MODE",
+    "BUILD_SLOT_CPU_SOURCE", "BUILD_SLOT_CPU_BUDGET", "BUILD_SLOT_POOL_SLOTS",
+    "BUILD_SLOT_DIR", "BUILD_SLOT_EXCLUSIVE", "BUILD_SLOT_LEGACY_DIR",
+    "BUILD_SLOT_V2_DIR", "BUILD_SLOT_V2_SLOTS", "BUILD_SLOT_FENCE_FDS",
+    "TARGO_PLANNED_JOBS", "TARGO_CALLER_JOBS", "HEAVY_GATE_HELD",
 })
 
 
@@ -939,8 +968,8 @@ def config_problems(root: Path, env: dict[str, str], targo: str) -> list[str]:
     config_argv = (targo, *CONFIG_ARGS)
     try:
         proc = subprocess.run(list(config_argv), cwd=root, env=env, capture_output=True,
-                              text=True, check=False)
-    except OSError as exc:
+                              text=True, check=False, pass_fds=custody_fds(env))
+    except (OSError, CoverageFailure) as exc:
         return [f"cargo cannot say which configuration it reads: {exc}"]
     if proc.returncode != 0:
         tail = " | ".join((proc.stderr or proc.stdout).strip().splitlines()[-2:])
@@ -969,9 +998,9 @@ def config_problems(root: Path, env: dict[str, str], targo: str) -> list[str]:
 def _run(argv: list[str], root: Path, env: dict[str, str]) -> tuple[int, str]:
     try:
         proc = subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True,
-                              check=False)
+                              check=False, pass_fds=custody_fds(env))
         return proc.returncode, proc.stdout + proc.stderr
-    except OSError as exc:
+    except (OSError, CoverageFailure) as exc:
         return 127, f"could not run {argv[0]}: {exc}"
 
 
@@ -1018,15 +1047,18 @@ def build_types(root: Path, env: dict[str, str], targo: str) -> tuple[Path | Non
         return None, (f"the targo this check runs ({targo}) has no sibling `trustc`, the "
                       f"compiler that builds the typed driver")
     try:
-        proc = subprocess.run([str(compiler), "--print", "sysroot"], cwd=root, env=env,
-                              capture_output=True, text=True, check=False)
-    except OSError as exc:
-        return None, f"`{compiler} --print sysroot` could not run: {exc}"
-    lines = proc.stdout.strip().splitlines()
-    sysroot = Path(lines[-1]) if proc.returncode == 0 and lines else None
+        proc = subprocess.run([str(compiler), "--print=sysroot"], cwd=root, env=env,
+                              capture_output=True, check=False,
+                              pass_fds=custody_fds(env))
+    except (OSError, CoverageFailure) as exc:
+        return None, f"`{compiler} --print=sysroot` could not run: {exc}"
+    output = os.fsdecode(proc.stdout).removesuffix("\n")
+    sysroot = (Path(output) if proc.returncode == 0 and output
+               and not any(c in output for c in "\n\r\x00")
+               and Path(output).is_absolute() else None)
     if sysroot is None or not (sysroot / "lib").is_dir():
-        return None, (f"`{compiler} --print sysroot` named no sysroot (exit {proc.returncode}: "
-                      f"{(proc.stdout + proc.stderr).strip()[-200:]})")
+        return None, (f"`{compiler} --print=sysroot` named no sysroot (exit {proc.returncode}: "
+                      f"{os.fsdecode(proc.stdout + proc.stderr).strip()[-200:]})")
     run_env = {**env, **_dirs(sanitized_env(env), root, TYPES, "check-tests")}
     rc, out = _run([targo, "--unverified", "rustc", "--locked", "--manifest-path", f"{TYPES}/Cargo.toml",
                     "--bin", "lint-types", "--message-format=json-render-diagnostics", "--",
@@ -1247,7 +1279,7 @@ CARGO_CONFIG_FILES = (".cargo/config.toml", ".cargo/config", "rust-toolchain.tom
 def pinned_inputs(root: Path) -> list[str]:
     """The derived pin set (see above), repo-relative, sorted; excludes this
     script, which the registry row pins as its `script_sha256`."""
-    files = {FRONTEND}
+    files = {FRONTEND, RESOURCE_TRANSPORT}
     for crate in sorted(STANDALONE_GATED):
         tracked = tracked_files(root, crate)
         if not tracked:
@@ -1629,10 +1661,10 @@ done
 exit $rc
 """
 
-# `trustc --print sysroot` -- the stub targo's sibling, for the typed driver's rpath.
+# `trustc --print=sysroot` -- the stub targo's sibling, for the typed driver's rpath.
 _STUB_RUSTC = r"""#!/usr/bin/env bash
 printf 'trustc %s\n' "$*" >> "$PWD/.stub-calls"
-[[ "$1 $2" == "--print sysroot" ]] || { echo "stub trustc: unexpected $*" >&2; exit 2; }
+[[ "$#" == 1 && "$1" == "--print=sysroot" ]] || { echo "stub trustc: unexpected $*" >&2; exit 2; }
 grep -q PLANT_NO_SYSROOT scripts/stub_crate/src/main.rs && { echo "error: no sysroot" >&2; exit 1; }
 grep -q PLANT_SYSROOT_NO_LIB scripts/stub_crate/src/main.rs && { echo "$PWD/elsewhere"; exit 0; }
 echo "$PWD/sysroot"
@@ -1799,9 +1831,9 @@ _SELFTEST_ARMS: tuple[tuple[str, str, bool, dict[str, str]], ...] = (
     ("40 the tests and the lint compiled a tracked file the typed scan never read",
      "ONLY_TESTED PLANT_TEST_DEPINFO:src/only_tested.rs PLANT_DEPINFO:src/only_tested.rs",
      False, {}),
-    ("41 `trustc --print sysroot` names no sysroot for the typed driver's rpath",
+    ("41 `trustc --print=sysroot` names no sysroot for the typed driver's rpath",
      "PLANT_NO_SYSROOT", False, {}),
-    ("41b `trustc --print sysroot` names a directory with no `lib`", "PLANT_SYSROOT_NO_LIB",
+    ("41b `trustc --print=sysroot` names a directory with no `lib`", "PLANT_SYSROOT_NO_LIB",
      False, {}),
     # 2026-10-15: the rpath was read off the `trustc` PATH named, while targo
     # compiles with its own sibling; the two were different toolchains on this
@@ -1839,7 +1871,7 @@ def _selftest_non_runner_arms(work: Path) -> list[str]:
     # The pin set is DERIVED: a file added to a gated crate joins it without
     # anyone listing it, and the frontend and cargo configuration are in it.
     repo = work / "pins"
-    want = {FRONTEND, ".cargo/config.toml"}
+    want = {FRONTEND, RESOURCE_TRANSPORT, ".cargo/config.toml"}
     for crate in sorted(STANDALONE_GATED):
         want |= {f"{crate}/Cargo.toml", f"{crate}/src/main.rs"}
     extra = f"{gated}/src/extra.rs"

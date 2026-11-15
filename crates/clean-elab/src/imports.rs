@@ -562,7 +562,7 @@ fn finish_unresolved(
 /// (or the `Lean` / `Lean.*` shim) may be served, and the substitution is logged
 /// at `warn`. Under [`ImportPolicy::Permissive`] the `Mathlib.*` prefix wildcard
 /// is allowed to fabricate one too — also at `warn`, never silently.
-fn canonical_prelude_label(module: &Name) -> Option<String> {
+pub(crate) fn canonical_prelude_label(module: &Name) -> Option<String> {
     let label = module.to_string();
     (SurfaceName::generated_path(&label).name() == module).then_some(label)
 }

@@ -150,3 +150,30 @@ fn pinned_nat_primitive_folds_preserve_labels_and_surplus_arguments() {
         Expr::app(Expr::nat_lit(1000002), extra.erase())
     );
 }
+
+#[test]
+fn pinned_int_constructor_comparison_records_the_coverage_gap() {
+    let lib = clean_olean::require_pinned_lean_lib_path().expect("exact pin");
+    let mut env = Environment::for_lean_replay();
+    clean_olean::load_module_with_deps(&mut env, "Init.Data.Int.Basic", &[lib])
+        .expect("pinned Int definitions");
+    let c = |name| Expr::const_(Name::from_string(name), vec![]);
+    let left = Expr::app(c("Int.ofNat"), Expr::app(c("Nat.succ"), Expr::nat_lit(0)));
+    let right = Expr::app(c("Int.ofNat"), Expr::nat_lit(1));
+    let checker = TypeChecker::new(&env);
+    assert!(checker.is_def_eq(&left, &right));
+    assert!(!checker.heartbeat_spent());
+    let mut tracer = CoreTracer::new(&env, 1_000_000);
+    let (left, _) = tracer.check(&left).expect("left annotation");
+    let (right, _) = tracer.check(&right).expect("right annotation");
+    let refusal = tracer
+        .conv(&left, &right)
+        .expect_err("recorded producer gap");
+    assert!(
+        matches!(refusal, Refusal::Coverage { source_name, .. } if source_name == "conversion_rule_gap")
+    );
+    assert!(
+        tracer.domain_problems.is_empty(),
+        "coverage is not a failed domain guard"
+    );
+}

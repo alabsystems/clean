@@ -630,6 +630,10 @@ const TAG_SPACES: &[(&str, &str)] = &[
     ("TemplateParam", "template.rs"),
     ("TemplateRef", "level.rs"),
     ("TemporalForm", "spec.rs"),
+    ("TensorIndexExpr", "inst.rs"),
+    ("TensorMapNode", "inst.rs"),
+    ("TensorReduceOp", "inst.rs"),
+    ("TensorReduceOrder", "inst.rs"),
     ("TlsModel", "lib.rs"),
     ("Ty", "ty.rs"),
     ("TypeContract", "template.rs"),
@@ -772,6 +776,9 @@ fn ty_samples() -> Vec<Ty> {
         Ty::Dialect(Box::new(crate::ty::DialectTy::new("census", "opaque", 1))),
         Ty::Handle(Box::new(crate::ty::HandleTy::new("Nat", "census::Nat"))),
         Ty::Storage(crate::StorageLayout::new(80, 8)),
+        // The tensor region (`TENSOR_FORMAT_VERSION`): rank, then the inline
+        // element.
+        Ty::Tensor(boxed(), 2),
     ]
 }
 
@@ -808,6 +815,11 @@ fn constant_samples() -> Vec<Constant> {
         Constant::PhantomData,
         // Crystal lane (E3b): an unwritten aggregate lane (tag only).
         Constant::Uninit,
+        // v70 (PKG-U13e): a tensor named by its blob digest.
+        Constant::TensorBlob {
+            digest: crate::blob::BlobDigest::of(&[1, 0, 0, 0]),
+            dims: vec![1],
+        },
     ]
 }
 
@@ -1035,6 +1047,60 @@ fn inst_samples() -> Vec<Inst> {
         Inst::ArraySplat {
             ty: Ty::Array(TyId::new(0), 4),
             value: v(0),
+        },
+        // The tensor region (`TENSOR_FORMAT_VERSION`): a matrix multiply
+        // (`batch: []`, `contract: [(1, 0)]`) of two rank-2 operands.
+        Inst::TensorContract {
+            ty: Ty::Tensor(Box::new(ty()), 2),
+            lhs: v(0),
+            rhs: v(1),
+            batch: vec![],
+            contract: vec![(1, 0)],
+        },
+        // v68 (`TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION`): an element-wise
+        // negation, a row sum and a transpose.
+        Inst::TensorMap {
+            ty: Ty::Tensor(Box::new(Ty::I32), 1),
+            args: vec![v(0)],
+            body: vec![crate::TensorMapNode::UnOp {
+                op: UnOp::Neg,
+                ty: Ty::I32,
+                operand: 0,
+            }],
+        },
+        Inst::TensorReduce {
+            ty: Ty::Tensor(Box::new(Ty::I32), 1),
+            src: v(0),
+            op: crate::TensorReduceOp::Add,
+            axes: vec![1],
+            order: crate::TensorReduceOrder::RowMajor,
+        },
+        Inst::TensorView {
+            ty: Ty::Tensor(Box::new(Ty::I32), 2),
+            src: v(0),
+            params: vec![],
+            exprs: vec![
+                crate::TensorIndexExpr::SrcExtent(1),
+                crate::TensorIndexExpr::SrcExtent(0),
+                crate::TensorIndexExpr::Coord(1),
+                crate::TensorIndexExpr::Coord(0),
+            ],
+            shape: vec![0, 1],
+            index: vec![2, 3],
+            fill: None,
+        },
+        // v69 (`TENSOR_GATHER_SCATTER_FORMAT_VERSION`): a two-axis gather and
+        // a one-axis scatter.
+        Inst::TensorGather {
+            ty: Ty::Tensor(Box::new(Ty::I32), 1),
+            data: v(0),
+            coords: vec![v(1), v(2)],
+        },
+        Inst::TensorScatter {
+            ty: Ty::Tensor(Box::new(Ty::I32), 1),
+            init: v(0),
+            src: v(1),
+            coords: vec![v(2)],
         },
         // v51, the INST wire batch: the register aggregate seed (WS3.5) and
         // the bulk-memory pair (WS3.20).
@@ -1627,6 +1693,93 @@ fn spec_rows() -> Vec<TagRow> {
             ),
         ],
     ));
+    // v68: a tensor map node and a tensor view node each have their own
+    // writer (the tag is the first byte); the reduction operator is written
+    // inline in `Inst::TensorReduce`, so every sample is the same reduction
+    // differing only in the operator.
+    rows.extend(direct(
+        "TensorMapNode",
+        vec![
+            crate::TensorMapNode::<crate::level::NoExt>::BinOp {
+                op: BinOp::Add,
+                ty: Ty::I32,
+                lhs: 0,
+                rhs: 0,
+            },
+            crate::TensorMapNode::UnOp {
+                op: UnOp::Neg,
+                ty: Ty::I32,
+                operand: 0,
+            },
+            crate::TensorMapNode::ICmp {
+                op: ICmpOp::Eq,
+                ty: Ty::I32,
+                lhs: 0,
+                rhs: 0,
+            },
+            crate::TensorMapNode::Select {
+                ty: Ty::I32,
+                cond: 0,
+                then_lane: 0,
+                else_lane: 0,
+            },
+            crate::TensorMapNode::Cast {
+                op: CastOp::SExt,
+                src_ty: Ty::I8,
+                dst_ty: Ty::I32,
+                operand: 0,
+            },
+        ],
+        &|buf, pool, node| write_tensor_map_node(buf, pool, node),
+    ));
+    {
+        use crate::TensorIndexExpr as E;
+        rows.extend(direct(
+            "TensorIndexExpr",
+            vec![
+                E::Lit(0),
+                E::Param(0),
+                E::SrcExtent(0),
+                E::Coord(0),
+                E::Add(0, 0),
+                E::Sub(0, 0),
+                E::Mul(0, 0),
+                E::Div(0, 0),
+                E::Rem(0, 0),
+                E::Min(0, 0),
+                E::Max(0, 0),
+            ],
+            &|buf, _, expr| write_tensor_index_expr(buf, expr),
+        ));
+    }
+    let reduction = |op: crate::TensorReduceOp| {
+        encode(
+            &Inst::TensorReduce {
+                ty: Ty::Tensor(Box::new(Ty::I32), 0),
+                src: v(0),
+                op,
+                axes: vec![0],
+                order: crate::TensorReduceOrder::RowMajor,
+            },
+            &|buf, pool, inst| write_inst(buf, pool, None, inst),
+        )
+    };
+    rows.extend(differential(
+        "TensorReduceOp",
+        crate::TensorReduceOp::ALL
+            .iter()
+            .map(|&op| (format!("{op:?}"), reduction(op)))
+            .collect(),
+    ));
+    // `TensorReduceOrder` has one variant, written as the reduction's LAST
+    // byte (a one-sample space has no differential).
+    rows.push(TagRow {
+        space: "TensorReduceOrder",
+        variant: "RowMajor".to_owned(),
+        tag: *reduction(crate::TensorReduceOp::Add)
+            .last()
+            .expect("a reduction encodes to bytes"),
+    });
     // `TemporalForm` (v46) is written inline in the temporal block, same shape.
     let temporal_block = |form: crate::spec::TemporalForm| {
         let block = [crate::spec::SpecTemporal {
@@ -2361,14 +2514,23 @@ fn codec_tag_census() -> Vec<TagRow> {
 /// `pub enum NAMEG<X> {` with `NAME` its level-R alias. Its `Ext` variant is
 /// uninhabited at level R, so the census samples it through the TEMPLATE
 /// writer (`X = TemplateRef`), and it stays on the list like every variant.
+/// A carrier generic over the level with no level-R alias of its own (the
+/// tensor map's `pub enum TensorMapNode<X> {`, v68, which only `InstG`
+/// names) is read under its own name.
 fn rust_enum_variants(src: &str, enum_name: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     let plain = format!("pub enum {enum_name} {{");
     let generic = format!("pub enum {enum_name}G<X> {{");
-    let (start, needle) = match (src.find(&plain), src.find(&generic)) {
-        (Some(start), _) => (start, plain),
-        (None, Some(start)) => (start, generic),
-        (None, None) => return out,
+    let parameterised = format!("pub enum {enum_name}<X> {{");
+    let (start, needle) = match (
+        src.find(&plain),
+        src.find(&generic),
+        src.find(&parameterised),
+    ) {
+        (Some(start), _, _) => (start, plain),
+        (None, Some(start), _) => (start, generic),
+        (None, None, Some(start)) => (start, parameterised),
+        (None, None, None) => return out,
     };
     let level_generic = needle.ends_with("G<X> {");
     let mut depth: i32 = 0;

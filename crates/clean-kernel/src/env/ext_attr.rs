@@ -26,7 +26,7 @@ use super::persistent_ext::{
 use super::types::{EnvExtensionEntry, EnvExtensionEntryData};
 
 /// The canonical name for the attribute extension.
-const ATTR_EXT_NAME: &str = "attrExtension";
+pub(crate) const ATTR_EXT_NAME: &str = "attrExtension";
 
 /// Lazily-initialized extension index for attributes.
 static ATTR_EXT_IDX: OnceLock<ExtensionIdx> = OnceLock::new();
@@ -110,7 +110,7 @@ pub struct AttrRegistration {
 /// Aggregated attribute state with forward and inverted indices.
 ///
 /// Built by folding `AttrExtEntry` items from imported modules.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AttrExtState {
     attrs_by_decl: HashMap<Name, Vec<AttrRegistration>>,
     decls_by_attr: HashMap<Name, Vec<Name>>,
@@ -162,9 +162,16 @@ impl PersistentExtState for AttrExtState {
             .push(entry.decl_name.clone());
     }
 
+    /// In declaration-name order, each declaration's registrations in the
+    /// order they were made: the export of a state is a function of the
+    /// state, not of its hash map's layout (two equal states built in
+    /// different orders exported differently, which a local fact's replay
+    /// check and `EnvEffect` read as a change).
     fn export_entries(&self) -> Vec<EnvExtensionEntry> {
-        self.attrs_by_decl
-            .iter()
+        let mut by_decl: Vec<_> = self.attrs_by_decl.iter().collect();
+        by_decl.sort_by(|a, b| a.0.cmp(b.0));
+        by_decl
+            .into_iter()
             .flat_map(|(decl_name, registrations)| {
                 registrations.iter().map(move |registration| {
                     AttrExtEntry {
@@ -177,6 +184,172 @@ impl PersistentExtState for AttrExtState {
             })
             .collect()
     }
+}
+
+/// One appended registration as a local fact delta carries it:
+/// `(declaration, attribute, priority)`.
+pub(crate) type CarriedTag = (Name, Name, u32);
+
+/// The typed state, an empty one when the extension holds nothing, or `Err`
+/// while imported entries are still unfolded (the typed state would then
+/// not say what the environment holds).
+fn folded<'a>(
+    env: &'a super::Environment,
+    empty: &'a AttrExtState,
+) -> Result<&'a AttrExtState, &'static str> {
+    match env.get_ext_state::<AttrExtState>(attr_ext_idx()) {
+        Some(state) => Ok(state),
+        None if env.has_unfolded_extension_entries(ATTR_EXT_NAME) => {
+            Err("the attribute extension's imported entries are not folded")
+        }
+        None => Ok(empty),
+    }
+}
+
+/// Whether the two environments hold the same attribute registrations: per
+/// declaration and per attribute, in registration order.
+pub(crate) fn same_registrations(a: &super::Environment, b: &super::Environment) -> bool {
+    let empty = AttrExtState::default();
+    matches!((folded(a, &empty), folded(b, &empty)), (Ok(a), Ok(b)) if a == b)
+}
+
+/// The registrations `after` appended since `before`, in an order that
+/// rebuilds `after`'s state exactly, with each touched declaration's
+/// registrations before. `Err` when the change is anything but appended
+/// registrations: `before` plus the returned tags must equal `after` in both
+/// indexes (per declaration and per attribute, order included).
+#[allow(clippy::type_complexity)]
+pub(crate) fn tags_since(
+    before: &super::Environment,
+    after: &super::Environment,
+) -> Result<(Vec<CarriedTag>, Vec<(Name, Vec<(Name, u32)>)>), &'static str> {
+    let empty = AttrExtState::default();
+    let (was, now) = (folded(before, &empty)?, folded(after, &empty)?);
+    if was == now {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    // Per declaration, the appended suffix; the declarations in name order.
+    let mut touched: Vec<(&Name, &[AttrRegistration])> = Vec::new();
+    for (decl, registrations) in &now.attrs_by_decl {
+        let had = was.get_attrs_for_decl(decl);
+        if registrations.len() < had.len() || registrations[..had.len()] != *had {
+            return Err("an attribute registration was changed or removed");
+        }
+        if registrations.len() > had.len() {
+            touched.push((decl, &registrations[had.len()..]));
+        }
+    }
+    touched.sort_by(|a, b| a.0.cmp(b.0));
+    // Merge the suffixes into one order that also gives each attribute its
+    // declarations in `after`'s order: repeatedly take a declaration whose
+    // next registration is the next one its attribute's index expects.
+    let mut expected: HashMap<&Name, &[Name]> = HashMap::new();
+    for (attr, decls) in &now.decls_by_attr {
+        let had = was.get_decls_with_attr(attr);
+        if decls.len() < had.len() || decls[..had.len()] != *had {
+            return Err("an attribute registration was changed or removed");
+        }
+        expected.insert(attr, &decls[had.len()..]);
+    }
+    let mut cursor = vec![0usize; touched.len()];
+    let mut tags = Vec::new();
+    loop {
+        let next = touched.iter().enumerate().find(|(index, (decl, suffix))| {
+            suffix.get(cursor[*index]).is_some_and(|registration| {
+                expected
+                    .get(&registration.attr_name)
+                    .and_then(|decls| decls.first())
+                    == Some(*decl)
+            })
+        });
+        let Some((index, (decl, suffix))) = next else {
+            break;
+        };
+        let registration = &suffix[cursor[index]];
+        cursor[index] += 1;
+        if let Some(decls) = expected.get_mut(&registration.attr_name) {
+            *decls = &decls[1..];
+        }
+        tags.push((
+            (*decl).clone(),
+            registration.attr_name.clone(),
+            registration.priority,
+        ));
+    }
+    // The check that matters: replaying the tags rebuilds `after` exactly.
+    let mut rebuilt = was.clone();
+    for (decl_name, attr_name, priority) in &tags {
+        rebuilt.add_entry(&AttrExtEntry {
+            decl_name: decl_name.clone(),
+            attr_name: attr_name.clone(),
+            priority: *priority,
+        });
+    }
+    if rebuilt != *now {
+        return Err("the attribute registrations changed by more than appended tags");
+    }
+    let bases = touched
+        .iter()
+        .map(|(decl, _)| {
+            let had = was.get_attrs_for_decl(decl);
+            let had = had
+                .iter()
+                .map(|r| (r.attr_name.clone(), r.priority))
+                .collect();
+            ((*decl).clone(), had)
+        })
+        .collect();
+    Ok((tags, bases))
+}
+
+/// Whether each declaration the carried tags touch holds here exactly the
+/// registrations it held before the producing elaboration.
+pub(crate) fn tags_fit(
+    env: &super::Environment,
+    bases: &[(Name, Vec<(Name, u32)>)],
+) -> Result<(), String> {
+    if bases.is_empty() {
+        return Ok(());
+    }
+    let empty = AttrExtState::default();
+    let state = folded(env, &empty).map_err(str::to_string)?;
+    for (decl, base) in bases {
+        let here = state.get_attrs_for_decl(decl);
+        let same = here.len() == base.len()
+            && here
+                .iter()
+                .zip(base)
+                .all(|(registration, (attr, priority))| {
+                    registration.attr_name == *attr && registration.priority == *priority
+                });
+        if !same {
+            return Err(format!("the attributes of `{decl}` are different here"));
+        }
+    }
+    Ok(())
+}
+
+/// Append carried tags (after [`tags_fit`]).
+pub(crate) fn apply_tags(env: &mut super::Environment, tags: &[CarriedTag]) {
+    for (decl_name, attr_name, priority) in tags {
+        env.add_ext_entry::<AttrExtState>(
+            attr_ext_idx(),
+            &AttrExtEntry {
+                decl_name: decl_name.clone(),
+                attr_name: attr_name.clone(),
+                priority: *priority,
+            },
+        );
+    }
+}
+
+/// A declaration's registrations, for the elaboration record digest.
+pub(crate) fn registrations_of<'a>(
+    env: &'a super::Environment,
+    decl: &Name,
+) -> &'a [AttrRegistration] {
+    env.get_ext_state::<AttrExtState>(attr_ext_idx())
+        .map_or(&[], |state| state.get_attrs_for_decl(decl))
 }
 
 #[cfg(test)]

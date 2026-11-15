@@ -1793,8 +1793,14 @@ impl NativeVerificationBundle {
     }
 
     fn validate_compiler_facts(&self, errors: &mut Vec<NativeVerificationBundleError>) {
-        let known_obligations: BTreeSet<ProofId> =
-            self.module.proof_obligations.iter().map(|o| o.id).collect();
+        let mut known_obligations = BTreeSet::new();
+        for obligation in &self.module.proof_obligations {
+            if !known_obligations.insert(obligation.id) {
+                errors.push(NativeVerificationBundleError::DuplicateModuleObligationId(
+                    obligation.id,
+                ));
+            }
+        }
         let known_functions: BTreeSet<FuncId> = self
             .module
             .functions
@@ -3344,6 +3350,9 @@ pub enum NativeVerificationBundleError {
         request: NativeRequestId,
         field: &'static str,
     },
+    /// A module declaration id must name exactly one contract, including when
+    /// the duplicate rows are byte-identical or no request names that id.
+    DuplicateModuleObligationId(ProofId),
     DuplicateCompilerFactId(NativeCompilerFactId),
     DuplicateMonomorphizationId(NativeMonomorphizationId),
     InvalidCompilerFact {
@@ -4039,6 +4048,10 @@ impl core::fmt::Display for NativeVerificationBundleError {
             NativeVerificationBundleError::InvalidTrustWpOptions { request, field } => write!(
                 f,
                 "native verification request {request} has invalid TrustWp option {field}"
+            ),
+            NativeVerificationBundleError::DuplicateModuleObligationId(id) => write!(
+                f,
+                "native verification module repeats proof obligation id {id}"
             ),
             NativeVerificationBundleError::DuplicateCompilerFactId(id) => {
                 write!(f, "native verification compiler fact id {id} is duplicated")

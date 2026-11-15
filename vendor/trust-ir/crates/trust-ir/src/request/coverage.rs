@@ -508,6 +508,7 @@ pub(crate) fn erase_module_write_back_state(module: &mut Module) {
         completeness: _,
         drop_glue: _,
         closure_layouts: _,
+        blobs: _,
     } = module;
     // ERASED: the certificate table and the diagnostics sidecar.
     proof_certificates.clear();

@@ -57,6 +57,8 @@ fn all_fat_kinds_set_representations_and_extreme_ids_lanes_lengths_are_exact() {
     text(&[
         Ty::Array(TyId::new(u32::MAX), u64::MAX),
         Ty::Vector(Box::new(Ty::Error), u32::MAX),
+        Ty::Tensor(Box::new(Ty::I32), 2),
+        Ty::Tensor(Box::new(Ty::Error), u32::MAX),
         Ty::Refine(TyId::new(u32::MAX), PredId::new(u32::MAX)),
     ]);
 }

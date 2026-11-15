@@ -17,14 +17,14 @@
 #      it must be a plain regular executable
 #      file -- targo refuses to run as a symlink, so one is refused HERE, by
 #      name, before anything runs.
-#   2. When ATPKG_BIN is set, ask its managed `trustc --print sysroot` and
+#   2. When ATPKG_BIN is set, ask its managed `trustc --print=sysroot` and
 #      use that root's canonical bin/targo. A failed managed lookup refuses;
 #      it does not fall through to another compiler installation.
-#   3. Otherwise the canonical Trust targo, `$(rustc +trust --print sysroot)/bin/targo`
+#   3. Otherwise the canonical Trust targo, `$(rustc +trust --print=sysroot)/bin/targo`
 #      (CLAUDE.md, "Verifying changes"), with the sysroot's own directory
 #      canonicalised and the same plain-regular-file requirement. `+trust` is
 #      rustup's proxy syntax, so the sysroot is asked of rustup itself
-#      (`rustup run trust rustc --print sysroot`; rustup from PATH, else
+#      (`rustup run trust rustc --print=sysroot`; rustup from PATH, else
 #      `$CARGO_HOME/bin`), and `rustc +trust` is the fallback only when no
 #      rustup exists. A plain Trust `rustc` first on PATH -- the pre-push
 #      hook puts the Trust sysroot's own `bin/` there (7a4cc03ea) -- reads
@@ -45,7 +45,7 @@
 # set under the same gate name.
 #
 # History: until 2026-09-28 this resolved the frontend through
-# `rustc --print sysroot`, tried a stock `cargo <sub>` passthrough first, and
+# `rustc --print=sysroot`, tried a stock `cargo <sub>` passthrough first, and
 # retried a Trust ancestor-identity abort up to six times -- a workaround for
 # stage 10f221fbe, whose fix (trust 2929e33df4) is an ancestor of the
 # installed 321aaeda7. That text: `git show 7330fa6ce:scripts/rust_frontend.sh`.
@@ -100,7 +100,7 @@ resolve_targo() {
     return 0
   fi
   if [ -n "${ATPKG_BIN:-}" ]; then
-    if ! sysroot="$("$ATPKG_BIN/trustc" --print sysroot 2>&1)" || [ -z "$sysroot" ]; then
+    if ! sysroot="$("$ATPKG_BIN/trustc" --print=sysroot 2>&1)" || [ -z "$sysroot" ]; then
       echo "managed Trust sysroot lookup failed: ${sysroot:-no output}" >&2
       return 1
     fi
@@ -108,12 +108,12 @@ resolve_targo() {
     rustup="$(command -v rustup 2>/dev/null)" \
       || rustup="${CARGO_HOME:-$HOME/.cargo}/bin/rustup"
     if [ -x "$rustup" ]; then
-      if ! sysroot="$("$rustup" run trust rustc --print sysroot 2>&1)" || [ -z "$sysroot" ]; then
-        echo "\`$rustup run trust rustc --print sysroot\` failed: ${sysroot:-no output}" >&2
+      if ! sysroot="$("$rustup" run trust rustc --print=sysroot 2>&1)" || [ -z "$sysroot" ]; then
+        echo "\`$rustup run trust rustc --print=sysroot\` failed: ${sysroot:-no output}" >&2
         return 1
       fi
-    elif ! sysroot="$(rustc +trust --print sysroot 2>&1)" || [ -z "$sysroot" ]; then
-      echo "no rustup, and \`rustc +trust --print sysroot\` failed: ${sysroot:-no output}" >&2
+    elif ! sysroot="$(rustc +trust --print=sysroot 2>&1)" || [ -z "$sysroot" ]; then
+      echo "no rustup, and \`rustc +trust --print=sysroot\` failed: ${sysroot:-no output}" >&2
       return 1
     fi
   fi
@@ -185,15 +185,15 @@ FAKE
   sed 's/echo "targo /echo "canonical-targo /' "$tmp/bin/targo" > "$tmp/sysroot/bin/targo"
   printf '#!/bin/bash\necho "DECOY PATH TARGO RAN $*" >> "$FAKE_LOG"\nexit 0\n' > "$tmp/decoy/decoy-targo"
   printf '#!/bin/bash\necho "STOCK CARGO RAN $*" >> "$FAKE_LOG"\nexit 0\n' > "$tmp/stockonly/cargo"
-  # A rustup-shaped `rustc`: `+trust --print sysroot` names the fake sysroot.
-  printf '#!/bin/bash\n[ "$*" = "+trust --print sysroot" ] || exit 2\necho "%s"\n' \
+  # A rustup-shaped `rustc`: `+trust --print=sysroot` names the fake sysroot.
+  printf '#!/bin/bash\n[ "$*" = "+trust --print=sysroot" ] || exit 2\necho "%s"\n' \
     "$tmp/sysroot" > "$tmp/rustc/rustc"
-  printf '#!/bin/bash\n[ "$*" = "+trust --print sysroot" ] || exit 2\necho "%s"\n' \
+  printf '#!/bin/bash\n[ "$*" = "+trust --print=sysroot" ] || exit 2\necho "%s"\n' \
     "$tmp/badsys/sysroot" > "$tmp/badrustc/rustc"
-  # A rustup: `run trust rustc --print sysroot` names the fake sysroot.
-  printf '#!/bin/bash\n[ "$*" = "run trust rustc --print sysroot" ] || exit 2\necho "%s"\n' \
+  # A rustup: `run trust rustc --print=sysroot` names the fake sysroot.
+  printf '#!/bin/bash\n[ "$*" = "run trust rustc --print=sysroot" ] || exit 2\necho "%s"\n' \
     "$tmp/sysroot" > "$tmp/rustup/rustup"
-  printf '#!/bin/bash\n[ "$*" = "run trust rustc --print sysroot" ] || exit 2\necho "%s"\n' \
+  printf '#!/bin/bash\n[ "$*" = "run trust rustc --print=sysroot" ] || exit 2\necho "%s"\n' \
     "$tmp/badsys/sysroot" > "$tmp/badrustup/rustup"
   # A Trust sysroot's own rustc: no rustup proxy, so `+trust` is an input file.
   printf '#!/bin/bash\necho "error: couldn'"'"'t read \`$1\`: No such file or directory" >&2\nexit 1\n' \
@@ -240,7 +240,7 @@ FAKE
   mkdir -p "$tmp/managed" "$tmp/managed root/bin" "$tmp/managedfail" \
     "$tmp/managedempty" "$tmp/managedlink" "$tmp/managedmissing"
   sed 's/echo "targo /echo "managed-targo /' "$tmp/bin/targo" > "$tmp/managed root/bin/targo"
-  printf '#!/bin/bash\n[ "$*" = "--print sysroot" ] || exit 2\necho "%s"\n' \
+  printf '#!/bin/bash\n[ "$*" = "--print=sysroot" ] || exit 2\necho "%s"\n' \
     "$tmp/managed root" > "$tmp/managed/trustc"
   printf '#!/bin/bash\necho "managed lookup refused" >&2\nexit 51\n' > "$tmp/managedfail/trustc"
   printf '#!/bin/bash\nexit 0\n' > "$tmp/managedempty/trustc"

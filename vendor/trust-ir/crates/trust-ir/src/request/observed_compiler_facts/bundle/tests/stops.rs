@@ -5,6 +5,12 @@ use super::*;
 
 fn string_errors() -> NativeVerificationBundle {
     let mut bundle = fixture();
+    // Exercise the real duplicate-id diagnostic and its owning cleanup at
+    // every interruption point alongside the existing owned-string errors.
+    bundle
+        .module
+        .proof_obligations
+        .push(bundle.module.proof_obligations[0].clone());
     bundle.compiler_facts.obligation_sources[1].public_obligation_id =
         bundle.compiler_facts.obligation_sources[0]
             .public_obligation_id

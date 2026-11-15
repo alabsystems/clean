@@ -131,10 +131,11 @@
           "path": [
             "baseline_type_differing"
           ],
-          "value": 404
+          "value": 360
         },
         "command": "python3 scripts/check_prelude_collision_ratchet.py",
-        "expect_contains": "FAIL"
+        "expect_contains": "FAIL",
+        "why": "MEASURED 2026-11-14: the arm sets the baseline one BELOW the live count, which is what one new type-differing collision looks like to the gate (it fails when live > baseline). Recorded at 404 against a live 405; the census fell to 361 (40c7839a6e) and the arm, still at 404, stood ABOVE live, so the gate stayed green under it and the demonstration no longer replayed. Re-measured at live 361 -> 360."
       }
     ],
     "check_prelude_instance_priority_ratchet": [
@@ -146,11 +147,11 @@
           "path": [
             "baseline_colliding"
           ],
-          "value": 61
+          "value": 99
         },
         "command": "python3 scripts/check_prelude_instance_priority_ratchet.py",
         "expect_contains": "SHRANK",
-        "why": "MEASURED 2026-08-24: live colliding=60 / prelude_instances=152 against baselines 56 / 148, so the arm must clear 60 to reach the shrink comparison. The numerator arm (mismatched) is unreachable from the ledger because live mismatched is 0 and the check is `>`."
+        "why": "MEASURED 2026-11-14: live colliding=98 / prelude_instances=226 against baselines 98 / 226, so the arm sets baseline_colliding to 99 to reach the shrink comparison; at its recorded 61 it stood below live and the gate stayed green under it (the census moved, 40c7839a6e). MEASURED 2026-08-24: live colliding=60 / prelude_instances=152 against baselines 56 / 148, so the arm then had to clear 60. The numerator arm (mismatched) is unreachable from the ledger because live mismatched is 0 and the check is `>`."
       }
     ],
     "check_silent_tactic_ratchet": [
@@ -3201,17 +3202,17 @@
         "why": "MEASURED 2026-09-25 on the P0_EXEC worktree: the unmutated compare-mode run was GREEN (`test result: ok. 1 passed ... finished in 99.95s`), the planted line made it RED with rc=101 and `native-exec-battery: p01_hello is WRONG_OUTPUT_EXIT0`, and restoring the file restored GREEN. The claim assertion (no program outside BYTE_EQUAL / REFUSED_BUILD / REFUSED_RUNTIME) fires BEFORE the pin comparison, so this arm proves the byte comparison against the pinned-Lean bytes, not merely that a pin moved. `sandbox: clone` is load-bearing, for the reason `_needs_build` records: the test reads the fixture through CARGO_MANIFEST_DIR/../../tests/fixtures, and in the build layout crates/clean is a symlink, so the join would land in the SHARED tree's unmutated fixture and report a vacuous green."
       },
       {
-        "arm": "RE-ENABLE A NON-LEAN MEANING: Int.div / Int.mod are classified Genuine, so the prelude's T-rounding definitions are compiled for `/` and `%` on Int, which Lean means as E-rounding",
+        "arm": "RE-ENABLE A NON-LEAN MEANING: the checked Int.ediv that `/` on Int compiles through rounds a negative dividend toward zero (T-rounding), where Lean means E-rounding",
         "mutate": {
-          "file": "crates/clean-native/src/native_opaque_audit.rs",
+          "file": "crates/clean-kernel/src/env/data_types_int_euclidean.rs",
           "op": "regex-sub",
-          "pattern": "(name: \"Int\\.(?:div|mod)\",\\n        runtime: OpaqueRuntime::)LeanDivergent",
-          "replacement": "\\g<1>Genuine",
-          "count": 2
+          "pattern": "let quotient = Expr::apps\\(constant\\(\"Nat\\.div\"\\), \\[m, succ\\(k\\)\\]\\);\\n    let negative = Expr::app\\(constant\\(\"Int\\.negSucc\"\\), quotient\\);",
+          "replacement": "let quotient = Expr::apps(constant(\"Nat.div\"), [succ(m), succ(k)]);\n    let negative = Expr::app(constant(\"Int.neg\"), of_nat(quotient));",
+          "count": 1
         },
         "command": "env -u CLEAN_NATIVE_EXEC_UPDATE scripts/cargo_test_nonvacuous.sh native-exec-battery -- targo --unverified test --locked -p clean --test native_exec_battery",
         "expect_contains": "q10_scalars is WRONG_OUTPUT_EXIT0",
-        "why": "The demonstration the P0_EXEC package spec asks for. RE-TARGETED 2026-09-30 after a8d0b5b51 made the prelude DEFINE Int.div/Int.mod (Lean 4.8.0's T-rounding) instead of declaring `fun _ _ => Int.ofNat 0` opaques and moved their audit entries to PRELUDE_LEAN_DIVERGENT_AUDIT as `OpaqueRuntime::LeanDivergent`. The former pattern (`...::Placeholder`) no longer matched anything, so the recorded arm could not replay. Flipping the two entries to Genuine compiles T-rounding for `/` and `%` on Int, where Lean means E-rounding, and the battery must go RED naming a program that prints a non-Lean answer at exit 0: REPLAYED 2026-09-30 with `scripts/check_gate_registry.py --demonstrate native-exec-battery` (both arms ok, 14 min): the mutated battery went RED, rc=101, with `q10_scalars is WRONG_OUTPUT_EXIT0`."
+        "why": "RE-TARGETED 2026-11-14: the replay that R7c's burn-down ran (`--repin native-exec-battery`) found the 2026-09-30 arm GREEN under its own mutation. Since c65769ce5c (2026-10-27) `/` and `%` on Int are `instHDivInt`/`instHModInt` over the checked Euclidean definitions `Int.ediv`/`Int.emod` (crates/clean-kernel/src/env/algebra_hetero.rs, data_types_int_euclidean.rs), and the T-rounding `Int.div`/`Int.mod` heads, still LeanDivergent in PRELUDE_LEAN_DIVERGENT_AUDIT, are reached by no battery program, so flipping them to Genuine changed no program's bytes. The arm now plants the non-Lean meaning where `/` reaches it: the negative-dividend, positive-divisor branch of Int.ediv (`-[m+1] / succ k = -[m / succ k +1]`, Lean's E-rounding) becomes `-((m+1) / succ k)`, which is T-rounding. The mutated body is still well typed and passes add_decl, nothing native folds Int.ediv (no runtime helper, no native reducer: the file says so and a grep of crates/ finds none), so the battery compiles the planted definition: q10_scalars' `(-7 : Int) / 2` prints -3 at exit 0 where pinned Lean prints -4 (p10_scalars divides the same operands; the claim assertion lists every WRONG_OUTPUT_EXIT0 row, so the pinned q10 line is in its message either way). `%` (Int.emod) is untouched, so `(-7 : Int) % 3` still prints 2. Previous target, kept for the record: crates/clean-native/src/native_opaque_audit.rs `Int.div`/`Int.mod` LeanDivergent -> Genuine, replayed 2026-09-30 RED with `q10_scalars is WRONG_OUTPUT_EXIT0` before c65769ce5c moved `/` off them."
       }
     ],
     "lean_suite_conformance": [
@@ -5055,6 +5056,164 @@
         "command": "bash scripts/package_vendor.sh --self-test",
         "expect_contains": "VENDOR_AUTH_SELFTEST arm FAILED: changed archive authority",
         "why": "If cached .crate bytes are no longer checked against the trusted lock SHA, a forged matching tree/map/cache must make this actual control fail. The generator dependency and routing scripts are derived pinned inputs."
+      }
+    ],
+    "clean-auto::ay_coupling_boundary_ratchet": [
+      {
+        "arm": "a production proof_reconstruct file matches a raw ay_core::ProofStep variant outside the trace adapter",
+        "mutate": {
+          "file": "crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/resolution.rs",
+          "op": "append",
+          "text": "\n#[allow(dead_code)]\nfn __demo_raw_ay_payload_mention(step: &ay_core::ProofStep) -> bool {\n    matches!(step, ay_core::ProofStep::Assume(_))\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-auto --lib test_ay_coupling_boundary_ratchet",
+        "expect_contains": "raw ay mentions (baseline allows",
+        "why": "Designed 2026-11-14 for R7c's burn-down: data/replay_record_debt.json lists this row as a soundness pin with no replay record. The row claims that raw ay_core proof-payload types stay inside the trace adapter (trace.rs, trace_convert.rs, proof_backend.rs), with a baseline of literal 0 in every other production file. BASELINE is empty, so every file defaults to 0 through unwrap_or(0). The plant is that regression in real code: resolution.rs, a production file the ratchet scans, takes an `&ay_core::ProofStep` and matches its `Assume` variant. That is the raw-matcher coupling #2451 moved out. The plant compiles on its own. resolution.rs already names `ay_core`. ay-core at the locked rev 91d6b45 re-exports `ProofStep`, which has no generics and has an `Assume(TermId)` variant. `matches!` supplies the wildcard arm that its #[non_exhaustive] needs. Measured statically with a Python port of clean-auto's blank_noncode; the port reproduces the in-tree selftest's 0 and 3. Today all 35 scanned production files count 0 lexed, and resolution.rs counts 0 lexed and 0 raw. With the plant, resolution.rs counts 2, over its baseline of 0. The test reads the directory at run time through CARGO_MANIFEST_DIR of clean-auto. This arm mutates that crate, so the build layout clones it and the read sees the plant; no clone sandbox is needed. The replay will measure two things: the unmutated test passes, and the mutated test panics with `resolution.rs: 2 raw ay mentions (baseline allows 0)`. The needle is the literal fragment of the format string at tests_boundary.rs:152, not an interpolated part."
+      },
+      {
+        "arm": "CONTROL: every raw ay type named only in comments and a string literal in the same production file does NOT count (the lexed property)",
+        "mutate": {
+          "file": "crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/resolution.rs",
+          "op": "append",
+          "text": "\n// a comment naming ProofStep, TermData, AletheRule, TheoryLemmaKind, FarkasAnnotation, Constant:: and Symbol:: must not count\n/* nor a block comment naming ProofStep or Symbol:: */\n#[allow(dead_code)]\nfn __demo_raw_ay_prose() -> &'static str {\n    \"ProofStep, TermData and Constant:: are adapter-only\" // trailing: nor FarkasAnnotation\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-auto --lib test_ay_coupling_boundary_ratchet",
+        "expect": "green",
+        "expect_contains": "test result: ok. 1 passed",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json). The refusal arm alone also passes the scanner used before 2026-08-25. That scanner counted raw text on every line that did not start with `//`, so against a literal-0 baseline it punished the prose explaining why a file does not reach for a raw ay type. This arm pins the LEXED property: the registry's source_scan kind is lexed, implemented by blank_noncode in crates/clean-auto/src/test_support/source_scan.rs. The same file gets all seven patterns in a line comment, a block comment, a string literal and a trailing comment after real code. It also gets a `&'static` lifetime, which the lexer must not read as a char literal. Measured statically in resolution.rs: the raw-text count goes from 0 to 13, the pre-fix scanner's count goes from 0 to 6 (2 in the block comment, 4 in the string and trailing comment) so the old scanner would go red, and the lexed count stays 0. The replay will measure that the mutated run exits 0 and prints `test result: ok. 1 passed`. test_ay_coupling_boundary_ratchet is the only fn in clean-auto whose name contains the filter, so the needle fails this control if the filter ever selects no test."
+      }
+    ],
+    "clean-auto::expr_let_constructor_hygiene": [
+      {
+        "arm": "a real call to the deprecated `Expr::let_(` lands in production clean-auto code, after a string literal holding `//` on the same line",
+        "mutate": {
+          "file": "crates/clean-auto/src/bridge/trigger/normalize.rs",
+          "op": "append",
+          "text": "\n#[allow(dead_code, deprecated)]\nfn __demo_deprecated_let_constructor(ty: Expr, val: Expr, body: Expr) -> (&'static str, Expr) {\n    let origin = \"https://example.invalid/demo\"; (origin, Expr::let_(ty, val, body))\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-auto --test expr_let_constructor_hygiene test_clean_auto_source_avoids_deprecated_expr_let_constructor",
+        "expect_contains": "not the deprecated Expr::let_(...)",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json lists this row). The row claims that production clean-auto code cannot call the deprecated positional `Expr::let_(` constructor, which drops the Let name and forces non_dep=false. It also claims the scan is lexed, so a call that comes after a string literal containing `//` is still caught. That is the FALSE-GREEN hole the old `split(\"//\")` scanner had. The plant goes in src/bridge/trigger/normalize.rs. That file is always compiled (`mod trigger` and `mod normalize` have no cfg), it already rebuilds Let nodes through `Expr::let_named`, and it imports `clean_kernel::Expr`. So the plant is a real, type-correct call to the real deprecated constructor (`pub fn let_(ty, val, body) -> Self`, crates/clean-kernel/src/expr/constructors.rs:141). `#[allow(dead_code, deprecated)]` keeps the build free of warnings and does not hide the call from the scanner, which reads code and not lint attributes. Measured statically with a Python port of `blank_noncode` plus `deprecated_expr_let_lines`. The port reproduces the file's own self-test results: [] for direction 1 and [3, 7, 11] for direction 2. The unmutated scan covers 624 .rs files under src/ and tests/, with 0 raw `Expr::let_(` mentions and 0 offenders, so the assertion `offenders.is_empty()` holds today. With the plant, the lexed scan reports one offender, `src/bridge/trigger/normalize.rs:55`. The old `split(\"//\")` scanner run over the same plant reports [], so this arm fails on a scanner that has lost the FALSE-GREEN direction. Layout: clean-auto is a mutated member, so the build sandbox clones it rather than symlinking it, and the test's runtime `fs::read_to_string` under `CARGO_MANIFEST_DIR/src` reads the mutated sandbox copy (no `..` through a symlink), so no `sandbox: clone` is needed. The replay will check that the unmutated test passes, then that the mutated run exits non-zero and prints the assert message from tests/expr_let_constructor_hygiene.rs:206."
+      },
+      {
+        "arm": "CONTROL: `Expr::let_(` named only in a `// SOUNDNESS:` comment, a block comment, a string literal and a raw string does NOT count (the lexed property)",
+        "mutate": {
+          "file": "crates/clean-auto/src/bridge/trigger/normalize.rs",
+          "op": "append",
+          "text": "\n// SOUNDNESS: this path never calls Expr::let_( -- it uses Expr::let_named.\n/* nor does a block comment naming Expr::let_( call it */\n#[allow(dead_code)]\nfn __demo_expr_let_prose() -> (&'static str, &'static str) {\n    (\"a string literal naming Expr::let_( is not a call\", r#\"nor is a raw string naming Expr::let_(\"#)\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-auto --test expr_let_constructor_hygiene test_clean_auto_source_avoids_deprecated_expr_let_constructor",
+        "expect": "green",
+        "expect_contains": "test result: ok",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json). A scanner that counts mentions also passes the refusal arm. Such a scanner punishes exactly the `// SOUNDNESS:` prose that explains why a path uses `let_named`, and the cheapest green is then to delete the explanation. That is the false-RED direction lane LOOSE fixed on 2026-08-25. This arm plants four mentions in the same production file, none of them a call: a `// SOUNDNESS:` line comment, a block comment, a string literal and a hashed raw string. The appended function is self-contained and type-correct. Measured statically with the Python port of `blank_noncode` (it reproduces the file's own self-test results): the mutated file holds 4 raw `Expr::let_(` mentions and the lexed scan reports 0 offenders across 624 files. The old `split(\"//\")` scanner on the same plant flags lines 54 (the block comment) and 57 (the string literals), so this arm goes red on a scanner that has lost the lexed property. The replay will check that the mutated run still exits 0 and prints libtest's `test result: ok`."
+      }
+    ],
+    "clean-cli::cmd_replacement::row_prose_inertness": [
+      {
+        "arm": "a launch-gate decision starts reading row prose: a non-green row whose blocker sentence says something 'passes' is dropped from launch_blocking_row_ids",
+        "mutate": {
+          "file": "crates/clean-cli/src/cmd_replacement/readiness.rs",
+          "op": "regex-sub",
+          "pattern": "(let launch_blocking_row_ids = required_rows\\s+\\.iter\\(\\)\\s+\\.filter\\(\\|row\\| row\\.effective_status != ReplacementStatus::Green)\\)",
+          "replacement": "\\1 && !row.blocker.contains(\"passes\"))",
+          "count": 1
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-cli --lib row_prose_is_inert_for_every_launch_gate_decision",
+        "expect_contains": "part_16.rs:141:5",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json lists this row). The row claims that the prose moved to data/replacement_row_prose.json is inert: no launch-gate decision reads `blocker` or `removal_condition`. This arm plants that exact regression in production code. It adds a waiver keyed on prose to the filter that builds ReplacementReadinessAccounting::launch_blocking_row_ids (readiness.rs:77-81), so a non-green row whose blocker sentence contains 'passes' stops counting as launch-blocking. Measured statically: the anchored pattern matches once in readiness.rs. It has to be anchored, because the bare `.filter(|row| row.effective_status != ReplacementStatus::Green)` appears 3 times (lines 79, 154, 172). The substituted line still type-checks, since `row` auto-derefs to ReplacementRow and `blocker` is &'static str. In the real prose, 'passes' appears in the entries for strict-reconstruction, lake-workflow and launch-docs. It does not appear in the test's SCRAMBLED text, nor in MISSING_ROW_PROSE. lake-workflow is declared InProgress and launch-docs is declared Blocked, and effective_status_for (informational.rs:208-226) never turns either of them Green under any evidence state. So, whatever the reports on disk say, the baseline accounting leaves those two ids out and the scrambled accounting keeps them in. The counts asserted at part_16.rs:120-139 come from effective_status alone and stay equal. The first assertion that can fail is therefore the assert_eq! of launch_blocking_row_ids at part_16.rs:141, column 5, and the default panic hook prints that location as `part_16.rs:141:5`. The test reads its prose through CARGO_MANIFEST_DIR/../.. of clean-cli. That crate is the mutated one, so the build layout clones it, and the read reaches the sandbox's cloned (unmutated) data/. The data file's schema_version matches REPLACEMENT_ROW_PROSE_SCHEMA_VERSION, so the prose really loads. The replay will measure two things: the unmutated test passing in the sandbox, and the mutated run exiting non-zero with the panic located at that assertion."
+      },
+      {
+        "arm": "CONTROL: prose re-routed into a non-decision output field (DemotedPythonReferenceProof.exclusion_reason) leaves every launch-gate decision unchanged",
+        "mutate": {
+          "file": "crates/clean-cli/src/cmd_replacement/readiness.rs",
+          "op": "regex-sub",
+          "pattern": "exclusion_reason: row\\.blocker,",
+          "replacement": "exclusion_reason: row.removal_condition,",
+          "count": 1
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-cli --lib row_prose_is_inert_for_every_launch_gate_decision",
+        "expect": "green",
+        "expect_contains": "test result: ok. 1 passed",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json). The refusal arm alone would also be passed by a battery that goes red on any edit to readiness.rs, or on any change to what prose the scorecard emits. That would wrongly refuse the very thing the digest boundary allows: prose flowing to Serialize/writeln output. This control makes a live production change of that allowed kind. Inside from_current (readiness.rs:119-128 builds demoted_python_reference_proofs), it swaps which prose string fills the exclusion_reason field of the demoted-reference proofs, and no decision reads that field. Measured statically: the pattern matches once in readiness.rs (line 287). Both fields are &'static str on PythonToolMigrationRow (tactic_parity_types.rs:30-31), so the crate still compiles. The only other reader of exclusion_reason is a test in part_03.rs:64, and the filter does not select it. Like the refusal arm, the edit moves the cmd_replacement code digest. Whatever that does to evidence-derived statuses affects both sides of the comparison equally, because both come from replacement_rows() in one process over one tree. The needle pins `1 passed`, which rules out a vacuous zero-test green. The filter names exactly one test fn, as a grep over crates/ confirmed. The replay will measure the mutated run exiting 0 with that summary."
+      }
+    ],
+    "clean-elab::cert::external::tests_source_hygiene": [
+      {
+        "arm": "a real `.unwrap()` call after a `//`-bearing string literal lands in production external cert code, below the file's inline `#[cfg(test)]` module",
+        "mutate": {
+          "file": "crates/clean-elab/src/cert/external/rational.rs",
+          "op": "append",
+          "text": "\n#[allow(dead_code)]\nfn __demo_unwrap_after_url_literal() -> u32 {\n    let _demo_url = \"http://host.invalid\"; \"7\".parse::<u32>().unwrap()\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-elab --lib test_external_cert_source_has_no_production_unwraps",
+        "expect_contains": "production external cert code must not call unwrap()",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json lists this row). The row says production external cert code makes no `.unwrap()` calls, and its dangerous failure mode is the one the 2026-08-25 lexing fix closed: `split(\"//\")` cut the line at the `//` inside a string literal, so a call after it was never scanned. This plant is that exact shape, written as real code that compiles: a self-contained dead fn whose only call comes after `\"http://host.invalid\"` on the same line. It goes at the end of rational.rs, after the inline `#[cfg(test)] mod parse_tests` block (lines 358-443), so the scanner also has to resume production scanning once that block ends. Measured statically with a Python port of production_code_lines and contains_unwrap_call. First the port was checked against the file's four inline self-tests and reproduced their expected offender lines (16; 14; none; 3,7,11). Then: 0 offenders across the five production files (alethe, error, mod, rational, verify), so the baseline is green; exactly 1 offender with the plant in place (rational.rs:447, the planted line); 0 offenders from the old `split(\"//\")` scanner (the false-green hole); and 0 from a scanner that treats everything after a `#[cfg(test)]` mod as test code. So the arm fails if either regression comes back. clean-elab is the mutated crate, so the build layout copies it into the sandbox instead of linking it, and the test's env!(\"CARGO_MANIFEST_DIR\")/src/cert/external walk reads the mutated copy. No `sandbox: clone` is needed. The replay will measure two runs: the unmutated test passing, and the mutated test exiting non-zero with the assert message from tests_source_hygiene.rs:223."
+      },
+      {
+        "arm": "CONTROL: `.unwrap()` named only in a line comment, a nested block comment, a string literal and a raw string does NOT count (the lexed property)",
+        "mutate": {
+          "file": "crates/clean-elab/src/cert/external/rational.rs",
+          "op": "append",
+          "text": "\n// SOUNDNESS: a line comment naming .unwrap() is prose, not a call\n/* a block comment naming .unwrap() and /* a nested one naming .unwrap() */ */\n#[allow(dead_code)]\nfn __demo_unwrap_prose() {\n    let _ = (\".unwrap()\", r#\"a raw string naming .unwrap()\"#);\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-elab --lib test_external_cert_source_has_no_production_unwraps",
+        "expect": "green",
+        "expect_contains": "test result: ok. 1 passed",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json). The refusal arm alone would also pass with a scanner that counts mentions. This row's history (lane LOOSE, 2026-08-25) is the opposite failure: block comments and string literals that only name `.unwrap()` turned it red, which punished the `// SOUNDNESS:` prose CLAUDE.md asks for. This control puts the same token at the same place as the refusal plant (end of rational.rs, after the inline test module), but only in a `// SOUNDNESS:` line comment, a nested block comment, a string literal and a raw string. The only difference between the pair is code versus prose. Measured statically with the same Python port: the plant has 5 raw `.unwrap(` mentions, the lexed scanner counts 0, and the old `split(\"//\")` scanner counts 2 lines (rational.rs:446, the block comment; rational.rs:449, the string and raw string). So a lexing regression turns this control red. The pin `test result: ok. 1 passed` (a superset of `test result: ok`) also rules out a green from a filter that matched no test; the filter's fn name appears once in clean-elab (tests_source_hygiene.rs:198 and data/suite_plans/clean-elab__lib.json:942). The replay will measure the mutated run staying at exit 0, with the one targeted test passing."
+      }
+    ],
+    "clean-elab::tactic::bypass_ratchet": [
+      {
+        "arm": "a real direct `state.metas.assign(goal, proof)` bypass lands in production tactic code (abs_cases.rs)",
+        "mutate": {
+          "file": "crates/clean-elab/src/tactic/abs_cases.rs",
+          "op": "append",
+          "text": "\n#[allow(dead_code)]\nfn __demo_planted_metas_assign_bypass(\n    state: &mut ProofState,\n    goal: crate::unify::MetaId,\n    proof: Expr,\n) {\n    let _ = state.metas.assign(goal, proof);\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-elab --lib metas_assign_bypass_ratchet",
+        "expect_contains": "metas.assign bypass ratchet FAILED: found",
+        "why": "Designed 2026-11-14 for R7c's burn-down. data/replay_record_debt.json lists this row as a soundness pin with no replay record. The row claims that a NEW direct `metas.assign(` cannot land in production tactic code outside tactic/core/. Such a call is an unchecked goal-metavariable assignment that skips close_goal's kernel check. The plant is that exact shape with the crate's real types: a fn taking `&mut ProofState`, a `crate::unify::MetaId` and an `Expr` that calls `state.metas.assign(goal, proof)`. MetaState::assign and ProofState.metas are both pub(crate), and abs_cases.rs already imports ProofState and Expr. It goes in crates/clean-elab/src/tactic/abs_cases.rs, the same file the row's own 2026-08-25 ARM C used, so this arm is the replayable form of ARM C. Measured statically 2026-11-14 with a Python port of production_code_lines, run over the 369 files collect_rust_source_files keeps under src/tactic. Before the plant the count outside tactic/core/ is 0 lexed and 0 raw. METAS_ASSIGN_BYPASS_RATCHET is 0 (crates/clean-elab/src/tactic/core/ratchet.rs:23), so the test takes its zero-floor assert_eq! branch. With the plant the lexed count is 1, at abs_cases.rs:326. The filter matches exactly one test fn in clean-elab (bypass_ratchet.rs:319). The replay will measure the unmutated test green and then the mutated run red (rc 101), with the assert_eq! message from bypass_ratchet.rs:328, which contains this literal fragment and no other test in crates/ emits it."
+      },
+      {
+        "arm": "CONTROL: `metas.assign(` named only in a `// SOUNDNESS:` comment, doc/block comments and string literals does NOT count (the lexed property)",
+        "mutate": {
+          "file": "crates/clean-elab/src/tactic/abs_cases.rs",
+          "op": "append",
+          "text": "\n// SOUNDNESS: abs_cases never calls state.metas.assign( directly and never\n// reaches for .close_goal_unchecked( -- both would bypass the kernel check.\n/// Doc comment naming `metas.assign(` and `.close_goal_unchecked(` too.\n#[allow(dead_code)]\nfn __demo_bypass_prose() -> &'static str {\n    /* block comment: state.metas.assign(goal, proof) */\n    let _raw = r#\"state.metas.assign(goal, proof)\"#;\n    \"use close_goal, never metas.assign( or .close_goal_unchecked(\"\n}\n"
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-elab --lib metas_assign_bypass_ratchet",
+        "expect": "green",
+        "expect_contains": "test result: ok",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json). This is the CONTROL for the row's source_scan.kind=lexed claim and the replayable form of its 2026-08-25 ARM B. A counter that counts MENTIONS would pass the refusal arm alone. Because this ratchet is pinned at 0, such a counter would turn the `// SOUNDNESS:` prose CLAUDE.md asks for into a red that only deleting the explanation clears, which is the anti-correlation the row's note records. The plant names `metas.assign(` (and `.close_goal_unchecked(`) only in a `// SOUNDNESS:` line comment, a `///` doc comment, a `/* */` block comment, a raw string and a plain string literal. They sit inside a self-contained fn that also exercises the `'static` lifetime-versus-char-literal path. The plant goes in the same production file and runs under the same command as the refusal arm, so the two arms differ only in code versus prose. Measured statically 2026-11-14 with the same Python port of production_code_lines: the planted text holds 5 raw mentions of `metas.assign(` and 3 of `.close_goal_unchecked(`, and both lex to 0. The port was checked against this file's own fixtures: the prose fixture gives 0 and the cfg(test) fixture gives 2, as the Rust self-tests assert. The replay will measure the same test staying green under the plant, with libtest's `test result: ok` line."
+      }
+    ],
+    "gate::masquerade": [
+      {
+        "arm": "a hollow (argument-discarding) carrier lands in a production init_nn_verif* root and reaches the scanned corpus",
+        "mutate": {
+          "file": "crates/clean-kernel/src/env/nn_verify_tier_a_rat_neg_zero_zero.rs",
+          "op": "regex-sub",
+          "pattern": "self\\.register_rat_neg_zero_zero\\(\\)\\?;\\n",
+          "replacement": "self.register_rat_neg_zero_zero()?;\n        // gate::masquerade replay arm (R7c burn-down, 2026-11-14): a HOLLOW\n        // carrier reaches a production init root. `fun _ => Nat.zero` discards\n        // its argument (M2); the theorem over it has DISTINCT sides, so M4 and\n        // M1 stay silent and only M2 can object.\n        {\n            let nat = Expr::const_(Name::from_string(\"Nat\"), vec![]);\n            let zero = Expr::const_(Name::from_string(\"Nat.zero\"), vec![]);\n            let succ = Expr::const_(Name::from_string(\"Nat.succ\"), vec![]);\n            let succ_zero = Expr::app(succ, zero.clone());\n            let one = Level::succ(Level::zero());\n            let carrier = Name::from_string(\"NNVerify.DemoMasquerade.hollowCarrier\");\n            self.add_decl(Declaration::Definition {\n                name: carrier.clone(),\n                level_params: vec![],\n                type_: Expr::arrow(nat.clone(), nat.clone()),\n                value: Expr::lam(crate::expr::BinderInfo::Default, nat.clone(), zero.clone()),\n                is_reducible: true,\n            })?;\n            let applied = Expr::app(Expr::const_(carrier, vec![]), succ_zero);\n            self.add_decl(Declaration::Theorem {\n                name: Name::from_string(\"NNVerify.DemoMasquerade.hollowAtOne\"),\n                level_params: vec![],\n                type_: Expr::apps(\n                    Expr::const_(Name::from_string(\"Eq\"), vec![one.clone()]),\n                    [nat.clone(), applied, zero.clone()],\n                ),\n                value: Expr::apps(\n                    Expr::const_(Name::from_string(\"Eq.refl\"), vec![one]),\n                    [nat, zero],\n                ),\n            })?;\n        }\n",
+          "count": 1
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-kernel --lib masquerade_gate_no_new_masquerade_reaches_corpus",
+        "expect_contains": "MASQUERADE GATE FAILED",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json lists gate::masquerade as owing a replay record). The row claims that no M1/M2/M4 masquerade registered by an init_nn_verif* root can reach the corpus while the always-on gate stays green. This arm puts a HOLLOW carrier into production code. Inside init_nn_verify_tier_a_rat_neg_zero_zero (one of the 52 roots in NN_VERIFY_INITS, which full_corpus_env calls directly), right after the root's own register call, it registers a reducible `NNVerify.DemoMasquerade.hollowCarrier : Nat -> Nat := fun _ => Nat.zero` and a theorem `NNVerify.DemoMasquerade.hollowAtOne : hollowCarrier (Nat.succ Nat.zero) = Nat.zero` closed by `@Eq.refl.{1} Nat Nat.zero`. What was measured statically: re.findall finds the pattern exactly once in the file. The plant uses only items the file already imports (Declaration, Expr, Level, Name, EnvError via `?`), plus crate::expr::BinderInfo by path. It is ASCII with no backslashes, so the re replacement text is literal, and braces, parens and brackets balance after the substitution. Read from proof_quality.rs: M4 stays silent because the sides differ (equality_has_identical_sides). M1 stays silent because the heads differ (hollowCarrier against Nat.zero, alias_collapse_witness). Only M2 fires: classify_discarding_body reports 'constant body' because the lambda never references its binder. So this attacks the hollow-carrier rule ALONE, through the gate's own corpus sweep. That is evidence the in-file arm masquerade_gate_says_no_to_a_planted_hollow_carrier does not give: its compound plant trips M1, M2 and M4 at once, and it calls the detector directly rather than going through the gate's corpus. The kernel should accept the plant, since hollowCarrier (succ zero) delta-beta-reduces to Nat.zero, the same unfolding NNVerify.Rat.neg_zero_zero relies on. Then the init succeeds, FAILED_INIT_CEILING (0) and THEOREM_FLOOR (619, which one more theorem only exceeds) hold, and the subset check against the empty ALLOWLIST is what refuses it. expect_contains is the literal head of that assert (tests_masquerade_gate.rs:519). The earlier coverage asserts print 'MASQUERADE GATE COVERAGE REGRESSION' or 'SHRUNKEN corpus', and neither contains this needle, so a red for an unrelated reason (a failed init, a shrunken corpus) does not match. What the replay will measure: the unmutated run is green (the last recorded green is data/suite_state/gate__masquerade.json, 2026-09-20 at 23e4b9fe0), and the mutated run exits non-zero and prints MASQUERADE GATE FAILED, with NNVerify.DemoMasquerade.hollowAtOne in the non-allowlisted list."
+      },
+      {
+        "arm": "CONTROL: the same plant with a FAITHFUL carrier and a distinct-sides refl lemma stays green (the detector's precision)",
+        "mutate": {
+          "file": "crates/clean-kernel/src/env/nn_verify_tier_a_rat_neg_zero_zero.rs",
+          "op": "regex-sub",
+          "pattern": "self\\.register_rat_neg_zero_zero\\(\\)\\?;\\n",
+          "replacement": "self.register_rat_neg_zero_zero()?;\n        // gate::masquerade replay CONTROL (R7c burn-down, 2026-11-14): the same\n        // plant with a FAITHFUL carrier. `fun n => Nat.succ n` uses its argument,\n        // and the refl-closed theorem has DISTINCT sides: a sound\n        // definitional-equality lemma the detector must not flag.\n        {\n            let nat = Expr::const_(Name::from_string(\"Nat\"), vec![]);\n            let zero = Expr::const_(Name::from_string(\"Nat.zero\"), vec![]);\n            let succ = Expr::const_(Name::from_string(\"Nat.succ\"), vec![]);\n            let succ_zero = Expr::app(succ.clone(), zero.clone());\n            let one = Level::succ(Level::zero());\n            let carrier = Name::from_string(\"NNVerify.DemoMasquerade.faithfulCarrier\");\n            self.add_decl(Declaration::Definition {\n                name: carrier.clone(),\n                level_params: vec![],\n                type_: Expr::arrow(nat.clone(), nat.clone()),\n                value: Expr::lam(crate::expr::BinderInfo::Default, nat.clone(), Expr::app(succ, Expr::bvar(0))),\n                is_reducible: true,\n            })?;\n            let applied = Expr::app(Expr::const_(carrier, vec![]), zero);\n            self.add_decl(Declaration::Theorem {\n                name: Name::from_string(\"NNVerify.DemoMasquerade.faithfulAtZero\"),\n                level_params: vec![],\n                type_: Expr::apps(\n                    Expr::const_(Name::from_string(\"Eq\"), vec![one.clone()]),\n                    [nat.clone(), applied, succ_zero.clone()],\n                ),\n                value: Expr::apps(\n                    Expr::const_(Name::from_string(\"Eq.refl\"), vec![one]),\n                    [nat, succ_zero],\n                ),\n            })?;\n        }\n",
+          "count": 1
+        },
+        "command": "targo --unverified test --locked -j 2 -p clean-kernel --lib masquerade_gate_no_new_masquerade_reaches_corpus",
+        "expect": "green",
+        "expect_contains": "test result: ok",
+        "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json), as the control for the hollow-carrier arm. It makes the same plant at the same site and changes only what the masquerade turns on. Here the carrier is FAITHFUL: `NNVerify.DemoMasquerade.faithfulCarrier := fun n => Nat.succ n`, whose body Nat.succ (BVar 0) uses its binder. The theorem `faithfulAtZero : faithfulCarrier Nat.zero = Nat.succ Nat.zero`, closed by `@Eq.refl.{1} Nat (Nat.succ Nat.zero)`, is a sound definitional-equality lemma with distinct sides, the shape the module docs say the detector must not flag (Nat.add_zero, the C004 faithful refls). Read from proof_quality.rs: M4 needs syntactically identical sides, and these differ. M1 needs both sides headed by the same reducible Definition, and the heads are faithfulCarrier and the constructor Nat.succ. M2 needs a body that ignores its binder or is a bare BVar, and this body is an App that uses BVar 0. So check_proof_nontrivial returns an empty set, and the corpus grows by one theorem, which THEOREM_FLOOR (>= 619) allows. Without this arm the refusal arm would also pass on a gate that reddens on ANY new definition or theorem in an init root, or on the edit itself. With it, the replay shows that the red is the hollow carrier being refused, which is the claim the empty ALLOWLIST rests on ('the gate passes because the detector is PRECISE'). What was measured statically: re.findall finds the pattern exactly once, the replacement is ASCII with no backslashes, and braces, parens and brackets balance after the substitution. What the replay will measure: the unmutated run is green, and the mutated run exits 0 and prints libtest's 'test result: ok'."
       }
     ]
   },

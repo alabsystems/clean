@@ -138,6 +138,16 @@ pub(super) fn execute<O: ExecutionObserver>(
         Inst::MakeClosure { .. } => {
             return Err(Fault::Unsupported("observed runtime closure construction"));
         }
+        // A tensor never enters this path (`startup::check_type` refuses every
+        // non-scalar, non-`[u8]` type); the contraction is refused by name.
+        Inst::TensorContract { .. } => {
+            return Err(Fault::Unsupported("observed tensor contraction"));
+        }
+        Inst::TensorMap { .. } => return Err(Fault::Unsupported("observed tensor map")),
+        Inst::TensorReduce { .. } => return Err(Fault::Unsupported("observed tensor reduction")),
+        Inst::TensorView { .. } => return Err(Fault::Unsupported("observed tensor view")),
+        Inst::TensorGather { .. } => return Err(Fault::Unsupported("observed tensor gather")),
+        Inst::TensorScatter { .. } => return Err(Fault::Unsupported("observed tensor scatter")),
         Inst::MakeAggregate {
             ty,
             variant,

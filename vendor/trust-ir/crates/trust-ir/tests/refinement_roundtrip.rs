@@ -203,14 +203,16 @@ fn a_module_without_refinements_is_bit_identical_to_before() {
     // moved it once more, to the drop-glue table, flipping `completeness` to
     // always-emitted (`null` when there is no claim); v58 moved it again, to
     // closure_layouts (APPENDED after the drop-glue table, flipping
-    // `drop_glue` to always-emitted, so an empty table spells `[]`).
+    // `drop_glue` to always-emitted, so an empty table spells `[]`); v70
+    // moved it to the blob table (APPENDED after the closure-layout table,
+    // flipping `closure_layouts` to always-emitted).
     assert!(
-        !json.contains("\"closure_layouts\""),
-        "the trailing closure-layout table must be skipped when empty: {json}"
+        !json.contains("\"blobs\""),
+        "the trailing blob table must be skipped when empty: {json}"
     );
     assert!(
-        json.ends_with(",\"completeness\":null,\"drop_glue\":[]}"),
-        "the claim slot and the drop-glue table before it are always emitted: {json}"
+        json.ends_with(",\"completeness\":null,\"drop_glue\":[],\"closure_layouts\":[]}"),
+        "the claim slot and the two tables after it are always emitted: {json}"
     );
     for always in [
         "\"predicates\":[]",
@@ -220,6 +222,7 @@ fn a_module_without_refinements_is_bit_identical_to_before() {
         "\"tuple_layouts\":[]",
         "\"completeness\":null",
         "\"drop_glue\":[]",
+        "\"closure_layouts\":[]",
     ] {
         assert!(
             json.contains(always),

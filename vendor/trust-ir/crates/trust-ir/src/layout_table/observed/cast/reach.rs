@@ -129,7 +129,7 @@ fn scan<'a, O: ExecutionObserver>(
     match ty {
         Ty::Storage(_) => {}
         Ty::Tuple(types) => work.push(tasks, Task::Types(types))?,
-        Ty::Vector(child, _) => work.push(tasks, Task::Type(child))?,
+        Ty::Vector(child, _) | Ty::Tensor(child, _) => work.push(tasks, Task::Type(child))?,
         Ty::Ref(child)
         | Ty::RefMut(child)
         | Ty::PtrConst(child)

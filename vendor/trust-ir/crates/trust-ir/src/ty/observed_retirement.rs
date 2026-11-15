@@ -70,6 +70,7 @@ pub(crate) fn retire_type<O: ExecutionObserver>(
                 }
             }
             Ty::Vector(child, _)
+            | Ty::Tensor(child, _)
             | Ty::Ref(child)
             | Ty::RefMut(child)
             | Ty::PtrConst(child)

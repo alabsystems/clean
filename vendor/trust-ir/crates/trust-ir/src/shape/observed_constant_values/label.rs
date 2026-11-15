@@ -46,6 +46,7 @@ impl State<'_> {
                     ConstantShape::Sequence { len } => ("sequence", len as u128),
                     ConstantShape::Set { len } => ("set", len as u128),
                     ConstantShape::Record { fields } => ("record", fields as u128),
+                    ConstantShape::TensorBlob { rank } => ("tensor_blob", rank as u128),
                     ConstantShape::Closure { .. }
                     | ConstantShape::FnDef
                     | ConstantShape::SymbolAddr => return Err(ObservedValueError::InvalidRange),

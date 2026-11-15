@@ -165,6 +165,7 @@ impl<X> TyG<X> {
             TyG::Dialect(ty) => TyG::Dialect(ty.clone()),
             TyG::Handle(ty) => TyG::Handle(ty.clone()),
             TyG::Ext(x) => ext(x)?,
+            TyG::Tensor(elem, rank) => TyG::Tensor(Box::new(elem.try_map_ext(ext)?), *rank),
         })
     }
 
@@ -174,6 +175,7 @@ impl<X> TyG<X> {
         match self {
             TyG::Storage(_) => {}
             TyG::Vector(inner, _)
+            | TyG::Tensor(inner, _)
             | TyG::Ref(inner)
             | TyG::RefMut(inner)
             | TyG::PtrConst(inner)
@@ -227,6 +229,7 @@ impl<X> TyG<X> {
         match self {
             TyG::Storage(_) => {}
             TyG::Vector(inner, _)
+            | TyG::Tensor(inner, _)
             | TyG::Ref(inner)
             | TyG::RefMut(inner)
             | TyG::PtrConst(inner)
@@ -331,6 +334,10 @@ impl<X> ConstantG<X> {
             },
             ConstantG::PhantomData => ConstantG::PhantomData,
             ConstantG::Uninit => ConstantG::Uninit,
+            ConstantG::TensorBlob { digest, dims } => ConstantG::TensorBlob {
+                digest: *digest,
+                dims: dims.clone(),
+            },
             ConstantG::Ext(x) => ext(x)?,
         })
     }
@@ -446,6 +453,59 @@ impl<X> EnumDefG<X> {
             repr: *repr,
             layout: layout.clone(),
             origin: origin.clone(),
+        })
+    }
+}
+
+impl<X> crate::inst::TensorMapNode<X> {
+    /// Rebuild this map-body node at another level, mapping each type it
+    /// spells with `map_ty` (PKG-U13c). Exhaustive, as
+    /// [`InstG::try_map_level`] is.
+    pub fn try_map_level<Y, E>(
+        &self,
+        map_ty: &mut TyMap<'_, X, Y, E>,
+    ) -> Result<crate::inst::TensorMapNode<Y>, E> {
+        use crate::inst::TensorMapNode as N;
+        Ok(match self {
+            N::BinOp { op, ty, lhs, rhs } => N::BinOp {
+                op: *op,
+                ty: map_ty(ty)?,
+                lhs: *lhs,
+                rhs: *rhs,
+            },
+            N::UnOp { op, ty, operand } => N::UnOp {
+                op: *op,
+                ty: map_ty(ty)?,
+                operand: *operand,
+            },
+            N::ICmp { op, ty, lhs, rhs } => N::ICmp {
+                op: *op,
+                ty: map_ty(ty)?,
+                lhs: *lhs,
+                rhs: *rhs,
+            },
+            N::Select {
+                ty,
+                cond,
+                then_lane,
+                else_lane,
+            } => N::Select {
+                ty: map_ty(ty)?,
+                cond: *cond,
+                then_lane: *then_lane,
+                else_lane: *else_lane,
+            },
+            N::Cast {
+                op,
+                src_ty,
+                dst_ty,
+                operand,
+            } => N::Cast {
+                op: *op,
+                src_ty: map_ty(src_ty)?,
+                dst_ty: map_ty(dst_ty)?,
+                operand: *operand,
+            },
         })
     }
 }
@@ -864,6 +924,73 @@ impl<X> InstG<X> {
                 ty: map_ty(ty)?,
                 value: value.clone(),
             },
+            InstG::TensorContract {
+                ty,
+                lhs,
+                rhs,
+                batch,
+                contract,
+            } => InstG::TensorContract {
+                ty: map_ty(ty)?,
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+                batch: batch.clone(),
+                contract: contract.clone(),
+            },
+            InstG::TensorMap { ty, args, body } => InstG::TensorMap {
+                ty: map_ty(ty)?,
+                args: args.clone(),
+                body: body
+                    .iter()
+                    .map(|node| node.try_map_level(map_ty))
+                    .collect::<Result<_, _>>()?,
+            },
+            InstG::TensorReduce {
+                ty,
+                src,
+                op,
+                axes,
+                order,
+            } => InstG::TensorReduce {
+                ty: map_ty(ty)?,
+                src: src.clone(),
+                op: *op,
+                axes: axes.clone(),
+                order: *order,
+            },
+            InstG::TensorView {
+                ty,
+                src,
+                params,
+                exprs,
+                shape,
+                index,
+                fill,
+            } => InstG::TensorView {
+                ty: map_ty(ty)?,
+                src: src.clone(),
+                params: params.clone(),
+                exprs: exprs.clone(),
+                shape: shape.clone(),
+                index: index.clone(),
+                fill: fill.clone(),
+            },
+            InstG::TensorGather { ty, data, coords } => InstG::TensorGather {
+                ty: map_ty(ty)?,
+                data: data.clone(),
+                coords: coords.clone(),
+            },
+            InstG::TensorScatter {
+                ty,
+                init,
+                src,
+                coords,
+            } => InstG::TensorScatter {
+                ty: map_ty(ty)?,
+                init: init.clone(),
+                src: src.clone(),
+                coords: coords.clone(),
+            },
             InstG::CallCannotUnwind { callee, args } => InstG::CallCannotUnwind {
                 callee: callee.clone(),
                 args: args.clone(),
@@ -1063,6 +1190,21 @@ impl<X> InstG<X> {
                 f(ty);
             }
             InstG::InvokeIndirect { .. } => {}
+            InstG::TensorContract { ty, .. }
+            | InstG::TensorReduce { ty, .. }
+            | InstG::TensorView { ty, .. }
+            | InstG::TensorGather { ty, .. }
+            | InstG::TensorScatter { ty, .. } => {
+                f(ty);
+            }
+            InstG::TensorMap { ty, body, .. } => {
+                f(ty);
+                for node in body {
+                    for node_ty in node.types() {
+                        f(node_ty);
+                    }
+                }
+            }
         }
     }
 }
@@ -1217,6 +1359,7 @@ impl<X> ModuleG<X> {
             completeness: self.completeness.clone(),
             drop_glue: self.drop_glue.clone(),
             closure_layouts: self.closure_layouts.clone(),
+            blobs: self.blobs.clone(),
         })
     }
 }

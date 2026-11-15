@@ -20,8 +20,8 @@
   },
   "closure_limit": "This is a REFERENCE closure at module granularity, NOT the per-body CALL closure. The call closure needs the trust-host whole-crate dump that data/spine_set.PENDING.md records as not yet produced (the same blocker G-SPINE-SET has). Until that dump exists, lane (a)'s membership is a conservative module-level surface: it can contain bodies no verdict path reaches, and it can MISS a body reached only through a dyn/fn-pointer edge. scripts/verdict_gate.sh refuses on this.",
   "input_pins": {
-   "data/env_bypass_census.json": "31c1c77686ae0f0046af4761cbe2c5d982f8a64f326ed2dd9a9842395254114a",
-   "data/gate_registry.json": "15d22c43b65d20955656146ad337edeae4ca4c19df74a50b307c48c3fbc83e79"
+   "data/env_bypass_census.json": "0e5a467c9ae540a63c00838588c04545956f5e966312db9314d9c94f673d0112",
+   "data/gate_registry.json": "4807116d2584ed732823e351d42cfe9785266f7bce2c5b7b2978416958e71823"
   },
   "regenerate": "scripts/verdict_set.py            (--check to verify the committed copy)"
  },
@@ -5882,8 +5882,8 @@
    "line_ratchet": {
     "what": "total committed lines of the TCB script surface; may fall freely, may rise only through scripts/verdict_set.py --rebase-up '<reason>' (recorded below)",
     "direction": "down",
-    "baseline_total_lines": 128437,
-    "measured_total_lines": 128437,
+    "baseline_total_lines": 128935,
+    "measured_total_lines": 128935,
     "minted_utc": "2026-11-14T21:29:51Z",
     "rebases": [
      {
@@ -7421,6 +7421,78 @@
       "from": 128426,
       "to": 128437,
       "reason": "2026-11-14 frontend receipt repair: +11 lines reject missing or malformed phase starts, failed stale-receipt removal and timestamp output; real-reporter pre-repair green reproduced,20+20 controls and original-source regression negatives pass; weights and payload arguments unchanged"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128437,
+      "to": 128783,
+      "reason": "2026-11-14 R7c (docs/DECISIONS.md): scripts/check_gate_registry.py grows +346 net lines -- check_replay_record_debt (a soundness pin carries its replay record or is named in data/replay_record_debt.json), the --repin discharge and inheritor route, and the self-test arms and mutant-pinned repin-guard arms that demonstrate them"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128385,
+      "to": 128397,
+      "reason": "2026-11-15: acknowledge 12 verify_runner lines for typed recorded must-pass cost eligibility; full350 runner tests pass; existing classifier/schema/budgets/defaults unchanged, missing names retain prior/default floors; no proof claim"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128437,
+      "to": 128449,
+      "reason": "2026-11-15: land12 qualified recorded-required-name cost guard lines on current coherent main; fresh350 runner tests and16 journal controls pass; preserve prior branch/main histories, classifiers/budgets/defaults and refusal gates; no proof claim"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128437,
+      "to": 128449,
+      "reason": "2026-11-15: requalify12 recorded-required-name cost guard lines after lossless main merge; fresh350 runner tests and16 journal controls; preserve both histories; classifiers budgets and defaults unchanged; no proof claim"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128783,
+      "to": 128795,
+      "reason": "2026-11-15: retain12 qualified required-test cost guard lines after incoming gate-registry source landing; publisher and runner source/tuple/manifest unchanged from full350 and actual export qualification; budgets classifiers and defaults unchanged"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128795,
+      "to": 128843,
+      "reason": "M3 congruence Refutes controls and CoreRules.beta argument-typing refutation"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128843,
+      "to": 128859,
+      "reason": "E2 meaning pins (cic_l + cic_l_model) and binding_not_review runner coverage"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128426,
+      "to": 128443,
+      "reason": "2026-11-15: +17 measured lines for inventoried Python-source loading and synchronous Bash errexit/status preservation; behavior qualified by loader, wrapper and mutation controls; no refusal, denominator or verification-default change"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128843,
+      "to": 128860,
+      "reason": "Q6 merged-source accounting: preserve incoming baseline 128843 and both branch rebase histories; carry the already qualified 17 physical script lines for source-byte loading and synchronous Bash errexit handling (3795045c), with no further implementation growth or weakened gate."
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128859,
+      "to": 128876,
+      "reason": "Q6 source publication on incoming128859: preserve both histories and measure the unchanged qualified 17 own implementation lines alongside incoming E2 verifier changes. No additional implementation or gate weakening; native lint replay remains pending separately."
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128876,
+      "to": 128908,
+      "reason": "Q6 source-only bounded discovery/custody repair: measure actual added pinned source-byte helper and explicit transport/refusal controls; retain histories. Fresh native lint R7 request unadmitted75, no body/mint. No gate/diagnostic/proof or genesis waiver."
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128908,
+      "to": 128935,
+      "reason": "2026-11-15: +27 measured lines in check_gate_registry.py preserve selected live resource descriptors through compiler-facing launches and retain fatal transport refusals. Qualified by inert14 normal/optimized controls, original chain13, and native registry self-repin0; no gate/member/criterion change or evidence waiver. rederive_chain adds11 lines outside this existing lane-c roster. Full lint baseline remains red and its72-arm replay has no new credit."
      }
     ]
    },
@@ -7480,8 +7552,8 @@
      "kind": "gate",
      "claims": "hygiene",
      "disposition": "tcb-declared",
-     "lines": 282,
-     "sha256": "bae477609af2b3abf35a7a9dc94fbda605588ccc2215cbdb227ef1c83c14f205",
+     "lines": 292,
+     "sha256": "341f2d9f9a67b8b90c41092dbfbe43a994c2752d62e993ad118289602901b43a",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -7629,8 +7701,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 1168,
-     "sha256": "0aac5dc26ed8585d0174d60115ec7c84ebb7c690680ba09eb249e4ea5e087823",
+     "lines": 1215,
+     "sha256": "f06b2e6198b594a69c01ba785fa1bf8100920dc33c907512093db350921e2974",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -7660,8 +7732,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 1317,
-     "sha256": "bc93efc33b5a1618db3bae82b4d870b0fa111c485cc412db6061c3fdd926bad5",
+     "lines": 1323,
+     "sha256": "68382fbf10f6283651dc153cab8553433d1817bb7561701657a6f71cde8447b9",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -7804,8 +7876,8 @@
      "kind": "gate",
      "claims": "hygiene",
      "disposition": "tcb-declared",
-     "lines": 6444,
-     "sha256": "0243aadbfd886ef1029be7d080c064354106400438e2ef5adb2f25eb63cae15f",
+     "lines": 6817,
+     "sha256": "2de5640218be314e1e35c37d5a61c4bd693bb3149a19b5014e7fd1afcb6f7a10",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -7883,8 +7955,8 @@
      "kind": "gate",
      "claims": "hygiene",
      "disposition": "tcb-declared",
-     "lines": 2055,
-     "sha256": "5f67bfb3ae9084e3e45e22a2a6241e48c59b9718ea17b77fbe6933dda7810a5a",
+     "lines": 2087,
+     "sha256": "4355e0eba5409965f6cccc0a01a5e806094385243bb9b9fddf0810c8a8c3d410",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9191,7 +9263,7 @@
      "claims": "quality",
      "disposition": "tcb-declared",
      "lines": 330,
-     "sha256": "7b07f075c1efc186a3c6c5d8764e05c1ef16841c0f698d2f8c2486147388734a",
+     "sha256": "9e01eee26b4114ee06b2dff01dc459e4098c0e95d4b8866e46d151ddf8f8c346",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9211,8 +9283,8 @@
      "kind": "tool",
      "claims": "quality",
      "disposition": "tcb-declared",
-     "lines": 500,
-     "sha256": "5025ec680f51aaf039c02762022be018de52e6f810f84a2a36b015cf70a3d9f7",
+     "lines": 501,
+     "sha256": "e6c2fc187098019afbbe3b10b5c60a00770291c0b00658040c296b7a57d810e8",
      "demonstrated": false,
      "waived": false,
      "self_test_entry_point": false,
@@ -9685,8 +9757,8 @@
      "kind": "tool",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 7188,
-     "sha256": "e73ca09ce6ba83921ae34a9d4e53a6dd148ecee7e9df00169f20a30a19236370",
+     "lines": 7217,
+     "sha256": "7645938603460e61d1d8136ece9f5b21864f50f6c039df544df1bba017bb0244",
      "demonstrated": false,
      "waived": false,
      "self_test_entry_point": false,

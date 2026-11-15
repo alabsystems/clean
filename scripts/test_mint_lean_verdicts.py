@@ -15,6 +15,8 @@ unknown tactic, `--check` must see a changed verdict or unknown tactic, and
 `--file-verdict` must give 0 / 1 (an error, or a `sorry` warning) / 2. The
 local_gate.sh `tactic-lean-verdicts` leg is run from its own bytes on a stub
 Python: SKIPPED only for exit 2 with the minter's skip line.
+Its admission handoff is modelled by a strict, recorded fake adapter; these
+tests request no real CPU/memory admission and execute no real Lean or Rust.
 """
 
 import contextlib
@@ -29,10 +31,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 from scripts.tactic_parity import mint_lean_verdicts as mint
 
 fg, lv = mint.fg, mint.lv
-ROOT = Path(__file__).resolve().parent.parent
 GITHASH = lv.ORACLE_GITHASHES["v4.30.0-rc2"]
 FAKE = """import json, os, re, sys, time
 mode = os.environ.get("FAKE_LEAN_MODE", "good")
@@ -264,27 +268,83 @@ LEG_MARK = "  # GATE-LEG: tactic-lean-verdicts\n"
 
 
 class LocalGateLegTests(unittest.TestCase):
-    """The leg's own bytes from scripts/local_gate.sh, on a stub GATE_PYTHON."""
+    """The copied production leg, with recorded fake admission and Python."""
 
-    def run_leg(self, rc, out):
+    def setUp(self):
+        self.leg_observations = []
+
+    def run_leg(self, rc, out, *, transform=None):
         gate = (ROOT / "scripts" / "local_gate.sh").read_text(encoding="utf-8")
         start = gate.index(LEG_MARK)
         block = gate[start:gate.index("\n  done\n", start) + len("\n  done\n")]
+        if transform is not None:
+            block = transform(block)  # mutate only this copied shell text
         tmp = Path(tempfile.mkdtemp(prefix="leg-test-"))
         self.addCleanup(lambda: __import__("shutil").rmtree(tmp, ignore_errors=True))
         stub = tmp / "python"
-        stub.write_text('#!/bin/sh\nprintf "%s\\n" "$STUB_OUT"\nexit "$STUB_RC"\n')
+        handoffs, fake_calls = tmp / "handoffs", tmp / "fake-calls"
+        stub.write_text('#!/bin/sh\nprintf "%s\\0" "$#" "$@" >> "$Q6_LEG_FAKE_LOG"\n'
+                        'printf "%s\\n" "$STUB_OUT"\nexit "$STUB_RC"\n')
         stub.chmod(0o755)
+        # This is a fixture API adapter, never a real reservation. It accepts
+        # only the production handoff's exact budget, label and fake command.
+        adapter = '''_gate_build() {
+  printf '%s\\0' "$#" "$@" >> "$Q6_LEG_HANDOFF_LOG"
+  if [[ $# -ne 8 || ${1:-} != 12 || ${2:-} != 2 ||
+        ${3:-} != tactic-lean-verdicts || ${4:-} != "$GATE_PYTHON" ||
+        ${5:-} != scripts/tactic_parity/mint_lean_verdicts.py ||
+        ${6:-} != --check || ${7:-} != --family ||
+        ( ${8:-} != g_auto && ${8:-} != g_simp ) ]]; then
+    echo 'FIXTURE HANDOFF: refused unexpected API' >&2
+    return 75
+  fi
+  shift 3
+  "$@"
+}
+'''
         script = ('set -euo pipefail\nfail() { echo "LOCAL GATE: FAIL — $1"; exit 1; }\n'
-                  f'GATE_PYTHON={stub}\n{block}echo LEG-DONE\n')
-        return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60,
-                              env={**os.environ, "STUB_RC": str(rc), "STUB_OUT": out})
+                  f'GATE_PYTHON={shlex.quote(str(stub))}\n{adapter}{block}echo LEG-DONE\n')
+        env = {**os.environ, "STUB_RC": str(rc), "STUB_OUT": out,
+               "Q6_LEG_HANDOFF_LOG": str(handoffs), "Q6_LEG_FAKE_LOG": str(fake_calls)}
+        proc = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60,
+                              env=env)
+
+        def calls(path):
+            fields = path.read_bytes().split(b"\0") if path.exists() else []
+            if fields:
+                self.assertEqual(fields.pop(), b"", "fixture call framing")
+            rows = []
+            while fields:
+                count = int(fields.pop(0))
+                self.assertGreaterEqual(len(fields), count, "fixture call arity framing")
+                rows.append([word.decode() for word in fields[:count]])
+                del fields[:count]
+            return rows
+
+        proc.handoff_calls, proc.fake_calls = calls(handoffs), calls(fake_calls)
+        proc.fixture_python = str(stub)
+        self.leg_observations.append(dict(argv=proc.args, exit_code=proc.returncode,
+            stdout=proc.stdout, stderr=proc.stderr, stub_exit=rc, stub_stdout=out,
+            handoff_calls=proc.handoff_calls, fake_calls=proc.fake_calls,
+            copied_block_modified=transform is not None))
+        return proc
+
+    def assertHandoffs(self, proc, families):
+        self.assertEqual(len(proc.handoff_calls), len(families), "fixture handoff census")
+        for call, family in zip(proc.handoff_calls, families):
+            self.assertEqual(call, ["12", "2", "tactic-lean-verdicts", proc.fixture_python,
+                "scripts/tactic_parity/mint_lean_verdicts.py", "--check", "--family", family],
+                "fixture handoff arguments")
+        self.assertEqual(proc.fake_calls,
+            [["scripts/tactic_parity/mint_lean_verdicts.py", "--check", "--family", family]
+             for family in families], "fixture forwarded calls")
 
     def test_exit_2_with_the_skip_line_is_skipped(self):
         proc = self.run_leg(2, "MINT_LEAN_VERDICTS=skipped:no-usable-lean family=g_auto (no executable Lean)")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertEqual(proc.stdout.count("TACTIC-LEAN-VERDICTS=SKIPPED"), 2)
         self.assertIn("LEG-DONE", proc.stdout)
+        self.assertHandoffs(proc, ["g_auto", "g_simp"])
 
     def test_exit_2_without_it_fails(self):
         """argparse's usage error, and Python's `can't open file`, are exit 2 too."""
@@ -294,12 +354,54 @@ class LocalGateLegTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 1, proc.stdout)
             self.assertIn("LOCAL GATE: FAIL — tactic family Lean verdicts g_auto", proc.stdout)
             self.assertNotIn("SKIPPED", proc.stdout)
+            self.assertHandoffs(proc, ["g_auto"])
 
     def test_other_exits(self):
-        self.assertEqual(self.run_leg(1, "MINT_LEAN_VERDICTS=differs family=g_auto").returncode, 1)
+        proc = self.run_leg(1, "MINT_LEAN_VERDICTS=differs family=g_auto")
+        self.assertEqual(proc.returncode, 1)
+        self.assertHandoffs(proc, ["g_auto"])
         proc = self.run_leg(0, "MINT_LEAN_VERDICTS=same family=g_auto")
         self.assertEqual(proc.returncode, 0, proc.stdout)
         self.assertIn("LEG-DONE", proc.stdout)
+        self.assertHandoffs(proc, ["g_auto", "g_simp"])
+
+    def test_changed_handoff_is_refused_before_fake_python(self):
+        mutations = (
+            ("_gate_build 12 2 tactic-lean-verdicts", "_gate_build 11 2 tactic-lean-verdicts"),
+            ("_gate_build 12 2 tactic-lean-verdicts", "_gate_build 12 3 tactic-lean-verdicts"),
+            ("_gate_build 12 2 tactic-lean-verdicts", "_gate_build 12 2 another-leg"),
+            ('"$GATE_PYTHON" scripts/tactic_parity/mint_lean_verdicts.py',
+             '/bin/true scripts/tactic_parity/mint_lean_verdicts.py'),
+            ('"$GATE_PYTHON" scripts/tactic_parity/mint_lean_verdicts.py --check --family',
+             '"$GATE_PYTHON" scripts/tactic_parity/not-the-minter.py --check --family'),
+            ('"$GATE_PYTHON" scripts/tactic_parity/mint_lean_verdicts.py --check --family',
+             '"$GATE_PYTHON" scripts/tactic_parity/mint_lean_verdicts.py --changed --family'),
+            ('--family "$fam_mint"', '--family wrong-family'),
+            ('--family "$fam_mint"', '--family "$fam_mint" extra-argument'),
+        )
+        for old, new in mutations:
+            with self.subTest(old=old, replacement=new):
+                def transform(block):
+                    self.assertEqual(block.count(old), 1, "copied mutation target")
+                    return block.replace(old, new, 1)
+                proc = self.run_leg(0, "MINT_LEAN_VERDICTS=same family=g_auto", transform=transform)
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                self.assertIn("FIXTURE HANDOFF: refused unexpected API", proc.stdout)
+                self.assertEqual(len(proc.handoff_calls), 1)
+                self.assertEqual(proc.fake_calls, [])
+                self.assertNotIn("LEG-DONE", proc.stdout)
+
+    def test_missing_handoff_is_detected_even_when_copied_leg_succeeds(self):
+        old = '_gate_build 12 2 tactic-lean-verdicts "$GATE_PYTHON"'
+        def transform(block):
+            self.assertEqual(block.count(old), 1, "copied mutation target")
+            return block.replace(old, '"$GATE_PYTHON"', 1)
+        proc = self.run_leg(0, "MINT_LEAN_VERDICTS=same family=g_auto", transform=transform)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(proc.handoff_calls, [])
+        self.assertEqual(len(proc.fake_calls), 2)
+        with self.assertRaisesRegex(AssertionError, "fixture handoff census"):
+            self.assertHandoffs(proc, ["g_auto", "g_simp"])
 
 
 if __name__ == "__main__":

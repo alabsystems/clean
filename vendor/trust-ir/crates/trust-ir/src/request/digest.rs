@@ -362,6 +362,15 @@ pub(crate) fn write_ty_stable(out: &mut Vec<u8>, ty: &Ty) {
             write_str_stable(out, &ty.name);
             write_str_stable(out, &ty.runtime);
         }
+        // PKG-U13a: stable tag 41 (matches the binary codec's tag), then the
+        // rank (as `Vector` writes its lanes), then the inline element. No
+        // domain moves: only a module that carries a tensor gets this
+        // spelling.
+        Ty::Tensor(elem, rank) => {
+            write_u8_stable(out, 41);
+            write_u32_stable(out, *rank);
+            write_ty_stable(out, elem);
+        }
         Ty::Ext(e) => e.unreachable(),
     }
 }
@@ -446,6 +455,17 @@ pub(crate) fn write_constant_stable(out: &mut Vec<u8>, constant: &Constant) {
             write_constant_stable(out, elem);
             write_u64_stable(out, *len);
         }
+        // v70 TensorBlob: stable tag 18 (matches the binary codec's tag; 17
+        // is the template extension's). The digest and the extents, never the
+        // blob's bytes: a weight is an input, not part of what is identified.
+        Constant::TensorBlob { digest, dims } => {
+            write_u8_stable(out, 18);
+            out.extend_from_slice(&digest.0);
+            write_len_stable(out, dims.len());
+            for dim in dims {
+                write_u64_stable(out, *dim);
+            }
+        }
         Constant::Ext(e) => e.unreachable(),
     }
 }
@@ -460,6 +480,8 @@ pub(crate) fn write_constants_stable(out: &mut Vec<u8>, constants: &[Constant]) 
 pub(crate) fn write_ty_shape_stable(out: &mut Vec<u8>, shape: TyShape) {
     match shape {
         TyShape::Storage => write_u8_stable(out, 27),
+        // PKG-U13a: the next free shape tag.
+        TyShape::Tensor => write_u8_stable(out, 28),
         TyShape::Int { signed, bits } => {
             write_u8_stable(out, 0);
             write_bool_stable(out, signed);
@@ -2905,6 +2927,12 @@ pub(crate) fn native_inst_result_ty(inst: &Inst) -> Option<Ty> {
         | Inst::InsertField { ty, .. }
         | Inst::MakeAggregate { ty, .. }
         | Inst::ArraySplat { ty, .. }
+        | Inst::TensorContract { ty, .. }
+        | Inst::TensorMap { ty, .. }
+        | Inst::TensorReduce { ty, .. }
+        | Inst::TensorView { ty, .. }
+        | Inst::TensorGather { ty, .. }
+        | Inst::TensorScatter { ty, .. }
         | Inst::ExtractElement { ty, .. }
         | Inst::InsertElement { ty, .. }
         | Inst::Const { ty, .. }
@@ -3596,6 +3624,7 @@ mod nominal_type_identity_tests {
             Ty::Vector(Box::new(Ty::I8), 4),
             Ty::Dialect(Box::new(crate::DialectTy::new("example", "value", 1))),
             Ty::handle("Nat", "trust_bignum::Nat"),
+            Ty::Tensor(Box::new(Ty::I8), 2),
         ];
         let mut tags = std::collections::BTreeMap::new();
         for ty in representatives {
@@ -3607,10 +3636,11 @@ mod nominal_type_identity_tests {
                 bytes[0]
             );
         }
-        assert_eq!(tags.len(), 39);
+        assert_eq!(tags.len(), 40);
         assert_eq!(tags[&33], Ty::Isize);
         assert_eq!(tags[&37], Ty::Refine(TyId::new(0), crate::PredId::new(0)));
         assert_eq!(tags[&38], Ty::handle("Nat", "trust_bignum::Nat"));
+        assert_eq!(tags[&41], Ty::Tensor(Box::new(Ty::I8), 2));
     }
 
     /// The stable request-digest `FatPtrKind` sub-tags are frozen, exactly as

@@ -142,6 +142,15 @@ fn write_head<'a, O: ExecutionObserver>(
             out.push_value(tasks, ConstantTask::U64(*len))?;
             out.push_value(tasks, ConstantTask::Value(elem))?;
         }
+        // v70 TensorBlob: stable tag 18, the digest and the extents.
+        Constant::TensorBlob { digest, dims } => {
+            write_u8(out, 18)?;
+            out.append(&digest.0)?;
+            write_len(out, dims.len())?;
+            for dim in dims {
+                write_u64(out, *dim)?;
+            }
+        }
         Constant::Ext(e) => e.unreachable(),
     }
     Ok(())

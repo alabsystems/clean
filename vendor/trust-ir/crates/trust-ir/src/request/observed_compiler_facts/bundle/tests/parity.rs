@@ -4,6 +4,26 @@
 use super::*;
 
 #[test]
+fn module_obligation_duplicates_are_not_silently_collapsed_by_the_known_id_index() {
+    let mut bundle = fixture();
+    let mut duplicate = bundle.module.proof_obligations[0].clone();
+    duplicate.formula = Some(crate::ProofFormula::smtlib2("false", "Bool"));
+    let id = duplicate.id;
+    bundle
+        .module
+        .proof_obligations
+        .extend([duplicate.clone(), duplicate]);
+    let errors = parity(&bundle);
+    assert_eq!(
+        &errors[..2],
+        &[
+            E::DuplicateModuleObligationId(id),
+            E::DuplicateModuleObligationId(id)
+        ]
+    );
+}
+
+#[test]
 fn whole_compiler_fact_constituent_matches_original_with_every_primitive_family() {
     assert!(parity(&fixture()).is_empty());
     let mut empty = fixture();
@@ -332,6 +352,8 @@ fn generic_inline_error_and_target_width_constant_walks_match_actual_original_he
         Ty::U32,
         Ty::Tuple(vec![Ty::U32, Ty::PtrConst(Box::new(Ty::Error))]),
         Ty::Vector(Box::new(Ty::Error), 0),
+        Ty::Tensor(Box::new(Ty::Error), 2),
+        Ty::Tensor(Box::new(Ty::U32), 0),
         Ty::Struct(StructId::new(99)),
         Ty::Refine(crate::TyId::new(0), crate::PredId::new(0)),
     ];

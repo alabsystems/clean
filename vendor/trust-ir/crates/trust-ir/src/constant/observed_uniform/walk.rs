@@ -79,7 +79,9 @@ impl<'a> State<'a> {
                 | Constant::Bool(_)
                 | Constant::FnDef(_)
                 | Constant::SymbolAddr { .. }
-                | Constant::PhantomData => self.building = Some(Key::Leaf(node)),
+                | Constant::PhantomData
+                // v70: a leaf keyed by its digest and extents (no constant children).
+                | Constant::TensorBlob { .. } => self.building = Some(Key::Leaf(node)),
                 _ => {
                     let list = matches!(node, Constant::Array(_) | Constant::Aggregate(_));
                     self.building = Some(Key::Composite {

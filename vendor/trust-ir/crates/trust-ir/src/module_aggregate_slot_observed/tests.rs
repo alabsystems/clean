@@ -58,6 +58,7 @@ fn every_original_aggregate_spelling_and_scalar_boundary_matches_one_predicate()
         Ty::Set(TyId::new(0), crate::ty::SetRepr::Boxed),
         Ty::Closure(ClosureTyId::new(0)),
         Ty::Vector(Box::new(Ty::U8), 0),
+        Ty::Tensor(Box::new(Ty::U8), 0),
     ] {
         assert!(run(&m, &t).0);
     }

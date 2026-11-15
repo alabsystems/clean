@@ -11,8 +11,13 @@
 //! block control flow, bounded direct/indirect function calls, executable
 //! integer/float casts, scalar/vector float operations at every carried
 //! width (binary16 included, WS2.15: computed at a wider precision and
-//! rounded ONCE by [`f64_to_f16_bits`]), and simple allocation-aware memory
-//! operations. Dialect ops, intentionally excluded casts, borrow/ARC, binding
+//! rounded ONCE by [`f64_to_f16_bits`]), integer tensor contraction
+//! (`Inst::TensorContract` over [`InterpretValueKind::Tensor`] values,
+//! PKG-U13a: the shape is part of the value, paired extents that differ and a
+//! result count `usize` cannot hold are undefined behaviour, and the node
+//! costs one fuel unit however many elements it materializes), and simple
+//! allocation-aware memory operations. Dialect ops, intentionally excluded
+//! casts, borrow/ARC, binding
 //! frames, and multi-threaded atomics return stable unsupported codes instead
 //! of pretending to execute. A
 //! VARIADIC signature is two cases (WS2.15): a call to a variadic
@@ -42,8 +47,9 @@
 //! allocations, bounds, initialized bytes, and base-pointer deallocation, but
 //! intentionally keeps layout conservative: scalar, pointer, unit, fixed
 //! integer/bool vectors, and module-backed arrays have byte layouts, while
-//! structs, enums, fat pointers, records, sets, sequences, closures, and
-//! packed/ABI aggregate layout still report `type_error`. Volatile load/store
+//! structs, enums, fat pointers, records, sets, sequences, tensors (which have
+//! no memory layout at all), closures, and packed/ABI aggregate layout still
+//! report `type_error`. Volatile load/store
 //! flags are deterministic no-ops in this single-threaded interpreter;
 //! explicit alignment operands and natural scalar/vector alignment are checked.
 
@@ -57,8 +63,13 @@ mod observed;
 #[cfg(test)]
 mod reconciled_execution;
 pub(crate) use observed::btree as observed_btree;
+mod module_policy;
 mod rope;
 mod scalar_bool;
+mod tensor_gather_scatter;
+mod tensor_region;
+pub use module_policy::InterpreterModule;
+use module_policy::ModulePreflight;
 
 pub use observation_word::{ObservationWord, WordLengthOverflow};
 
@@ -355,6 +366,15 @@ pub type InterpretResult<T> = Result<T, InterpretError>;
 /// not divide, which decodes `min(p, s) / gcd(p, s)` distinct elements for
 /// period `p` and stride `s` — that many DISTINCT values exist, and a
 /// materialized value holds each.
+///
+/// One instruction is the exception to "follows the instructions it
+/// executes": `Inst::TensorContract` (PKG-U13a) materializes its `N` result
+/// elements from ONE node, charged one fuel unit like every node (SemR's
+/// `run` charges the same), and does `N · K` multiply-adds for `K` the
+/// product of the contracted extents. `N` is bounded only by the target
+/// (`N < 2^pointer_bits`, else undefined behaviour, decided before anything
+/// is allocated); when some contracted extent is 0 every sum is empty and the
+/// all-zero result is one uniform node, O(1) whatever `N`.
 ///
 /// `panic_strategy` names which panic runtime the run models (amendment D,
 /// Part 2, `docs/SPEC_RATIFICATIONS.md` §21). The default is
@@ -869,6 +889,23 @@ pub enum InterpretValueKind {
     /// sequence (no instruction inserts into a set; the shared
     /// representation keeps the two collection kinds one payload type).
     Set(ArrayValue),
+    /// A tensor value (PKG-U13a), the runtime image of a
+    /// `Ty::Tensor(elem, rank)`, which fixes only the element type and the
+    /// rank: the SHAPE is part of the value. Well-formed when `dims` has one
+    /// extent per axis (`dims.len() == rank`), each below `2^pointer_bits`,
+    /// and `elems` holds exactly `∏ dims` elements, each an `Int` of exactly
+    /// `elem`; rank 0 is one element under no extents. Those invariants are
+    /// checked where a tensor is CONSUMED (`Inst::TensorContract`'s operand
+    /// check, a `TypeError`), and an entry argument's extents are range-checked
+    /// on entry. No byte layout: a tensor is never stored to memory.
+    Tensor {
+        /// The extent of each axis, outermost first.
+        dims: Vec<u64>,
+        /// The elements in row-major order (last axis fastest), held like an
+        /// array's elements ([`ArrayValue`]), so an all-zero contraction
+        /// result is one uniform node whatever its count.
+        elems: ArrayValue,
+    },
     Record(Vec<(String, InterpretValue)>),
     Closure {
         func: FuncId,
@@ -1034,6 +1071,8 @@ impl InterpretValue {
 #[derive(Clone, Copy)]
 pub struct Interpreter<'m> {
     module: Option<&'m Module>,
+    /// Borrowed only from an `InterpreterModule` for this exact immutable module.
+    module_preflight: Option<&'m std::sync::OnceLock<ModulePreflight>>,
     options: InterpretOptions,
     /// The host model of bodyless declarations (WS2.12); `None` = every call to
     /// a declaration is `UnsupportedCall`.
@@ -1061,6 +1100,7 @@ impl<'m> Interpreter<'m> {
     pub fn new() -> Self {
         Self {
             module: None,
+            module_preflight: None,
             options: InterpretOptions::default(),
             host: None,
             float_zero_choice_observer: None,
@@ -1070,6 +1110,7 @@ impl<'m> Interpreter<'m> {
     pub fn with_module(module: &'m Module) -> Self {
         Self {
             module: Some(module),
+            module_preflight: None,
             options: InterpretOptions::default(),
             host: None,
             float_zero_choice_observer: None,
@@ -1271,20 +1312,20 @@ impl<'m> Interpreter<'m> {
         // does not implement yet (fresh by-value copies, extension and hidden
         // results). Refuse the entire module before executing any body or host
         // callback, including unused/FnPtr-only typed signatures.
-        if self
-            .module
-            .is_some_and(|module| module.func_types.iter().any(|ty| ty.abi.is_some()))
-        {
+        let preflight = self.module.map_or(ModulePreflight::Ready, |module| {
+            self.module_preflight.map_or_else(
+                || ModulePreflight::inspect(module),
+                |owner| *owner.get_or_init(|| ModulePreflight::inspect(module)),
+            )
+        });
+        if matches!(preflight, ModulePreflight::UnsupportedAbi) {
             return Err(err(
                 InterpretErrorCode::UnsupportedCall,
                 function.entry,
                 "typed signature ABI transport is not implemented by the reference interpreter",
             ));
         }
-        if self
-            .module
-            .is_some_and(|module| module.first_storage_violation().is_some())
-        {
+        if matches!(preflight, ModulePreflight::InvalidStorage) {
             return Err(type_error(
                 function.entry,
                 "storage-only geometry cannot be a typed value or malformed layout",
@@ -1443,7 +1484,6 @@ impl<'m> Interpreter<'m> {
                     Step::Unwind { exception, target } => {
                         self.enter_landing_pad(function, block.id, exception, target, state)?;
                         current = target;
-                        incoming = Vec::new();
                         jumped = true;
                         break;
                     }
@@ -1515,7 +1555,16 @@ impl<'m> Interpreter<'m> {
                 // so an unvalidated module cannot smuggle an unwritten lane anywhere but a direct
                 // lane of a struct/tuple aggregate constant.
                 check_uninit_lane_placement(ty, value, block)?;
-                let value = self.constant_to_value_in(ty, value, Some(state), block)?;
+                // v70 (§27 rule C1): a content-addressed tensor is read only
+                // as the WHOLE value of a `Const`; `constant_to_value_in`
+                // refuses one anywhere else (a lane, a payload, a capture, a
+                // global initializer, a switch case).
+                let value = match (ty, value) {
+                    (Ty::Tensor(elem, rank), Constant::TensorBlob { digest, dims }) => {
+                        self.tensor_blob_value(ty, elem, *rank, digest, dims, block)?
+                    }
+                    _ => self.constant_to_value_in(ty, value, Some(state), block)?,
+                };
                 bind_results(state, block, node, [value])?;
                 Ok(Step::Continue)
             }
@@ -1631,6 +1680,103 @@ impl<'m> Interpreter<'m> {
                 let value = state.value(block, *value)?;
                 reject_handle(value, block, "ArraySplat")?;
                 let result = self.eval_array_splat(ty, value, block)?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
+            // PKG-U13a: an integer tensor contraction. One node, one fuel unit
+            // (the per-node tick in `execute_function_inner`, as SemR's `run`
+            // charges one per node), however many elements it materializes.
+            Inst::TensorContract {
+                ty,
+                lhs,
+                rhs,
+                batch,
+                contract,
+            } => {
+                let lhs = state.value(block, *lhs)?;
+                let rhs = state.value(block, *rhs)?;
+                let result = self.eval_tensor_contract(ty, lhs, rhs, batch, contract, block)?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
+            // PKG-U13c: the map, the reduction and the view. One node, one
+            // fuel unit each, however many elements they materialize.
+            Inst::TensorMap { ty, args, body } => {
+                let args = args
+                    .iter()
+                    .map(|arg| state.value(block, *arg))
+                    .collect::<InterpretResult<Vec<_>>>()?;
+                let result = self.eval_tensor_map(ty, &args, body, state, block)?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
+            Inst::TensorReduce {
+                ty,
+                src,
+                op,
+                axes,
+                order,
+            } => {
+                let src = state.value(block, *src)?;
+                let result = self.eval_tensor_reduce(ty, src, *op, axes, *order, block)?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
+            Inst::TensorView {
+                ty,
+                src,
+                params,
+                exprs,
+                shape,
+                index,
+                fill,
+            } => {
+                let src = state.value(block, *src)?;
+                let params = params
+                    .iter()
+                    .map(|param| state.value(block, *param))
+                    .collect::<InterpretResult<Vec<_>>>()?;
+                let fill = fill.map(|fill| state.value(block, fill)).transpose()?;
+                let result = self.eval_tensor_view(
+                    ty,
+                    src,
+                    &params,
+                    &tensor_region::ViewFunction {
+                        exprs,
+                        shape,
+                        index,
+                    },
+                    fill,
+                    block,
+                )?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
+            // PKG-U13d: the gather and the scatter. One node, one fuel unit
+            // each, however many elements they read or write.
+            Inst::TensorGather { ty, data, coords } => {
+                let data = state.value(block, *data)?;
+                let coords = coords
+                    .iter()
+                    .map(|coord| state.value(block, *coord))
+                    .collect::<InterpretResult<Vec<_>>>()?;
+                let result = self.eval_tensor_gather(ty, data, &coords, block)?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
+            Inst::TensorScatter {
+                ty,
+                init,
+                src,
+                coords,
+            } => {
+                let init = state.value(block, *init)?;
+                let src = state.value(block, *src)?;
+                let coords = coords
+                    .iter()
+                    .map(|coord| state.value(block, *coord))
+                    .collect::<InterpretResult<Vec<_>>>()?;
+                let result = self.eval_tensor_scatter(ty, init, src, &coords, block)?;
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
             }
@@ -3951,11 +4097,116 @@ impl<'m> Interpreter<'m> {
                 ty: Ty::Unit,
                 kind: InterpretValueKind::Unit,
             }),
+            // v70 (PKG-U13e, SPEC_RATIFICATIONS §27 rule C1): a
+            // content-addressed tensor is read only as the whole value of an
+            // `Inst::Const` (`execute_inst` reads it there, before this
+            // walk), so every blob this walk reaches is misplaced.
+            (_, Constant::TensorBlob { .. }) => Err(type_error(
+                block,
+                "misplaced tensor blob constant: a content-addressed tensor stands only as \
+                 the whole value of a Const"
+                    .to_string(),
+            )),
             _ => Err(type_error(
                 block,
                 format!("constant {value:?} does not match declared type {ty}"),
             )),
         }
+    }
+
+    /// The tensor a `Constant::TensorBlob` names (PKG-U13e, §27), checked in
+    /// the one order SemR's `blobVal` checks it, each failure a `TypeError`
+    /// (the constant is not a value of its type): an integer element; one
+    /// extent per axis, each below `2^pointer_bits`; a row for the digest;
+    /// bytes that hash to the digest; exactly `∏ dims × width/8` bytes (so
+    /// the element count is below `2^pointer_bits` too). The elements are
+    /// the bytes read little-endian at the element's width, row-major.
+    fn tensor_blob_value(
+        &self,
+        ty: &Ty,
+        elem: &Ty,
+        rank: u32,
+        digest: &crate::blob::BlobDigest,
+        dims: &[u64],
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        let pointer_bits = self.pointer_bits();
+        let Some((bits, signed)) = int_shape_at(elem, pointer_bits) else {
+            return Err(type_error(
+                block,
+                format!("tensor blob constant: element type {elem} has no integer shape"),
+            ));
+        };
+        if dims.len() as u64 != u64::from(rank) {
+            return Err(type_error(
+                block,
+                format!(
+                    "tensor blob constant: {} extents, but its type {ty} has rank {rank}",
+                    dims.len()
+                ),
+            ));
+        }
+        let usize_limit = 1u128.checked_shl(pointer_bits).unwrap_or(u128::MAX);
+        if let Some(dim) = dims.iter().find(|dim| u128::from(**dim) >= usize_limit) {
+            return Err(type_error(
+                block,
+                format!(
+                    "tensor blob constant: extent {dim} does not fit the target's \
+                     {pointer_bits}-bit usize"
+                ),
+            ));
+        }
+        let Some(row) = self.module.and_then(|module| module.blob(digest)) else {
+            return Err(type_error(
+                block,
+                format!("tensor blob constant: the module holds no blob {digest}"),
+            ));
+        };
+        if !row.digest_matches() {
+            return Err(type_error(
+                block,
+                format!("tensor blob constant: the bytes of blob {digest} do not hash to it"),
+            ));
+        }
+        let width = u128::from(bits / 8);
+        let count = exact_product_below(dims, usize_limit);
+        if count.and_then(|count| u128::from(count).checked_mul(width))
+            != Some(row.data.len() as u128)
+        {
+            return Err(type_error(
+                block,
+                format!(
+                    "tensor blob constant: blob {digest} holds {} bytes, not {dims:?} \
+                     elements of {elem}",
+                    row.data.len()
+                ),
+            ));
+        }
+        let elems =
+            ArrayValue::try_from_elements(row.data.chunks_exact(width as usize).map(|chunk| {
+                let raw = chunk
+                    .iter()
+                    .rev()
+                    .fold(0u128, |acc, byte| (acc << 8) | u128::from(*byte));
+                InterpretInt::from_raw(bits, signed, raw)
+                    .map(|int| InterpretValue {
+                        ty: elem.clone(),
+                        kind: InterpretValueKind::Int(int),
+                    })
+                    .ok_or_else(|| {
+                        type_error(
+                            block,
+                            format!("tensor blob constant: element type {elem} has no width"),
+                        )
+                    })
+            }))?;
+        Ok(InterpretValue {
+            ty: ty.clone(),
+            kind: InterpretValueKind::Tensor {
+                dims: dims.to_vec(),
+                elems,
+            },
+        })
     }
 
     /// One LANE of a struct/tuple aggregate constant (crystal lane, E3b): an unwritten lane
@@ -8122,6 +8373,292 @@ impl<'m> Interpreter<'m> {
         }
     }
 
+    /// `TensorContract { ty, lhs, rhs, batch, contract }` (PKG-U13a, XLA
+    /// `DotGeneral`'s shape). The checks run in the order both engines share
+    /// (SemR spells the same verdicts):
+    ///
+    /// 1. a poison operand is undefined behaviour (`reject_partial`), and a
+    ///    runtime handle is refused (`reject_handle`);
+    /// 2. the static rules, on the instruction and the operand VALUE types
+    ///    (`TypeError`, which `validate_module` refuses ahead of this as
+    ///    `InvalidTensorContract`): `ty`, `lhs` and `rhs` are tensors of one
+    ///    integer element type; every paired axis is in range for its side;
+    ///    no axis is paired twice on one side; and the result rank is
+    ///    `|batch| + |left free| + |right free|`;
+    /// 3. each operand's well-formedness, left then right (`TypeError`,
+    ///    [`tensor_operand`]);
+    /// 4. extent agreement, batch pairs in order then contract pairs in
+    ///    order (undefined behaviour: shape agreement is a precondition of
+    ///    the operation, never a type);
+    /// 5. the result count `N`: `N >= 2^pointer_bits` is undefined behaviour,
+    ///    decided exactly (a zero extent makes `N` 0) BEFORE anything is
+    ///    allocated;
+    /// 6. the elements.
+    ///
+    /// The result's axes are the batch axes (pair order), then the left free
+    /// axes, then the right free axes (each ascending). Each result element,
+    /// in row-major order, is a LEFT FOLD from 0 at the element type, over
+    /// the contracted multi-index in row-major order (the first contract pair
+    /// outermost), of `acc + l * r` through [`eval_int_binop`]'s wrapping
+    /// `BinOp::Add` / `BinOp::Mul` (`docs/ub-numerics-policy.md` §1), with
+    /// pointer-width elements at this run's pointer width. When some
+    /// contracted extent is 0 every sum is empty, and the all-zero result is
+    /// ONE uniform node ([`ArrayValue::splat`]), O(1) whatever `N`.
+    fn eval_tensor_contract(
+        &self,
+        ty: &Ty,
+        lhs: &InterpretValue,
+        rhs: &InterpretValue,
+        batch: &[(u32, u32)],
+        contract: &[(u32, u32)],
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        reject_partial(lhs, block, "tensor_contract")?;
+        reject_partial(rhs, block, "tensor_contract")?;
+        reject_handle(lhs, block, "TensorContract")?;
+        reject_handle(rhs, block, "TensorContract")?;
+
+        // Static rule 1: three tensor types over one integer element type.
+        let Ty::Tensor(result_elem, result_rank) = ty else {
+            return Err(type_error(
+                block,
+                format!("tensor contraction: the result type {ty} is not a tensor type"),
+            ));
+        };
+        let Ty::Tensor(lhs_elem, lhs_rank) = &lhs.ty else {
+            return Err(type_error(
+                block,
+                format!(
+                    "tensor contraction: the left operand has type {}, not a tensor type",
+                    lhs.ty
+                ),
+            ));
+        };
+        let Ty::Tensor(rhs_elem, rhs_rank) = &rhs.ty else {
+            return Err(type_error(
+                block,
+                format!(
+                    "tensor contraction: the right operand has type {}, not a tensor type",
+                    rhs.ty
+                ),
+            ));
+        };
+        if lhs_elem != result_elem || rhs_elem != result_elem {
+            return Err(type_error(
+                block,
+                format!(
+                    "tensor contraction: element types differ (result {result_elem}, left \
+                     {lhs_elem}, right {rhs_elem})"
+                ),
+            ));
+        }
+        let elem: &Ty = result_elem;
+        if !elem.is_integer() {
+            return Err(type_error(
+                block,
+                format!("tensor contraction: element type {elem} is not an integer type"),
+            ));
+        }
+        let (p, q, r) = (*lhs_rank, *rhs_rank, *result_rank);
+
+        // Static rule 2: every paired axis is in range for its side.
+        for &(a, b) in batch.iter().chain(contract) {
+            if a >= p {
+                return Err(type_error(
+                    block,
+                    format!("tensor contraction: left axis {a} is out of range for rank {p}"),
+                ));
+            }
+            if b >= q {
+                return Err(type_error(
+                    block,
+                    format!("tensor contraction: right axis {b} is out of range for rank {q}"),
+                ));
+            }
+        }
+        // Static rule 3: no axis is paired twice on one side.
+        let mut lhs_paired = BTreeSet::new();
+        let mut rhs_paired = BTreeSet::new();
+        for &(a, b) in batch.iter().chain(contract) {
+            if !lhs_paired.insert(a) {
+                return Err(type_error(
+                    block,
+                    format!("tensor contraction: left axis {a} is paired twice"),
+                ));
+            }
+            if !rhs_paired.insert(b) {
+                return Err(type_error(
+                    block,
+                    format!("tensor contraction: right axis {b} is paired twice"),
+                ));
+            }
+        }
+        // Static rule 4: the result rank. Rules 2 and 3 make the paired axes
+        // distinct and in range on each side, so `paired <= p` and
+        // `paired <= q`: the subtractions cannot underflow, and nothing here
+        // allocates in the (unchecked) ranks.
+        let paired = (batch.len() + contract.len()) as u64;
+        let expected = batch.len() as u64 + (u64::from(p) - paired) + (u64::from(q) - paired);
+        if u64::from(r) != expected {
+            return Err(type_error(
+                block,
+                format!(
+                    "tensor contraction: the result rank is {r}, but {} batch, {} left free and \
+                     {} right free axes make {expected}",
+                    batch.len(),
+                    u64::from(p) - paired,
+                    u64::from(q) - paired
+                ),
+            ));
+        }
+
+        // Runtime well-formedness of each operand, left then right.
+        let pointer_bits = self.pointer_bits();
+        let (lhs_dims, lhs_elems) = tensor_operand(
+            lhs,
+            "tensor contraction",
+            "left",
+            elem,
+            p,
+            pointer_bits,
+            block,
+        )?;
+        let (rhs_dims, rhs_elems) = tensor_operand(
+            rhs,
+            "tensor contraction",
+            "right",
+            elem,
+            q,
+            pointer_bits,
+            block,
+        )?;
+
+        // The precondition: paired axes agree, batch pairs then contract
+        // pairs. Every index is in range (rule 2, `dims.len() == rank`).
+        for &(a, b) in batch.iter().chain(contract) {
+            if lhs_dims[a as usize] != rhs_dims[b as usize] {
+                return Err(ub(block, TENSOR_EXTENT_MISMATCH));
+            }
+        }
+
+        // The result shape, and its count, decided before anything is
+        // allocated. Free axes are O(rank), which the operand payloads (one
+        // extent per axis, checked above) already hold.
+        let lhs_free: Vec<u32> = (0..p).filter(|a| !lhs_paired.contains(a)).collect();
+        let rhs_free: Vec<u32> = (0..q).filter(|b| !rhs_paired.contains(b)).collect();
+        let result_dims: Vec<u64> = batch
+            .iter()
+            .map(|&(a, _)| lhs_dims[a as usize])
+            .chain(lhs_free.iter().map(|&a| lhs_dims[a as usize]))
+            .chain(rhs_free.iter().map(|&b| rhs_dims[b as usize]))
+            .collect();
+        let usize_limit = 1u128.checked_shl(pointer_bits).unwrap_or(u128::MAX);
+        let count = exact_product_below(&result_dims, usize_limit)
+            .ok_or_else(|| ub(block, TENSOR_RESULT_TOO_LARGE))?;
+
+        let (bits, signed) = int_shape_at(elem, pointer_bits).ok_or_else(|| {
+            type_error(
+                block,
+                format!("tensor contraction: element type {elem} has no integer shape"),
+            )
+        })?;
+        let zero = InterpretInt::from_raw(bits, signed, 0).ok_or_else(|| {
+            type_error(
+                block,
+                format!("tensor contraction: unsupported integer width {bits}"),
+            )
+        })?;
+        let contracted: Vec<u64> = contract
+            .iter()
+            .map(|&(a, _)| lhs_dims[a as usize])
+            .collect();
+        if count == 0 || contracted.contains(&0) {
+            // No element, or every sum empty: one uniform node of zeros.
+            return Ok(InterpretValue {
+                ty: ty.clone(),
+                kind: InterpretValueKind::Tensor {
+                    dims: result_dims,
+                    elems: ArrayValue::splat(
+                        InterpretValue {
+                            ty: elem.clone(),
+                            kind: InterpretValueKind::Int(zero),
+                        },
+                        count,
+                    ),
+                },
+            });
+        }
+
+        // From here every result extent and every contracted extent is
+        // nonzero, so every extent of both operands is (each axis is a batch,
+        // contracted or free axis): every stride and the term count are at
+        // most an operand's element count, a `u64`. The `TypeError`s below
+        // are unreachable defences, not verdicts.
+        let overflow = || {
+            type_error(
+                block,
+                "tensor contraction: operand strides exceed the element count",
+            )
+        };
+        let terms = exact_product_below(&contracted, 1u128 << 64).ok_or_else(overflow)?;
+        let lhs_strides = row_major_strides(lhs_dims).ok_or_else(overflow)?;
+        let rhs_strides = row_major_strides(rhs_dims).ok_or_else(overflow)?;
+        // Per result axis, the stride it advances in each operand (0 where it
+        // is not that operand's axis); per contract pair, the same.
+        let mut out_lhs = Vec::with_capacity(result_dims.len());
+        let mut out_rhs = Vec::with_capacity(result_dims.len());
+        for &(a, b) in batch {
+            out_lhs.push(lhs_strides[a as usize]);
+            out_rhs.push(rhs_strides[b as usize]);
+        }
+        for &a in &lhs_free {
+            out_lhs.push(lhs_strides[a as usize]);
+            out_rhs.push(0);
+        }
+        for &b in &rhs_free {
+            out_lhs.push(0);
+            out_rhs.push(rhs_strides[b as usize]);
+        }
+        let sum_lhs: Vec<u64> = contract
+            .iter()
+            .map(|&(a, _)| lhs_strides[a as usize])
+            .collect();
+        let sum_rhs: Vec<u64> = contract
+            .iter()
+            .map(|&(_, b)| rhs_strides[b as usize])
+            .collect();
+        let fetch = |elems: &ArrayValue, at: u64| -> InterpretResult<InterpretInt> {
+            elems
+                .get(at)
+                .and_then(InterpretValue::as_int)
+                .ok_or_else(|| {
+                    type_error(block, "tensor contraction: an operand element is missing")
+                })
+        };
+        let elems = ArrayValue::try_from_elements((0..count).map(|flat| -> InterpretResult<_> {
+            let (lhs_base, rhs_base) = row_major_offsets(flat, &result_dims, &out_lhs, &out_rhs);
+            let mut acc = zero;
+            for term in 0..terms {
+                let (lhs_at, rhs_at) = row_major_offsets(term, &contracted, &sum_lhs, &sum_rhs);
+                let left = fetch(lhs_elems, lhs_base + lhs_at)?;
+                let right = fetch(rhs_elems, rhs_base + rhs_at)?;
+                let product = eval_int_binop(BinOp::Mul, left, right, block)?;
+                acc = eval_int_binop(BinOp::Add, acc, product, block)?;
+            }
+            Ok(InterpretValue {
+                ty: elem.clone(),
+                kind: InterpretValueKind::Int(acc),
+            })
+        }))?;
+        Ok(InterpretValue {
+            ty: ty.clone(),
+            kind: InterpretValueKind::Tensor {
+                dims: result_dims,
+                elems,
+            },
+        })
+    }
+
     fn eval_extract_field(
         &self,
         field_ty: &Ty,
@@ -9751,7 +10288,8 @@ fn first_handle(value: &InterpretValue) -> Option<&InterpretValue> {
         InterpretValueKind::Array(values)
         | InterpretValueKind::Vector(values)
         | InterpretValueKind::Sequence(values)
-        | InterpretValueKind::Set(values) => {
+        | InterpretValueKind::Set(values)
+        | InterpretValueKind::Tensor { elems: values, .. } => {
             match values.try_for_each_stored(|value| match first_handle(value) {
                 Some(handle) => core::ops::ControlFlow::Break(handle),
                 None => core::ops::ControlFlow::Continue(()),
@@ -9803,6 +10341,156 @@ fn reject_handle(value: &InterpretValue, block: BlockId, op: &str) -> InterpretR
     } else {
         Ok(())
     }
+}
+
+/// The undefined-behaviour message of a contraction whose paired axes have
+/// different extents (PKG-U13a). NORMATIVE text: SemR spells it byte for byte,
+/// and the differential compares UB verdicts by message.
+const TENSOR_EXTENT_MISMATCH: &str = "tensor contraction: paired axes have different extents";
+
+/// The undefined-behaviour message of a contraction whose result count is
+/// `2^pointer_bits` or more (PKG-U13a). NORMATIVE text, as
+/// [`TENSOR_EXTENT_MISMATCH`].
+const TENSOR_RESULT_TOO_LARGE: &str =
+    "tensor contraction: the result has more elements than usize holds";
+
+/// The extents and elements of `value`, the `side` operand of the tensor
+/// instruction `op` (its diagnostic name) whose static rules already hold, so its type is `Tensor(elem, rank)` with
+/// `elem` an integer type (PKG-U13a runtime well-formedness): a tensor
+/// payload, one extent per axis, each below `2^pointer_bits`, exactly
+/// `∏ dims` elements (a zero extent makes that 0, the empty product is 1),
+/// and every element an `Int` carrier of exactly `elem` at this run's pointer
+/// width. Each STORED element is checked once, never each element, so a
+/// uniform run of any count costs one check. Any failure is a `TypeError`:
+/// the value is not a value of its type.
+fn tensor_operand<'v>(
+    value: &'v InterpretValue,
+    op: &str,
+    side: &str,
+    elem: &Ty,
+    rank: u32,
+    pointer_bits: u32,
+    block: BlockId,
+) -> InterpretResult<(&'v [u64], &'v ArrayValue)> {
+    let InterpretValueKind::Tensor { dims, elems } = &value.kind else {
+        return Err(type_error(
+            block,
+            format!(
+                "{op}: the {side} operand ({}) carries no tensor payload",
+                value.ty
+            ),
+        ));
+    };
+    if dims.len() as u64 != u64::from(rank) {
+        return Err(type_error(
+            block,
+            format!(
+                "{op}: the {side} operand carries {} extents, but its type {} has \
+                 rank {rank}",
+                dims.len(),
+                value.ty
+            ),
+        ));
+    }
+    let usize_limit = 1u128.checked_shl(pointer_bits).unwrap_or(u128::MAX);
+    if let Some(dim) = dims.iter().find(|dim| u128::from(**dim) >= usize_limit) {
+        return Err(type_error(
+            block,
+            format!(
+                "{op}: the {side} operand's extent {dim} does not fit the \
+                 target's {pointer_bits}-bit usize"
+            ),
+        ));
+    }
+    if exact_product_below(dims, 1u128 << 64) != Some(elems.len()) {
+        return Err(type_error(
+            block,
+            format!(
+                "{op}: the {side} operand's extents {dims:?} do not describe its {} \
+                 elements",
+                elems.len()
+            ),
+        ));
+    }
+    let (bits, signed) = int_shape_at(elem, pointer_bits).ok_or_else(|| {
+        type_error(
+            block,
+            format!("{op}: element type {elem} has no integer shape"),
+        )
+    })?;
+    let stray = elems.try_for_each_stored(|element| {
+        let carried = element.ty == *elem
+            && matches!(
+                element.kind,
+                InterpretValueKind::Int(int) if integer_carrier_matches(&int, bits, signed)
+            );
+        if carried {
+            core::ops::ControlFlow::Continue(())
+        } else {
+            core::ops::ControlFlow::Break(element)
+        }
+    });
+    if let core::ops::ControlFlow::Break(element) = stray {
+        return Err(type_error(
+            block,
+            format!(
+                "{op}: the {side} operand carries a {} element that is not a {elem} \
+                 integer",
+                element.ty
+            ),
+        ));
+    }
+    Ok((dims.as_slice(), elems))
+}
+
+/// The exact product of `dims` when it is below `limit`, else `None`. A zero
+/// extent makes the product 0 whatever the others (decided first, so a large
+/// prefix cannot overflow before the zero is reached), and the empty product
+/// is 1 (a rank-0 tensor has one element). Exact, as SemR's `Nat` product is.
+fn exact_product_below(dims: &[u64], limit: u128) -> Option<u64> {
+    let product = if dims.contains(&0) {
+        0
+    } else {
+        // Every factor is at least 1, so a partial product at or above
+        // `limit` stays there: stop at the first.
+        dims.iter().try_fold(1u128, |product, &dim| {
+            product
+                .checked_mul(u128::from(dim))
+                .filter(|product| *product < limit)
+        })?
+    };
+    if product < limit {
+        u64::try_from(product).ok()
+    } else {
+        None
+    }
+}
+
+/// The row-major stride of each axis of `dims` (`∏ dims[i+1..]`; the last
+/// axis is fastest), or `None` if one does not fit a `u64`.
+fn row_major_strides(dims: &[u64]) -> Option<Vec<u64>> {
+    let mut strides = vec![0u64; dims.len()];
+    let mut stride = 1u64;
+    for (slot, &dim) in strides.iter_mut().zip(dims).rev() {
+        *slot = stride;
+        stride = stride.checked_mul(dim)?;
+    }
+    Some(strides)
+}
+
+/// Decode `flat`, a row-major position over the NONZERO extents `dims` (last
+/// axis fastest), and return its offsets `(Σ index[i] · lhs[i], Σ index[i] ·
+/// rhs[i])` under the two per-axis stride lists. The caller's indices name
+/// real elements, so neither sum exceeds an operand's element count.
+fn row_major_offsets(mut flat: u64, dims: &[u64], lhs: &[u64], rhs: &[u64]) -> (u64, u64) {
+    let (mut lhs_offset, mut rhs_offset) = (0u64, 0u64);
+    for ((&dim, &lhs_stride), &rhs_stride) in dims.iter().zip(lhs).zip(rhs).rev() {
+        let index = flat % dim;
+        flat /= dim;
+        lhs_offset += index * lhs_stride;
+        rhs_offset += index * rhs_stride;
+    }
+    (lhs_offset, rhs_offset)
 }
 
 fn ensure_call_depth(block: BlockId, call_depth: u64) -> InterpretResult<()> {
@@ -11045,6 +11733,27 @@ fn narrow_pointer_width_ints(
         InterpretValueKind::FatPtr { data, metadata } => {
             narrow_pointer_width_ints(data, pointer_bits, block, char_allowed)?;
             narrow_pointer_width_ints(metadata, pointer_bits, block, char_allowed)
+        }
+        // A tensor's extents are `usize` values it carries (PKG-U13a): one
+        // the target's pointer width cannot hold is refused here, and its
+        // elements are re-expressed like an array's (each stored node once).
+        // The rest of its well-formedness (one extent per axis, `∏ dims`
+        // elements of exactly its element type) is checked where it is
+        // consumed (`tensor_operand`), as for a tensor an instruction built.
+        InterpretValueKind::Tensor { dims, elems } => {
+            let usize_limit = 1u128.checked_shl(pointer_bits).unwrap_or(u128::MAX);
+            if let Some(dim) = dims.iter().find(|dim| u128::from(**dim) >= usize_limit) {
+                return Err(malformed(format!(
+                    "{} extent {dim} does not fit the target's {pointer_bits}-bit usize",
+                    value.ty
+                )));
+            }
+            *elems = elems.try_map(|item| {
+                let mut item = item.clone();
+                narrow_pointer_width_ints(&mut item, pointer_bits, block, char_allowed)
+                    .map(|()| item)
+            })?;
+            Ok(())
         }
         _ => Ok(()),
     }
@@ -12459,6 +13168,14 @@ mod drop_glue_tests;
 #[cfg(test)]
 #[path = "interpret_float_choice_tests.rs"]
 mod float_choice_tests;
+
+#[cfg(test)]
+#[path = "interpret_tensor_contract_tests.rs"]
+mod tensor_contract_tests;
+
+#[cfg(test)]
+#[path = "interpret_tensor_gather_scatter_tests.rs"]
+mod tensor_gather_scatter_tests;
 
 #[cfg(test)]
 mod tests {

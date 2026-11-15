@@ -251,36 +251,64 @@ fn test_imported_constructor_binding_refuses_every_root() {
     }
 }
 
+/// The text of the refusal `link_types_agree` names a link by.
+fn type_mismatch_refusal(decl: &str, target: &str) -> String {
+    format!(
+        "`{decl}` is @[implemented_by {target}], and in this environment `{target}` \
+         does not have the type of `{decl}`"
+    )
+}
+
 /// An imported binding whose target Clean's builtin prelude types otherwise
-/// is refused by name where it is followed (`link_types_agree`, fixture
-/// family `implemented_by_shadowed`). Pinned Lean accepted both bindings
-/// against its own declarations:
+/// (fixture family `implemented_by_shadowed`, a Lean-written `.olean`) is
+/// followed in the declarations Lean held. The artifact has no Clean
+/// payload, so the program environment is the selected world's genuine Init
+/// (`source_closure_needs_world_setup`, `docs/DECISIONS.md`), not the builtin
+/// prelude; neither target is a resident of another type there. Pinned
+/// v4.30.0-rc2 Lean accepted both bindings against its own declarations:
 ///
-/// * `modVia` is `@[implemented_by Nat.modCore]`, which Lean types `Nat →
-///   Nat → Nat` and the builtin prelude `Nat → Nat → Nat → Nat`. Lean's own
-///   build of `modVia 7 3` fails ("Failed to find LCNF signature for
-///   Nat.modCore", exit 1); following the link here would call a three-place
-///   function with two arguments.
+/// * `modVia` is `@[implemented_by Nat.modCore]`, which genuine Init types
+///   `Nat → Nat → Nat` and declares `@[extern "lean_nat_mod"]` with a body
+///   (`Init/Prelude.lean`). Lean's own build of `modVia 7 3` fails ("Failed
+///   to find LCNF signature for Nat.modCore", exit 1). The link is followed
+///   and the native path refuses its END by name (`native-extern-body`), as
+///   it refuses any extern with a body; it never compiles that body, and it
+///   never calls a three-place function with two arguments, as following the
+///   builtin prelude's fuelled `Nat.modCore` would.
 /// * `finEqVia` is `@[implemented_by instDecidableEqFin]`, which Lean types
-///   `(n : Nat) → DecidableEq (Fin n)` and the builtin prelude holds unfolded.
-///   Lean prints `true` for `finSelfEq ()`. The types are definitionally
-///   equal, but the check is Lean's syntactic one, so this is an
-///   over-refusal, pinned so that it fails loudly the day it closes.
+///   `(n : Nat) → DecidableEq (Fin n)`, as genuine Init does. Lean prints
+///   `true` for `finSelfEq ()`. Over the builtin prelude, which holds that
+///   instance unfolded, this was an over-refusal pinned to fail loudly the
+///   day it closed; genuine Init closed it.
+///
+/// The type check itself stays where the link is followed, for a binding
+/// whose target the environment types otherwise
+/// (`clean_compiler::implemented_by_tests::test_runtime_const_name_names_a_type_mismatch`).
 #[test]
-fn test_imported_binding_to_a_resident_of_another_type_refused_by_name() {
-    for (expr, decl, target) in [
-        ("modVia 7 3", "modVia", "Nat.modCore"),
-        ("finSelfEq ()", "finEqVia", "instDecidableEqFin"),
-    ] {
-        let (_dir, file) = project_of("implemented_by_shadowed", "ShadowLib", expr);
-        let msg = refusal(&file);
-        assert!(
-            msg.contains(&format!(
-                "`{decl}` is @[implemented_by {target}], and in this environment `{target}` \
-                 does not have the type of `{decl}`"
-            )),
-            "`{expr}`: {msg}"
-        );
-        assert!(msg.contains("(implemented-by)"), "`{expr}`: {msg}");
-    }
+fn test_imported_binding_to_a_shadowed_resident_follows_genuine_init() {
+    let (_dir, file) = project_of("implemented_by_shadowed", "ShadowLib", "modVia 7 3");
+    let msg = refusal(&file);
+    assert!(
+        msg.contains("native build refuses `Nat.modCore` (reached from `main`)")
+            && msg.contains("@[extern \"lean_nat_mod\"] with a body")
+            && msg.contains("(native-extern-body)"),
+        "`modVia 7 3`: the link to genuine `Nat.modCore` is followed and its end refused \
+         by name: {msg}"
+    );
+    assert!(
+        !msg.contains(&type_mismatch_refusal("modVia", "Nat.modCore")),
+        "`modVia 7 3`: genuine `Nat.modCore` has the type of `modVia`: {msg}"
+    );
+
+    let (_dir, file) = project_of("implemented_by_shadowed", "ShadowLib", "finSelfEq ()");
+    let (c, stdout, status) = build_and_run(&file);
+    assert_eq!(
+        (stdout.as_str(), status),
+        ("true\n", 0),
+        "`finSelfEq ()`: pinned Lean prints \"true\" at exit 0"
+    );
+    assert!(
+        !mentions_symbol(&c, "l_finEqVia"),
+        "`finEqVia`'s logical body is never compiled:\n{c}"
+    );
 }

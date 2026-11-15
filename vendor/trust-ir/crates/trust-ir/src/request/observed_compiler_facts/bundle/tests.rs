@@ -176,7 +176,8 @@ fn add_facts(bundle: &mut NativeVerificationBundle) {
 fn family(error: &E) -> bool {
     matches!(
         error,
-        E::DuplicateCompilerFactId(_)
+        E::DuplicateModuleObligationId(_)
+            | E::DuplicateCompilerFactId(_)
             | E::DuplicateMonomorphizationId(_)
             | E::InvalidCompilerFact { .. }
             | E::UnknownCompilerFactFunction { .. }

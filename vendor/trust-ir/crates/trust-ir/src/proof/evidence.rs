@@ -564,6 +564,20 @@ pub const KERNEL_ANCHOR_CLEAN_BACKEND_TV: &str = "clean_backend_tv";
 /// this distinct anchor; the parametric/no-callee anchor keeps its meaning.
 pub const KERNEL_ANCHOR_CLEAN_BACKEND_SOURCE_CALLS_V1: &str = "clean_backend_source_calls_v1";
 
+/// Universal readonly-effect call-family TV in the canonical ByteV1 model.
+/// This distinct anchor never upgrades a pointwise source/word coincidence.
+/// It rederives actual C(Ptr)->U64 LOAD8/call bodies and checks their complete
+/// context/memory/address -> memory-result functions against island Definitions.
+pub const KERNEL_ANCHOR_CLEAN_BACKEND_READONLY_CALLS_V1: &str = "clean_backend_readonly_calls_v1";
+
+/// The closed source-family anchors; each has its own rederived profile.
+pub fn is_clean_source_call_anchor(anchor: &str) -> bool {
+    matches!(
+        anchor,
+        KERNEL_ANCHOR_CLEAN_BACKEND_SOURCE_CALLS_V1 | KERNEL_ANCHOR_CLEAN_BACKEND_READONLY_CALLS_V1
+    )
+}
+
 /// In-process kernel anchor for a **user theorem shipped with its island**
 /// (roadmap WS1.13, finding F-012): the one anchor whose environment is not
 /// fixed by the validator but carried by the certificate, as an

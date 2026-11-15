@@ -205,20 +205,21 @@ fn a_pre_drop_glue_json_and_msgpack_module_decodes_with_an_empty_table() {
 }
 
 #[test]
-fn completeness_and_drop_glue_are_always_emitted_and_closure_layouts_is_the_trailing_skipped_field()
-{
-    // No claim, no drop-glue table, no closure table: `completeness` is
-    // written (null) and `drop_glue` is written (`[]`) — wire v58 appended
-    // `closure_layouts` after the drop-glue table, and positional MessagePack
-    // may skip only a TRAILING field — while `closure_layouts` is skipped, so
-    // a module without a closure table keeps one exact serde form.
+fn completeness_and_the_drop_glue_and_closure_tables_are_always_emitted_and_blobs_is_the_trailing_skipped_field()
+ {
+    // No claim, no drop-glue table, no closure table, no blob table:
+    // `completeness` is written (null), `drop_glue` and `closure_layouts` are
+    // written (`[]`) — wire v58 appended `closure_layouts` after the
+    // drop-glue table, v70 appended `blobs` after the closure table, and
+    // positional MessagePack may skip only a TRAILING field — while `blobs`
+    // is skipped, so a module without a blob table keeps one exact serde form.
     let plain = Module::new("plain");
     let text = serde_json::to_string(&plain).unwrap();
     assert!(
-        text.ends_with(",\"completeness\":null,\"drop_glue\":[]}"),
-        "completeness then drop_glue are the last emitted fields: {text}"
+        text.ends_with(",\"completeness\":null,\"drop_glue\":[],\"closure_layouts\":[]}"),
+        "completeness, drop_glue then closure_layouts are the last emitted fields: {text}"
     );
-    assert!(!text.contains("closure_layouts"), "{text}");
+    assert!(!text.contains("blobs"), "{text}");
 
     // A drop-glue table no longer changes the document's SHAPE, only the
     // always-emitted field's value.
@@ -227,13 +228,12 @@ fn completeness_and_drop_glue_are_always_emitted_and_closure_layouts_is_the_trai
     let text_table = serde_json::to_string(&with_table).unwrap();
     assert!(
         text_table.contains(",\"completeness\":null,\"drop_glue\":[{")
-            && text_table.ends_with("}]}"),
-        "drop_glue is still the last emitted field: {text_table}"
+            && text_table.ends_with("}],\"closure_layouts\":[]}"),
+        "closure_layouts still follows the drop-glue table: {text_table}"
     );
-    assert!(!text_table.contains("closure_layouts"), "{text_table}");
+    assert!(!text_table.contains("blobs"), "{text_table}");
 
-    // A closure table is the one trailing skip: it appends exactly one field
-    // after both always-emitted ones.
+    // Nor does a closure table, since v70.
     let mut with_closure = plain.clone();
     with_closure.closure_layouts.push(ClosureLayoutDescriptor {
         origin: None,
@@ -244,35 +244,53 @@ fn completeness_and_drop_glue_are_always_emitted_and_closure_layouts_is_the_trai
     });
     let text_closure = serde_json::to_string(&with_closure).unwrap();
     assert!(
-        text_closure.contains(",\"completeness\":null,\"drop_glue\":[],\"closure_layouts\":[{"),
-        "closure_layouts trails the always-emitted fields: {text_closure}"
+        text_closure.contains(",\"completeness\":null,\"drop_glue\":[],\"closure_layouts\":[{")
+            && text_closure.ends_with("}]}"),
+        "closure_layouts is the last emitted field: {text_closure}"
     );
+    assert!(!text_closure.contains("blobs"), "{text_closure}");
     let mut with_both = with_table.clone();
     with_both.closure_layouts = with_closure.closure_layouts.clone();
 
-    // Positional MessagePack: the module array ends with the nil claim and
-    // the drop-glue table, whether or not that table is empty; only a
-    // closure table appends exactly one trailing element after them.
-    let arrays: Vec<(Vec<u8>, Vec<rmpv_like::Any>)> =
-        [&plain, &with_table, &with_closure, &with_both]
-            .into_iter()
-            .map(|m| {
-                let mp = rmp_serde::to_vec(m).unwrap();
-                let array = rmp_serde::from_slice(&mp).unwrap();
-                (mp, array)
-            })
-            .collect();
-    let [plain_a, table_a, closure_a, both_a] = [0, 1, 2, 3].map(|i| &arrays[i].1);
+    // A blob table is the one trailing skip: it appends exactly one field
+    // after the always-emitted ones.
+    let mut with_blob = plain.clone();
+    with_blob.intern_blob(vec![1, 2, 3]);
+    let text_blob = serde_json::to_string(&with_blob).unwrap();
+    assert!(
+        text_blob.contains(",\"drop_glue\":[],\"closure_layouts\":[],\"blobs\":[{"),
+        "blobs trails the always-emitted fields: {text_blob}"
+    );
+
+    // Positional MessagePack: the module array ends with the nil claim, the
+    // drop-glue table and the closure table, whether or not the tables are
+    // empty; only a blob table appends exactly one trailing element after
+    // them.
+    let shapes = [&plain, &with_table, &with_closure, &with_both, &with_blob];
+    let arrays: Vec<(Vec<u8>, Vec<rmpv_like::Any>)> = shapes
+        .into_iter()
+        .map(|m| {
+            let mp = rmp_serde::to_vec(m).unwrap();
+            let array = rmp_serde::from_slice(&mp).unwrap();
+            (mp, array)
+        })
+        .collect();
+    let [plain_a, table_a, closure_a, both_a, blob_a] = [0, 1, 2, 3, 4].map(|i| &arrays[i].1);
     assert_eq!(table_a.len(), plain_a.len(), "drop_glue is always emitted");
-    assert_eq!(closure_a.len(), plain_a.len() + 1, "one trailing skip");
-    assert_eq!(both_a.len(), plain_a.len() + 1, "one trailing skip");
+    assert_eq!(
+        closure_a.len(),
+        plain_a.len(),
+        "closure_layouts is always emitted"
+    );
+    assert_eq!(both_a.len(), plain_a.len());
+    assert_eq!(blob_a.len(), plain_a.len() + 1, "one trailing skip");
     use rmpv_like::Any::{Nil, Seq};
     assert!(
-        matches!(plain_a[plain_a.len() - 2..], [Nil, Seq(0)]),
+        matches!(plain_a[plain_a.len() - 3..], [Nil, Seq(0), Seq(0)]),
         "{plain_a:?}"
     );
     assert!(
-        matches!(table_a[table_a.len() - 2..], [Nil, Seq(1)]),
+        matches!(table_a[table_a.len() - 3..], [Nil, Seq(1), Seq(0)]),
         "{table_a:?}"
     );
     assert!(
@@ -283,15 +301,24 @@ fn completeness_and_drop_glue_are_always_emitted_and_closure_layouts_is_the_trai
         matches!(both_a[both_a.len() - 3..], [Nil, Seq(1), Seq(1)]),
         "{both_a:?}"
     );
+    assert!(
+        matches!(blob_a[blob_a.len() - 4..], [Nil, Seq(0), Seq(0), Seq(1)]),
+        "{blob_a:?}"
+    );
     // Every shape decodes back exactly.
-    for ((mp, _), m) in arrays
-        .iter()
-        .zip([&plain, &with_table, &with_closure, &with_both])
-    {
+    for ((mp, _), m) in arrays.iter().zip(shapes) {
         assert_eq!(&rmp_serde::from_slice::<Module>(mp).unwrap(), m);
         let json = serde_json::to_string(m).unwrap();
         assert_eq!(&serde_json::from_str::<Module>(&json).unwrap(), m);
     }
+    // A pre-v70 array (no closure slot) decodes with both tables empty.
+    let (plain_mp, _) = &arrays[0];
+    let mut legacy = plain_mp.clone();
+    assert_eq!(legacy[0], 0xdc, "array16 header");
+    legacy.pop();
+    let n = u16::from_be_bytes([legacy[1], legacy[2]]) - 1;
+    legacy[1..3].copy_from_slice(&n.to_be_bytes());
+    assert_eq!(rmp_serde::from_slice::<Module>(&legacy).unwrap(), plain);
 }
 
 /// A minimal "any MessagePack value" decoder (the crate has no `rmpv`

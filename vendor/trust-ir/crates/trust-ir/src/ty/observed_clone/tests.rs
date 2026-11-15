@@ -339,3 +339,11 @@ fn requested_bytes_are_cumulative_across_calls_without_replacement_allowance() {
     );
     assert_eq!(session.remaining_fuel(), InterpretOptions::default().fuel);
 }
+#[test]
+fn tensor_clone_preserves_its_rank_and_inline_element() {
+    let ty = Ty::Tuple(vec![
+        Ty::Tensor(Box::new(Ty::U8), 0),
+        Ty::Tensor(Box::new(Ty::I64), 3),
+    ]);
+    assert_eq!(clone(&ty).0, ty);
+}

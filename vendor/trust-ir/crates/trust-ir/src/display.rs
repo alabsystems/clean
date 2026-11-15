@@ -349,6 +349,17 @@ impl<X: crate::level::Extension> fmt::Display for crate::ModuleG<X> {
             writeln!(f)?;
         }
 
+        // v70: the blob table, one `blob <DIGEST> bytes<HEX>` line per row in
+        // the module's (canonical, ascending-digest) order. An empty table
+        // prints nothing, so a module without one keeps its text.
+        for blob in &self.blobs {
+            write!(f, "\nblob {} bytes<", blob.digest)?;
+            for byte in &blob.data {
+                write!(f, "{byte:02x}")?;
+            }
+            writeln!(f, ">")?;
+        }
+
         for ct in &self.closure_types {
             write!(f, "\nclosure_ty functy.{} {{ ", ct.func.index())?;
             for (i, cap) in ct.captures.iter().enumerate() {
@@ -1646,6 +1657,20 @@ fn val(id: &crate::value::ValueId) -> u32 {
     id.index()
 }
 
+/// A `tensor_contract` axis-pair list (PKG-U13a): `[a:b, c:d]`, each pair
+/// `lhs axis:rhs axis`, separated by `", "`; the empty list is `[]`.
+/// `Parser::read_axis_pairs` reads exactly this.
+fn write_axis_pairs(f: &mut fmt::Formatter<'_>, pairs: &[(u32, u32)]) -> fmt::Result {
+    write!(f, "[")?;
+    for (i, (lhs_axis, rhs_axis)) in pairs.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "{lhs_axis}:{rhs_axis}")?;
+    }
+    write!(f, "]")
+}
+
 /// The `, KIND` (plan item P, v52) and `, panic @func.E at LOC` (amendment
 /// P, v54) clauses after an assert's condition; an `Unspecified` kind and an
 /// absent site write nothing.
@@ -1670,6 +1695,28 @@ fn write_assert_kind_and_site(
             crate::inst::PanicLocation::Global(global) => write!(f, "@global.{}", global.index())?,
             crate::inst::PanicLocation::Value(value) => write!(f, "%{}", val(&value))?,
         }
+    }
+    Ok(())
+}
+
+/// A gather's or a scatter's coordinate operand list, as `%a, %b` (PKG-U13d).
+fn write_value_list(f: &mut fmt::Formatter<'_>, values: &[crate::value::ValueId]) -> fmt::Result {
+    for (i, value) in values.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "%{}", val(value))?;
+    }
+    Ok(())
+}
+
+/// A `TensorView` node-reference list, as `$i, $j` (PKG-U13c).
+fn write_node_refs(f: &mut fmt::Formatter<'_>, nodes: &[u32]) -> fmt::Result {
+    for (i, node) in nodes.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "${node}")?;
     }
     Ok(())
 }
@@ -2009,6 +2056,122 @@ fn write_inst<X: crate::level::Extension>(
             write!(f, ")")
         }
         InstG::ArraySplat { ty, value } => write!(f, "array_splat {ty} %{}", val(value)),
+        // PKG-U13a: `tensor_contract TY %l, %r batch [a:b, ..] contract [a:b, ..]`.
+        // Both pair lists are always written (an empty one as `[]`), so the
+        // spelling has no optional clause and `[]` is the only empty list.
+        InstG::TensorContract {
+            ty,
+            lhs,
+            rhs,
+            batch,
+            contract,
+        } => {
+            write!(
+                f,
+                "tensor_contract {ty} %{}, %{} batch ",
+                val(lhs),
+                val(rhs)
+            )?;
+            write_axis_pairs(f, batch)?;
+            write!(f, " contract ")?;
+            write_axis_pairs(f, contract)
+        }
+        // PKG-U13c: `tensor_map TY (%a, ..) { NODE; .. }`, each node the
+        // scalar instruction's own spelling with `$lane` for `%value`.
+        InstG::TensorMap { ty, args, body } => {
+            write!(f, "tensor_map {ty} (")?;
+            for (i, arg) in args.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "%{}", val(arg))?;
+            }
+            write!(f, ") {{")?;
+            for (i, node) in body.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ";")?;
+                }
+                write!(f, " {node}")?;
+            }
+            write!(f, " }}")
+        }
+        // PKG-U13c: `tensor_reduce OP TY %x axes [a, ..] order row_major`;
+        // the axis list is always written (`[]` when empty).
+        InstG::TensorReduce {
+            ty,
+            src,
+            op,
+            axes,
+            order,
+        } => {
+            write!(f, "tensor_reduce {op} {ty} %{} axes [", val(src))?;
+            for (i, axis) in axes.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{axis}")?;
+            }
+            write!(f, "] order {order}")
+        }
+        // PKG-U13c: `tensor_view TY %src params [..] exprs [..] shape [$i, ..]
+        // index [$j, ..]`, then ` fill %f` when there is one. Every list is
+        // always written (`[]` when empty).
+        InstG::TensorView {
+            ty,
+            src,
+            params,
+            exprs,
+            shape,
+            index,
+            fill,
+        } => {
+            write!(f, "tensor_view {ty} %{} params [", val(src))?;
+            for (i, param) in params.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "%{}", val(param))?;
+            }
+            write!(f, "] exprs [")?;
+            for (i, expr) in exprs.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{expr}")?;
+            }
+            write!(f, "] shape [")?;
+            write_node_refs(f, shape)?;
+            write!(f, "] index [")?;
+            write_node_refs(f, index)?;
+            write!(f, "]")?;
+            if let Some(fill) = fill {
+                write!(f, " fill %{}", val(fill))?;
+            }
+            Ok(())
+        }
+        // PKG-U13d: `tensor_gather TY %data coords [%c, ..]`; the coordinate
+        // list is always written (`[]` when empty).
+        InstG::TensorGather { ty, data, coords } => {
+            write!(f, "tensor_gather {ty} %{} coords [", val(data))?;
+            write_value_list(f, coords)?;
+            write!(f, "]")
+        }
+        // PKG-U13d: `tensor_scatter TY %init, %src coords [%c, ..]`.
+        InstG::TensorScatter {
+            ty,
+            init,
+            src,
+            coords,
+        } => {
+            write!(
+                f,
+                "tensor_scatter {ty} %{}, %{} coords [",
+                val(init),
+                val(src)
+            )?;
+            write_value_list(f, coords)?;
+            write!(f, "]")
+        }
         InstG::ExtractField {
             ty,
             aggregate,
@@ -2615,6 +2778,18 @@ impl<X: crate::level::Extension> fmt::Display for crate::ConstantG<X> {
             // of an `Inst::Const` aggregate (the validator's placement rule).
             ConstantG::Uninit => write!(f, "uninit"),
             ConstantG::Ext(e) => e.fmt_ext(f),
+            // v70: `tensor_blob<DIGEST>[d0, d1, ..]` — the digest in lower-case
+            // hex and the extents; the bytes are the module's `blob` rows.
+            ConstantG::TensorBlob { digest, dims } => {
+                write!(f, "tensor_blob<{digest}>[")?;
+                for (index, dim) in dims.iter().enumerate() {
+                    if index != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{dim}")?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }

@@ -45,6 +45,24 @@ pub(super) fn collect<'a, O: ExecutionObserver>(
                     .ok_or(ObservedValueError::CapacityOverflow)?;
             }
         }
+        plan::Plan::Map(ty, body) => {
+            work.push(types, ty)?;
+            work.admit(1, size_of::<usize>())?;
+            let mut index = 0usize;
+            loop {
+                work.admit(1, 2 * size_of::<&Ty>())?;
+                let Some(node) = body.get(index) else {
+                    return Ok(());
+                };
+                for node_ty in node.types() {
+                    work.push(types, node_ty)?;
+                }
+                work.admit(1, size_of::<usize>())?;
+                index = index
+                    .checked_add(1)
+                    .ok_or(ObservedValueError::CapacityOverflow)?;
+            }
+        }
         plan::Plan::Empty => Ok(()),
     }
 }

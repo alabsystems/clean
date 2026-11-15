@@ -1207,7 +1207,7 @@
       },
       {
         "path": "data/verdict_io_contracts.json",
-        "sha256": "192be09a3cfad15e90570506775063b923a156eb3d389790de53bdbf95f33f9e"
+        "sha256": "df4d25c35db38240dd79993612897de392fb9cbc8b69e0949df04c2f65913924"
       }
     ],
     "consumers": [

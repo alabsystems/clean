@@ -64,7 +64,7 @@ fn clean_format_closure_keeps_bootstrap_bodies_and_source_isolation() {
         previous = bytes;
     }
     let path = dir.path().join("Main.lean");
-    assert!(source_closure_needs_world_setup(&path).expect("source walk"));
+    assert!(source_closure_needs_world_setup(&path, &choice(&path)).expect("source walk"));
     assert!(clean_format_source_closure(&path, &choice(&path)).expect("strict format walk"));
     let mut setup = SourceModuleSetup::for_file(EnvironmentSetup::default(), &choice(&path), &path)
         .expect("Clean-format setup");
@@ -167,7 +167,8 @@ fn source_aliases_preserve_lexical_parent_resolution_contexts() {
         std::fs::write(parent.join("Dependency.lean"), body).expect("context-specific source");
     }
     let path = dir.path().join("Main.lean");
-    assert!(source_closure_needs_world_setup(&path).expect("outer selector checks both contexts"));
+    assert!(source_closure_needs_world_setup(&path, &choice(&path))
+        .expect("outer selector checks both contexts"));
     let setup = SourceModuleSetup::for_file(EnvironmentSetup::default(), &choice(&path), &path)
         .expect("prelude requires genuine setup");
     assert!(!setup.bootstrap_snapshot);
@@ -246,7 +247,7 @@ fn quoted_parent_source_backedge_is_a_named_cycle_in_both_walkers() {
         .imports()
         .expect("fixture imports remain permitted");
     for result in [
-        source_closure_needs_world_setup(&path),
+        source_closure_needs_world_setup(&path, &decision),
         clean_format_source_closure(&path, &decision),
     ] {
         match result {

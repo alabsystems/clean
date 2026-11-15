@@ -19,7 +19,6 @@ import subprocess
 import sys
 import tempfile
 import stat
-import ck0_input_stability as inputs
 try:
     import tomllib
 except ImportError:
@@ -46,6 +45,18 @@ _RUST_MODULES = None
 def need(ok, why):
     if not ok:
         raise ValueError(why)
+
+
+def _source_module(name, path):
+    """Execute the inventoried Python source; bytecode caches are not inputs."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    need(spec is not None and spec.loader is not None, 'Python source helper unavailable')
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
+
+inputs = _source_module('ck0_input_stability', ROOT / 'scripts/ck0_input_stability.py')
 
 
 def digest(data):
@@ -89,12 +100,7 @@ def _rust_modules():
     """Reuse the module walk's repaired lexer, not its approximate reachability."""
     global _RUST_MODULES
     if _RUST_MODULES is None:
-        path = ROOT / 'scripts/rust_modules.py'
-        spec = importlib.util.spec_from_file_location('_ck0_rust_modules', path)
-        need(spec is not None and spec.loader is not None, 'Rust lexer unavailable')
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        _RUST_MODULES = module
+        _RUST_MODULES = _source_module('_ck0_rust_modules', ROOT / 'scripts/rust_modules.py')
     return _RUST_MODULES
 
 

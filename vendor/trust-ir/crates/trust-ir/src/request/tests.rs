@@ -628,6 +628,9 @@ fn source_generation_authority_bundle() -> NativeVerificationBundle {
 #[path = "tests/validated_view.rs"]
 mod validated_view;
 
+#[path = "tests/module_obligation_identity.rs"]
+mod module_obligation_identity;
+
 #[test]
 fn native_bundle_rejects_ambiguous_v6_identity_without_authority_fallback() {
     let mut bundle = source_generation_authority_bundle();

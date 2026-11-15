@@ -138,6 +138,16 @@ fn constant_head<'a, O: ExecutionObserver>(
             buf.push_value(tasks, ConstantTask::U64(*len))?;
             buf.push_value(tasks, ConstantTask::Value(elem))?;
         }
+        // v70: the 32 digest bytes, then the counted extents as fixed-width
+        // `u64`s. Read-gated on v70.
+        ConstantG::TensorBlob { digest, dims } => {
+            observed_write_u8(buf, CONSTANT_TENSOR_BLOB_TAG)?;
+            buf.extend_from_slice(&digest.0)?;
+            observed_write_count(buf, "Constant::TensorBlob dims", dims.len())?;
+            for dim in dims {
+                observed_write_u64(buf, *dim)?;
+            }
+        }
         ConstantG::Ext(e) => {
             e.unreachable();
         }

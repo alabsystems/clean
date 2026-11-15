@@ -5,7 +5,7 @@
     "kind": "rule: deleting the code would change which judgments the kernel accepts as instances of a rule. strategy: the code only orders the rules it names in uses_rules. infrastructure: object plumbing, caches, printing.",
     "extension": "A family that hardcodes Lean constants beyond the core calculus. plan_requires_derived_rule says whether the self-proof plan requires it as a derived rule (unit S6 for Nat and String literals).",
     "anchors": "file is relative to upstream.root; lines are 1-based and inclusive; sha256 is of those raw lines. A whole-function anchor has the function's span; a function split between rows has every code line and case arm claimed by some part.",
-    "control": "Plan unit E6. Each constructor item of a rule carrier names its negative control: {theorem, file}, a theorem `<constructor>_control` stating `Refutes .<constructor> ...` (with that premise deleted the judgment derives a statement it refutes as written), or {none: reason} where no single deleted premise lets the judgment derive a statement it can be shown to refute. The gate checks the name and the statement; crates/clean-olean/tests/cic_l_level.rs checks the admitted theorem and what Refutes, Closed and Mutation mean."
+    "control": "Plan unit E6 / M3. Each constructor item of a rule carrier names its negative control: {theorem, file}, a ground theorem `<constructor>_control` stating `Refutes .<constructor> ...` (with that premise deleted the judgment derives a statement it refutes as written), or {none: reason} where no single deleted premise lets the judgment derive a statement it can be shown to refute (zero constructors of CICL.CoreJudgmentIn remain none). The gate checks the name and the statement across spec.control_roots; crates/clean-olean/tests/cic_l_level.rs and crates/clean-olean/tests/cic_l_model.rs check the admitted theorems and what Refutes, Closed and Mutation mean."
   },
   "grouping_rule": "One row per rule family, where a family is the unit of specification work: one typing rule per term former, one row per reduction, one per definitional-equality rule, one per stage of inductive admission, one per generated artifact. A dispatch function is split by line range so each arm goes to its family. Where the kernel dispatches on hardcoded constants, constants that share one implementation function share a row, and the row names each of them.",
   "out_of_scope": "KR2 names four files; inductive.h and quot.h are pinned with them because iota, K, structure eta of a major premise and quotient reduction are defined there. Everything else under src/kernel is outside this inventory, in particular environment.cpp (admission of axioms, definitions, theorems, opaque and mutual definitions), expr.cpp (lit_type), instantiate.cpp, abstract.cpp, local_ctx.cpp, declaration.cpp, equiv_manager.cpp and type_checker.h. A rule those files state is not counted here.",
@@ -44,6 +44,10 @@
   },
   "spec": {
     "root": "theories/cic_l",
+    "control_roots": {
+      "CICL/": "theories/cic_l",
+      "CICLModel/": "theories/cic_l_model"
+    },
     "rule_carriers": [
       "CICL.CoreJudgmentIn"
     ]
@@ -704,7 +708,8 @@
           "kind": "constructor",
           "file": "CICL/CoreTyping.lean",
           "control": {
-            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+            "theorem": "CICL.Model.CongruenceControls.letCong_control",
+            "file": "CICLModel/CongruenceControls.lean"
           }
         },
         {
@@ -2030,7 +2035,8 @@
           "kind": "constructor",
           "file": "CICL/CoreTyping.lean",
           "control": {
-            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+            "theorem": "CICL.Model.CongruenceControls.piCong_control",
+            "file": "CICLModel/CongruenceControls.lean"
           }
         },
         {
@@ -2038,7 +2044,8 @@
           "kind": "constructor",
           "file": "CICL/CoreTyping.lean",
           "control": {
-            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+            "theorem": "CICL.Model.CongruenceControls.lamCong_control",
+            "file": "CICLModel/CongruenceControls.lean"
           }
         }
       ],
@@ -2077,7 +2084,8 @@
           "kind": "constructor",
           "file": "CICL/CoreTyping.lean",
           "control": {
-            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+            "theorem": "CICL.Model.CongruenceControls.appCong_control",
+            "file": "CICLModel/CongruenceControls.lean"
           }
         },
         {

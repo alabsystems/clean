@@ -1,0 +1,7 @@
+{
+  "what": "Registry rows with a pin of their own (`script_sha256`) that a soundness claim stands on (their own, or a row inheriting their pin) and that carry neither a replay record (an object under `replayed`) nor an undemonstrated-pin account. R7c (scripts/check_gate_registry.py) requires every other such row to carry one, so a pin moved by hand with its record deleted (or nulled) goes red instead of reading as an old unrecorded pin. Whether the row has a replay route is not asked: the rows here with none stay until they gain one.",
+  "how_it_shrinks": "`scripts/check_gate_registry.py --repin <id>` removes a row when it writes the row's replay record (or its account); R7c refuses an entry that owes nothing, and an id outside REPLAY_DEBT_MINTED in that script, the debt as it was minted. Adding a row means editing that R7-pinned script, which moves only over its own self-test.",
+  "minted": "2026-11-14, from the registry at origin/main 0ab6b71159, widened by the review of R7c the same day (docs/DECISIONS.md)",
+  "count": 0,
+  "rows": []
+}

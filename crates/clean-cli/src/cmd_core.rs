@@ -229,7 +229,7 @@ pub(crate) fn collect_check_outcome_in_world(
         },
     };
     let mut source_setup = if !imports_prefer_olean
-        && clean_elab::module_driver::source_closure_needs_world_setup(path)?
+        && clean_elab::module_driver::source_closure_needs_world_setup(path, &decision)?
     {
         Some(clean_elab::module_driver::SourceModuleSetup::for_file(
             environment_setup,

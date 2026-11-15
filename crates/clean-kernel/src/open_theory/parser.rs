@@ -142,8 +142,7 @@ fn parse_quoted_name(input: &str) -> OpenTheoryResult<OtName> {
         match ch {
             '\\' => escaped = true,
             '.' => {
-                components.push(current);
-                current = String::new();
+                components.push(std::mem::take(&mut current));
             }
             _ => current.push(ch),
         }

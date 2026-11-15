@@ -267,6 +267,49 @@ fn rewrite_inst_with(inst: &mut Inst, lookup: &mut impl FnMut(&ValueId) -> Value
         Inst::ArraySplat { value, .. } => {
             *value = lookup(value);
         }
+        // The two tensors; the axis pairs are not values.
+        Inst::TensorContract { lhs, rhs, .. } => {
+            *lhs = lookup(lhs);
+            *rhs = lookup(rhs);
+        }
+        // PKG-U13c: the operands; a map's lanes, a reduction's axes and a
+        // view's node ids are not values.
+        Inst::TensorMap { args, .. } => {
+            for argument in args.iter_mut() {
+                *argument = lookup(argument);
+            }
+        }
+        Inst::TensorReduce { src, .. } => {
+            *src = lookup(src);
+        }
+        Inst::TensorView {
+            src, params, fill, ..
+        } => {
+            *src = lookup(src);
+            for param in params.iter_mut() {
+                *param = lookup(param);
+            }
+            if let Some(fill) = fill {
+                *fill = lookup(fill);
+            }
+        }
+        // PKG-U13d: the data (or the initial tensor and the source), then
+        // the coordinate tensors in axis order.
+        Inst::TensorGather { data, coords, .. } => {
+            *data = lookup(data);
+            for coord in coords.iter_mut() {
+                *coord = lookup(coord);
+            }
+        }
+        Inst::TensorScatter {
+            init, src, coords, ..
+        } => {
+            *init = lookup(init);
+            *src = lookup(src);
+            for coord in coords.iter_mut() {
+                *coord = lookup(coord);
+            }
+        }
         Inst::ExtractField { aggregate, .. } => {
             *aggregate = lookup(aggregate);
         }

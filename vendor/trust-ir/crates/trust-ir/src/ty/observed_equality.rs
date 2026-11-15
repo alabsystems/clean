@@ -131,7 +131,8 @@ fn types<O: ExecutionObserver>(left: &Ty, right: &Ty, work: &mut Work<'_, '_, O>
                         (Ty::Set(a, n), Ty::Set(b, m)) => a == b && n == m,
                         (Ty::Refine(a, n), Ty::Refine(b, m)) => a == b && n == m,
                         (Ty::FatPtr(a), Ty::FatPtr(b)) => a == b,
-                        (Ty::Vector(a, n), Ty::Vector(b, m)) => {
+                        (Ty::Vector(a, n), Ty::Vector(b, m))
+                        | (Ty::Tensor(a, n), Ty::Tensor(b, m)) => {
                             if n != m {
                                 return Ok(false);
                             }
@@ -233,6 +234,7 @@ fn payload_free(ty: &Ty) -> bool {
         | Ty::Refine(_, _)
         | Ty::FatPtr(_)
         | Ty::Vector(_, _)
+        | Ty::Tensor(_, _)
         | Ty::Ref(_)
         | Ty::RefMut(_)
         | Ty::PtrConst(_)

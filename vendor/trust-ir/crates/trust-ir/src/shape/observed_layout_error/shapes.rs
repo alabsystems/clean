@@ -49,6 +49,7 @@ pub(super) fn shape<O: ExecutionObserver>(
         TyShape::Refine => "refine",
         TyShape::Dialect => "dialect",
         TyShape::Handle => "handle",
+        TyShape::Tensor => "tensor",
     };
     work.text(text, output)
 }

@@ -29,8 +29,10 @@ const INVENTORY: &str = concat!(
 /// What the rule inventory records for one constructor of the carrier.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Control {
-    /// The control theorem, by qualified name.
+    /// The control theorem in `CICL`, by qualified name.
     Theorem(String),
+    /// A set-model control theorem in `CICLModel` (verified by `cic_l_model`).
+    ModelTheorem { theorem: String, file: String },
     /// No control, and the recorded reason.
     Owed(String),
 }
@@ -122,9 +124,19 @@ pub(crate) fn inventory_controls() -> Result<BTreeMap<String, Control>, String> 
             continue;
         };
         let control = &item["control"];
-        let entry = match (control["theorem"].as_str(), control["none"].as_str()) {
-            (Some(t), None) => Control::Theorem(t.to_owned()),
-            (None, Some(reason)) if !reason.trim().is_empty() => Control::Owed(reason.to_owned()),
+        let entry = match (
+            control["theorem"].as_str(),
+            control["file"].as_str(),
+            control["none"].as_str(),
+        ) {
+            (Some(t), Some(f), None) if f.starts_with("CICLModel/") => Control::ModelTheorem {
+                theorem: t.to_owned(),
+                file: f.to_owned(),
+            },
+            (Some(t), Some(_), None) => Control::Theorem(t.to_owned()),
+            (None, None, Some(reason)) if !reason.trim().is_empty() => {
+                Control::Owed(reason.to_owned())
+            }
             _ => continue,
         };
         if let Some(previous) = table.insert(ctor.to_owned(), entry.clone()) {
@@ -396,6 +408,23 @@ fn check_rule(
                 "{ctor}: {theorem} refutes the rule with binder {deleted} deleted"
             ))
         }
+        Control::ModelTheorem { theorem, file } => {
+            if !stated.is_empty() {
+                return Err(format!(
+                    "{ctor}'s model control is {theorem} ({file}), and {stated:?} also refute it in CICL"
+                ));
+            }
+            if !theorem.starts_with("CICL.Model.")
+                || !theorem.ends_with(&format!(".{ctor}_control"))
+            {
+                return Err(format!(
+                    "{ctor}'s model control {theorem} is not named CICL.Model.*.{ctor}_control"
+                ));
+            }
+            Ok(format!(
+                "{ctor}: {theorem} ({file}, verified in cic_l_model) refutes the rule with binder {deleted} deleted"
+            ))
+        }
         Control::Owed(reason) => {
             if !stated.is_empty() {
                 return Err(format!(
@@ -565,6 +594,10 @@ pub(crate) fn check_wf_census(
 /// that deletes nothing, and a census missing a level.
 pub(crate) fn run(env: &Environment, checker: &TypeChecker<'_>) {
     let table = inventory_controls().expect("read the rule inventory's controls");
+    assert!(
+        !table.values().any(|c| matches!(c, Control::Owed(_))),
+        "every constructor of {CARRIER} must name a Refutes control theorem (zero Owed exemptions)"
+    );
     for line in check_controls(env, checker, &table).expect("E6 negative controls") {
         eprintln!("E6 {line}");
     }
@@ -583,7 +616,7 @@ pub(crate) fn run(env: &Environment, checker: &TypeChecker<'_>) {
         .copied()
         .filter(|(_, w, _)| *w != "wf_definition_sort_two")
         .collect();
-    let arms: [(&str, Result<Vec<String>, String>, &str); 6] = [
+    let arms: [(&str, Result<Vec<String>, String>, &str); 7] = [
         (
             "a constructor whose control row is gone",
             planted(&|t| {
@@ -617,6 +650,19 @@ pub(crate) fn run(env: &Environment, checker: &TypeChecker<'_>) {
                 t.insert("sort".to_owned(), Control::Owed("planted".to_owned()));
             }),
             "records no control (planted)",
+        ),
+        (
+            "a model control row for a rule already refuted in CICL",
+            planted(&|t| {
+                t.insert(
+                    "sort".to_owned(),
+                    Control::ModelTheorem {
+                        theorem: "CICL.Model.CongruenceControls.sort_control".to_owned(),
+                        file: "CICLModel/CongruenceControls.lean".to_owned(),
+                    },
+                );
+            }),
+            "also refute it in CICL",
         ),
         (
             "a mutation that deletes nothing",

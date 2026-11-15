@@ -72,7 +72,7 @@
     "C001": {
       "axioms": 0,
       "theorems": 331,
-      "definitions": 341,
+      "definitions": 348,
       "opaques": 2,
       "constructive": false,
       "tc_verified": true,
@@ -84,7 +84,7 @@
     "C002": {
       "axioms": 0,
       "theorems": 285,
-      "definitions": 409,
+      "definitions": 416,
       "opaques": 5,
       "constructive": false,
       "tc_verified": true,
@@ -98,7 +98,7 @@
     "C003": {
       "axioms": 0,
       "theorems": 246,
-      "definitions": 292,
+      "definitions": 298,
       "opaques": 20,
       "constructive": false,
       "tc_verified": true,
@@ -116,7 +116,7 @@
     "C004": {
       "axioms": 0,
       "theorems": 201,
-      "definitions": 238,
+      "definitions": 244,
       "opaques": 3,
       "constructive": false,
       "tc_verified": true,
@@ -131,7 +131,7 @@
     "C005": {
       "axioms": 0,
       "theorems": 213,
-      "definitions": 253,
+      "definitions": 259,
       "opaques": 5,
       "constructive": false,
       "tc_verified": true,
@@ -145,7 +145,7 @@
     "C006": {
       "axioms": 0,
       "theorems": 282,
-      "definitions": 334,
+      "definitions": 341,
       "opaques": 6,
       "constructive": false,
       "tc_verified": true,
@@ -163,7 +163,7 @@
       "axioms": 0,
       "theorems": 177,
       "opaques": 10,
-      "definitions": 229,
+      "definitions": 235,
       "constructive": false,
       "tc_verified": true,
       "proof_mechanism": "sorry_inhabited",
@@ -173,7 +173,7 @@
     "C008": {
       "axioms": 0,
       "theorems": 300,
-      "definitions": 312,
+      "definitions": 318,
       "opaques": 1,
       "constructive": true,
       "tc_verified": true,
@@ -183,7 +183,7 @@
     "C009": {
       "axioms": 0,
       "theorems": 143,
-      "definitions": 229,
+      "definitions": 235,
       "opaques": 18,
       "constructive": false,
       "tc_verified": true,
@@ -205,7 +205,7 @@
       "axioms": 0,
       "theorems": 273,
       "opaques": 12,
-      "definitions": 303,
+      "definitions": 309,
       "sorry_inhabit_pi_sites": 3,
       "constructive": false,
       "tc_verified": true,
@@ -217,7 +217,7 @@
     "C011": {
       "axioms": 0,
       "theorems": 286,
-      "definitions": 330,
+      "definitions": 337,
       "opaques": 3,
       "constructive": false,
       "tc_verified": true,
@@ -231,7 +231,7 @@
       "axioms": 0,
       "theorems": 270,
       "opaques": 19,
-      "definitions": 303,
+      "definitions": 309,
       "sorry_inhabit_pi_sites": 2,
       "constructive": false,
       "tc_verified": true,
@@ -241,7 +241,7 @@
     "C028": {
       "axioms": 0,
       "theorems": 175,
-      "definitions": 228,
+      "definitions": 234,
       "opaques": 8,
       "constructive": false,
       "tc_verified": true,
@@ -260,13 +260,13 @@
       "c029_volume_ratio_bound_hypothesis_wrapped_2026_04_27": "C029 axiom retirement (2026-04-27): `NNVerify.PacProof.volume_ratio_bound` promoted from Declaration::Axiom to Declaration::Theorem by strengthening the statement with an explicit local volume-ratio inequality hypothesis immediately before the unchanged inequality conclusion. The proof is `fun eps L H h_eps h_L h_H h_bound => h_bound`; it does not use `Rat.le_refl`, does not unfold `coverage_volume`, and does not reference global C029 axioms. Remaining C029-specific domain axioms: none. Counts: C029 axioms 1 -> 0, theorems 45 -> 46; top-level contribution: total_domain_axioms -1, total_all_axioms -1, total_theorems +1. Current recomputed header totals are total_domain_axioms=8, total_all_axioms=8, total_theorems=548.",
       "notes": "Current (2026-04-27): all three C029 headline claims are no longer hypothesis-free axioms. `NNVerify.PacProof.pac_certification_bound` is a hypothesis-wrapped theorem that requires a local PAC/Chernoff inequality witness and returns it directly. `NNVerify.PacProof.volume_ratio_bound` is a hypothesis-wrapped theorem that requires a local volume-ratio inequality witness and returns it directly. `NNVerify.PacProof.proof_lifting` is a hypothesis-wrapped theorem that requires a local `proof_certificate d f x0 eps delta` witness and returns it directly. The old unwrapped C029a PAC/Chernoff miss-probability bound, C029b ball-packing / Lipschitz-Hessian volume-ratio bound, and C029c PAC search-to-certificate lifting remain future work. Remaining C029-specific domain axioms: none. Post-#3588 Branch A demasquerade history: 3 honest Axioms (pac_certification_bound, volume_ratio_bound, proof_lifting) were restored on original Pi signatures after the pre-#3588 Theorem forms were found to be Rat.le_refl MASQUERADE over reducible identity carriers (Rules M1 + M4, see `c029_triple_demasquerade_2026_04_20` top-level entry). The three leaf carriers (coverage_volume, miss_probability, proof_certificate) were co-demoted to Declaration::Opaque with SAME bodies (only kind flipped); three backing `_core` Opaques removed. Earlier history preserved for context: Phase 1 (8 support objects -> Opaque). Phase 2 (#3378): 3 claim axioms promoted to sorry-inhabited Opaques. Phase 3 (#3467): proof_lifting -> Theorem via True. Phase 4 (#3549): demasquerade True -> Rat.le delta delta. Phase 5 (#3563): demasquerade C029a/b leaves to real arithmetic formulas + promote to Theorem via Rat.le_refl. Phase 6 (#3588 Branch A): honest demotion of the three Theorems back to Axioms + co-demotion of reducible Definition carriers to Opaques. Branch B (Hoeffding/Chernoff + ball-packing + PAC-lifting over real probability measures) remains future work under #3470.",
       "sorry_inhabit_pi_sites": 0,
-      "definitions": 292
+      "definitions": 298
     },
     "C030": {
       "axioms": 0,
       "theorems": 202,
       "opaques": 14,
-      "definitions": 240,
+      "definitions": 246,
       "constructive": false,
       "tc_verified": true,
       "proof_mechanism": "hypothesis_wrapped",

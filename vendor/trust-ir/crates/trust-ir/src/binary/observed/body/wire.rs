@@ -88,5 +88,10 @@ pub(super) fn write<O: ExecutionObserver>(
     if pool.minimum_version() >= NOMINAL_IDENTITY_FORMAT_VERSION {
         observed_write_count(out, "Module.closure_layouts", 0)?;
     }
+    // v70: a body that names a blob raises the image's header; the image
+    // carries no blob table (the body reads the digest, never the bytes).
+    if pool.minimum_version() >= TENSOR_BLOB_FORMAT_VERSION {
+        observed_write_count(out, "Module.blobs", 0)?;
+    }
     Ok(())
 }

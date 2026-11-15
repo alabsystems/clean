@@ -56,6 +56,7 @@ impl Module {
                     | Ty::Set(_, _)
                     | Ty::Closure(_)
                     | Ty::Vector(_, _)
+                    | Ty::Tensor(_, _)
             ),
         };
         session.admit(ExecutionProgress {

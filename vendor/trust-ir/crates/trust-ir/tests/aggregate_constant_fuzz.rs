@@ -343,6 +343,12 @@ fn decl_ty_for_wrapper(module: &mut Module, c: &Constant) -> Ty {
         // never generated here; any stand-in type serves the display/parse wrapper, which runs
         // no validator.
         Constant::Uninit => Ty::U64,
+        // v70: a content-addressed tensor is typed by its own rank (never
+        // generated here; the wrapper runs no validator).
+        Constant::TensorBlob { dims, .. } => Ty::Tensor(
+            Box::new(Ty::I8),
+            u32::try_from(dims.len()).expect("test fixture rank"),
+        ),
         Constant::Ext(e) => e.unreachable(),
     }
 }

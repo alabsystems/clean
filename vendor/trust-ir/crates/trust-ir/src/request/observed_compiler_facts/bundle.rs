@@ -72,7 +72,13 @@ impl<'a> Scratch<'a> {
     ) -> R {
         for obligation in &bundle.module.proof_obligations {
             admit(session, site, 1, 0)?;
-            set_insert(&mut self.obligations, obligation.id, session, site)?;
+            if !set_insert(&mut self.obligations, obligation.id, session, site)? {
+                work.fixed_error(
+                    || E::DuplicateModuleObligationId(obligation.id),
+                    session,
+                    site,
+                )?;
+            }
         }
         for function in &bundle.module.functions {
             admit(session, site, 1, 0)?;

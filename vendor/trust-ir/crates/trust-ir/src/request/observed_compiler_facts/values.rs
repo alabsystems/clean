@@ -123,6 +123,12 @@ pub(super) fn inst_type<O: ExecutionObserver>(
         | Inst::InsertField { ty, .. }
         | Inst::MakeAggregate { ty, .. }
         | Inst::ArraySplat { ty, .. }
+        | Inst::TensorContract { ty, .. }
+        | Inst::TensorMap { ty, .. }
+        | Inst::TensorReduce { ty, .. }
+        | Inst::TensorView { ty, .. }
+        | Inst::TensorGather { ty, .. }
+        | Inst::TensorScatter { ty, .. }
         | Inst::ExtractElement { ty, .. }
         | Inst::InsertElement { ty, .. }
         | Inst::Const { ty, .. }

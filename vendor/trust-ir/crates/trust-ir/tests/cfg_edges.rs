@@ -366,6 +366,58 @@ fn sample_of_every_instruction() -> Vec<Inst> {
             normal_args: vec![v(10)],
             unwind_dest: b(2),
         },
+        // PKG-U13a: a pure value op over two tensors; it leaves by falling
+        // through.
+        Inst::TensorContract {
+            ty: Ty::Tensor(Box::new(Ty::I64), 2),
+            lhs: v(0),
+            rhs: v(1),
+            batch: vec![],
+            contract: vec![(1, 0)],
+        },
+        // PKG-U13c: pure value ops over tensors; each leaves by falling
+        // through.
+        Inst::TensorMap {
+            ty: Ty::Tensor(Box::new(Ty::I64), 2),
+            args: vec![v(0), v(1)],
+            body: vec![trust_ir::TensorMapNode::BinOp {
+                op: BinOp::Add,
+                ty: Ty::I64,
+                lhs: 0,
+                rhs: 1,
+            }],
+        },
+        Inst::TensorReduce {
+            ty: Ty::Tensor(Box::new(Ty::I64), 1),
+            src: v(0),
+            op: trust_ir::TensorReduceOp::Add,
+            axes: vec![1],
+            order: trust_ir::TensorReduceOrder::RowMajor,
+        },
+        Inst::TensorView {
+            ty: Ty::Tensor(Box::new(Ty::I64), 1),
+            src: v(0),
+            params: vec![],
+            exprs: vec![
+                trust_ir::TensorIndexExpr::SrcExtent(0),
+                trust_ir::TensorIndexExpr::Coord(0),
+            ],
+            shape: vec![0],
+            index: vec![1],
+            fill: None,
+        },
+        // PKG-U13d: likewise the gather and the scatter.
+        Inst::TensorGather {
+            ty: Ty::Tensor(Box::new(Ty::I64), 1),
+            data: v(0),
+            coords: vec![v(1)],
+        },
+        Inst::TensorScatter {
+            ty: Ty::Tensor(Box::new(Ty::I64), 1),
+            init: v(0),
+            src: v(1),
+            coords: vec![v(2)],
+        },
     ]
 }
 

@@ -522,6 +522,14 @@ impl ConformanceSubset {
                  subset",
             ),
             Ty::FatPtr(_) => None,
+            // PKG-U13a: a tensor has no memory layout and no machine lowering,
+            // and the W5b Lean model defines no tensor (SemR judges the
+            // tensor region), so no module carrying one is in the subset,
+            // whatever its element.
+            Ty::Tensor(..) => Some(
+                "Ty::Tensor has no memory layout or machine lowering yet (PKG-U13: outside the \
+                 lowering-target subset)",
+            ),
             // Composite types are in-subset iff their components are. Recurse so
             // e.g. `Tuple(F16, I32)` or `Vector<F16>` is correctly rejected.
             Ty::Vector(elem, _)
@@ -800,6 +808,31 @@ impl ConformanceSubset {
             // that bump lands with the trust-cg lowering.
             Inst::ArraySplat { .. } => Some(
                 "Inst::ArraySplat: not yet admitted to the lowering-target subset (v50 landed the wire tag, Lean and interpreter semantics; admission is a subset-contract bump with the trust-cg lowering)",
+            ),
+            // PKG-U13a: the tensor contraction executes in the reference
+            // interpreter and SemR, but the subset has no tensor type
+            // (`ty_excluded`) and no backend lowers one. Excluded by name, so
+            // the verdict never rests on the inline-type fallthrough below.
+            Inst::TensorContract { .. } => Some(
+                "Inst::TensorContract: a tensor contraction has no machine lowering yet (PKG-U13: outside the lowering-target subset)",
+            ),
+            // PKG-U13c: the map, the reduction and the view likewise, each by
+            // name.
+            Inst::TensorMap { .. } => Some(
+                "Inst::TensorMap: a tensor map has no machine lowering yet (PKG-U13: outside the lowering-target subset)",
+            ),
+            Inst::TensorReduce { .. } => Some(
+                "Inst::TensorReduce: a tensor reduction has no machine lowering yet (PKG-U13: outside the lowering-target subset)",
+            ),
+            Inst::TensorView { .. } => Some(
+                "Inst::TensorView: a tensor view has no machine lowering yet (PKG-U13: outside the lowering-target subset)",
+            ),
+            // PKG-U13d: the gather and the scatter likewise, each by name.
+            Inst::TensorGather { .. } => Some(
+                "Inst::TensorGather: a tensor gather has no machine lowering yet (PKG-U13: outside the lowering-target subset)",
+            ),
+            Inst::TensorScatter { .. } => Some(
+                "Inst::TensorScatter: a tensor scatter has no machine lowering yet (PKG-U13: outside the lowering-target subset)",
             ),
             // The constant twin, wherever a constant is emitted: a
             // `Constant::Splat` at any depth of an `Inst::Const` value is
@@ -1515,6 +1548,12 @@ fn inst_result_tys(inst: &Inst, module: &Module) -> Vec<Ty> {
         | Inst::AtomicRMW { ty, .. }
         | Inst::MakeAggregate { ty, .. }
         | Inst::ArraySplat { ty, .. }
+        | Inst::TensorContract { ty, .. }
+        | Inst::TensorMap { ty, .. }
+        | Inst::TensorReduce { ty, .. }
+        | Inst::TensorView { ty, .. }
+        | Inst::TensorGather { ty, .. }
+        | Inst::TensorScatter { ty, .. }
         | Inst::ExtractField { ty, .. }
         | Inst::InsertField { ty, .. }
         | Inst::ExtractElement { ty, .. }
@@ -2527,6 +2566,84 @@ mod tests {
         assert!(ConformanceSubset::ty_excluded(&Ty::Tuple(vec![Ty::I32, Ty::I64])).is_none());
         assert!(ConformanceSubset::ty_excluded(&Ty::Vector(Box::new(Ty::I32), 4)).is_none());
         assert!(ConformanceSubset::ty_excluded(&Ty::FatPtr(crate::FatPtrKind::Str)).is_none());
+        // A tensor is out whatever its element (PKG-U13a), and so is the
+        // contraction, by name rather than through its inline type.
+        assert!(ConformanceSubset::ty_excluded(&Ty::Tensor(Box::new(Ty::I32), 2)).is_some());
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::TensorContract {
+                ty: Ty::Tensor(Box::new(Ty::I32), 2),
+                lhs: v(0),
+                rhs: v(1),
+                batch: Vec::new(),
+                contract: vec![(1, 0)],
+            })
+            .is_some_and(|reason| reason.starts_with("Inst::TensorContract"))
+        );
+        // PKG-U13c: the map, the reduction and the view, each by name.
+        let tensor = || Ty::Tensor(Box::new(Ty::I32), 1);
+        for (inst, name) in [
+            (
+                Inst::TensorMap {
+                    ty: tensor(),
+                    args: vec![v(0)],
+                    body: vec![crate::TensorMapNode::UnOp {
+                        op: crate::UnOp::Neg,
+                        ty: Ty::I32,
+                        operand: 0,
+                    }],
+                },
+                "Inst::TensorMap",
+            ),
+            (
+                Inst::TensorReduce {
+                    ty: Ty::Tensor(Box::new(Ty::I32), 0),
+                    src: v(0),
+                    op: crate::TensorReduceOp::Add,
+                    axes: vec![0],
+                    order: crate::TensorReduceOrder::RowMajor,
+                },
+                "Inst::TensorReduce",
+            ),
+            (
+                Inst::TensorView {
+                    ty: tensor(),
+                    src: v(0),
+                    params: Vec::new(),
+                    exprs: vec![
+                        crate::TensorIndexExpr::SrcExtent(0),
+                        crate::TensorIndexExpr::Coord(0),
+                    ],
+                    shape: vec![0],
+                    index: vec![1],
+                    fill: None,
+                },
+                "Inst::TensorView",
+            ),
+            // PKG-U13d: the gather and the scatter, each by name.
+            (
+                Inst::TensorGather {
+                    ty: tensor(),
+                    data: v(0),
+                    coords: vec![v(1)],
+                },
+                "Inst::TensorGather",
+            ),
+            (
+                Inst::TensorScatter {
+                    ty: tensor(),
+                    init: v(0),
+                    src: v(1),
+                    coords: vec![v(2)],
+                },
+                "Inst::TensorScatter",
+            ),
+        ] {
+            assert!(
+                ConformanceSubset::inst_excluded(&inst)
+                    .is_some_and(|reason| reason.starts_with(name)),
+                "{name}"
+            );
+        }
         // ReifyFnPointer / FP*Sat casts are out; PtrToPtr, Transmute (op
         // level — the scalar condition is structural) and ZExt are in.
         assert!(ConformanceSubset::cast_op_excluded(CastOp::ReifyFnPointer).is_some());

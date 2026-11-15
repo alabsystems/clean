@@ -46,6 +46,10 @@ pub(super) fn projection<O: ExecutionObserver>(
         | BinaryProjectionError::StorageRequiresV64
         | BinaryProjectionError::MakeClosureRequiresV63
         | BinaryProjectionError::ClosureOriginRequiresV66
+        | BinaryProjectionError::TensorRequiresV67
+        | BinaryProjectionError::TensorMapReduceViewRequiresV68
+        | BinaryProjectionError::TensorGatherScatterRequiresV69
+        | BinaryProjectionError::TensorBlobRequiresV70
         | BinaryProjectionError::CompletenessClaimUnencodable
         | BinaryProjectionError::ConstructAheadOfWireTag { .. }
         | BinaryProjectionError::InvalidStorageGeometry(_)

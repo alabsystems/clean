@@ -2348,7 +2348,8 @@ fn arg_class(module: &Module, ty: &Ty, depth: usize) -> ArgClass {
         | Ty::Record(_)
         | Ty::Closure(_)
         | Ty::Sequence(_)
-        | Ty::Set(..) => exact(),
+        | Ty::Set(..)
+        | Ty::Tensor(..) => exact(),
         Ty::Enum(_) | Ty::Unit | Ty::Never | Ty::Dialect(_) | Ty::Error => ArgClass::Unclassified,
         Ty::Ext(e) => e.unreachable(),
     }
@@ -2444,6 +2445,7 @@ fn zero_sized(module: &Module, ty: &Ty, depth: usize) -> Option<bool> {
         | Ty::Enum(_)
         | Ty::Sequence(_)
         | Ty::Set(..)
+        | Ty::Tensor(..)
         | Ty::Dialect(_)
         | Ty::Error => None,
         Ty::Ext(e) => e.unreachable(),

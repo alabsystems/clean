@@ -60,6 +60,21 @@ fn every_inline_wrapper_tuple_and_vector_keeps_order_and_length() {
     unequal(&m, &roots[6], &m, &Ty::Tuple(vec![Ty::Bool, Ty::I64]));
 }
 #[test]
+fn a_tensor_is_equivalent_exactly_at_its_rank_and_element() {
+    let m = Module::new("tensor");
+    let tensor = Ty::Tensor(Box::new(Ty::I32), 2);
+    equal(&m, &tensor, &m, &Ty::Tensor(Box::new(Ty::I32), 2));
+    unequal(&m, &tensor, &m, &Ty::Tensor(Box::new(Ty::I32), 3));
+    unequal(&m, &tensor, &m, &Ty::Tensor(Box::new(Ty::U32), 2));
+    unequal(&m, &tensor, &m, &Ty::Vector(Box::new(Ty::I32), 2));
+    unequal(
+        &m,
+        &Ty::Tensor(Box::new(Ty::Error), 0),
+        &m,
+        &Ty::Tensor(Box::new(Ty::Error), 0),
+    );
+}
+#[test]
 fn different_registered_ids_expand_and_missing_ids_refuse_semantically() {
     let mut a = Module::new("a");
     let mut b = Module::new("b");

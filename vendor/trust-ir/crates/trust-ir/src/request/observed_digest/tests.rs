@@ -185,6 +185,7 @@ fn iterative_nested_type_and_constant_preimages_match_and_splat_is_not_expanded(
         Ty::I32,
         Ty::Ref(Box::new(Ty::Vector(Box::new(Ty::U8), 16))),
         Ty::Tuple(vec![Ty::Isize, Ty::Usize, Ty::Char]),
+        Ty::Tensor(Box::new(Ty::I32), 2),
     ]);
     let mut bytes = Vec::new();
     write_ty_stable(&mut bytes, &ty);

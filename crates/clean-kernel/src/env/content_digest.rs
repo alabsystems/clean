@@ -723,6 +723,14 @@ impl Environment {
             binders.is_some(),
             &mut |f| f.debug(&binders),
         );
+        let compiled = super::csimp::recorded_body_rules(self, name);
+        row(&mut f, "csimp_compiled", compiled.is_some(), &mut |f| {
+            f.debug(&compiled)
+        });
+        let tags = super::ext_attr::registrations_of(self, name);
+        row(&mut f, "attr_tags", !tags.is_empty(), &mut |f| {
+            f.debug(&tags)
+        });
         let codata = self.codata_origins.get(name);
         row(&mut f, "codata_origins", codata.is_some(), &mut |f| {
             f.debug(&codata)
@@ -824,6 +832,8 @@ pub(crate) const ELABORATION_RECORD_TABLES: &[&str] = &[
     "typed_param_names",
     "param_binder_infos",
     "value_forall_binder_names",
+    "csimp_compiled",
+    "attr_tags",
     "codata_origins",
     "simp_lemmas",
     "structure_field_defaults",

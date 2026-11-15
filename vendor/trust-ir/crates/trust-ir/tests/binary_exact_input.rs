@@ -39,6 +39,11 @@ fn empty_module_at_version(version: u32) -> (Module, Vec<u8>) {
     if version >= trust_ir::binary::NOMINAL_IDENTITY_FORMAT_VERSION {
         bytes.push(0);
     }
+    // v70 appends the weight-blob table after the closure layouts: one more
+    // empty count.
+    if version >= trust_ir::binary::TENSOR_BLOB_FORMAT_VERSION {
+        bytes.push(0);
+    }
     (module, bytes)
 }
 

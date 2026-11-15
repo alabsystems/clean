@@ -15,7 +15,7 @@ pub(super) fn pair<'a, O: ExecutionObserver>(
     }
     match (a, b) {
         (Ty::Storage(a), Ty::Storage(b)) => s.last = a == b,
-        (Ty::Vector(a, n), Ty::Vector(b, m)) => {
+        (Ty::Vector(a, n), Ty::Vector(b, m)) | (Ty::Tensor(a, n), Ty::Tensor(b, m)) => {
             s.last = n == m;
             if s.last {
                 s.push(Task::Ty(a, b), w)?;
@@ -104,6 +104,7 @@ fn scalar(ty: &Ty) -> bool {
         Ty::Error => false,
         Ty::Ext(extension) => extension.unreachable(),
         Ty::Vector(..)
+        | Ty::Tensor(..)
         | Ty::Ref(..)
         | Ty::RefMut(..)
         | Ty::PtrConst(..)

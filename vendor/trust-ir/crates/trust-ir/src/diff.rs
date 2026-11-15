@@ -400,6 +400,7 @@ pub fn diff_with(a: &Module, b: &Module, opts: DiffOptions) -> Diff {
         completeness: _,           // `completeness` row
         drop_glue: _,              // `drop_glue` row (v55, amendment D)
         closure_layouts: _,        // `closure_layouts` row (v58, WS3.9)
+        blobs: _,                  // `blobs` row (v70): each digest and its byte count
     } = a;
     let mut changes = Vec::new();
 
@@ -621,6 +622,12 @@ pub fn diff_with(a: &Module, b: &Module, opts: DiffOptions) -> Diff {
             after: closures_b,
         });
     }
+    // v70 weight blobs: the table is part of the module's byte image (its
+    // `stable_digest`), so a changed weight is a change even though no body
+    // moves. Rows are compared as written, recorded digest AND bytes, so a
+    // row whose bytes changed under an unchanged recorded digest (refused by
+    // the validator) still renders.
+    push_meta_if_changed(&mut module_meta_changes, "blobs", blobs_fp(a), blobs_fp(b));
     // Target information is execution metadata for EVERY module, not only one
     // that declares tuple layouts (audit row
     // b1.gap.diff_blind_to_spec_modules_and_target: retargeting
@@ -774,6 +781,26 @@ fn tuple_layouts_fp(m: &Module) -> String {
 /// hex-rendered) or the literal `none`, which no rendered key can spell.
 fn origin_fp(origin: Option<&crate::ty::TypeOrigin>) -> String {
     origin.map_or_else(|| "none".to_string(), ToString::to_string)
+}
+
+/// The blob table as written, one `digest=<hex>:len=<n>:sha256=<hex>` entry
+/// per row in stored order (the table's canonical order is the validator's
+/// question; a diff renders what each side holds). The bytes enter through
+/// their own SHA-256, so a row whose bytes changed under an unchanged
+/// recorded digest still differs.
+fn blobs_fp(m: &Module) -> String {
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    m.blobs
+        .iter()
+        .map(|crate::blob::Blob { digest, data }| {
+            format!(
+                "digest={digest}:len={}:sha256={}",
+                data.len(),
+                crate::blob::BlobDigest::of(data)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 /// Declaration order and arena `ClosureTyId`s are cosmetic; capture-offset
@@ -2337,6 +2364,91 @@ fn fp_assert_kind_and_site(
     }
 }
 
+/// A tensor contraction's axis-pair list, in order, as `a:b` items joined by
+/// `separator`: `,` in the fingerprint, `, ` in the rendering (the text
+/// spelling's). Axes are positions, not ids, so a changed axis or a reordered
+/// pair is a body change.
+fn axis_pairs(pairs: &[(u32, u32)], separator: &str) -> String {
+    pairs
+        .iter()
+        .map(|(lhs_axis, rhs_axis)| format!("{lhs_axis}:{rhs_axis}"))
+        .collect::<Vec<_>>()
+        .join(separator)
+}
+
+/// A tensor map body (PKG-U13c), node by node, each as its scalar
+/// instruction's operator, its types through `ty` (the fingerprint's or the
+/// rendering's spelling) and its lanes. Lanes are positions, not ids, so a
+/// changed lane or a reordered node is a body change.
+fn map_body(
+    m: &Module,
+    body: &[crate::TensorMapNode<crate::level::NoExt>],
+    ty: fn(&Module, &Ty) -> String,
+) -> String {
+    body.iter()
+        .map(|node| match node {
+            crate::TensorMapNode::BinOp {
+                op,
+                ty: t,
+                lhs,
+                rhs,
+            } => {
+                format!("binop {op:?} {} ${lhs} ${rhs}", ty(m, t))
+            }
+            crate::TensorMapNode::UnOp { op, ty: t, operand } => {
+                format!("unop {op:?} {} ${operand}", ty(m, t))
+            }
+            crate::TensorMapNode::ICmp {
+                op,
+                ty: t,
+                lhs,
+                rhs,
+            } => {
+                format!("icmp {op:?} {} ${lhs} ${rhs}", ty(m, t))
+            }
+            crate::TensorMapNode::Select {
+                ty: t,
+                cond,
+                then_lane,
+                else_lane,
+            } => format!("select {} ${cond} ${then_lane} ${else_lane}", ty(m, t)),
+            crate::TensorMapNode::Cast {
+                op,
+                src_ty,
+                dst_ty,
+                operand,
+            } => format!(
+                "cast {op:?} {} -> {} ${operand}",
+                ty(m, src_ty),
+                ty(m, dst_ty)
+            ),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// A tensor view's node list and node references (PKG-U13c), in order: node
+/// ids and axes are positions, so every change is a body change.
+fn view_nodes(exprs: &[crate::TensorIndexExpr], shape: &[u32], index: &[u32]) -> String {
+    let refs = |nodes: &[u32]| {
+        nodes
+            .iter()
+            .map(|n| format!("${n}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!(
+        "exprs [{}] shape [{}] index [{}]",
+        exprs
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", "),
+        refs(shape),
+        refs(index)
+    )
+}
+
 fn fp_inst(
     m: &Module,
     inst: &Inst,
@@ -2736,6 +2848,88 @@ fn fp_inst(
         Inst::ArraySplat { ty, value } => {
             let _ = write!(s, "ArraySplat({},{})", fp_ty(m, ty), vv(value));
         }
+        // PKG-U13a: both axis-pair lists are part of the identity, in order
+        // (the batch order is the result's axis order).
+        Inst::TensorContract {
+            ty,
+            lhs,
+            rhs,
+            batch,
+            contract,
+        } => {
+            let _ = write!(
+                s,
+                "TensorContract({},{},{},[{}],[{}])",
+                fp_ty(m, ty),
+                vv(lhs),
+                vv(rhs),
+                axis_pairs(batch, ","),
+                axis_pairs(contract, ",")
+            );
+        }
+        // PKG-U13c: the operands by value, the body node by node.
+        Inst::TensorMap { ty, args, body } => {
+            let a = args.iter().map(vv).collect::<Vec<_>>().join(",");
+            let _ = write!(
+                s,
+                "TensorMap({},[{a}],[{}])",
+                fp_ty(m, ty),
+                map_body(m, body, fp_ty)
+            );
+        }
+        Inst::TensorReduce {
+            ty,
+            src,
+            op,
+            axes,
+            order,
+        } => {
+            let _ = write!(
+                s,
+                "TensorReduce({},{},{op:?},{axes:?},{order:?})",
+                fp_ty(m, ty),
+                vv(src)
+            );
+        }
+        Inst::TensorView {
+            ty,
+            src,
+            params,
+            exprs,
+            shape,
+            index,
+            fill,
+        } => {
+            let p = params.iter().map(vv).collect::<Vec<_>>().join(",");
+            let fill = fill.as_ref().map_or_else(|| "-".to_string(), vv);
+            let _ = write!(
+                s,
+                "TensorView({},{},[{p}],{},{fill})",
+                fp_ty(m, ty),
+                vv(src),
+                view_nodes(exprs, shape, index)
+            );
+        }
+        // PKG-U13d: the operands by value, the coordinates in axis order.
+        Inst::TensorGather { ty, data, coords } => {
+            let c = coords.iter().map(vv).collect::<Vec<_>>().join(",");
+            let _ = write!(s, "TensorGather({},{},[{c}])", fp_ty(m, ty), vv(data));
+        }
+        Inst::TensorScatter {
+            ty,
+            init,
+            src,
+            coords,
+        } => {
+            let c = coords.iter().map(vv).collect::<Vec<_>>().join(",");
+            let _ = write!(
+                s,
+                "TensorScatter({},{},{},[{c}])",
+                fp_ty(m, ty),
+                vv(init),
+                vv(src)
+            );
+        }
         Inst::InsertField {
             ty,
             aggregate,
@@ -3091,6 +3285,9 @@ impl<'a> TypeFingerprint<'a> {
             Ty::Struct(id) => self.struct_ref(*id),
             Ty::Array(elem, n) => format!("arr[{};{}]", self.tyid_ref(*elem), n),
             Ty::Vector(elem, lanes) => format!("vec<{lanes}x{}>", self.ty(elem)),
+            // The element is inline (as `Vector`'s); the rank is the type's
+            // only other content, so both are in the key.
+            Ty::Tensor(elem, rank) => format!("tensor<{}, {rank}>", self.ty(elem)),
             Ty::Tuple(ts) => {
                 let mut s = String::from("tuple(");
                 for (i, t) in ts.iter().enumerate() {
@@ -3483,6 +3680,9 @@ fn fp_constant(m: &Module, c: &Constant) -> String {
         Constant::PhantomData => "phantomdata".to_string(),
         Constant::Uninit => "uninit".to_string(),
         Constant::Ext(e) => e.unreachable(),
+        // v70: the digest and the shape, never the bytes (the blob table is
+        // its own `blobs` row).
+        Constant::TensorBlob { digest, dims } => format!("tensor_blob({digest};{dims:?})"),
     }
 }
 
@@ -3959,6 +4159,111 @@ fn render_inst_core(m: &Module, inst: &Inst) -> String {
         }
         Inst::ArraySplat { ty, value } => {
             let _ = write!(s, "array_splat {} %{}", render_ty(m, ty), value.0);
+        }
+        // The text spelling, every field: `tensor_contract TY %a, %b batch
+        // [a:b, ...] contract [a:b, ...]`.
+        Inst::TensorContract {
+            ty,
+            lhs,
+            rhs,
+            batch,
+            contract,
+        } => {
+            let _ = write!(
+                s,
+                "tensor_contract {} %{}, %{} batch [{}] contract [{}]",
+                render_ty(m, ty),
+                lhs.0,
+                rhs.0,
+                axis_pairs(batch, ", "),
+                axis_pairs(contract, ", ")
+            );
+        }
+        // PKG-U13c: every field, the body node by node.
+        Inst::TensorMap { ty, args, body } => {
+            let a = args
+                .iter()
+                .map(|v| format!("%{}", v.0))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = write!(
+                s,
+                "tensor_map {} ({a}) {{ {} }}",
+                render_ty(m, ty),
+                map_body(m, body, render_ty)
+            );
+        }
+        Inst::TensorReduce {
+            ty,
+            src,
+            op,
+            axes,
+            order,
+        } => {
+            let _ = write!(
+                s,
+                "tensor_reduce {op} {} %{} axes {axes:?} order {order}",
+                render_ty(m, ty),
+                src.0
+            );
+        }
+        Inst::TensorView {
+            ty,
+            src,
+            params,
+            exprs,
+            shape,
+            index,
+            fill,
+        } => {
+            let p = params
+                .iter()
+                .map(|v| format!("%{}", v.0))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = write!(
+                s,
+                "tensor_view {} %{} params [{p}] {}",
+                render_ty(m, ty),
+                src.0,
+                view_nodes(exprs, shape, index)
+            );
+            if let Some(fill) = fill {
+                let _ = write!(s, " fill %{}", fill.0);
+            }
+        }
+        // PKG-U13d: every field, the coordinates in axis order.
+        Inst::TensorGather { ty, data, coords } => {
+            let c = coords
+                .iter()
+                .map(|v| format!("%{}", v.0))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = write!(
+                s,
+                "tensor_gather {} %{} coords [{c}]",
+                render_ty(m, ty),
+                data.0
+            );
+        }
+        Inst::TensorScatter {
+            ty,
+            init,
+            src,
+            coords,
+        } => {
+            let c = coords
+                .iter()
+                .map(|v| format!("%{}", v.0))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = write!(
+                s,
+                "tensor_scatter {} %{}, %{} coords [{c}]",
+                render_ty(m, ty),
+                init.0,
+                src.0
+            );
         }
         Inst::InsertField {
             ty,

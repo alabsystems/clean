@@ -436,6 +436,7 @@ fn record_carrier(carriers: &mut CallableCarriers, ty: &Ty) {
         | Ty::Never
         | Ty::Handle(_)
         | Ty::Vector(..)
+        | Ty::Tensor(..)
         | Ty::Tuple(_)
         | Ty::Array(..)
         | Ty::Set(..)
@@ -548,6 +549,7 @@ pub(crate) fn table_referent(ty: &Ty) -> Option<TableReferent> {
         | Ty::F64
         | Ty::Bool
         | Ty::Vector(_, _)
+        | Ty::Tensor(_, _)
         | Ty::Ptr
         | Ty::FatPtr(
             FatPtrKind::Str

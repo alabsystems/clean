@@ -138,3 +138,13 @@ fn borrowed_pointer_vector_and_nominal_payloads_stay_opaque_as_documented() {
         assert!(!run(&ty, &[Ty::Unit]).0);
     }
 }
+#[test]
+fn a_tensor_is_never_trivially_droppable_as_a_sequence_is_not() {
+    for ty in [
+        Ty::Tensor(Box::new(Ty::I32), 2),
+        Ty::Tensor(Box::new(Ty::U8), 0),
+    ] {
+        assert!(!ty.is_trivially_droppable(&[]));
+        assert!(!run(&ty, &[]).0);
+    }
+}

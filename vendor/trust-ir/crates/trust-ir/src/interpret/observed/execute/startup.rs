@@ -135,6 +135,7 @@ fn walk_type<O: ExecutionObserver>(
         event(session, site, phase, 1, 0)?;
         match ty {
             Ty::Vector(inner, _)
+            | Ty::Tensor(inner, _)
             | Ty::Ref(inner)
             | Ty::RefMut(inner)
             | Ty::PtrConst(inner)

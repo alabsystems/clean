@@ -30,7 +30,12 @@
 //!   producing check recorded it, and the extension states named in
 //!   [`DELTA_CARRIED_EXTENSIONS`] (each definition's value binder names,
 //!   which a later named argument reads; `value_binder_names`), entry by
-//!   entry. The provenance is the one capability the delta adds:
+//!   entry; and of the csimp source state (`Clean.compiler.csimpSource`)
+//!   the compilation point the elaborator records for every declaration,
+//!   as the name with the rules its body resolved to. Applying records the
+//!   point against the target's own rule events after checking that they
+//!   resolve to those rules, so no event position or local-rule token
+//!   crosses a process. The provenance is the one capability the delta adds:
 //!   a declaration replayed from a local fact carries the `FullKernelCheck`
 //!   stamp of the check that produced it in an earlier process of the same
 //!   compiler. `COMPILE-TIME-FACTS-1` makes that a discharge for a fact made
@@ -69,8 +74,10 @@
 //! [`Environment::local_fact_delta_since`] refuses (and Trust then stores no
 //! fact) when the elaboration changed something the delta cannot replay: the
 //! kernel theory, the native reducer set, the lazy constant source, the
-//! prelude aliases, an exported extension entry, or a typed extension state
-//! outside [`ELABORATION_PRIVATE_EXTENSIONS`]. It then APPLIES the delta
+//! prelude aliases, an exported extension entry (the csimp source state's
+//! snapshot excepted, and only when compilation points are its whole change:
+//! `csimp::compiled_since`), or a typed extension state outside
+//! [`ELABORATION_PRIVATE_EXTENSIONS`] and [`DELTA_CARRIED_EXTENSIONS`]. It then APPLIES the delta
 //! it built to a copy of `before` and compares the result with `after` over
 //! every component ([`Environment::local_fact_difference`]); any difference
 //! refuses. A delta that exists therefore reproduces its `after` exactly, by
@@ -88,7 +95,7 @@ use super::Environment;
 use crate::name::Name;
 
 /// The delta format. Part of every Trust fact key, so a format change misses.
-pub const LOCAL_FACT_DELTA_FORMAT: &str = "clean_kernel.local_fact_delta.v2";
+pub const LOCAL_FACT_DELTA_FORMAT: &str = "clean_kernel.local_fact_delta.v3";
 
 /// The typed extension states a delta may leave out because only a later
 /// elaboration reads them (module docs). Writing any other one refuses.
@@ -100,9 +107,15 @@ pub const ELABORATION_PRIVATE_EXTENSIONS: &[&str] = &[
 
 /// The typed extension states a delta CARRIES, by type, as a typed
 /// component: per-name tables the kernel owns (module docs). A write to one
-/// is replayed, not refused.
-pub const DELTA_CARRIED_EXTENSIONS: &[&str] =
-    &[super::value_binder_names::VALUE_BINDER_NAMES_EXTENSION];
+/// is replayed, not refused. Of the csimp source state only compilation
+/// points are carried ([`super::csimp::compiled_since`]), and of the
+/// attribute extension only appended registrations
+/// ([`super::ext_attr::tags_since`]); any other change to either refuses.
+pub const DELTA_CARRIED_EXTENSIONS: &[&str] = &[
+    super::value_binder_names::VALUE_BINDER_NAMES_EXTENSION,
+    super::csimp::CSIMP_SOURCE_EXTENSION,
+    super::ext_attr::ATTR_EXT_NAME,
+];
 
 /// Why a delta could not be built or applied.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -310,6 +323,18 @@ macro_rules! typed_components {
             value_forall_binder_names: MapDelta<Name, super::ValueForallBinderNames>,
             codata_carriers: SetDelta,
             cumulative_ever: Option<(bool, bool)>,
+            /// The csimp compilation points the elaboration recorded, in name
+            /// order, each with the rules its body resolved to. Applying
+            /// records the point against the target's own rule events, after
+            /// checking that they resolve to these rules.
+            csimp_compiled: Vec<(Name, Vec<super::csimp::Rule>)>,
+            /// The attribute registrations the elaboration appended
+            /// (`attrExtension`: a theorem proved by `rfl` is tagged
+            /// `defeq`), in an order that rebuilds both of its indexes.
+            attr_tags: Vec<super::ext_attr::CarriedTag>,
+            /// Each declaration those tags touch, with the registrations it
+            /// held before: what the target must hold for the tags to fit.
+            attr_tag_bases: Vec<(Name, Vec<(Name, u32)>)>,
             /// Every other serialized field that changed, by name, as its
             /// bincode bytes before and after.
             scalars: Vec<(String, Vec<u8>, Vec<u8>)>,
@@ -344,6 +369,9 @@ macro_rules! typed_components {
                 ),
                 codata_carriers: set_delta(&before.codata_carriers, &after.codata_carriers),
                 cumulative_ever: whole_delta(&before.cumulative_ever, &after.cumulative_ever),
+                csimp_compiled: Vec::new(),
+                attr_tags: Vec::new(),
+                attr_tag_bases: Vec::new(),
                 scalars: Vec::new(),
             }
         }
@@ -373,6 +401,10 @@ macro_rules! typed_components {
                 &delta.value_forall_binder_names,
             )?;
             set_fits("codata_carriers", &env.codata_carriers, &delta.codata_carriers)?;
+            super::csimp::compiled_fits(env, &delta.csimp_compiled)
+                .map_err(FactDeltaError::BaseMismatch)?;
+            super::ext_attr::tags_fit(env, &delta.attr_tag_bases)
+                .map_err(FactDeltaError::BaseMismatch)?;
             if let Some((was, _)) = delta.cumulative_ever {
                 if env.cumulative_ever != was {
                     return Err(FactDeltaError::BaseMismatch(
@@ -411,6 +443,17 @@ macro_rules! typed_components {
                 );
             }
             apply_set(&mut env.codata_carriers, &delta.codata_carriers);
+            // A carried extension state, written only when the delta
+            // records a compilation point (`typed_fits` checked the rules).
+            if !delta.csimp_compiled.is_empty() {
+                super::csimp::record_compiled(
+                    env,
+                    delta.csimp_compiled.iter().map(|(name, _)| name.clone()),
+                );
+            }
+            if !delta.attr_tags.is_empty() {
+                super::ext_attr::apply_tags(env, &delta.attr_tags);
+            }
             if let Some((_, value)) = delta.cumulative_ever {
                 env.cumulative_ever = value;
             }
@@ -455,6 +498,8 @@ macro_rules! typed_components {
                     + self.codata_origins.changed.len()
                     + self.value_forall_binder_names.changed.len()
                     + self.codata_carriers.changed.len()
+                    + self.csimp_compiled.len()
+                    + self.attr_tags.len()
                     + self.scalars.len()
             }
         }
@@ -610,7 +655,13 @@ impl Environment {
         &self,
         before: &Environment,
     ) -> Result<EnvFactDelta, FactDeltaError> {
-        unreplayable_change(before, self)?;
+        unreplayable_change(before, self, false)?;
+        // The one exported extension state a delta carries: compilation
+        // points only, checked against the whole typed csimp state.
+        let csimp_compiled = super::csimp::compiled_since(before, self)
+            .map_err(|why| FactDeltaError::Unrepresentable(why.to_string()))?;
+        let (attr_tags, attr_tag_bases) = super::ext_attr::tags_since(before, self)
+            .map_err(|why| FactDeltaError::Unrepresentable(why.to_string()))?;
         if let Some(name) = self
             .extension_states
             .written_since(&before.extension_states)
@@ -627,6 +678,9 @@ impl Environment {
             )));
         }
         let mut delta = typed_delta(before, self);
+        delta.csimp_compiled = csimp_compiled;
+        delta.attr_tags = attr_tags;
+        delta.attr_tag_bases = attr_tag_bases;
         let scalars_before = scalar_bytes(before)?;
         let scalars_after = scalar_bytes(self)?;
         if scalars_before.keys().ne(scalars_after.keys()) {
@@ -712,7 +766,7 @@ impl Environment {
     /// does not carry it (module docs).
     #[must_use]
     pub fn local_fact_difference(&self, other: &Environment) -> Option<String> {
-        if let Err(why) = unreplayable_change(self, other) {
+        if let Err(why) = unreplayable_change(self, other, true) {
             return Some(why.to_string());
         }
         if let Some(change) = self.effect_since(other).first_change() {
@@ -794,8 +848,18 @@ impl Environment {
     }
 }
 
-/// A change no delta can replay, or `Ok`.
-fn unreplayable_change(before: &Environment, after: &Environment) -> Result<(), FactDeltaError> {
+/// A change no delta can replay, or `Ok`. With `csimp` false the csimp
+/// source state's exported snapshot is left to the caller, which must accept
+/// it only through [`super::csimp::compiled_since`]. The attribute
+/// extension is compared here by its typed state when `csimp` is true (its
+/// export order is a hash map's, so two equal states can export in different
+/// orders) and left to [`super::ext_attr::tags_since`] otherwise. Every
+/// other exported extension entry is compared either way.
+fn unreplayable_change(
+    before: &Environment,
+    after: &Environment,
+    csimp: bool,
+) -> Result<(), FactDeltaError> {
     let refuse = |why: &str| Err(FactDeltaError::Unrepresentable(why.to_string()));
     if before.kernel_theory != after.kernel_theory {
         return refuse("the kernel theory changed");
@@ -816,8 +880,31 @@ fn unreplayable_change(before: &Environment, after: &Environment) -> Result<(), 
     {
         return refuse("the native reducer set changed");
     }
-    if before.export_extension_states() != after.export_extension_states() {
-        return refuse("an exported extension entry changed");
+    let exported = |env: &Environment| {
+        let mut states = env.export_extension_states();
+        states.retain(|(name, _)| {
+            let name = name.to_string();
+            name != super::ext_attr::ATTR_EXT_NAME
+                && (csimp || name != super::csimp::CSIMP_SOURCE_EXTENSION)
+        });
+        states
+    };
+    if csimp && !super::ext_attr::same_registrations(before, after) {
+        return refuse(&format!(
+            "an exported extension entry changed (`{}`)",
+            super::ext_attr::ATTR_EXT_NAME
+        ));
+    }
+    let (was, now) = (exported(before), exported(after));
+    if was != now {
+        // Name the first state that differs: the refusal is read by whoever
+        // has to decide whether that state can be carried.
+        let changed = now
+            .iter()
+            .find(|state| !was.contains(state))
+            .or_else(|| was.iter().find(|state| !now.contains(state)))
+            .map_or_else(String::new, |(name, _)| format!(" (`{name}`)"));
+        return refuse(&format!("an exported extension entry changed{changed}"));
     }
     Ok(())
 }

@@ -29,8 +29,8 @@
 //!
 //! | predicate        | seed         | inline children it follows    | a node's members |
 //! |------------------|--------------|-------------------------------|------------------|
-//! | closure by value | `Closure`    | tuple elements, vector element | `Array` / `Refine` entry; every struct, enum and record definition of the id |
-//! | bool lane        | `Bool`       | tuple elements, vector element | `Array` / `Refine` entry; every struct and enum definition of the id (not records) |
+//! | closure by value | `Closure`    | tuple elements, vector and tensor element | `Array` / `Refine` entry; every struct, enum and record definition of the id |
+//! | bool lane        | `Bool`       | tuple elements, vector and tensor element | `Array` / `Refine` entry; every struct and enum definition of the id (not records) |
 //! | handle           | `Handle`     | every inline child ([`Ty::visit_types`]) | every table reference ([`table_referent`]): an entry, a signature's parameters and returns, every struct, enum and record definition, a closure's captures and its signature |
 //!
 //! A missing entry, id or signature has no members. The walks these replace
@@ -67,7 +67,7 @@
 //!
 //! | seed | inline children it follows | a node's members |
 //! |------|----------------------------|------------------|
-//! | `Char`; a MISSING entry, id or closure type; a node on a by-value CYCLE | tuple elements, vector element | `Array` / `Sequence` / `Set` / `Refine` entry; the ONE struct, enum or record definition [`Module::struct_def`] (and its twins) resolves an id to; a closure type's captures |
+//! | `Char`; a MISSING entry, id or closure type; a node on a by-value CYCLE | tuple elements, vector element, tensor element | `Array` / `Sequence` / `Set` / `Refine` entry; the ONE struct, enum or record definition [`Module::struct_def`] (and its twins) resolves an id to; a closure type's captures |
 //!
 //! A dangling reference is a seed so that a malformed module fails closed,
 //! and so is a node on a by-value cycle: it is an infinitely large type
@@ -719,7 +719,9 @@ fn scan(reach: Reach, ty: &Ty, out: &mut Vec<TableReferent>, steps: &mut u64) ->
                     Ty::Closure(_) if closure => return true,
                     Ty::Bool if reach == Reach::BoolLane => return true,
                     Ty::Tuple(elems) => pending.extend(elems.iter()),
-                    Ty::Vector(elem, _) => pending.push(elem),
+                    // A tensor's element is an inline child, as a vector's
+                    // is: following it can only find a seed, which refuses.
+                    Ty::Vector(elem, _) | Ty::Tensor(elem, _) => pending.push(elem),
                     Ty::Array(id, _) | Ty::Refine(id, _) => {
                         out.push(TableReferent::Ty(id.as_usize()));
                     }
@@ -827,7 +829,7 @@ fn scan_char_value(ty: &Ty, out: &mut Vec<TableReferent>, steps: &mut u64) -> bo
             Ty::Storage(_) => {}
             Ty::Char => return true,
             Ty::Tuple(elems) => pending.extend(elems.iter()),
-            Ty::Vector(elem, _) => pending.push(elem),
+            Ty::Vector(elem, _) | Ty::Tensor(elem, _) => pending.push(elem),
             Ty::Array(id, _) | Ty::Sequence(id) | Ty::Set(id, _) | Ty::Refine(id, _) => {
                 out.push(TableReferent::Ty(id.as_usize()));
             }

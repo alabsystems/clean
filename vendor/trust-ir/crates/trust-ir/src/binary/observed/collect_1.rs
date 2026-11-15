@@ -38,6 +38,11 @@ pub(super) fn observed_collect_strings_into<O: ExecutionObserver>(
             observed_collect_type_identity_strings(&entry.ty, pool, out)?;
         }
     }
+    // v70 (PKG-U13e): a module with a blob table row writes the trailing
+    // blob section. A row holds no interned string.
+    if !module.blobs.is_empty() {
+        pool.raise_to(TENSOR_BLOB_FORMAT_VERSION);
+    }
     // The v30 universe / predicate tables carry constants too (scalar-only
     // when well-formed). Walk them like every other constant carrier, so a
     // gated constant tag (v49 `Uninit`, v50 `Splat`) can never be written under a header
@@ -312,6 +317,12 @@ pub(super) fn observed_collect_type_identity_strings<O: ExecutionObserver>(
             pool.intern(&ty.name, out)?;
             pool.intern(&ty.runtime, out)?;
         }
+        // v64 and v67: the same discipline for type tags 40 and 41, exactly
+        // as `collect_type_identity_strings` raises them, so this identity's
+        // header is the canonical writer's (`stable_digest`) and never a
+        // lower one carrying a tag that header refuses.
+        TyG::Storage(_) => pool.raise_to(STORAGE_LAYOUT_FORMAT_VERSION),
+        TyG::Tensor(..) => pool.raise_to(TENSOR_FORMAT_VERSION),
         _ => {}
     }
 

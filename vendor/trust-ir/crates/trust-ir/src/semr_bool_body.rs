@@ -236,7 +236,8 @@ mod tests {
 
     #[test]
     fn implementation_only_mutants_are_not_the_original_derivation() {
-        let changes: Vec<(Refusal, Box<dyn Fn(&mut Module)>)> = vec![
+        type Mutation = Box<dyn Fn(&mut Module)>;
+        let changes: Vec<(Refusal, Mutation)> = vec![
             (
                 Refusal::Operation,
                 Box::new(|m| {

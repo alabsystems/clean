@@ -234,14 +234,24 @@ main() {
         exit 2
     fi
 
-    local out rc replay_rc cleanup_rc verdict="" vrc=1
+    local out rc replay_rc cleanup_rc verdict="" vrc=1 child_errexit=0
     if out="$(mktemp "${TMPDIR:-/tmp}/cargo-nonvacuous.XXXXXX")" && [[ -f "$out" ]]; then
         :
     else
         echo "[$label] NONVACUOUS=fail reason=capture-setup-error" >&2
         return 2
     fi
-    if "$@" >|"$out" 2>&1; then rc=0; else rc=$?; fi
+    # A command in `if` disables errexit inside a shell function too. Run it
+    # unconditionally in a foreground subshell with the caller's original
+    # errexit setting, while the parent stays alive to replay and clean up.
+    case $- in *e*) child_errexit=1 ;; esac
+    set +e
+    (
+        if [[ "$child_errexit" -eq 1 ]]; then set -e; fi
+        "$@"
+    ) >|"$out" 2>&1
+    rc=$?
+    if [[ "$child_errexit" -eq 1 ]]; then set -e; fi
     if cat "$out"; then replay_rc=0; else replay_rc=$?; fi
 
     if [[ "$rc" -eq 0 && "$replay_rc" -eq 0 ]]; then

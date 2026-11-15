@@ -40,6 +40,15 @@ impl<'a> State<'a> {
                 self.push(Task::Text(">"), work)?;
                 self.push(Task::Type(element), work)
             }
+            // `tensor<{elem}, {rank}>`: the rank follows the element, so it
+            // waits on the task stack behind it.
+            Ty::Tensor(element, rank) => {
+                work.text("tensor<", &mut self.output)?;
+                self.push(Task::Text(">"), work)?;
+                self.push(Task::Number(*rank), work)?;
+                self.push(Task::Text(", "), work)?;
+                self.push(Task::Type(element), work)
+            }
             Ty::Ref(inner) => self.wrapped("&", "", inner, work),
             Ty::RefMut(inner) => self.wrapped("&mut ", "", inner, work),
             Ty::PtrConst(inner) => self.wrapped("*const ", "", inner, work),

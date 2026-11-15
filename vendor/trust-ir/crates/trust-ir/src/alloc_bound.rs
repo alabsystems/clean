@@ -489,7 +489,8 @@ impl<'m> Sizer<'m> {
             | Ty::Closure(_)
             | Ty::Set(..)
             | Ty::Sequence(_)
-            | Ty::Record(_) => Bytes::Unknown,
+            | Ty::Record(_)
+            | Ty::Tensor(..) => Bytes::Unknown,
             Ty::Ext(e) => e.unreachable(),
         }
     }

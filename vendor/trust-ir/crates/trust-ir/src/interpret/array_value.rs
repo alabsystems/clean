@@ -31,7 +31,8 @@ impl RopeElem for InterpretValue {
     const FRESH_LEAF: usize = LEAF;
 
     /// Certainly-equal, cheaply: scalars by value, arrays and vectors by node
-    /// identity, aggregates field by field. Never a deep array comparison.
+    /// identity, tensors by extents and element-node identity, aggregates
+    /// field by field. Never a deep array comparison.
     fn same(&self, other: &Self) -> bool {
         use InterpretValueKind as K;
         if self.ty != other.ty {
@@ -51,6 +52,9 @@ impl RopeElem for InterpretValue {
             | (K::Vector(a), K::Vector(b))
             | (K::Sequence(a), K::Sequence(b))
             | (K::Set(a), K::Set(b)) => a.ptr_eq(b),
+            (K::Tensor { dims: a, elems: x }, K::Tensor { dims: b, elems: y }) => {
+                a == b && x.ptr_eq(y)
+            }
             (K::Aggregate(a), K::Aggregate(b)) => {
                 a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.same(y))
             }

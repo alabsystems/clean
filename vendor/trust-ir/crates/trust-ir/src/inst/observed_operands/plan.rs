@@ -132,6 +132,35 @@ pub(super) fn for_instruction(instruction: &Inst) -> Plan<'_> {
             second: &[],
         },
         Inst::ArraySplat { value, .. } => Plan::One(*value),
+        Inst::TensorContract { lhs, rhs, .. } => Plan::Two(*lhs, *rhs),
+        Inst::TensorMap { args, .. } => Plan::Lists {
+            prefix: None,
+            first: args,
+            second: &[],
+        },
+        Inst::TensorReduce { src, .. } => Plan::One(*src),
+        // The source, the parameters in order, then the fill.
+        Inst::TensorView {
+            src, params, fill, ..
+        } => Plan::Lists {
+            prefix: Some(*src),
+            first: params,
+            second: fill.as_slice(),
+        },
+        // The data, then the coordinate tensors in axis order.
+        Inst::TensorGather { data, coords, .. } => Plan::Lists {
+            prefix: Some(*data),
+            first: coords,
+            second: &[],
+        },
+        // The initial tensor, the source, then the coordinate tensors.
+        Inst::TensorScatter {
+            init, src, coords, ..
+        } => Plan::Lists {
+            prefix: Some(*init),
+            first: core::slice::from_ref(src),
+            second: coords,
+        },
         Inst::ExtractField { aggregate, .. } => Plan::One(*aggregate),
         Inst::InsertField {
             aggregate, value, ..

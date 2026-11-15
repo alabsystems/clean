@@ -182,6 +182,12 @@ fn build<'a, O: ExecutionObserver>(
         | Inst::MakeAggregate { .. }
         | Inst::MakeClosure { .. }
         | Inst::ArraySplat { .. }
+        | Inst::TensorContract { .. }
+        | Inst::TensorMap { .. }
+        | Inst::TensorReduce { .. }
+        | Inst::TensorView { .. }
+        | Inst::TensorGather { .. }
+        | Inst::TensorScatter { .. }
         | Inst::CallCannotUnwind { .. }
         | Inst::CallIndirectCannotUnwind { .. } => Ok(()),
     }

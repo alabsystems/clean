@@ -82,6 +82,13 @@ fn other_single() -> Vec<Inst> {
         },
         Inst::CloseFrame { frame: v(1) },
         Inst::Resume { exn: v(1) },
+        Inst::TensorReduce {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            src: v(1),
+            op: crate::TensorReduceOp::Add,
+            axes: vec![74],
+            order: crate::TensorReduceOrder::RowMajor,
+        },
     ]
 }
 
@@ -167,6 +174,30 @@ fn every_two_operand_variant_preserves_field_order_and_duplicates() {
             next_state: 73,
             value: v(2),
         },
+        Inst::TensorContract {
+            ty: Ty::Tensor(Box::new(Ty::U32), 2),
+            lhs: v(1),
+            rhs: v(2),
+            batch: vec![(74, 75)],
+            contract: vec![(76, 77)],
+        },
+        // Lane and node numbers are not operands.
+        Inst::TensorMap {
+            ty: Ty::Tensor(Box::new(Ty::U32), 2),
+            args: vec![v(1), v(2)],
+            body: vec![crate::TensorMapNode::BinOp {
+                op: BinOp::Add,
+                ty: Ty::U32,
+                lhs: 78,
+                rhs: 79,
+            }],
+        },
+        // The data, then its one coordinate tensor.
+        Inst::TensorGather {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            data: v(1),
+            coords: vec![v(2)],
+        },
     ];
     for instruction in instructions {
         assert_eq!(parity(&instruction), ids(&[1, 2]));
@@ -216,6 +247,26 @@ fn every_three_operand_variant_preserves_its_real_field_order() {
             cond: v(1),
             then_val: v(2),
             else_val: v(3),
+        },
+        // The source, the parameter, then the fill; node ids are not operands.
+        Inst::TensorView {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            src: v(1),
+            params: vec![v(2)],
+            exprs: vec![
+                crate::TensorIndexExpr::Param(0),
+                crate::TensorIndexExpr::Coord(0),
+            ],
+            shape: vec![0],
+            index: vec![1],
+            fill: Some(v(3)),
+        },
+        // The initial tensor, the source, then the coordinate tensor.
+        Inst::TensorScatter {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            init: v(1),
+            src: v(2),
+            coords: vec![v(3)],
         },
     ];
     for instruction in instructions {

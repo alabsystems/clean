@@ -5586,6 +5586,14 @@ impl Environment {
         self.extension_states.export_all()
     }
 
+    /// Whether `extension` has imported raw entries that no typed state has
+    /// folded yet: a reader of the typed state would then miss them.
+    pub(crate) fn has_unfolded_extension_entries(&self, extension: &str) -> bool {
+        self.persistent_extensions
+            .get(&Name::from_string(extension))
+            .is_some_and(|raw| raw.imported_entries.iter().any(|module| !module.is_empty()))
+    }
+
     /// Internal: ensure a specific extension's typed state is initialized.
     fn ensure_ext_initialized(&mut self, idx: ExtensionIdx) {
         if self.extension_states.is_initialized(idx) {

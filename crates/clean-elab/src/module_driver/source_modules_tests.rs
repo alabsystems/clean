@@ -49,6 +49,79 @@ fn write_artifact(lib: &Path, module: &str, imports: &[&str], clean_built: bool)
     std::fs::write(lib.join(format!("{module}.olean")), bytes).expect("write artifact");
 }
 
+/// The implicit source world of `main`, as both production verbs select it.
+fn world(main: &Path) -> clean_olean::SourceWorldDecision {
+    clean_olean::source_world_for_file(main, None).expect("source world")
+}
+
+/// A Lake project whose `Main.lean` has `header` and no artifact directory
+/// content: `(main, lib)`.
+fn project_with_header(dir: &Path, header: &str) -> (PathBuf, PathBuf) {
+    let (main, lib) = lake_project(dir);
+    std::fs::write(&main, format!("{header}\ndef plain (n : Nat) : Nat := n\n"))
+        .expect("write main");
+    (main, lib)
+}
+
+/// A module Clean's hand-written prelude names verbatim, with no artifact
+/// anywhere the importer searches, is served from that prelude, which is
+/// built over the bootstrap prelude: it selects no world. Selecting genuine
+/// Init for it registered the prelude's `HAdd` over Init's
+/// ("init_hadd: Duplicate declaration: HAdd").
+#[test]
+fn test_world_setup_declared_prelude_without_artifact_keeps_bootstrap_route() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (main, _lib) = project_with_header(dir.path(), "import Mathlib.Data.Real.Basic");
+    assert!(
+        !source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
+        "a declared-prelude import with no artifact is no artifact import"
+    );
+}
+
+/// The same module with an artifact present is an artifact import.
+#[test]
+fn test_world_setup_declared_prelude_with_artifact_selects_genuine_init() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (main, lib) = project_with_header(dir.path(), "import Mathlib.Data.Real.Basic");
+    let real = lib.join("Mathlib/Data/Real");
+    std::fs::create_dir_all(&real).expect("create module dir");
+    write_artifact(&real, "Basic", &[], false);
+    assert!(
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
+        "an artifact for a declared-prelude module must select genuine Init"
+    );
+}
+
+/// A declared-prelude import beside a real artifact import does not hide
+/// the artifact import, in either order.
+#[test]
+fn test_world_setup_declared_prelude_beside_artifact_selects_genuine_init() {
+    for header in [
+        "import Mathlib.Data.Real.Basic\nimport Lib",
+        "import Lib\nimport Mathlib.Data.Real.Basic",
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (main, lib) = project_with_header(dir.path(), header);
+        write_artifact(&lib, "Lib", &[], false);
+        assert!(
+            source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
+            "{header}: the artifact import must select genuine Init"
+        );
+    }
+}
+
+/// A module no prelude names is never served by one: genuine Init, where the
+/// importer refuses it by name.
+#[test]
+fn test_world_setup_undeclared_mathlib_module_selects_genuine_init() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (main, _lib) = project_with_header(dir.path(), "import Mathlib.Utterly.Fake.Nonsense");
+    assert!(
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
+        "the Mathlib prefix wildcard is not a declared prelude"
+    );
+}
+
 #[test]
 fn test_world_setup_clean_built_closure_keeps_bootstrap_route() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -56,7 +129,7 @@ fn test_world_setup_clean_built_closure_keeps_bootstrap_route() {
     write_artifact(&lib, "Dep", &[], true);
     write_artifact(&lib, "Lib", &["Dep"], true);
     assert!(
-        source_closure_needs_world_setup(&main).expect("closure is readable"),
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
         "bootstrap compatibility must retain isolated source-module setup"
     );
     let decision = clean_olean::source_world_for_file(&main, None).expect("source world");
@@ -89,7 +162,7 @@ fn test_world_setup_clean_built_artifact_recording_init_selects_genuine_init() {
     let (main, lib) = lake_project(dir.path());
     write_artifact(&lib, "Lib", &["Init"], true);
     assert!(
-        source_closure_needs_world_setup(&main).expect("closure is readable"),
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
         "a Clean-payload artifact recording an Init import must select genuine Init"
     );
 }
@@ -101,7 +174,7 @@ fn test_world_setup_transitive_init_import_selects_genuine_init() {
     write_artifact(&lib, "Dep", &["Init"], true);
     write_artifact(&lib, "Lib", &["Dep"], true);
     assert!(
-        source_closure_needs_world_setup(&main).expect("closure is readable"),
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
         "an Init import recorded anywhere in the artifact closure selects genuine Init"
     );
 }
@@ -112,7 +185,7 @@ fn test_world_setup_lean_written_artifact_selects_genuine_init() {
     let (main, lib) = lake_project(dir.path());
     write_artifact(&lib, "Lib", &[], false);
     assert!(
-        source_closure_needs_world_setup(&main).expect("closure is readable"),
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
         "an artifact without a Clean payload (Lean-written) must select genuine Init"
     );
 }
@@ -124,7 +197,7 @@ fn test_world_setup_lean_written_dependency_selects_genuine_init() {
     write_artifact(&lib, "Dep", &[], false);
     write_artifact(&lib, "Lib", &["Dep"], true);
     assert!(
-        source_closure_needs_world_setup(&main).expect("closure is readable"),
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
         "a Clean-built artifact over a Lean-written one must select genuine Init"
     );
 }
@@ -134,7 +207,7 @@ fn test_world_setup_unresolved_artifact_selects_genuine_init() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (main, _lib) = lake_project(dir.path());
     assert!(
-        source_closure_needs_world_setup(&main).expect("closure is readable"),
+        source_closure_needs_world_setup(&main, &world(&main)).expect("closure is readable"),
         "an import that resolves to no artifact must select genuine Init"
     );
 }

@@ -9,7 +9,7 @@
 //! `theories/kcheck_spec`, replayed by `leanchecker --fresh`, and re-admitted
 //! constant by constant through Clean's reference kernel from an empty base.
 //!
-//! What a green run shows: every constant the package's thirteen modules declare
+//! What a green run shows: every constant the package's fifty-seven modules declare
 //! is admitted by two kernels; every case line the executable prints
 //! (`expected_output.txt`) is stated by a re-admitted theorem `run_<case> =
 //! Except.ok ...` or `Except.error ...`, which the kernels decide by evaluating
@@ -28,12 +28,15 @@
 //! `KCheckSpec.Checker`, meets `Checker.StartsAtBase` by a re-admitted
 //! theorem (D1 Revision 5). It also re-checks and statement-pins the bounded
 //! C3 report-calculus, checker-output and first semantic-base theorems, refuses
-//! a concrete report that drops the successor increment, and refuses the proved
-//! `Sort 1 : Sort 2` bound at height 1. The semantic base covers the complete
-//! fuel-one conversion domain and actual delta helper, not all-fuel soundness of
-//! a checker member, the mutually recursive block, or the C3 headline;
-//! nor anything about the first cut `theories/kcheck`, which `kcheck_core.rs`
-//! checks.
+//! a dropped-successor report and a proved `Sort 1 : Sort 2` bound at height 1.
+//! It qualifies all-fuel soundness of the five checker members, their mutual
+//! block, actual ordinary admission and the exact unconditional C3 headline.
+//! The actual beta and delta proofs discharge both primitive head laws; the
+//! guarded twin and real beta guard-deletion refutation remain checked.
+//! This is per-bound semantic soundness against the stated model. It does not
+//! show admission of this proof by the adopted checker, compiled-byte lineage,
+//! an additional quorum vote or a transfer of authority. The legacy checker
+//! `theories/kcheck` is qualified separately by `kcheck_core.rs`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
@@ -170,6 +173,269 @@ const C3_THEOREMS: &[&str] = &[
     "KCheck.check_bounded_proved",
     "KCheck.report_upper_bound_proved",
     "KCheck.checkSortBound_control",
+    "KCheck.WalkSupport.levelSame_eq",
+    "KCheck.WalkSupport.levelsSame_eq",
+    "KCheck.WalkSupport.sameErasure_toExpr",
+    "KCheck.WalkSupport.sameErasure_value",
+    "KCheck.WalkSupport.scoped_mono",
+    "KCheck.WalkSupport.scoped_inst",
+    "KCheck.walk_sound_step",
+    "KCheck.walk_sound_of_conv_sound",
+    "KCheck.walk_refl_sound_proved",
+    "KCheck.walk_argument_typing_control",
+    "KCheck.context_depth_transport",
+    "KCheck.context_tail_transport",
+    "KCheck.context_getElem_semantics",
+    "KCheck.lookupLocal_semantics",
+    "KCheck.inferAnn_local_sound",
+    "KCheck.ContextControls.good_scoped",
+    "KCheck.ContextControls.good_satisfies",
+    "KCheck.ContextControls.good_lookup_assumption",
+    "KCheck.ContextControls.good_lookup_definition",
+    "KCheck.ContextControls.lookupLocal_witness",
+    "KCheck.ContextControls.bad_satisfies",
+    "KCheck.ContextControls.bad_lookup",
+    "KCheck.ContextControls.bad_not_scoped",
+    "KCheck.ContextControls.bad_not_member",
+    "KCheck.ContextControls.lookupLocal_needs_scope",
+    "KCheck.BinderSound.scoped_openAt",
+    "KCheck.BinderSound.scoped_closeAt",
+    "KCheck.BinderSound.closeAt_openAt",
+    "KCheck.BinderSound.openAt_closeAt",
+    "KCheck.BinderSound.value_openAt",
+    "KCheck.BinderSound.ann_openAt",
+    "KCheck.BinderSound.value_closeAt",
+    "KCheck.BinderSound.ann_closeAt",
+    "KCheck.BinderSound.assumptionSetting_exists",
+    "KCheck.BinderSound.definitionSetting_exists",
+    "KCheck.BinderSound.Controls.body_scoped",
+    "KCheck.BinderSound.Controls.body_annotation",
+    "KCheck.BinderSound.Controls.body_open_annotation",
+    "KCheck.BinderSound.Controls.body_roundtrip",
+    "KCheck.BinderSound.Controls.bad_body_annotation",
+    "KCheck.BinderSound.Controls.bad_body_not_scoped",
+    "KCheck.BinderSound.Controls.bad_body_open_not_annotated",
+    "KCheck.BinderSound.Controls.opening_annotation_needs_scope",
+    "KCheck.BinderSound.Controls.bad_local_open_value",
+    "KCheck.BinderSound.Controls.opening_value_needs_scope",
+    "KCheck.BinderSound.closeAt_toExpr",
+    "KCheck.BinderSound.empty_in_prop",
+    "KCheck.BinderSound.assumptionSetting_nonvacuous",
+    "KCheck.BinderSound.prop_in_type",
+    "KCheck.BinderSound.definitionSetting_nonvacuous",
+    "KCheck.whnfSoundAt_spec",
+    "KCheck.inferSoundAt_spec",
+    "KCheck.context_getElem_scoped",
+    "KCheck.lookupLocal_scoped",
+    "KCheck.instLevels_scoped",
+    "KCheck.inferAnn_bvar_result",
+    "KCheck.inferAnn_local_result",
+    "KCheck.inferAnn_sort_result",
+    "KCheck.inferAnn_const_result",
+    "KCheck.pi_value_mem_sort",
+    "KCheck.inferAnn_app_composed",
+    "KCheck.inferAnn_lam_composed",
+    "KCheck.inferAnn_let_composed",
+    "KCheck.inferAnn_pi_composed",
+    "KCheck.inferAnn_sound_step",
+    "KCheck.inferAnn_sound_of_whnf_conv",
+    "KCheck.inferAnn_sound_one",
+    "KCheck.InferControls.idProp_run",
+    "KCheck.InferControls.idProp_result",
+    "KCheck.InferControls.idProp_scoped",
+    "KCheck.InferControls.idProp_annotated",
+    "KCheck.InferControls.idProp_domain_inhabited",
+    "KCheck.InferControls.idProp_witness",
+    "KCheck.InferControls.badApp_run",
+    "KCheck.InferControls.badApp_scoped",
+    "KCheck.InferControls.falseTy_uninhabited",
+    "KCheck.InferControls.badApp_not_annotated",
+    "KCheck.InferControls.badApp_not_typed",
+    "KCheck.InferControls.badApp_control",
+    "KCheck.InferControls.inferAnn_needs_annotation",
+    "KCheck.ConvModel.traceLambda_congr_on",
+    "KCheck.ConvModel.tracePi_congr_on",
+    "KCheck.ConvModel.eta_pi",
+    "KCheck.ConvModel.proposition_members_related",
+    "KCheck.ConvWeakening.semantic_transport",
+    "KCheck.ConvWeakening.closed_push",
+    "KCheck.convResult_spec",
+    "KCheck.ConvLeaves.refl_result",
+    "KCheck.ConvLeaves.sort_result",
+    "KCheck.ConvLeaves.levelsEqv_eval",
+    "KCheck.ConvLeaves.const_result",
+    "KCheck.ConvLeaves.app_composed",
+    "KCheck.ConvLeaves.irrel_composed",
+    "KCheck.conv_lam_composed",
+    "KCheck.conv_pi_composed",
+    "KCheck.conv_core_left_composed",
+    "KCheck.conv_core_right_composed",
+    "KCheck.conv_delta_left_composed",
+    "KCheck.conv_delta_right_composed",
+    "KCheck.conv_delta_both_composed",
+    "KCheck.conv_eta_left_composed",
+    "KCheck.conv_eta_right_composed",
+    "KCheck.conv_sound_step",
+    "KCheck.conv_sound_of_whnf_infer_unfold",
+    "KCheck.ConvControls.falseTy_value_empty",
+    "KCheck.ConvControls.falseTy_member_prop",
+    "KCheck.ConvControls.good_beta_run",
+    "KCheck.ConvControls.good_beta_scoped",
+    "KCheck.ConvControls.falseTy_annotated",
+    "KCheck.ConvControls.good_beta_annotated",
+    "KCheck.ConvControls.good_beta_related",
+    "KCheck.ConvControls.beta_witness",
+    "KCheck.ConvControls.bad_beta_run",
+    "KCheck.ConvControls.bad_beta_value_empty",
+    "KCheck.ConvControls.bad_beta_not_related",
+    "KCheck.ConvControls.bad_beta_control",
+    "KCheck.ConvControls.conversion_needs_left_annotation",
+    "KCheck.ConvControls.scope_lambda_run",
+    "KCheck.ConvControls.dangling_lambda_annotated",
+    "KCheck.ConvControls.dangling_lambda_not_scoped",
+    "KCheck.ConvControls.true_proposition_member",
+    "KCheck.ConvControls.scope_lambda_not_related",
+    "KCheck.ConvControls.scope_lambda_control",
+    "KCheck.ConvControls.conversion_needs_right_scope",
+    "KCheck.WhnfSpine.spine_scoped",
+    "KCheck.WhnfSpine.spine_ann",
+    "KCheck.WhnfSpine.getSpine_reassemble",
+    "KCheck.WhnfSpine.getSpine_scoped",
+    "KCheck.WhnfSpine.getSpine_ann",
+    "KCheck.WhnfSpine.applyN_congr",
+    "KCheck.WhnfSpine.spine_congr",
+    "KCheck.WhnfSpine.familyOfRecursor_sound",
+    "KCheck.WhnfSpine.findRule_sound",
+    "KCheck.WhnfShapes.beta_shape",
+    "KCheck.WhnfShapes.zeta_shape",
+    "KCheck.WhnfShapes.local_shape",
+    "KCheck.WhnfShapes.recursor_shape",
+    "KCheck.unfoldHead_scoped",
+    "KCheck.beta_redex_scoped",
+    "KCheck.zeta_redex_scoped",
+    "KCheck.zeta_redex_semantics",
+    "KCheck.local_redex_scoped",
+    "KCheck.local_redex_semantics",
+    "KCheck.WhnfFold.bind_ok",
+    "KCheck.WhnfFold.report_trans",
+    "KCheck.WhnfFold.fold_growth",
+    "KCheck.WhnfFold.fold_related",
+    "KCheck.WhnfFold.relatedList_refl",
+    "KCheck.WhnfFold.relatedList_symm",
+    "KCheck.WhnfFold.relatedList_append",
+    "KCheck.WhnfRecursor.findEntry_found",
+    "KCheck.WhnfRecursor.entry_name",
+    "KCheck.WhnfRecursor.const_bound",
+    "KCheck.WhnfRecursor.const_type_ann",
+    "KCheck.WhnfRecursor.args_scoped_subset",
+    "KCheck.WhnfRecursor.args_ann_subset",
+    "KCheck.WhnfRecursor.iota_redex_scoped",
+    "KCheck.WhnfRecursor.k_redex_scoped",
+    "KCheck.WhnfRecursor.rule_rhs_ann",
+    "KCheck.WhnfRecursor.rule_rhs_value",
+    "KCheck.WhnfLists.prefix_major",
+    "KCheck.WhnfLists.recursor_prefix",
+    "KCheck.WhnfLists.take_length",
+    "KCheck.WhnfLists.index_length",
+    "KCheck.WhnfLists.leading_length",
+    "KCheck.WhnfLists.k_prefix",
+    "KCheck.WhnfK.applyN_append",
+    "KCheck.WhnfK.k_redex_semantics",
+    "KCheck.whnf_after_head",
+    "KCheck.whnf_delta_composed",
+    "KCheck.whnf_zeta_composed",
+    "KCheck.whnf_local_composed",
+    "KCheck.whnf_beta_composed",
+    "KCheck.whnf_k_composed",
+    "KCheck.WhnfStored.instR_scoped",
+    "KCheck.WhnfStored.stored_instR",
+    "KCheck.WhnfStored.telescope_residual",
+    "KCheck.WhnfStored.spineArgs_scoped",
+    "KCheck.WhnfStored.spineArgs_annotated",
+    "KCheck.WhnfStored.ctorResultArgs_semantics",
+    "KCheck.WhnfStored.inTele_related",
+    "KCheck.WhnfIota.applyN_related",
+    "KCheck.WhnfIota.iota_redex_semantics",
+    "KCheck.whnf_iota_composed",
+    "KCheck.whnf_sound_step",
+    "KCheck.whnf_sound_of_conv_walk_heads",
+    "KCheck.WhnfControls.good_whnf_run",
+    "KCheck.WhnfControls.good_whnf_witness",
+    "KCheck.WhnfControls.bad_annotation_run",
+    "KCheck.WhnfControls.annotation_control",
+    "KCheck.WhnfControls.whnf_needs_annotation",
+    "KCheck.WhnfControls.bad_scope_run",
+    "KCheck.WhnfControls.unscoped_beta_not_scoped",
+    "KCheck.WhnfControls.unscoped_beta_annotated",
+    "KCheck.WhnfControls.bad_scope_not_related",
+    "KCheck.WhnfControls.scope_control",
+    "KCheck.WhnfControls.whnf_needs_scope",
+    "KCheck.checkSoundAt_spec",
+    "KCheck.check_bvar_result",
+    "KCheck.check_sort_result",
+    "KCheck.check_const_result",
+    "KCheck.check_app_composed",
+    "KCheck.check_lam_composed",
+    "KCheck.check_pi_composed",
+    "KCheck.check_let_composed",
+    "KCheck.check_sound_step",
+    "KCheck.check_sound_of_whnf_conv",
+    "KCheck.check_sound_one",
+    "KCheck.CheckControls.good_context_scoped",
+    "KCheck.CheckControls.good_run",
+    "KCheck.CheckControls.good_result",
+    "KCheck.CheckControls.good_witness",
+    "KCheck.CheckControls.bad_context_run",
+    "KCheck.CheckControls.bad_context_not_typed",
+    "KCheck.CheckControls.checking_needs_context_scope",
+    "KCheck.CheckControls.sort_run",
+    "KCheck.CheckControls.sort_result",
+    "KCheck.CheckControls.sort_not_self_typed",
+    "KCheck.CheckControls.sort_control",
+    "KCheck.CheckControls.metadata_run",
+    "KCheck.CheckControls.metadata_witness",
+    "KCheck.blockSoundAt_spec",
+    "KCheck.block_sound_at_zero",
+    "KCheck.block_sound_at_step",
+    "KCheck.block_sound_at_all_fuel",
+    "KCheck.block_sound_of_head_laws",
+    "KCheck.whnf_sound_of_head_laws",
+    "KCheck.conv_sound_of_head_laws",
+    "KCheck.inferAnn_sound_of_head_laws",
+    "KCheck.check_sound_of_head_laws",
+    "KCheck.walk_sound_of_head_laws",
+    "KCheck.EnvTransport.find_old",
+    "KCheck.EnvTransport.found_ne_fresh",
+    "KCheck.EnvTransport.find_new",
+    "KCheck.EnvTransport.find_existing_iff",
+    "KCheck.EnvTransport.names_extend",
+    "KCheck.EnvTransport.assignment_append",
+    "KCheck.EnvTransport.constant_old",
+    "KCheck.EnvTransport.constant_new",
+    "KCheck.EnvTransport.avoids_fresh",
+    "KCheck.EnvTransport.value_same",
+    "KCheck.EnvTransport.ann_extend",
+    "KCheck.EnvTransport.names_dropPis",
+    "KCheck.EnvTransport.names_spineArgs",
+    "KCheck.EnvTransport.inTele_iff",
+    "KCheck.EnvTransport.mem_ne_fresh",
+    "KCheck.EnvTransport.old_entry_valid",
+    "KCheck.EnvTransport.old_family_valid",
+    "KCheck.EnvTransport.new_entry_valid",
+    "KCheck.EnvTransport.append_valid",
+    "KCheck.EnvTransport.Controls.identity_evidence",
+    "KCheck.EnvTransport.Controls.identity_domain_inhabited",
+    "KCheck.EnvTransport.Controls.identity_extension_valid",
+    "KCheck.EnvTransport.Controls.identity_base_extension_valid",
+    "KCheck.EnvTransport.Controls.identity_punit_family_survives",
+    "KCheck.EnvTransport.Controls.nameProbe_scoped",
+    "KCheck.EnvTransport.Controls.nameProbe_not_old_named",
+    "KCheck.EnvTransport.Controls.probe_fresh",
+    "KCheck.EnvTransport.Controls.nameProbe_value_changed",
+    "KCheck.EnvTransport.Controls.names_deletion_refuted",
+    "KCheck.EnvTransport.Controls.untypedEntry_other_premises",
+    "KCheck.EnvTransport.Controls.untypedEntry_not_valid",
+    "KCheck.EnvTransport.Controls.typing_deletion_refuted",
     "KCheck.levelSame_sound",
     "KCheck.levelsSame_sound",
     "KCheck.sameErasure_toExpr",
@@ -178,6 +444,86 @@ const C3_THEOREMS: &[&str] = &[
     "KCheck.unfoldHead_sound_proved",
     "KCheck.unfoldHead_scoped_proved",
     "KCheck.unfoldHead_id_control",
+    "KCheck.AdmissionShape.levelSame_eq",
+    "KCheck.AdmissionShape.levelsSame_eq",
+    "KCheck.AdmissionShape.matchesExpr_toExpr",
+    "KCheck.AdmissionShape.matchesExpr_sound",
+    "KCheck.AdmissionShape.entryMatches_sound",
+    "KCheck.AdmissionShape.recogniseBlock_sound",
+    "KCheck.AdmissionShape.ordinaryParts_matches",
+    "KCheck.ordinary_evidence_from_runs",
+    "KCheck.checkOrdinary_sound",
+    "KCheck.kcheck_ordinary_sound",
+    "KCheck.kcheck_inductive_sound",
+    "KCheck.kcheck_quotient_refused",
+    "KCheck.kcheck_sound_N_of_block",
+    "KCheck.kcheck_sound_of_blocks",
+    "KCheck.kcheck_sound_N_of_beta_law",
+    "KCheck.kcheck_sound_of_beta_laws",
+    "KCheck.c3Owes_of_blocks",
+    "KCheck.c3Owes_of_beta_laws",
+    "KCheck.AdmissionControls.ordinary_admitted",
+    "KCheck.AdmissionControls.admitted_shape",
+    "KCheck.AdmissionControls.admitted_fields",
+    "KCheck.AdmissionControls.definition_evidence",
+    "KCheck.AdmissionControls.admitted_valid",
+    "KCheck.AdmissionControls.body_typed_at_old_setting",
+    "KCheck.AdmissionControls.admitted_bound_fits",
+    "KCheck.AdmissionControls.admission_witness",
+    "KCheck.AdmissionControls.admission_bound_control",
+    "KCheck.AdmissionControls.theorem_kind_refused",
+    "KCheck.AdmissionControls.axiom_refused",
+    "KCheck.AdmissionControls.unsafe_refused",
+    "KCheck.CompleteSound.beta_head_law",
+    "KCheck.CompleteSound.unfold_head_law",
+    "KCheck.CompleteSound.block_at_all_fuel",
+    "KCheck.CompleteSound.block_sound",
+    "KCheck.CompleteSound.whnf_sound",
+    "KCheck.CompleteSound.conv_sound",
+    "KCheck.CompleteSound.inferAnn_sound",
+    "KCheck.CompleteSound.check_sound",
+    "KCheck.CompleteSound.walk_sound",
+    "KCheck.CompleteSound.kcheck_sound_N",
+    "KCheck.CompleteSound.kcheck_sound",
+    "KCheck.CompleteSound.c3Owes",
+];
+
+/// Independent semantic beta contracts; each actual proof is re-entered at
+/// the separately stated contract and refused at False.
+const BETA_CONTRACTS: &[(&str, &str)] = &[
+    ("KCheck.beta_redex_spine", "betaRedexSpine"),
+    ("KCheck.beta_spine_semantics", "betaSpine"),
+    ("KCheck.beta_redex_semantics", "betaRedex"),
+    ("KCheck.BetaCounterexample.redex", "betaCounterexampleRedex"),
+    ("KCheck.BetaCounterexample.term_scoped", "betaInputScoped"),
+    ("KCheck.BetaCounterexample.term_bounded", "betaInputBounded"),
+    (
+        "KCheck.BetaCounterexample.term_annotated",
+        "betaInputAnnotated",
+    ),
+    (
+        "KCheck.BetaCounterexample.guarded_beta_control",
+        "betaGuardedControl",
+    ),
+    (
+        "KCheck.BetaCounterexample.beta_changes_value",
+        "betaCounterexampleUnequal",
+    ),
+    ("KCheck.beta_needs_label_guard", "betaGuardRequired"),
+];
+
+/// The successful generic beta proof must not prove its guard-deleted statement.
+const BETA_FORGED: &[(&str, &str)] = &[("KCheck.beta_redex_semantics", "forged_betaWithoutGuard")];
+
+/// Proof-only meanings and concrete witness data, distinct from the executable
+/// checker definitions. Their bodies bind the mutation and its real tower.
+const BETA_DEFINITIONS: &[&str] = &[
+    "KCheck.BetaWithoutLabelGuard",
+    "KCheck.BetaCounterexample.term",
+    "KCheck.BetaCounterexample.assignment",
+    "KCheck.BetaCounterexample.environment",
+    "KCheck.BetaCounterexample.guardedTwin",
+    "KCheck.BetaContracts.betaWithoutGuard",
 ];
 
 const FORGED_REPORT: &str = "forged_report_successor";
@@ -296,6 +642,28 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         String::from_utf8_lossy(&independent.stderr)
     );
 
+    // Read actual exported structural names before the expensive import/replay.
+    // An imported equation lemma re-exported by a new proof module can share
+    // the KCheck namespace, so namespace-prefix checks cannot detect it.
+    let mut raw_exports: BTreeMap<Name, String> = BTreeMap::new();
+    for stem in order_stems() {
+        let module = stem.replace('/', ".");
+        let artifact = read_artifact(
+            &module,
+            &compiled.join(format!("{stem}.olean")),
+            ArtifactDepth::Names,
+        )
+        .unwrap_or_else(|error| panic!("read raw exports of {module}: {error}"));
+        for subject in artifact.names {
+            let previous = raw_exports.insert(subject.clone(), module.clone());
+            assert!(
+                previous.is_none(),
+                "duplicate exported structural name {subject}: {previous:?} and {module}"
+            );
+        }
+    }
+    eprintln!("raw export preflight: {} distinct names", raw_exports.len());
+
     let mut loaded = Environment::for_lean_replay();
     let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
         .expect("load the compiled checker");
@@ -307,7 +675,7 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     let stems = order_stems();
     assert_eq!(
         stems.len(),
-        13,
+        57,
         "module denominator of theories/kcheck_labelled/ORDER"
     );
     let not_replayable: BTreeSet<&str> = summaries
@@ -513,7 +881,7 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     }
     let mut observed_closures: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     observed_closures.insert("*".to_owned(), union);
-    for definition in CHECKER {
+    for definition in CHECKER.iter().chain(BETA_DEFINITIONS) {
         let subject = name(definition);
         assert!(targets.contains(&subject), "{definition} is not a subject");
         observed_closures.insert(
@@ -535,6 +903,14 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             closure_of(kernel.environment(), &subject),
         );
     }
+    for (theorem, _) in BETA_CONTRACTS {
+        let subject = name(theorem);
+        assert!(targets.contains(&subject), "missing beta theorem {theorem}");
+        observed_closures.insert(
+            (*theorem).to_owned(),
+            closure_of(kernel.environment(), &subject),
+        );
+    }
     for (subject, closure) in &observed_closures {
         eprintln!("axiom-closure {subject} {closure:?}");
     }
@@ -545,6 +921,14 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         loaded
             .get_const(&name(&format!("KCheck.CheckerContracts.{pin}")))
             .unwrap_or_else(|| panic!("missing statement {pin}"))
+            .value
+            .clone()
+            .unwrap_or_else(|| panic!("{pin} is not a proposition definition"))
+    };
+    let beta_statement = |pin: &str| -> Expr {
+        loaded
+            .get_const(&name(&format!("KCheck.BetaContracts.{pin}")))
+            .unwrap_or_else(|| panic!("missing beta statement {pin}"))
             .value
             .clone()
             .unwrap_or_else(|| panic!("{pin} is not a proposition definition"))
@@ -581,8 +965,16 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             "{theorem} is listed twice"
         );
     }
+    for (_, pin) in BETA_CONTRACTS.iter().chain(BETA_FORGED) {
+        assert!(
+            observed_pins
+                .insert((*pin).to_owned(), digest(&beta_statement(pin)))
+                .is_none(),
+            "{pin} is listed twice"
+        );
+    }
     let mut pinned_auxiliaries: BTreeSet<String> = BTreeSet::new();
-    for definition in CHECKER {
+    for definition in CHECKER.iter().chain(BETA_DEFINITIONS) {
         let constant = loaded
             .get_const(&name(definition))
             .expect("resident subject");
@@ -638,7 +1030,13 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     }
     assert_eq!(
         observed_pins.len(),
-        FORGED_RUNS.len() + 2 + C3_THEOREMS.len() + CHECKER.len(),
+        FORGED_RUNS.len()
+            + 2
+            + C3_THEOREMS.len()
+            + CHECKER.len()
+            + BETA_CONTRACTS.len()
+            + BETA_FORGED.len()
+            + BETA_DEFINITIONS.len(),
         "pin denominator"
     );
     let committed_closures: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(
@@ -743,6 +1141,44 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         );
     }
 
+    // The beta implementation proofs must inhabit independently pinned contracts,
+    // not just their own declared types. Each also fails at False, while the
+    // guard mutation is positively refuted by betaGuardRequired's theorem.
+    for (theorem, pin) in BETA_CONTRACTS {
+        let proof = loaded.get_const(&name(theorem)).expect("beta theorem");
+        let value = proof.value.clone().expect("beta proof");
+        kernel
+            .add_checked(Declaration::Theorem {
+                name: name(&format!("KCheck.Controls.{pin}_beta_contract")),
+                level_params: proof.level_params.clone(),
+                type_: beta_statement(pin),
+                value: value.clone(),
+            })
+            .unwrap_or_else(|refusal| panic!("{theorem} at {pin}: {refusal:?}"));
+        let at_false = kernel.add_checked(Declaration::Theorem {
+            name: name(&format!("KCheck.Controls.{pin}_beta_false")),
+            level_params: proof.level_params.clone(),
+            type_: Expr::const_(name("False"), vec![]),
+            value,
+        });
+        assert!(
+            is_type_mismatch(&at_false),
+            "{theorem} at False: {at_false:?}"
+        );
+    }
+    for (theorem, pin) in BETA_FORGED {
+        let proof = loaded
+            .get_const(&name(theorem))
+            .expect("generic beta theorem");
+        let bad = kernel.add_checked(Declaration::Theorem {
+            name: name(&format!("KCheck.Controls.{pin}_beta_forged")),
+            level_params: proof.level_params.clone(),
+            type_: beta_statement(pin),
+            value: proof.value.clone().expect("same actual beta proof"),
+        });
+        assert!(is_type_mismatch(&bad), "guard deletion must fail: {bad:?}");
+    }
+
     // C3 report-calculus mutation: the proved ground successor report is
     // admitted at its own equation, while both that proof and `Eq.refl` of the
     // forged right-hand side fail at the statement that drops the increment.
@@ -808,12 +1244,15 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     eprintln!(
         "kcheck_labelled subjects {}, modules {}, cases {} ({accepted_cases} accepted, \
          {refused_cases} refused), checker pins {}, C3 theorems {}, forged runs {}, \
-         forged C3 controls 2",
+         forged C3 controls 2, beta contracts {}, beta guard forgeries {}, beta definition pins {}",
         targets.len(),
         stems.len(),
         accepted_cases + refused_cases,
         CHECKER.len(),
         C3_THEOREMS.len(),
-        FORGED_RUNS.len()
+        FORGED_RUNS.len(),
+        BETA_CONTRACTS.len(),
+        BETA_FORGED.len(),
+        BETA_DEFINITIONS.len()
     );
 }

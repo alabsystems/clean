@@ -185,12 +185,19 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "data/gate_registry.json"
 DEMOS = ROOT / "data/gate_demonstrations.json"
+
+# Execute the declared helper source; ignored bytecode is not an input.
+_transport = types.ModuleType("gate_registry_resource_transport")
+_transport.__file__ = str(ROOT / "scripts/resource_transport.py")
+exec(compile(Path(_transport.__file__).read_bytes(), _transport.__file__, "exec",
+             dont_inherit=True), _transport.__dict__)
 
 LOCAL_GATE = "scripts/local_gate.sh"
 HOOK = "scripts/githooks/pre-push"
@@ -517,6 +524,14 @@ class Red(Exception):
     """A refusal. Carries the actionable diagnostic and nothing else."""
 
 
+def _resource_fds(env: dict[str, str]) -> tuple[int, ...]:
+    """Transport live descriptors; native owners still authenticate authority."""
+    try:
+        return _transport.resource_fds(env)
+    except RuntimeError as exc:
+        raise Red(f"resource transport refused: {exc}") from exc
+
+
 # ── reading ──────────────────────────────────────────────────────────────────
 
 
@@ -568,10 +583,12 @@ def _derived_inputs(root: Path, subject: str) -> tuple[dict[str, str] | None, st
     (None, why). Every listed path must be a regular file reached through no
     symlink (see below)."""
     interp = [sys.executable] if subject.endswith(".py") else ["bash"]
+    env = dict(os.environ)
     try:
         proc = subprocess.run([*interp, subject, PINNED_INPUTS_FLAG], cwd=str(root),
-                              capture_output=True, text=True, check=False, timeout=120)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+                              capture_output=True, text=True, check=False, timeout=120,
+                              env=env, pass_fds=_resource_fds(env))
+    except (OSError, subprocess.TimeoutExpired, Red) as exc:
         return None, f"`{subject} {PINNED_INPUTS_FLAG}` could not run: {exc}"
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout).strip().splitlines()[-1:] or ["(no output)"]
@@ -650,6 +667,12 @@ def _replay_record(d: dict, how: str) -> dict:
 
 def _replay_disagreement(rid: str, d: dict) -> str | None:
     rec = d.get("replayed")
+    if rec is None and "replayed" in d:
+        # Review of R7c (2026-11-14): a null record read as NO record here and
+        # as a record in R7c, so a hand-moved pin with `"replayed": null` was
+        # green under both. Only --repin writes the field, and it writes an object.
+        return (f"{rid} carries a null `replayed` record -- only --repin writes it, and it "
+                f"writes an object")
     if rec is None:
         if isinstance(d.get("inputs"), dict):
             return (f"{rid} pins a derived input set that no recorded replay produced -- "
@@ -1810,11 +1833,13 @@ def check(root: Path) -> list[str]:
         # red, and only while it is valid. Deleting it therefore goes red rather
         # than green -- but ONLY for a row R7b reaches (one citing a reports/*.json
         # record with a script_sha256). A row whose demonstration is a
-        # Every other row (all but two today) cites no such record, and deleting
-        # its account goes green unseen -- as does a hand edit of its pin
-        # (measured 2026-11-13, review of d5619e490). Closing that needs a
-        # replay record (`replayed`, written by --repin) on every pin that has a
-        # replay route, which many rows still lack (docs/DECISIONS.md, same day).
+        # Every other row (all but two today) cites no such record. For a pin
+        # under a soundness claim, R7c (check_replay_record_debt) catches the
+        # hand edit instead: such a pin carries its replay record or an account,
+        # or is named as debt in data/replay_record_debt.json. Elsewhere -- a debt
+        # row, or a row no soundness claim stands on -- deleting an account or
+        # moving a pin by hand still goes green unseen (review of d5619e490,
+        # 2026-11-13; R7c widened by its own review, 2026-11-14).
         #
         # An account never stands under a soundness claim that has a replay
         # route (2026-11-13, same review). R4 makes a soundness row's dated
@@ -1887,7 +1912,7 @@ def check(root: Path) -> list[str]:
         # and its own sanctioned bypass shipped demonstrated by nothing while
         # every rule stayed green. R7 asks "does the pin match the file?"; this
         # asks the question R7 cannot: "does the pin match the EVIDENCE?"
-        if pinned and not parent_id:
+        if pinned:
             import re as _re7b
             _blob = json.dumps(d)
             _seen, _match = [], False
@@ -1924,6 +1949,15 @@ def check(root: Path) -> list[str]:
                     f"demonstrates that sha ({_lst}) -- the pin moved past its evidence, so "
                     f"the row is backed only by records about other versions of the file. "
                     f"Re-demonstrate at the new sha and mint a record, or restore the pin.")
+        if pinned and parent_id and (parent_id == rid or parent_id not in by_id):
+            # Review of R7c (2026-11-14): a row with its own pin is judged on it
+            # here, so the delegation checks below never ran for it, and
+            # `inherited_from` naming the row itself or no row passed unread --
+            # while R7c, R7b and R12 read the field as "this pin is someone else's".
+            problems.append(
+                f"R7 FRESH: {rid} pins its own subject and names inherited_from "
+                f"{parent_id!r}, which is {'the row itself' if parent_id == rid else 'no registry row'} "
+                f"-- a delegation pointer names another row, or is removed.")
         if pinned:
             live = _sha256(root, subject)
             if not live:
@@ -2222,6 +2256,7 @@ def check(root: Path) -> list[str]:
     problems.extend(check_pushed_tips(root))
     problems.extend(check_soundness_claims_ratchet(root, doc))
     problems.extend(check_r7b_coverage(root, doc))
+    problems.extend(check_replay_record_debt(root, doc))
     try:
         _demos = json.loads((root / "data/gate_demonstrations.json").read_text())
     except (OSError, ValueError):
@@ -2503,6 +2538,132 @@ def check_r7b_coverage(root: Path, doc: dict) -> list[str]:
     if not out and eligible and len(backed) < len(committed):
         out.append(f"R7b REACH: {len(backed)} backed rows against {len(committed)} anchored")
     return out
+
+
+REPLAY_DEBT_REL = "data/replay_record_debt.json"
+
+# The debt as it was MINTED (docs/DECISIONS.md, 2026-11-14): the only ids the
+# anchor may name. --repin removes a row from the anchor and never adds one, so
+# the anchor shrinks inside this set; naming any other id is refused, and
+# widening the set is an edit to this R7-pinned file, which moves only over its
+# own self-test (--repin check_gate_registry). Review of R7c: an anchor the
+# check compared with nothing reopened the hand-edit hole with one appended id.
+REPLAY_DEBT_MINTED = frozenset({
+    "axiom_audit_release_check",
+    "clean-auto::ay_coupling_boundary_ratchet",
+    "clean-auto::expr_let_constructor_hygiene",
+    "clean-cli::cmd_replacement::row_prose_inertness",
+    "clean-cli::cmd_replacement::self_reported_gate_refusal",
+    "clean-cli::replacement::evidence_substitution",
+    "clean-elab::cert::external::tests_source_hygiene",
+    "clean-elab::tactic::bypass_ratchet",
+    "clean-elab::tactic::replace_target_ratchet",
+    "clean-elab::trust_soundness_ouroboros_gate",
+    "crystal_fixture_freshness",
+    "gate::masquerade",
+    "lean-profile-reducer-differential",
+    "native-exec-battery",
+    "trust-verify-soundness",
+})
+# The self-test's mini-repo names its own debt; `selftest()` sets this for the
+# duration of its run and nothing else does.
+_REPLAY_DEBT_FIXTURE: frozenset = frozenset()
+
+
+def replay_record_debt(rows: list[dict]) -> set[str]:
+    """The rows with a pin of their own (`script_sha256`) that a soundness claim
+    stands on (their own, or that of a row inheriting their pin) and that carry
+    neither a replay record (an object under `replayed`) nor an undemonstrated-pin
+    account (`repinned_without_demonstration`, which R4b polices).
+
+    Review of d5619e490 (2026-11-13): R7 compares a pin with the live file and
+    `_replay_disagreement` compares it with its replay record, but a pin moved
+    by hand together with deleting that record satisfies both. Such a row reads
+    exactly like one that never had a record. So the rows with no record are
+    named, once, in an anchor: anything else must carry one.
+
+    Review of R7c (2026-11-14) narrowed the exemptions to the two records:
+    a row is judged on its OWN pin whether or not it also names `inherited_from`
+    (R7 judges such a row self-pinned, so the field took it out of this rule
+    while R7 never checked the delegation), and the rule no longer asks whether
+    the row has a replay route, which is read from free text (`ref`,
+    `replayable`) that a one-word edit removes. A row nothing can replay stays
+    named until it gains a route and a --repin, or carries an account.
+    """
+    owed: set[str] = set()
+    for row in rows:
+        d = row.get("demonstrated")
+        if not isinstance(d, dict) or not d.get("script_sha256"):
+            continue
+        if isinstance(d.get("replayed"), dict) or d.get("repinned_without_demonstration"):
+            continue
+        if _soundness_under_account(rows, row):
+            owed.add(row["id"])
+    return owed
+
+
+def check_replay_record_debt(root: Path, doc: dict) -> list[str]:
+    """R7c REPLAY RECORD: a pin under a soundness claim carries the record of
+    the replay it moved over (or an undemonstrated-pin account), or is named
+    as debt; the anchor names only rows that still owe one, and only ids in the
+    debt as minted (`REPLAY_DEBT_MINTED`). `--repin` removes a row when it
+    writes its record."""
+    path = root / REPLAY_DEBT_REL
+    try:
+        anchor = json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return [f"R7c REPLAY RECORD: {REPLAY_DEBT_REL} is missing -- without it a pin moved "
+                f"by hand with its replay record deleted reads as an old, unrecorded pin."]
+    except ValueError as exc:
+        return [f"R7c REPLAY RECORD: {REPLAY_DEBT_REL} is not valid JSON: {exc}"]
+    if not isinstance(anchor, dict):
+        return [f"R7c REPLAY RECORD: {REPLAY_DEBT_REL} must be a JSON object carrying "
+                f"'count' and 'rows'"]
+    listed = anchor.get("rows")
+    if not isinstance(listed, list) or not all(isinstance(x, str) for x in listed):
+        return [f"R7c REPLAY RECORD: {REPLAY_DEBT_REL} must carry a list of row ids under 'rows'"]
+    out = []
+    if anchor.get("count") != len(listed):
+        out.append(f"R7c REPLAY RECORD: {REPLAY_DEBT_REL} says count={anchor.get('count')!r} "
+                   f"beside {len(listed)} row(s) -- the two halves of one claim disagree.")
+    minted = REPLAY_DEBT_MINTED | _REPLAY_DEBT_FIXTURE
+    for rid in sorted(set(listed) - minted):
+        out.append(
+            f"R7c REPLAY RECORD: {rid} is listed in {REPLAY_DEBT_REL} but was not in the debt "
+            f"minted with this rule -- the debt only shrinks; re-pin the row over a replay "
+            f"(--repin {rid}) instead of naming it as debt.")
+    owed = replay_record_debt(doc["rows"])
+    for rid in sorted(owed - set(listed)):
+        out.append(
+            f"R7c REPLAY RECORD: {rid} has a soundness claim on a pin and no replay record "
+            f"(`replayed`) -- re-pin it over a replay (--repin {rid}), or, where nothing can "
+            f"replay it, record an account (--repin-undemonstrated {rid}). A pin moved by "
+            f"hand with its record deleted looks exactly like this.")
+    for rid in sorted(set(listed) - owed):
+        out.append(
+            f"R7c REPLAY RECORD: {rid} is listed in {REPLAY_DEBT_REL} but owes no replay "
+            f"record (it has one or an account, or no longer has a pin, a soundness claim or "
+            f"a row) -- remove it; the anchor names only rows that still owe one.")
+    return out
+
+
+def _discharge_replay_debt(root: Path, rid: str) -> None:
+    """Remove `rid` from the replay-record debt once a replay record (or an
+    undemonstrated-pin account) backs it. A missing or malformed anchor is left
+    alone: R7c names it on the next check."""
+    path = root / REPLAY_DEBT_REL
+    try:
+        anchor = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(anchor, dict):
+        return
+    listed = anchor.get("rows")
+    if isinstance(listed, list) and rid in listed:
+        anchor["rows"] = [x for x in listed if x != rid]
+        anchor["count"] = len(anchor["rows"])
+        path.write_text(json.dumps(anchor, indent=2) + "\n")
+        print(f"{rid}: removed from {REPLAY_DEBT_REL} ({anchor['count']} left)")
 
 
 def summarise(root: Path) -> dict:
@@ -3391,9 +3552,11 @@ def _canonical_targo() -> str | None:
     own, and one that does not is not held back."""
     if not _TARGO_CACHE:
         frontend = ROOT / "scripts" / "rust_frontend.sh"
+        env = dict(os.environ)
         try:
             r = subprocess.run(["bash", str(frontend), "--targo"], cwd=ROOT,
-                               capture_output=True, check=False)
+                               capture_output=True, check=False, env=env,
+                               pass_fds=_resource_fds(env))
             targo = os.fsdecode(r.stdout).removesuffix("\n") if r.returncode == 0 and os.fsdecode(r.stdout).strip() else ""
             why = " ".join(os.fsdecode(r.stderr or b"").split())
         except OSError as exc:
@@ -3866,9 +4029,10 @@ def _evict_mutated_units(sandbox: Path, root: Path, rel: str) -> None:
         return
     for extra in ((), ("--release",)):
         # The canonical targo (see `_canonical_targo`), never PATH's first one.
+        env = _sandbox_env(sandbox)
         r = subprocess.run([_canonical_targo() or "targo", "clean", "-p", name, *extra],
-                           cwd=sandbox,
-                           env=_sandbox_env(sandbox), capture_output=True, text=True)
+                           cwd=sandbox, env=env, pass_fds=_resource_fds(env),
+                           capture_output=True, text=True)
         if r.returncode != 0:
             print(f"  [note] targo clean -p {name} {' '.join(extra)} failed in the "
                   f"sandbox: {(r.stderr or '').strip()[:160]}")
@@ -4087,7 +4251,8 @@ def _run_demo_command(command: str, rid: str, builds: bool, cwd: Path,
                       env: dict[str, str]) -> subprocess.CompletedProcess:
     """Run one arm's shell `command` (baseline or mutated) under the gate."""
     return subprocess.run(_demo_argv(["/bin/sh", "-c", command], rid, builds, env),
-                          cwd=cwd, env=env, capture_output=True, text=True)
+                          cwd=cwd, env=env, pass_fds=_resource_fds(env),
+                          capture_output=True, text=True)
 
 
 def _last_command_line(blob: str) -> str:
@@ -4324,8 +4489,10 @@ def repin(root: Path, rid: str, undemonstrated: bool = False) -> int:
             # The run is in this tree, so what it ran over is read around it.
             ran_over.append(_pin_state(root, subject))
             try:
-                result = subprocess.run(_demo_argv(ref.split(), rid, False), cwd=root,
-                                        capture_output=True)
+                env = dict(os.environ)
+                result = subprocess.run(_demo_argv(ref.split(), rid, False, env), cwd=root,
+                                        capture_output=True, env=env,
+                                        pass_fds=_resource_fds(env))
                 rc = result.returncode
             except OSError as exc:
                 print(f"{rid}: refusing to re-pin -- its demonstration `{ref}` cannot run: "
@@ -4342,15 +4509,35 @@ def repin(root: Path, rid: str, undemonstrated: bool = False) -> int:
             ran_over.append(_pin_state(root, subject))
             how = f"`{ref}` exited 0"
         elif d.get("replayable"):
-            print(f"{rid}: replaying its recorded demonstration before the pin moves")
-            if demonstrate(root, rid, ran_over=ran_over) != 0:
+            # A row naming `inherited_from` keeps its arms under the row it names
+            # (R5 reads them there), and R7c judges it on any pin of its own, so
+            # `--repin` replays those arms -- but only when that row pins the very
+            # same subject: its arms run over its own file, which demonstrates
+            # this row's pin only when the two are one file. Before this, such a
+            # row could be discharged by no verb: `--repin` found no arms under
+            # its own id, and the account refuses a soundness row with a route.
+            arm_key = d.get("inherited_from") or rid
+            if arm_key != rid:
+                parent = next((r for r in doc["rows"] if r.get("id") == arm_key), None)
+                parent_subject = _subject(parent) if parent is not None else None
+                if parent_subject != subject:
+                    seen = ("is no registry row" if parent is None
+                            else f"pins {parent_subject or 'nothing'}, not {subject}")
+                    print(f"{rid}: refusing to re-pin -- its arms are those of {arm_key} "
+                          f"(inherited_from), which {seen}; those arms never ran over "
+                          f"this row's pin", file=sys.stderr)
+                    return 1
+            print(f"{rid}: replaying its recorded demonstration"
+                  f"{'' if arm_key == rid else f' (the arms of {arm_key})'} before the pin moves")
+            if demonstrate(root, arm_key, ran_over=ran_over) != 0:
                 # Often the UNMUTATED gate is red for someone else's change -- a red
                 # arm on a red tree proves nothing, and it is still no licence to
                 # move the pin.
                 print(f"{rid}: refusing to re-pin -- its recorded demonstration does NOT "
                       f"replay on this tree", file=sys.stderr)
                 return 1
-            how = "its recorded arms replayed green"
+            how = ("its recorded arms replayed green" if arm_key == rid else
+                   f"the arms of {arm_key}, which pins the same subject, replayed green")
         else:
             print(f"{rid}: refusing to re-pin -- its demonstration `{ref}` can be neither run "
                   f"nor replayed here, and --repin moves a pin only over a demonstration it "
@@ -4388,6 +4575,10 @@ def repin(root: Path, rid: str, undemonstrated: bool = False) -> int:
     # the fields it moved, not a whole-file reformat. Round-trip the TRACKED file
     # before changing it.
     (root / "data/gate_registry.json").write_text(json.dumps(doc, indent=2) + "\n")
+    # The registry first (review of R7c): the row's record is what discharges
+    # it, so an anchor write that fails after it leaves a stale entry R7c names,
+    # never an unrecorded row the anchor has already dropped.
+    _discharge_replay_debt(root, rid)
     if undemonstrated:
         acct = d["repinned_without_demonstration"]
         print(f"re-pinned {rid} -> sha256:{d['script_sha256'][:12]} on an account issued "
@@ -4527,6 +4718,11 @@ def _mini(tmp: Path) -> Path:
     # live in every arm and the two arms below can move it.
     (root / "data/r7b_record_coverage.json").write_text(
         json.dumps({"count": 0, "rows": []}, indent=2))
+    # R7c: check_alpha, check_scan and check_rs_scan claim soundness on pins of
+    # their own and carry no replay record, as the real legacy rows do
+    # (check_rs_scan has no replay route at all; R7c does not ask).
+    (root / REPLAY_DEBT_REL).write_text(json.dumps(
+        {"count": 3, "rows": ["check_alpha", "check_scan", "check_rs_scan"]}, indent=2))
     return root
 
 
@@ -5132,11 +5328,15 @@ def selftest() -> int:
     otherwise each take a REAL machine-wide reservation and queue behind every
     lane on a busy box. `_selftest_heavy_gated` clears the marker to test the
     gating itself against a stand-in gate."""
+    global _REPLAY_DEBT_FIXTURE
     held = os.environ.get(HEAVY_GATE_HELD)
     os.environ[HEAVY_GATE_HELD] = "check_gate_registry-selftest"
+    # The mini-repo's own debt (`_mini`), minted for these arms only.
+    _REPLAY_DEBT_FIXTURE = frozenset({"check_alpha", "check_scan", "check_rs_scan"})
     try:
         return _selftest_body()
     finally:
+        _REPLAY_DEBT_FIXTURE = frozenset()
         if held is None:
             os.environ.pop(HEAVY_GATE_HELD, None)
         else:
@@ -5258,8 +5458,73 @@ def _selftest_body() -> int:
          lambda r: _demo_set(r, "beta_gate", "repinned_without_demonstration",
                              _valid_account(r, "scripts/beta_gate.sh"))),
         ("8h a valid account on a soundness row nothing can run or replay stays green", "",
-         lambda r: _demo_set(r, "check_rs_scan", "repinned_without_demonstration",
-                             _valid_account(r, "crates/x/tests/scan_battery.rs"))),
+         lambda r: (_demo_set(r, "check_rs_scan", "repinned_without_demonstration",
+                              _valid_account(r, "crates/x/tests/scan_battery.rs")),
+                    # ... an account is the row's record, so it leaves the debt (R7c)
+                    _discharge_replay_debt(r, "check_rs_scan"))),
+        # R7c (2026-11-13): the hand edit d5619e490's review found -- a pin moved
+        # with its replay record deleted -- reads as an unrecorded pin, so the
+        # unrecorded pins are named and nothing else may lack a record.
+        ("8i R7c a recorded row's pin moved by hand with its replay record deleted",
+         "R7c REPLAY RECORD: check_alpha has a soundness claim on a pin",
+         lambda r: (_hand_moved_alpha(r), _demo_drop(r, "check_alpha", "replayed"))),
+        ("8j R7c a debt entry for a row that now has its replay record",
+         "R7c REPLAY RECORD: check_alpha is listed",
+         lambda r: _demo_set(r, "check_alpha", "replayed", _replay_record(
+             _reg(r)["rows"][0]["demonstrated"], "self-test fixture"))),
+        ("8k R7c the debt anchor is missing", "R7c REPLAY RECORD: data/replay_record_debt.json is missing",
+         lambda r: (r / REPLAY_DEBT_REL).unlink()),
+        ("8l R7c the anchor's count disagrees with its rows", "R7c REPLAY RECORD: data/replay_record_debt.json says count",
+         lambda r: (r / REPLAY_DEBT_REL).write_text(
+             json.dumps({"count": 3, "rows": ["check_alpha", "check_scan"]}, indent=2))),
+        ("8m R7c a recorded row discharged from the debt is green", "",
+         lambda r: (_demo_set(r, "check_alpha", "replayed", _replay_record(
+                        _reg(r)["rows"][0]["demonstrated"], "self-test fixture")),
+                    _discharge_replay_debt(r, "check_alpha"))),
+        # Review of R7c (2026-11-14): each way a hand edit stepped around it.
+        ("8n R7c a hand-moved pin whose record is set to null, not deleted",
+         "R7c REPLAY RECORD: check_alpha has a soundness claim on a pin",
+         lambda r: (_hand_moved_alpha(r), _demo_set(r, "check_alpha", "replayed", None))),
+        ("8n2 R7 ... and R7 reads a null record as a disagreement, not as none",
+         "R7 FRESH: check_alpha carries a null `replayed` record",
+         lambda r: (_hand_moved_alpha(r), _demo_set(r, "check_alpha", "replayed", None))),
+        ("8o R7c a hand-moved pin that also names itself under inherited_from",
+         "R7c REPLAY RECORD: check_alpha has a soundness claim on a pin",
+         lambda r: (_hand_moved_alpha(r), _demo_drop(r, "check_alpha", "replayed"),
+                    _demo_set(r, "check_alpha", "inherited_from", "check_alpha"))),
+        ("8p R7c a hand-moved pin whose ref is reworded so nothing can run it",
+         "R7c REPLAY RECORD: check_alpha has a soundness claim on a pin",
+         lambda r: (_hand_moved_alpha(r), _demo_drop(r, "check_alpha", "replayed"),
+                    _demo_set(r, "check_alpha", "ref", "./scripts/check_alpha.py --selftest"))),
+        ("8q R7c a soundness pin with no replay route still owes a record",
+         "R7c REPLAY RECORD: check_rs_scan has a soundness claim on a pin",
+         lambda r: _discharge_replay_debt(r, "check_rs_scan")),
+        ("8r R7c a pin only an inheriting leg's soundness claim stands on",
+         "R7c REPLAY RECORD: check_alpha has a soundness claim on a pin",
+         lambda r: (_edit(r, "check_alpha", "claims", "quality"),
+                    _drop_soundness_anchor(r, "check_alpha"),
+                    _discharge_replay_debt(r, "check_alpha"))),
+        ("8s R7c ... and with the inheriting leg demoted too it owes nothing", "",
+         lambda r: (_edit(r, "check_alpha", "claims", "quality"),
+                    _drop_soundness_anchor(r, "check_alpha"),
+                    _edit(r, "alpha", "claims", "quality"),
+                    _drop_soundness_anchor(r, "alpha"),
+                    _discharge_replay_debt(r, "check_alpha"))),
+        ("8t R7c a row added to the debt anchor outside the minted debt",
+         "R7c REPLAY RECORD: beta_gate is listed in data/replay_record_debt.json but was not "
+         "in the debt minted",
+         lambda r: (_edit(r, "beta_gate", "claims", "soundness"),
+                    (r / REPLAY_DEBT_REL).write_text(json.dumps({"count": 4, "rows": [
+                        "check_alpha", "check_scan", "check_rs_scan", "beta_gate"]})))),
+        ("8u R7c the debt anchor is not valid JSON",
+         "R7c REPLAY RECORD: data/replay_record_debt.json is not valid JSON",
+         lambda r: (r / REPLAY_DEBT_REL).write_text("<<<<<<< HEAD\n{}\n")),
+        ("8v R7c the debt anchor is not an object",
+         "R7c REPLAY RECORD: data/replay_record_debt.json must be a JSON object",
+         lambda r: (r / REPLAY_DEBT_REL).write_text("[]\n")),
+        ("8w R7c the debt anchor carries no list of row ids",
+         "R7c REPLAY RECORD: data/replay_record_debt.json must carry a list",
+         lambda r: (r / REPLAY_DEBT_REL).write_text(json.dumps({"count": 0, "rows": {}}))),
         ("8b R4 waiver beyond the 180-day horizon", "R4 DEMO",
          lambda r: (_edit(r, "check_alpha", "demonstrated", None),
                     _edit(r, "check_alpha", "waiver",
@@ -5281,6 +5546,21 @@ def _selftest_body() -> int:
                             "script_sha256": _sha256(r, "scripts/beta_gate.sh")}),
                     _sub(r, "reports/mutation-proof-beta.json",
                          _sha256(r, "scripts/beta_gate.sh"), "0" * 64))),
+        ("12c R7b ... still read on a self-pinned row that also names inherited_from",
+         "R7b RECORD",
+         lambda r: (_edit(r, "beta_gate", "demonstrated",
+                          {**{"kind": "selftest-file", "ref": "scripts/test_beta_gate.sh",
+                              "date": "2026-08-24", "inherited_from": "check_alpha",
+                              "note": "demonstrated by reports/mutation-proof-beta.json"},
+                            "script_sha256": _sha256(r, "scripts/beta_gate.sh")}),
+                    _sub(r, "reports/mutation-proof-beta.json",
+                         _sha256(r, "scripts/beta_gate.sh"), "0" * 64))),
+        ("12d R7 a self-pinned row whose inherited_from names the row itself",
+         "R7 FRESH: beta_gate pins its own subject and names inherited_from 'beta_gate'",
+         lambda r: _demo_set(r, "beta_gate", "inherited_from", "beta_gate")),
+        ("12e R7 a self-pinned row whose inherited_from names no row",
+         "R7 FRESH: beta_gate pins its own subject and names inherited_from 'no_such_row'",
+         lambda r: _demo_set(r, "beta_gate", "inherited_from", "no_such_row")),
         ("13 R6 a leg with no registry row", "R6 IDS",
          lambda r: _sub(r, "scripts/local_gate.sh", "# GATE-LEG: alpha\n",
                         "# GATE-LEG: alpha\n# GATE-LEG: delta\n")),
@@ -5322,6 +5602,8 @@ def _selftest_body() -> int:
                     # a demotion is only honest if the anchor moves WITH it
                     # (audit r11 M11-8 / R11 CLAIMS)
                     _drop_soundness_anchor(r, "check_scan"),
+                    # ... and the replay-record debt it no longer owes (R7c)
+                    _discharge_replay_debt(r, "check_scan"),
                     _edit(r, "check_scan", "source_scan",
                           {"kind": "raw-lines", "note": "counts every mention"}),
                     _resha(r, "check_scan"))),
@@ -5422,7 +5704,11 @@ def _selftest_body() -> int:
         ("48 R7 a leg delegating to a row that does not exist", "R7 FRESH: alpha ",
          lambda r: _demo_set(r, "alpha", "inherited_from", "no_such_row")),
         ("49 R7 a leg SELF-PINNED to its implementation is green", "",
-         lambda r: (_demo_drop(r, "alpha", "inherited_from"), _resha(r, "alpha"))),
+         lambda r: (_demo_drop(r, "alpha", "inherited_from"), _resha(r, "alpha"),
+                    # pinned as --repin would: with the record of its run (R7c)
+                    _demo_set(r, "alpha", "replayed", _replay_record(
+                        next(x for x in _reg(r)["rows"] if x["id"] == "alpha")["demonstrated"],
+                        "self-test fixture")))),
         # ── R7 over a DERIVED input set (verifier r8b, 2026-09-25) ────────
         #
         # `check_alpha` becomes a gate that RUNS a file besides itself and
@@ -5699,6 +5985,17 @@ def _git_run(root: Path, *args: str) -> None:
                                              "GIT_COMMITTER_EMAIL": "selftest@example.invalid"})
 
 
+def _hand_moved_alpha(root: Path) -> None:
+    """check_alpha as --repin leaves it (a replay record, out of the debt), then
+    its script edited and its pin re-hashed BY HAND: the starting point of every
+    R7c hand-edit arm, which then disguises the stale record its own way."""
+    _demo_set(root, "check_alpha", "replayed", _replay_record(
+        _reg(root)["rows"][0]["demonstrated"], "self-test fixture"))
+    _discharge_replay_debt(root, "check_alpha")
+    _sub(root, "scripts/check_alpha.py", "print('a')", "print('moved')")
+    _resha(root, "check_alpha")
+
+
 def _drop_soundness_anchor(root: Path, rid: str) -> None:
     """Remove a row from the mini repo's soundness-claim anchor.
 
@@ -5759,6 +6056,7 @@ def _selftest_repin() -> tuple[int, int]:
                     old_pin = row["demonstrated"]["script_sha256"]
             reg.write_text(json.dumps(doc, indent=2) + "\n")
             before = reg.read_bytes()
+            debt_before = (root / REPLAY_DEBT_REL).read_bytes()
             if expected_output:
                 import contextlib
                 import io
@@ -5773,7 +6071,9 @@ def _selftest_repin() -> tuple[int, int]:
                            for r in json.loads(reg.read_text())["rows"]
                            if r["id"] == "check_alpha")
             ok = (((rc == 0) == expect_ok) and ((new_pin != old_pin) == expect_moved)
-                  and diagnostics_ok and (expect_ok or reg.read_bytes() == before))
+                  and diagnostics_ok
+                  and (expect_ok or (reg.read_bytes() == before
+                                     and (root / REPLAY_DEBT_REL).read_bytes() == debt_before)))
             print(f"  [{'ok' if ok else 'FAIL'}] repin-guard {name}")
             if not ok:
                 failures += 1
@@ -5884,10 +6184,77 @@ def _selftest_repin() -> tuple[int, int]:
         rc = repin(root, "check_alpha")
         d = next(r for r in json.loads((root / "data/gate_registry.json").read_text())["rows"]
                  if r["id"] == "check_alpha")["demonstrated"]
-        ok = rc == 0 and (d.get("replayed") or {}).get("script_sha256") == d["script_sha256"]
-        print(f"  [{'ok' if ok else 'FAIL'}] repin-guard a green --repin records its replay")
+        debt = json.loads((root / REPLAY_DEBT_REL).read_text())
+        ok = (rc == 0 and (d.get("replayed") or {}).get("script_sha256") == d["script_sha256"]
+              and debt == {"count": 2, "rows": ["check_scan", "check_rs_scan"]}
+              and not [p for p in check(root) if p.startswith("R7c")])
+        print(f"  [{'ok' if ok else 'FAIL'}] repin-guard a green --repin records its replay "
+              f"and discharges the row's replay-record debt")
         if not ok:
             failures += 1
+
+    # A self-pinned inheritor (R7c judges it on its own pin) re-pins over the
+    # arms of the row it names when both pin one file, and is refused before any
+    # replay when they do not. The replay is the real arm loop over a sandbox of
+    # the mini-repo, so arms looked up under the inheritor's own id find none.
+    heir_demos = {"check_alpha": [{
+        "arm": "the gate is planted to exit 1",
+        "mutate": {"file": "scripts/check_alpha.py", "op": "append",
+                   "text": "\nraise SystemExit(1)\n"},
+        "command": "python3 scripts/check_alpha.py"}]}
+    for label, own_subject, expect_moved in (
+            ("an inheritor pinning its parent's subject re-pins over the parent's arms "
+             "and discharges its debt", "scripts/check_alpha.py", True),
+            ("an inheritor pinning a file its parent does not is refused before any replay, "
+             "registry and anchor untouched", "scripts/check_scan.py", False)):
+        arms += 1
+        with tempfile.TemporaryDirectory() as td:
+            root = _mini(Path(td))
+            for rid in ("check_alpha", "alpha"):
+                _demo_set(root, rid, "ref", "data/gate_demonstrations.json")
+                _demo_set(root, rid, "replayable", True)
+            _edit(root, "alpha", "implemented_by", own_subject)
+            _demo_set(root, "alpha", "script_sha256", _sha256(root, own_subject))
+            anchor = root / REPLAY_DEBT_REL
+            owed = json.loads(anchor.read_text())
+            owed["rows"].append("alpha")
+            owed["count"] = len(owed["rows"])
+            anchor.write_text(json.dumps(owed, indent=2) + "\n")
+            for argv in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-qm", "g")):
+                _git_run(root, *argv)
+            reg = root / "data/gate_registry.json"
+            before = (reg.read_bytes(), anchor.read_bytes())
+            called: list = []
+
+            def heir_replay(r, rid, keep=False, ran_over=None):
+                called.append(rid)
+                sand = Path(td) / "sandbox"
+                _build_sandbox(r, sand, build=False, mutated=set())
+                rows = {row["id"]: row for row in load_registry(r)["rows"]}
+                failed, total = _demonstrate_arms(r, lambda _b, _m: sand, sys.executable,
+                                                  [rid], heir_demos, rows, 0, 0, ran_over)
+                return 1 if failed or not total else 0
+            real_demonstrate = globals()["demonstrate"]
+            globals()["demonstrate"] = heir_replay
+            err = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                    rc = repin(root, "alpha")
+            finally:
+                globals()["demonstrate"] = real_demonstrate
+            d = next(r for r in load_registry(root)["rows"] if r["id"] == "alpha")["demonstrated"]
+            left = json.loads(anchor.read_text())["rows"]
+            if expect_moved:
+                ok = (rc == 0 and called == ["check_alpha"]
+                      and (d.get("replayed") or {}).get("script_sha256") == d["script_sha256"]
+                      and "check_alpha" in (d["replayed"].get("by") or "")
+                      and "alpha" not in left)
+            else:
+                ok = (rc != 0 and not called and (reg.read_bytes(), anchor.read_bytes()) == before
+                      and "never ran over this row's pin" in err.getvalue())
+            print(f"  [{'ok' if ok else 'FAIL'}] repin-guard {label}")
+            if not ok:
+                failures += 1
 
     # verifier r10: `--repin` hashed the pin AFTER a multi-minute replay whose
     # sandbox was cloned before the first arm, so a pinned input edited in the tree
@@ -6236,6 +6603,7 @@ def _derive_alpha(root: Path, pin_inputs: bool = True) -> None:
         row = next(r for r in _reg(root)["rows"] if r["id"] == "check_alpha")
         _demo_set(root, "check_alpha", "replayed",
                   _replay_record(row["demonstrated"], "self-test fixture"))
+        _discharge_replay_debt(root, "check_alpha")
 
 
 def _scan_through(root: Path, walker_body: str, lexer: str | None = None) -> None:
@@ -6265,6 +6633,7 @@ def _scan_through(root: Path, walker_body: str, lexer: str | None = None) -> Non
     _demo_set(root, "check_scan", "inputs", derived)
     row = next(r for r in _reg(root)["rows"] if r["id"] == "check_scan")
     _demo_set(root, "check_scan", "replayed", _replay_record(row["demonstrated"], "self-test fixture"))
+    _discharge_replay_debt(root, "check_scan")
 
 
 def _symlinked_alpha_input(root: Path) -> None:
@@ -6405,10 +6774,14 @@ def main(argv: list[str]) -> int:
         return cmd_wiring_audit(ROOT, args.wiring_audit_out)
     if args.list:
         return cmd_list(ROOT)
-    if args.repin:
-        return repin(ROOT, args.repin)
-    if args.repin_undemonstrated:
-        return repin(ROOT, args.repin_undemonstrated, undemonstrated=True)
+    if args.repin or args.repin_undemonstrated:
+        try:
+            if args.repin:
+                return repin(ROOT, args.repin)
+            return repin(ROOT, args.repin_undemonstrated, undemonstrated=True)
+        except Red as exc:
+            print(f"GATE_REGISTRY=fail {exc}", file=sys.stderr)
+            return 1
     if args.demonstrate is not None:
         try:
             return demonstrate(ROOT, args.demonstrate or None, args.keep_sandbox)

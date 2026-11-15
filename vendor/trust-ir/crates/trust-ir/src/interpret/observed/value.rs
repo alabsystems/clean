@@ -208,9 +208,11 @@ fn retire_value(value: InterpretValue, progress: &mut impl StructuralProgress) {
             retire_tick(progress);
             retire_type(ty, progress);
             match kind {
-                K::Array(a) | K::Vector(a) | K::Sequence(a) | K::Set(a) => {
-                    a.into_rope_observed().retire_observed(progress)
-                }
+                K::Array(a)
+                | K::Vector(a)
+                | K::Sequence(a)
+                | K::Set(a)
+                | K::Tensor { elems: a, .. } => a.into_rope_observed().retire_observed(progress),
                 K::Aggregate(mut values)
                 | K::Closure {
                     captures: mut values,
@@ -369,6 +371,7 @@ fn retire_type(ty: Ty, progress: &mut impl StructuralProgress) {
             retire_tick(progress);
             match ty {
                 Ty::Vector(inner, _)
+                | Ty::Tensor(inner, _)
                 | Ty::Ref(inner)
                 | Ty::RefMut(inner)
                 | Ty::PtrConst(inner)

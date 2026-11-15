@@ -35,6 +35,7 @@ pub(super) fn contains_error<O: ExecutionObserver>(
             match ty {
                 Ty::Error => return Ok(true),
                 Ty::Vector(child, _)
+                | Ty::Tensor(child, _)
                 | Ty::Ref(child)
                 | Ty::RefMut(child)
                 | Ty::PtrConst(child)

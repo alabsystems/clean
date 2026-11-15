@@ -8,10 +8,17 @@ environment, where the builtin prelude's declaration of the same name can have a
 each link is checked again where it is followed (`clean_compiler`'s `link_types_agree`) and a
 link that fails is refused by name (`CompilerError::ImplementedByTypeMismatch`).
 
-| Program prints | Pinned Lean (`lean --run`, 2026-10-21) | Clean |
+Since `6e12a7791` (and `docs/DECISIONS.md`, 2026-11-14) a Lean-written artifact's closure
+gets the selected world's genuine Init, not the builtin prelude, so both targets resolve to the
+declarations Lean held and neither is a resident of another type. The test now pins that:
+
+| Program prints | Pinned Lean (`lean --run`, re-measured 2026-11-14) | Clean |
 |---|---|---|
-| `modVia 7 3` (`Nat.modCore`: Lean `Nat → Nat → Nat`, Clean's prelude takes a fuel argument first) | exit 1, "Failed to find LCNF signature for Nat.modCore" | refused by name |
-| `finSelfEq ()` (`instDecidableEqFin`: Lean `(n : Nat) → DecidableEq (Fin n)`, Clean's prelude the unfolded `(n : Nat) → (x y : Fin n) → Decidable (x = y)`) | `true` | refused by name (an over-refusal: the two types are definitionally equal, but the check is Lean's syntactic one) |
+| `modVia 7 3` (genuine `Nat.modCore : Nat → Nat → Nat`, `@[extern "lean_nat_mod"]` with a body) | exit 1, "Failed to find LCNF signature for Nat.modCore" | refused by name at the followed link's end (`native-extern-body`) |
+| `finSelfEq ()` (genuine `instDecidableEqFin : (n : Nat) → DecidableEq (Fin n)`) | `true` | `true`, exit 0 (the builtin-prelude over-refusal closed) |
+
+The type check where a link is followed (`link_types_agree`) keeps its unit control in
+`clean-compiler`.
 
 Only the source, `ORDER` and this file are checked in; the `.olean` is a build product
 (`clean_olean::test_support::compiled_fixture_dir`).

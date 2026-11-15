@@ -21,6 +21,8 @@ enum Task<'a> {
     Text(&'a str),
     Number(u128),
     Bytes(&'a [u8]),
+    /// A tensor blob's extents, `, `-separated.
+    Dims(&'a [u64], bool),
 }
 #[derive(Default)]
 struct State<'a> {
@@ -94,6 +96,15 @@ impl<'a> State<'a> {
                     }
                 }
                 Task::Bytes(bytes) => self.bytes(bytes, work)?,
+                Task::Dims(dims, first) => {
+                    if let Some((dim, rest)) = dims.split_first() {
+                        if !first {
+                            work.text(", ", &mut self.output)?;
+                        }
+                        work.unsigned(u128::from(*dim), &mut self.output)?;
+                        self.push(Task::Dims(rest, false), work)?;
+                    }
+                }
             }
         }
         Ok(())
@@ -167,6 +178,14 @@ impl<'a> State<'a> {
             Constant::PhantomData => work.text("phantomdata", &mut self.output),
             Constant::Uninit => work.text("uninit", &mut self.output),
             Constant::Ext(extension) => extension.unreachable(),
+            // v70: `tensor_blob<DIGEST>[d0, d1, ..]`, the digest in lower-case hex.
+            Constant::TensorBlob { digest, dims } => {
+                work.text("tensor_blob<", &mut self.output)?;
+                self.push(Task::Text("]"), work)?;
+                self.push(Task::Dims(dims, true), work)?;
+                self.push(Task::Text(">["), work)?;
+                self.push(Task::Bytes(&digest.0), work)
+            }
         }
     }
     fn items<O: ExecutionObserver>(

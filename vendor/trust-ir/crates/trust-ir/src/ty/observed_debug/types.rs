@@ -40,6 +40,7 @@ impl<'a> State<'a> {
             | Ty::Record(..)
             | Ty::Closure(..) => self.ids(ty, work),
             Ty::Vector(..)
+            | Ty::Tensor(..)
             | Ty::Tuple(..)
             | Ty::Ref(..)
             | Ty::RefMut(..)
@@ -94,6 +95,13 @@ impl<'a> State<'a> {
                 Task::Ty(t),
                 Task::Text(", "),
                 Task::Num(u128::from(*n)),
+                Task::Text(")"),
+            ]),
+            Ty::Tensor(t, rank) => scheduled!(self, work; [
+                Task::Text("Tensor("),
+                Task::Ty(t),
+                Task::Text(", "),
+                Task::Num(u128::from(*rank)),
                 Task::Text(")"),
             ]),
             Ty::Tuple(t) => scheduled!(self, work; [

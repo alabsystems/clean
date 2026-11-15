@@ -9,22 +9,22 @@
     "UNKNOWN is a first-class value, never 0; it neither satisfies nor violates a direction.",
     "Quoting any row of this file from prose is a bug: read the artifact."
   ],
-  "generated_at_utc": "2026-11-15T06:38:34Z",
+  "generated_at_utc": "2026-11-15T12:07:20Z",
   "generator": "scripts/spine_scoreboard.py",
   "inputs": {
     "spine_set": "ABSENT",
     "a0_census": "sha256:f1acedfd852f29023474404a75d7dfc6c4aaad4af52052faa0f45e1de81f054f",
     "axiom_ratchet": "sha256:cca27c20be9d4a38ef4d6008beae43231ed359a68a55fb3ed9a403ee44dd1fc0",
     "unchecked_decl_ratchet": "sha256:0a0a26bef7832b0261015068743896e7c6edb02537647acde26c19a083ee1d76",
-    "env_bypass_census": "sha256:31c1c77686ae0f0046af4761cbe2c5d982f8a64f326ed2dd9a9842395254114a",
-    "assumption_ledger": "sha256:59cfc964546641f41224127ed1a00363fe03037a88f6515bdd7777bb5b327501",
+    "env_bypass_census": "sha256:0e5a467c9ae540a63c00838588c04545956f5e966312db9314d9c94f673d0112",
+    "assumption_ledger": "sha256:af5af41a9f36b0bbf6790700b512b64517728a2dbb4d1f2c7c4f682dbe5a93a5",
     "parity_tiers": "sha256:2d2d501572050b8c0589d7ec9864be9213231c3447a74d4be895905edf4eecfb",
     "evalir_coverage": "sha256:eaa072140d77bab3fb3f500f13cb4fb253289aef7d3bb25938925956331c38cc",
     "evalir_adequacy_grid": "sha256:ad6ee7dbf67de3c6e8a4a1e5b677effa4c5ac8f4dda7487c5307f711ad7d6cfd",
     "evalir_census_src": "sha256:2d785520100aacd746da40082cd733947ebe4890ef1f4feabbf21e5b647da602",
-    "evalir_syntax_src": "sha256:1b3aecdf6306b9592bbfd861ae062d690ff39ef57e9dd5de0510389be82a7c42",
-    "verdict_io_contracts": "sha256:a66c738e34caad2de7097c3f356643b5c202aec56032cec40550bf1ba9aa35c8",
-    "verdict_set": "sha256:68f9a07b863cb1133d3476c708dc109798c094dac7eb867a2207e8792fc76c5e"
+    "evalir_syntax_src": "sha256:96353ec20713bd6267e3a81205b7d3ca81b7d17fcc0cb651d26319ed010e9e63",
+    "verdict_io_contracts": "sha256:df4d25c35db38240dd79993612897de392fb9cbc8b69e0949df04c2f65913924",
+    "verdict_set": "sha256:6d03312b697c01409b4fb4921bf886ecc282937b367db5b459c9401006b6f289"
   },
   "rebases": [
     {

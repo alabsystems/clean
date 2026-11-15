@@ -172,6 +172,13 @@ fn type_head<'a, O: ExecutionObserver>(
             observed_write_str(buf, pool, &ty.name)?;
             observed_write_str(buf, pool, &ty.runtime)?;
         }
+        // v67 (tensor region): the rank, then the inline element, as `Vector`
+        // spells its lanes and element.
+        TyG::Tensor(elem, rank) => {
+            observed_write_u8(buf, 41)?;
+            observed_write_v32(buf, *rank)?;
+            buf.push_value(tasks, TypeTask::Value(elem))?;
+        }
         TyG::Ext(e) => {
             e.unreachable();
         }

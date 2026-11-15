@@ -147,6 +147,53 @@ fn aggregate() -> Vec<Inst> {
             ty: Ty::Array(TyId::new(8), u64::MAX),
             value: v(),
         },
+        Inst::TensorContract {
+            ty: Ty::Tensor(Box::new(Ty::U32), 2),
+            lhs: v(),
+            rhs: v(),
+            batch: Vec::new(),
+            contract: vec![(1, 0)],
+        },
+        Inst::TensorMap {
+            ty: Ty::Tensor(Box::new(Ty::U32), 2),
+            args: vec![v(), v()],
+            body: vec![crate::TensorMapNode::BinOp {
+                op: crate::inst::BinOp::Add,
+                ty: Ty::U32,
+                lhs: 0,
+                rhs: 1,
+            }],
+        },
+        Inst::TensorReduce {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            src: v(),
+            op: crate::TensorReduceOp::Add,
+            axes: vec![1],
+            order: crate::TensorReduceOrder::RowMajor,
+        },
+        Inst::TensorView {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            src: v(),
+            params: vec![],
+            exprs: vec![
+                crate::TensorIndexExpr::SrcExtent(0),
+                crate::TensorIndexExpr::Coord(0),
+            ],
+            shape: vec![0],
+            index: vec![1],
+            fill: None,
+        },
+        Inst::TensorGather {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            data: v(),
+            coords: vec![v()],
+        },
+        Inst::TensorScatter {
+            ty: Ty::Tensor(Box::new(Ty::U32), 1),
+            init: v(),
+            src: v(),
+            coords: vec![v()],
+        },
         Inst::ExtractField {
             ty: Ty::U32,
             aggregate: v(),

@@ -1768,6 +1768,7 @@ impl TyEq<'_> {
             | (Ty::Never, Ty::Never) => true,
             (Ty::Error, _) | (_, Ty::Error) => false,
             (Ty::Vector(ea, na), Ty::Vector(eb, nb)) => na == nb && self.ty(ea, eb),
+            (Ty::Tensor(ea, ra), Ty::Tensor(eb, rb)) => ra == rb && self.ty(ea, eb),
             (Ty::FatPtr(ka), Ty::FatPtr(kb)) => self.fat_ptr(ka, kb),
             (Ty::Struct(sa), Ty::Struct(sb)) => self.strukt(*sa, *sb),
             (Ty::Array(ea, na), Ty::Array(eb, nb)) => na == nb && self.ty_id(*ea, *eb),

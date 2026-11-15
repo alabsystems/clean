@@ -439,7 +439,9 @@ def scan_lean(raw: str) -> set[tuple[str, str]]:
 
 def _statement(code: str, at: int) -> str:
     """The type of the declaration whose name ends at `at`: from the first `:`
-    outside brackets to the first `:=` outside brackets, whitespace collapsed."""
+    outside brackets to the first `:=` outside brackets, whitespace collapsed,
+    prefixed with any binders before `:` so a parameterized helper never passes
+    for a ground control theorem."""
     depth, start, i = 0, None, at
     while i < len(code):
         ch = code[i]
@@ -452,7 +454,11 @@ def _statement(code: str, at: int) -> str:
         elif depth == 0 and ch == ":" and start is None:
             start = i + 1
         i += 1
-    return " ".join(code[start:i].split()) if start is not None else ""
+    if start is None:
+        return ""
+    binders = " ".join(code[at:start - 1].split())
+    body = " ".join(code[start:i].split())
+    return f"{binders} : {body}" if binders else body
 
 
 def lean_theorem_statements(raw: str) -> dict[str, str]:
@@ -477,7 +483,10 @@ def lean_theorem_statements(raw: str) -> dict[str, str]:
     return out
 
 
-_REFUTES = re.compile(r"Refutes\s+(?:\.|Rule\.)([A-Za-z_][\w']*)(?![\w'.])")
+_REFUTES = re.compile(
+    r"(?:CICL\.NegativeControls\.)?Refutes\s+"
+    r"(?:\.|(?:CICL\.NegativeControls\.)?Rule\.)([A-Za-z_][\w']*)(?![\w'.])"
+)
 
 
 def control_problems(mapping: dict, theory: dict[str, str],
@@ -548,6 +557,7 @@ class Inputs:
     toolchain: str
     upstream_record: dict | None   # the fixture directory's UPSTREAM.json
     missing_sources: list[str] = field(default_factory=list)
+    extra_controls: dict[str, str] = field(default_factory=dict)
 
 
 def load_inputs(root: Path) -> Inputs:
@@ -568,10 +578,26 @@ def load_inputs(root: Path) -> Inputs:
     if not spec_root.is_dir():
         missing.append(mapping["spec"]["root"])
     theory = {p.relative_to(spec_root).as_posix(): p.read_text()
-              for p in sorted(spec_root.rglob("*.lean")) if ".lake" not in p.parts}
+              for p in sorted(spec_root.rglob("*.lean")) if ".lake" not in p.parts} \
+        if spec_root.is_dir() else {}
+    extra_controls: dict[str, str] = {}
+    for prefix, croot_rel in (mapping["spec"].get("control_roots") or {}).items():
+        if croot_rel == mapping["spec"]["root"]:
+            continue
+        croot = root / croot_rel
+        if not croot.is_dir():
+            if croot_rel not in missing:
+                missing.append(croot_rel)
+            continue
+        for p in sorted(croot.rglob("*.lean")):
+            if ".lake" in p.parts:
+                continue
+            rel = p.relative_to(croot).as_posix()
+            if not prefix or rel.startswith(prefix):
+                extra_controls[rel] = p.read_text()
     toolchain_path = root / up["toolchain_file"]
     toolchain = toolchain_path.read_text().strip() if toolchain_path.is_file() else ""
-    return Inputs(mapping, ratchet, sources, theory, toolchain, record, missing)
+    return Inputs(mapping, ratchet, sources, theory, toolchain, record, missing, extra_controls)
 
 
 # ── the check ────────────────────────────────────────────────────────────────
@@ -734,7 +760,7 @@ def check(inp: Inputs) -> Result:
                     f"a new specification rule must be mapped to the kernel family it states")
 
     # (b) every cited rule-carrier constructor names its negative control.
-    for problem in control_problems(mapping, inp.theory, spec_items):
+    for problem in control_problems(mapping, {**inp.theory, **inp.extra_controls}, spec_items):
         bad(problem)
 
     # (a) every function, case arm, split line and hardcoded constant is claimed.
@@ -1043,6 +1069,27 @@ def selftest(out=sys.stdout) -> int:
     arm("27 (b) a control named for another rule", "(b) CONTROL",
         lambda inp: inp.theory.update({"C.lean": _ST_CONTROLS.replace("sort_control", "pi_control")})
         or rows(inp)["sort"]["cic_l"][0]["control"].update(theorem="Spec.pi_control"))
+    arm("28 control: a cross-package set-model Refutes theorem is green", "",
+        lambda inp: inp.extra_controls.update({
+            "CICLModel/M.lean": (
+                "namespace CICL.Model\n"
+                "theorem helper (h : False) : CICL.NegativeControls.Refutes .pi True := False.elim h\n"
+                "theorem pi_control : CICL.NegativeControls.Refutes .pi True := trivial\n"
+                "end CICL.Model\n"
+            )
+        }) or rows(inp)["binding"]["cic_l"][0].update(
+            control={"theorem": "CICL.Model.pi_control", "file": "CICLModel/M.lean"}))
+    arm("29 (b) a parameterized control theorem with binders is refused", "(b) CONTROL",
+        lambda inp: inp.theory.update({"C.lean": _ST_CONTROLS.replace(
+            "theorem sort_control :", "theorem sort_control (h : False) :")}))
+    arm("30 (b) an unrecorded cross-package Refutes theorem is refused", "(b) CONTROL",
+        lambda inp: inp.extra_controls.update({
+            "CICLModel/M.lean": (
+                "namespace CICL.Model\n"
+                "theorem pi_control : CICL.NegativeControls.Refutes CICL.NegativeControls.Rule.pi True := trivial\n"
+                "end CICL.Model\n"
+            )
+        }))
 
     # The lexers and the scanner, directly: prose is not code.
     units = {fn.name: fn for fn in scan_cpp("k/checker.cpp", _ST_CPP)}

@@ -403,6 +403,7 @@ fn byte_ty_inner(module: &Module, ty: &Ty, resolving: &mut BTreeSet<u32>) -> R<S
         | Ty::Closure(..)
         | Ty::Refine(..)
         | Ty::Dialect(..)
+        | Ty::Tensor(..)
         | Ty::Storage(..)
         | Ty::Handle(..)) => {
             return Err(format!(

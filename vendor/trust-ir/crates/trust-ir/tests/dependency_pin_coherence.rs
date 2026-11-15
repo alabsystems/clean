@@ -47,7 +47,8 @@ When target Clean changes either package version, use the coordinated form:
 
 CLEAN legs:
   1. crates/trust-ir/Cargo.toml               clean-kernel            (1 rev)
-  2. crates/trust-ir-build/Cargo.toml         kernel/mathverse/olean/verify (5 declarations)
+  2. crates/trust-ir-build/Cargo.toml         kernel/mathverse/olean/verify (6 declarations;
+                                              olean twice: optional and dev)
   3. crates/trust-ir/tests/dependency_pin_coherence.rs  CLEAN_REVISION
   4. frontend/Cargo.lock  <-- SEPARATE WORKSPACE. frontend/ is `exclude`d
      from the root workspace, so it is INVISIBLE to --workspace. This is
@@ -155,7 +156,7 @@ fn clean_consumability_baseline_is_exact_and_atomic() {
     assert_exact_manifest_pins(
         "crates/trust-ir-build/Cargo.toml",
         TRUST_IR_BUILD_MANIFEST,
-        5,
+        6,
     );
 
     let clean_packages: Vec<&str> = FRONTEND_LOCK

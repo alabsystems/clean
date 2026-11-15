@@ -107,7 +107,8 @@ def _load(rel: Path):
         if not ref.is_file() or spec is None or spec.loader is None:
             raise SystemExit(f"cannot load {ref}")
         mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        # Consumers inventory this source, not an existing bytecode cache.
+        exec(compile(ref.read_bytes(), str(ref), "exec", dont_inherit=True), mod.__dict__)
         _LOADED[rel] = mod
     return _LOADED[rel]
 

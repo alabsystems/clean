@@ -43,6 +43,13 @@ impl<'a> State<'a> {
                 self.task(Task::Text(", "), work)?;
                 self.task(Task::Type(inner), work)
             }
+            Ty::Tensor(inner, rank) => {
+                work.text("Tensor(", &mut self.detail)?;
+                self.task(Task::Text(")"), work)?;
+                self.task(Task::Number(*rank as u128), work)?;
+                self.task(Task::Text(", "), work)?;
+                self.task(Task::Type(inner), work)
+            }
             Ty::Ref(inner) => self.wrapped("Ref", inner, work),
             Ty::RefMut(inner) => self.wrapped("RefMut", inner, work),
             Ty::PtrConst(inner) => self.wrapped("PtrConst", inner, work),

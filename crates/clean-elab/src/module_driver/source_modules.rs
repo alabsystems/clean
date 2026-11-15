@@ -55,7 +55,20 @@ enum SourceVisit {
 /// backbone. Artifact imports need a matching prelude: mixing genuine Init
 /// with bootstrap references can change definitional equality or lose bodies.
 /// Errors never choose the legacy setup as a fallback.
-pub fn source_closure_needs_world_setup(path: &Path) -> Result<bool, SourceModuleError> {
+///
+/// One import selects no world: a module Clean's hand-written prelude serves
+/// by name ([`crate::prelude_providers::has_declared_prelude`]) for which no
+/// artifact exists in `decision`'s search paths (the frontend importer's, in
+/// its order). The importer serves such a module from that prelude, whose
+/// stand-ins are built over the bootstrap prelude (`init_real_numbers`
+/// declares `HAdd`, which genuine Init already holds), so it is no artifact
+/// import and genuine Init has nothing to match. An artifact present for the
+/// same module, or a closure that also reaches a real artifact import, still
+/// selects world setup, where the stand-in is refused by name.
+pub fn source_closure_needs_world_setup(
+    path: &Path,
+    decision: &clean_olean::SourceWorldDecision,
+) -> Result<bool, SourceModuleError> {
     let mut pending = vec![SourceVisit::Enter(path.to_path_buf())];
     let mut completed = HashSet::new();
     let mut active = HashSet::new();
@@ -101,9 +114,10 @@ pub fn source_closure_needs_world_setup(path: &Path) -> Result<bool, SourceModul
             return Ok(true);
         }
         for import in header.imports {
-            if let Some(source) = crate::resolve_intra_project_import(import.module.name(), &path) {
+            let module = import.module.name();
+            if let Some(source) = crate::resolve_intra_project_import(module, &path) {
                 pending.push(SourceVisit::Enter(source));
-            } else {
+            } else if !served_by_declared_prelude(module, &path, decision) {
                 // The world-aware artifact importer still resolves and checks
                 // this import; a missing artifact is never a bootstrap fallback.
                 return Ok(true);
@@ -111,6 +125,45 @@ pub fn source_closure_needs_world_setup(path: &Path) -> Result<bool, SourceModul
         }
     }
     Ok(false)
+}
+
+/// Whether the importer serves `module`, imported from `source_path`, from a
+/// hand-written prelude Clean declares for it by name: no artifact for it
+/// exists where the importer searches. A refused artifact world answers
+/// `false` and keeps its existing setup (R111).
+fn served_by_declared_prelude(
+    module: &Name,
+    source_path: &Path,
+    decision: &clean_olean::SourceWorldDecision,
+) -> bool {
+    let Some(label) = crate::imports::canonical_prelude_label(module) else {
+        return false;
+    };
+    if !crate::prelude_providers::has_declared_prelude(&label) {
+        return false;
+    }
+    let Ok(imports) = decision.imports() else {
+        return false;
+    };
+    matches!(
+        clean_olean::resolve_typed_module_path(
+            module,
+            &artifact_search_paths(source_path, imports)
+        ),
+        Err(clean_olean::ImportError::ModuleNotFound { .. })
+    )
+}
+
+/// The frontend importer's artifact search paths for `source_path`, in its
+/// order: the file's Lake paths, then the selected world's library.
+fn artifact_search_paths(source_path: &Path, imports: &clean_olean::ImportWorld) -> Vec<PathBuf> {
+    let mut search_paths = crate::lake_import_search_paths_for_file(source_path);
+    for default in clean_olean::search_paths_in_world(imports) {
+        if !search_paths.contains(&default) {
+            search_paths.push(default);
+        }
+    }
+    search_paths
 }
 
 /// The checker retains its explicit prelude policy; native programs match
@@ -425,16 +478,12 @@ fn clean_format_source_closure(
         if header.is_prelude {
             return Ok(false);
         }
-        let mut search_paths = crate::lake_import_search_paths_for_file(&source_path);
-        for default in clean_olean::search_paths_in_world(
+        let search_paths = artifact_search_paths(
+            &source_path,
             decision
                 .imports()
                 .map_err(|error| fail(error.to_string()))?,
-        ) {
-            if !search_paths.contains(&default) {
-                search_paths.push(default);
-            }
-        }
+        );
         for import in header.imports {
             if let Some(source) =
                 crate::resolve_intra_project_import(import.module.name(), &source_path)

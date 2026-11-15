@@ -202,7 +202,11 @@ impl<'a> State<'a> {
                     found |= matches!(ty, Ty::Error);
                     match ty {
                         Ty::Storage(_) => {}
+                        // The tensor element (v67) is an inline child, as a
+                        // vector's is: an element spelling `Ty::Error` has
+                        // no identity either.
                         Ty::Vector(inner, _)
+                        | Ty::Tensor(inner, _)
                         | Ty::Ref(inner)
                         | Ty::RefMut(inner)
                         | Ty::PtrConst(inner)

@@ -1,8 +1,9 @@
 // Copyright 2026 Andrew Yates
 // SPDX-License-Identifier: Apache-2.0
 
-//! The set model (plan units M1 to M3): groundwork, one semantic lemma per
-//! core rule, and `sound_N` with its witness, each re-entered at a pinned contract.
+//! The set model (plan units M1 to M5 and E6): groundwork, one semantic lemma per
+//! core rule, `sound_N` with its witnesses, the interpreted primitive signature,
+//! quotation, and congruence negative controls, each re-entered at a pinned contract.
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -47,7 +48,7 @@ const CORE_RULE_CONTRACTS: [(&str, &str); 25] = [
 ];
 
 /// Plan units M1, M3 and M4, and M2's rule-level `Type : Type` refutation.
-const CORE_MODEL_CONTRACTS: [(&str, &str); 49] = [
+const CORE_MODEL_CONTRACTS: [(&str, &str); 70] = [
     ("KCheckSpec.Base.natRecDen_zero", "natRecursorZero"),
     ("KCheckSpec.Base.natRecDen_succ", "natRecursorSucc"),
     ("CICL.Model.Formula.falsity_false", "quotationFalse"),
@@ -166,6 +167,90 @@ const CORE_MODEL_CONTRACTS: [(&str, &str); 49] = [
     ("KCheckSpec.Base.eqRecDen_apply", "baseEqComputation"),
     ("KCheckSpec.Base.punitRecDen_apply", "basePUnitComputation"),
     ("KCheckSpec.Base.natRecDen_apply", "baseNatComputation"),
+    (
+        "CICL.Model.CongruenceControls.beta_without_argument_typing_refuted",
+        "betaWithoutArgumentTypingRefuted",
+    ),
+    (
+        "CICL.Model.CongruenceControls.piCong_refuted_of_tower",
+        "piCongTowerControl",
+    ),
+    (
+        "CICL.Model.CongruenceControls.lamCong_refuted_of_tower",
+        "lamCongTowerControl",
+    ),
+    (
+        "CICL.Model.CongruenceControls.appCong_refuted_of_tower",
+        "appCongTowerControl",
+    ),
+    (
+        "CICL.Model.CongruenceControls.letCong_refuted_of_tower",
+        "letCongTowerControl",
+    ),
+    (
+        "CICL.Model.CongruenceControls.piCong_control",
+        "piCongControl",
+    ),
+    (
+        "CICL.Model.CongruenceControls.lamCong_control",
+        "lamCongControl",
+    ),
+    (
+        "CICL.Model.CongruenceControls.appCong_control",
+        "appCongControl",
+    ),
+    (
+        "CICL.Model.CongruenceControls.letCong_control",
+        "letCongControl",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.addFn_meaning",
+        "quotationAddMeaning",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.mulFn_meaning",
+        "quotationMulMeaning",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.arith_meaning",
+        "quotationArithMeaning",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.formula_meaning",
+        "quotationFormulaMeaning",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.quote_correct",
+        "quotationCorrect",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.formula_quote_correct",
+        "quotationFormulaSliceCorrect",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.valid_base_assignment_exists",
+        "quotationValidBaseAssignment",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.quote_sound",
+        "quotationSound",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.base_quote_sound",
+        "quotationBaseSound",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.badAddFn_refuted",
+        "quotationBadAddRefuted",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.badConj_refuted",
+        "quotationBadConjRefuted",
+    ),
+    (
+        "CICL.Model.QuotationSemantics.quotation_semantics_witness",
+        "quotationWitness",
+    ),
 ];
 
 /// The hex SHA-256 of one model contract's proof value, for the untrusted pin
@@ -313,8 +398,16 @@ fn model_declaration_inventory(
     let mut inventory = std::collections::BTreeMap::new();
     for subject in targets {
         let constant = loaded.get_const(subject).expect("model census declaration");
-        let bytes = bincode::serde::encode_to_vec(&constant.type_, bincode::config::standard())
-            .expect("model type bytes");
+        let level_params: Vec<String> = constant
+            .level_params
+            .iter()
+            .map(Name::to_unambiguous_string)
+            .collect();
+        let bytes = bincode::serde::encode_to_vec(
+            (&level_params, &constant.type_),
+            bincode::config::standard(),
+        )
+        .expect("model type and level_params bytes");
         let digest: String = Sha256::digest(&bytes)
             .iter()
             .map(|byte| format!("{byte:02x}"))
@@ -326,11 +419,28 @@ fn model_declaration_inventory(
         let mut row = serde_json::json!({
             "module": module, "kind": format!("{:?}", constant.kind), "type_sha256": digest
         });
-        // Pin the meaning recursion and the migrated base semantics by body,
-        // as well as type: changing either changes the model being claimed.
-        if matches!(
+        // Pin every non-theorem declaration across the entire model package by full
+        // kernel meaning (body, reducibility, and any inductive/constructor/recursor
+        // table entry), and continue pinning theorem proof bodies in the foundational
+        // base, quotation, and control modules.
+        if constant.kind != clean_kernel::ConstantKind::Theorem {
+            let meaning_payload = (
+                constant.is_reducible,
+                &constant.value,
+                loaded.get_inductive(subject),
+                loaded.get_constructor(subject),
+                loaded.get_recursor(subject),
+            );
+            let bytes = bincode::serde::encode_to_vec(meaning_payload, bincode::config::standard())
+                .expect("model non-theorem meaning bytes");
+            row["value_sha256"] = serde_json::json!(Sha256::digest(&bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>());
+        } else if matches!(
             module,
             "CICLModel.Quotation"
+                | "CICLModel.QuotationSemantics"
                 | "CICLModel.BaseRaw"
                 | "CICLModel.BaseModel"
                 | "CICLModel.BaseComputation"
@@ -338,9 +448,10 @@ fn model_declaration_inventory(
                 | "CICLModel.BaseSignature"
                 | "CICLModel.BaseInterpretation"
                 | "CICLModel.BaseWitness"
+                | "CICLModel.CongruenceControls"
         ) {
             let bytes = bincode::serde::encode_to_vec(&constant.value, bincode::config::standard())
-                .expect("model definition bytes");
+                .expect("model theorem body bytes");
             row["value_sha256"] = serde_json::json!(Sha256::digest(&bytes)
                 .iter()
                 .map(|byte| format!("{byte:02x}"))
@@ -581,7 +692,7 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         "../../../theories/cic_l_model/model_statement_pins.json"
     ))
     .expect("committed model statement pins");
-    assert_eq!(pins.len(), 253, "exact contract denominator");
+    assert_eq!(pins.len(), 277, "exact contract denominator");
     // Every constructor of the core judgment has exactly one semantic lemma
     // in the paired table below; a missing lemma fails at its lookup.
     let constructors: BTreeSet<Name> = kernel
@@ -600,6 +711,115 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         constructors, ruled,
         "each core rule needs exactly one semantic lemma with a pinned contract"
     );
+    // Complete E6 / M3 negative-control census across CICL + CICLModel:
+    // every constructor of `CICL.CoreJudgmentIn` must have a unique ground
+    // `CICL.NegativeControls.Refutes` theorem admitted by the fenced kernel,
+    // matching `data/cic_l_rule_inventory.json` with zero `"none"` exemptions.
+    let rule_inventory: serde_json::Value =
+        serde_json::from_str(include_str!("../../../data/cic_l_rule_inventory.json"))
+            .expect("committed CIC_L rule inventory");
+    let mut expected_controls: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
+    let mut expected_model_controls: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
+    for item in rule_inventory["rows"]
+        .as_array()
+        .expect("rule inventory rows")
+        .iter()
+        .filter_map(|row| row["cic_l"].as_array())
+        .flatten()
+    {
+        let Some(ctor) = item["item"]
+            .as_str()
+            .and_then(|s| s.strip_prefix("CICL.CoreJudgmentIn."))
+        else {
+            continue;
+        };
+        assert!(
+            item["control"]["none"].is_null(),
+            "CoreJudgmentIn.{ctor} still records control.none instead of a Refutes theorem"
+        );
+        let theorem = item["control"]["theorem"]
+            .as_str()
+            .unwrap_or_else(|| panic!("CoreJudgmentIn.{ctor} lacks control.theorem"));
+        let file = item["control"]["file"]
+            .as_str()
+            .unwrap_or_else(|| panic!("CoreJudgmentIn.{ctor} lacks control.file"));
+        if let Some(prev) = expected_controls.insert(ctor.to_owned(), theorem.to_owned()) {
+            assert_eq!(
+                prev, theorem,
+                "CoreJudgmentIn.{ctor} names conflicting controls"
+            );
+        }
+        if file.starts_with("CICLModel/") {
+            expected_model_controls.insert(ctor.to_owned(), theorem.to_owned());
+        }
+    }
+    let expected_ctor_shorts: BTreeSet<String> = constructors
+        .iter()
+        .map(|n| n.to_string().rsplit('.').next().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        expected_controls.keys().cloned().collect::<BTreeSet<_>>(),
+        expected_ctor_shorts,
+        "rule inventory controls must cover every CoreJudgmentIn constructor"
+    );
+    assert!(
+        !expected_model_controls.is_empty(),
+        "theories/cic_l_model must supply the semantic congruence Refutes controls"
+    );
+    let refutes_head = Name::from_string("CICL.NegativeControls.Refutes");
+    let collect_refutes = |env: &Environment| {
+        let mut map: std::collections::BTreeMap<String, BTreeSet<String>> =
+            std::collections::BTreeMap::new();
+        for c in env.constants() {
+            if c.value.is_none() || !c.level_params.is_empty() {
+                continue;
+            }
+            if !matches!(
+                c.type_.get_app_fn().kind(),
+                clean_kernel::ExprKind::Const(h, _) if h == &refutes_head
+            ) {
+                continue;
+            }
+            let rule_short = match c.type_.get_app_args().get(1).map(|r| r.kind()) {
+                Some(clean_kernel::ExprKind::Const(r, _)) => {
+                    r.to_string().rsplit('.').next().unwrap().to_owned()
+                }
+                other => panic!("unreadable rule argument in {}: {other:?}", c.name),
+            };
+            map.entry(rule_short)
+                .or_default()
+                .insert(c.name.to_string());
+        }
+        map
+    };
+    let loaded_controls = collect_refutes(&loaded);
+    assert_eq!(
+        loaded_controls.len(),
+        constructors.len(),
+        "ground Refutes census across loaded CICL + CICLModel must equal CoreJudgmentIn constructor count"
+    );
+    for (ctor, expected_thm) in &expected_controls {
+        assert_eq!(
+            loaded_controls.get(ctor),
+            Some(&BTreeSet::from([expected_thm.clone()])),
+            "loaded ground Refutes theorem mismatch for CoreJudgmentIn.{ctor}"
+        );
+    }
+    let admitted_controls = collect_refutes(kernel.environment());
+    assert_eq!(
+        admitted_controls.len(),
+        expected_model_controls.len(),
+        "fenced CICLModel replay Refutes census must equal model-hosted control count"
+    );
+    for (ctor, expected_thm) in &expected_model_controls {
+        assert_eq!(
+            admitted_controls.get(ctor),
+            Some(&BTreeSet::from([expected_thm.clone()])),
+            "fenced ReferenceKernel Refutes theorem mismatch for CoreJudgmentIn.{ctor}"
+        );
+    }
     let mut consumed = BTreeSet::new();
     let mut paired_count = 0;
     let mut mutation_count = 0;
@@ -1068,6 +1288,15 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
             "CICL.Model.BaseWitness.base_signature_wf",
             "baseUnderstatedBoundWellFormed",
         ),
+        ("CICL.Model.CoreRules.beta", "betaWithoutArgumentTyping"),
+        (
+            "CICL.Model.QuotationSemantics.addFn_meaning",
+            "quotationAddWrongStep",
+        ),
+        (
+            "CICL.Model.QuotationSemantics.quote_correct",
+            "quotationCorrectWithoutHeight",
+        ),
     ] {
         assert!(consumed.insert(mutation), "duplicate mutation: {mutation}");
         let proof_name = if proof.starts_with("CICL.") || proof.starts_with("KCheckSpec.") {
@@ -1414,4 +1643,60 @@ fn model_inventory_accepts_checked_canonical_declaration() {
     assert_eq!(row["module"], "TypedNames");
     assert_eq!(row["kind"], "Definition");
     assert_eq!(row["type_sha256"].as_str().expect("type hash").len(), 64);
+    assert_eq!(
+        row["value_sha256"].as_str().expect("meaning hash").len(),
+        64
+    );
+}
+
+#[test]
+fn model_inventory_refuses_mutated_definition_body_and_level_params() {
+    let (base_loaded, _, canonical, _) = inventory_fixture();
+    let origin = base_loaded
+        .get_constant_origin(&canonical)
+        .expect("canonical origin")
+        .clone();
+    let mut env_a = Environment::for_lean_replay();
+    let mut env_b = Environment::for_lean_replay();
+    let mut env_c = Environment::for_lean_replay();
+    let prop_sort = Expr::sort(clean_kernel::Level::succ(clean_kernel::Level::zero()));
+    for (env, level_name, body) in [
+        (&mut env_a, "u", Expr::prop()),
+        (
+            &mut env_b,
+            "u",
+            Expr::pi(
+                clean_kernel::BinderInfo::Default,
+                Expr::prop(),
+                Expr::prop(),
+            ),
+        ),
+        (&mut env_c, "v", Expr::prop()),
+    ] {
+        env.add_decl(Declaration::Definition {
+            name: canonical.clone(),
+            level_params: vec![Name::from_string(level_name)],
+            type_: prop_sort.clone(),
+            value: body,
+            is_reducible: true,
+        })
+        .expect("scratch model definition");
+        assert!(env.set_constant_origin(canonical.clone(), origin.clone()));
+    }
+    let targets = BTreeSet::from([canonical]);
+    let inv_a = model_declaration_inventory(&env_a, &targets);
+    let inv_b = model_declaration_inventory(&env_b, &targets);
+    let inv_c = model_declaration_inventory(&env_c, &targets);
+    assert_eq!(
+        inv_a["Alias.value"]["type_sha256"], inv_b["Alias.value"]["type_sha256"],
+        "same level_params and type keep type_sha256 equal"
+    );
+    assert_ne!(
+        inv_a["Alias.value"]["value_sha256"], inv_b["Alias.value"]["value_sha256"],
+        "changing a non-theorem body anywhere in the model must change value_sha256"
+    );
+    assert_ne!(
+        inv_a["Alias.value"]["type_sha256"], inv_c["Alias.value"]["type_sha256"],
+        "renaming level_params must change type_sha256"
+    );
 }

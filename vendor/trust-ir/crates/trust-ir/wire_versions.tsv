@@ -105,3 +105,7 @@
 64	shipped	storage-only-layout: STORAGE_LAYOUT_FORMAT_VERSION	self	addressable-uninit-storage
 65	shipped	single-inhabited-enum: SINGLE_INHABITED_ENUM_FORMAT_VERSION	self	agents/enum-single-inhabited
 66	shipped	closure-frame-origin: CLOSURE_ORIGIN_FORMAT_VERSION	self	closure-storage
+67	shipped	tensor-region: TENSOR_FORMAT_VERSION	self	work/tensor-region
+68	shipped	tensor-map-reduce-view: TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION	self	work/tensor-map-reduce-view
+69	shipped	tensor-gather-scatter: TENSOR_GATHER_SCATTER_FORMAT_VERSION	self	work/tensor-gather-scatter
+70	shipped	tensor-weight-blobs: TENSOR_BLOB_FORMAT_VERSION	self	work/tensor-weight-blobs

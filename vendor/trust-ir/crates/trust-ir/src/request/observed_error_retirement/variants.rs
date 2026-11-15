@@ -92,6 +92,7 @@ E::ReplayAtomDigestMismatch { request: a, atom: b, expected: c, actual: d } => {
 E::ReplayAtomObligationNotRequested { request: a, atom: b, obligation: c } => { w.fixed((a,b,c)); },
 E::ReplayAtomAssertionMismatch { request: a, atom: b, obligation: c, expected: d, actual: e } => { w.fixed((a,b,c,d,e)); },
 E::ReplayAtomSourceSpanMismatch { request: a, atom: b, obligation: c, expected: d, actual: e } => { w.fixed((a,b,c,d,e)); },
+E::DuplicateModuleObligationId(a) => { w.fixed((a,)); },
 E::DuplicateCompilerFactId(a) => { w.fixed((a,)); },
 E::DuplicateMonomorphizationId(a) => { w.fixed((a,)); },
 E::InvalidCompilerFact { fact: a, field: b } => { w.fixed((a,b)); },

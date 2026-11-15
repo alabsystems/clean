@@ -1051,18 +1051,18 @@ fn elaborate_file_with_inventory(
     let source_identity = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let source_input = std::fs::read_to_string(path)?;
     let header = clean_parser::Parser::parse_header(&source_input)?;
-    let mut source_setup = if clean_elab::module_driver::source_closure_needs_world_setup(path)? {
-        let decision = clean_olean::source_world_for_file(path, None)?;
-        Some(clean_elab::module_driver::SourceModuleSetup::for_program_file(&decision, path)?)
-    } else {
-        None
-    };
+    let decision = clean_olean::source_world_for_file(path, None)?;
+    let mut source_setup =
+        if clean_elab::module_driver::source_closure_needs_world_setup(path, &decision)? {
+            Some(clean_elab::module_driver::SourceModuleSetup::for_program_file(&decision, path)?)
+        } else {
+            None
+        };
     let mut env = if let Some(setup) = &mut source_setup {
         setup
             .initial_environment(&header)
             .map_err(anyhow::Error::from)
     } else if header.is_prelude {
-        let decision = clean_olean::source_world_for_file(path, None)?;
         clean_elab::module_driver::module_environment_for_header_in_world(
             clean_elab::module_driver::EnvironmentSetup::default(),
             &decision,

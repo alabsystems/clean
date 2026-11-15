@@ -709,6 +709,87 @@ const MAGIC: &[u8; 8] = &crate::codec::TRUST_IR_BINARY_MAGIC;
 // `CanonicalV38` refuse (`ParamPointeePlaceRequiresV62`), which heads the
 // highest-wins chain. No digest domain moves: the stable preimages spell the
 // place with the same fresh tag byte, so no older preimage changes.
+// v67 (tensor region, ADDITIVE; PKG-U13a, Trust TENSOR-REOPEN). The tensor
+// region's first slice, one type and one instruction, both appended:
+// `Ty::Tensor(elem, rank)` at type tag 41 (0x29) — a v32 rank, then the
+// element type, exactly as `Vector` spells its lanes and element — and
+// `Inst::TensorContract { ty, lhs, rhs, batch, contract }` at Inst tag 71
+// (0x47) — the result type, the two operand ids, then each axis-pair list
+// (`batch`, then `contract`) as a v32 count followed by a v32 left axis and a
+// v32 right axis per pair. Both tags are read-gated `version >= 67`
+// (`TENSOR_FORMAT_VERSION`): an old-version label carrying either is refused
+// by the reader with `InvalidTag(41)` / `InvalidTag(71)` rather than read
+// (`refuse/blob_tensor_below_its_version`). The type fixes ONLY the element
+// type and the rank; each extent is a run-time value the tensor carries, so
+// the codec checks no shape. Whether the element is an integer and whether a
+// contraction's ranks and axes agree are the validator's to decide
+// (`InvalidTensorType`, `InvalidTensorContract`), never the codec's. The
+// writer selects 67 only when a tensor type occurs anywhere a type is spelled
+// or a contraction occurs, so every other module keeps its older bytes and
+// digests; `RawV38` / `CanonicalV38` refuse (`TensorRequiresV67`) rather than
+// erase the tensor, next below the v68 refusal in the highest-wins chain. No digest
+// domain moves: the stable preimages spell the type with the same fresh tag,
+// so only a module that carries a tensor gets a new spelling.
+// v68 (tensor map, reduce and view, ADDITIVE; PKG-U13c). Three instructions,
+// appended: `Inst::TensorMap { ty, args, body }` at Inst tag 72 (0x48) — the
+// result type, the operand ids as a counted list, then the body as a counted
+// list of `TensorMapNode`s (one tag byte: 0 BinOp, 1 UnOp, 2 ICmp, 3 Select,
+// 4 Cast; then the scalar instruction's own fields in its own order, the
+// operator by its scalar wire tag and each lane a v32); `Inst::TensorReduce
+// { ty, src, op, axes, order }` at tag 73 (0x49) — the result type, the
+// source id, a `TensorReduceOp` byte (0 Add .. 8 UMax), the axes as a counted
+// v32 list and a `TensorReduceOrder` byte (0 RowMajor); and
+// `Inst::TensorView { ty, src, params, exprs, shape, index, fill }` at tag 74
+// (0x4A) — the result type, the source id, the parameter ids as a counted
+// list, the coordinate function as a counted list of `TensorIndexExpr`s (one
+// tag byte: 0 Lit then a v64, 1 Param / 2 SrcExtent / 3 Coord then a v32,
+// 4 Add .. 10 Max then two v32 node ids), the shape and the index as counted
+// v32 lists, then the fill as 0, or 1 and a value id. All three tags are
+// read-gated `version >= 68` (`TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION`), so an
+// older header carrying one is `InvalidTag(72..=74)`
+// (`refuse/blob_tensor_map_reduce_view_below_its_version`). The codec checks
+// no typing, lane, axis or node rule: those are the validator's
+// (`InvalidTensorMap`, `InvalidTensorReduce`, `InvalidTensorView`). The writer
+// selects 68 only when one of the three occurs, so every other module keeps
+// its bytes and digests; `RawV38` / `CanonicalV38` refuse
+// (`TensorMapReduceViewRequiresV68`). No digest domain moves.
+// v69 (tensor gather and scatter, ADDITIVE; PKG-U13d, SPEC_RATIFICATIONS
+// §26). Two instructions, appended: `Inst::TensorGather { ty, data, coords }`
+// at Inst tag 75 (0x4B) — the result type, the data id, then the coordinate
+// tensor ids as a counted list; and `Inst::TensorScatter { ty, init, src,
+// coords }` at tag 76 (0x4C) — the result type, the initial tensor's id, the
+// source id, then the coordinate tensor ids as a counted list. Both tags are
+// read-gated `version >= 69` (`TENSOR_GATHER_SCATTER_FORMAT_VERSION`), so an
+// older header carrying one is `InvalidTag(75 | 76)`
+// (`refuse/blob_tensor_gather_scatter_below_its_version`). The codec checks no
+// rank, element or arity rule: those are the validator's
+// (`InvalidTensorGather`, `InvalidTensorScatter`). The writer selects 69 only
+// when one of the two occurs, so every other module keeps its bytes and
+// digests; `RawV38` / `CanonicalV38` refuse
+// (`TensorGatherScatterRequiresV69`). No digest domain moves.
+// v70 (content-addressed weight blobs, ADDITIVE; PKG-U13e,
+// `docs/SPEC_RATIFICATIONS.md` §27). Two additions, both read-gated
+// `version >= 70` (`TENSOR_BLOB_FORMAT_VERSION`):
+//   * `Constant::TensorBlob { digest, dims }` at Constant tag 18 (0x12; 17 is
+//     the template extension's): the 32 digest bytes, then the extents as a
+//     counted list of fixed-width `u64`s. An older header carrying tag 18 is
+//     `InvalidTag(18)` (`refuse/blob_tensor_blob_below_its_version`);
+//   * the module BLOB TABLE, a trailing section after the v58 closure
+//     layouts: a row count, then per row the 32 digest bytes and the counted
+//     bytes. The reader refuses, as `InvalidData` and before any validator
+//     runs, a digest not strictly greater than the previous row's, so each
+//     digest is listed once (`refuse/blob_tensor_blob_table_not_canonical`);
+//     whether a row's bytes hash to its digest, and whether a constant's
+//     digest names a row, are the validator's questions (`InvalidBlobTable`,
+//     `MissingBlob`), asked again by both engines where a constant reads it.
+// The writer selects 70 only when a module carries a tensor blob constant or
+// a table row, so every other module keeps its bytes and its digests;
+// `RawV38` / `CanonicalV38` refuse (`TensorBlobRequiresV70`), which heads the
+// highest-wins chain. The module identity (`stable_digest`) and the
+// executable-content identity KEEP the section, so a changed weight is a
+// changed module; a function body's identity does not, because its image
+// holds no table (the body names the digest, never the bytes). No digest
+// domain moves: the blob digest is plain SHA-256 of the bytes.
 /// Latest format version supported by this build. Writers select v38 for
 /// legacy modules, v39 only when a nominal dialect type occurs, v40 only when a
 /// `FatPtrKind::ContainerVtable` occurs, and v41 only when a contract-surface
@@ -743,10 +824,24 @@ const MAGIC: &[u8; 8] = &crate::codec::TRUST_IR_BINARY_MAGIC;
 /// A clause binding of the entry-state pointee place
 /// (`ClausePlace::ParamPointeeEntry`) selects v62.
 ///
+/// An `Inst::MakeClosure` selects v63, an addressable layout-only storage
+/// type (`Ty::Storage`) v64, a variant-free nominal enum or a
+/// single-inhabited enum layout (`EnumTagEncoding::SingleInhabited`) v65, and
+/// a declared closure frame's nominal origin
+/// (`ClosureLayoutDescriptor.origin`) v66.
+///
+/// A tensor type (`Ty::Tensor`, anywhere a type is spelled) or an
+/// `Inst::TensorContract` selects v67 (`TENSOR_FORMAT_VERSION`), and an
+/// `Inst::TensorMap`, `Inst::TensorReduce` or `Inst::TensorView` v68
+/// (`TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION`), and an `Inst::TensorGather` or
+/// `Inst::TensorScatter` v69 (`TENSOR_GATHER_SCATTER_FORMAT_VERSION`), and a
+/// `Constant::TensorBlob` or a blob table row v70
+/// (`TENSOR_BLOB_FORMAT_VERSION`).
+///
 /// `VERSION` may only equal the highest `shipped` row of
 /// `crates/trust-ir/wire_versions.tsv`; raising it without flipping that
 /// reserved row to `shipped` fails the `wire_version_ledger` test.
-pub const VERSION: u32 = 66;
+pub const VERSION: u32 = 70;
 /// Latest supported TrustIR binary wire-format version.
 pub const FORMAT_VERSION: u32 = VERSION;
 /// Baseline encoding retained for modules without v39 nominal dialect types
@@ -959,6 +1054,35 @@ pub const PARAM_POINTEE_PLACE_FORMAT_VERSION: u32 = 62;
 pub const MAKE_CLOSURE_FORMAT_VERSION: u32 = 63;
 /// Nominal source identity on a declared closure capture frame.
 pub const CLOSURE_ORIGIN_FORMAT_VERSION: u32 = 66;
+/// The tensor region's first slice (PKG-U13a, Trust DECISION_QUEUE
+/// TENSOR-REOPEN): `Ty::Tensor` (Ty tag 41) and `Inst::TensorContract` (Inst
+/// tag 71).
+pub const TENSOR_FORMAT_VERSION: u32 = 67;
+/// The tensor region's map, reduction and view (PKG-U13c): `Inst::TensorMap`
+/// (Inst tag 72), `Inst::TensorReduce` (73) and `Inst::TensorView` (74).
+pub const TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION: u32 = 68;
+/// The tensor region's gather and scatter (PKG-U13d): `Inst::TensorGather`
+/// (Inst tag 75) and `Inst::TensorScatter` (76).
+pub const TENSOR_GATHER_SCATTER_FORMAT_VERSION: u32 = 69;
+/// Content-addressed weight blobs (PKG-U13e): `Constant::TensorBlob`
+/// (Constant tag 18) and the module blob table, a trailing section after the
+/// v58 closure layouts.
+pub const TENSOR_BLOB_FORMAT_VERSION: u32 = 70;
+/// The `Constant` tag of a content-addressed tensor (v70).
+const CONSTANT_TENSOR_BLOB_TAG: u8 = 18;
+
+#[cfg(test)]
+#[path = "binary/tensor_blob_tests.rs"]
+mod tensor_blob_tests;
+#[cfg(test)]
+#[path = "binary/tensor_gather_scatter_tests.rs"]
+mod tensor_gather_scatter_tests;
+#[cfg(test)]
+#[path = "binary/tensor_map_reduce_view_tests.rs"]
+mod tensor_map_reduce_view_tests;
+#[cfg(test)]
+#[path = "binary/tensor_region_tests.rs"]
+mod tensor_region_tests;
 
 #[cfg(test)]
 #[path = "binary/param_pointee_place_tests.rs"]
@@ -1273,11 +1397,23 @@ pub enum BinaryProjectionError {
     /// pointee place (`ClausePlace::ParamPointeeEntry`, v62, roadmap DG-63).
     ParamPointeePlaceRequiresV62,
     /// A v38 projection cannot represent runtime closure construction (v63).
-    /// Heads the highest-wins chain.
     MakeClosureRequiresV63,
     StorageRequiresV64,
     /// A legacy projection cannot erase a declared closure's nominal source identity.
     ClosureOriginRequiresV66,
+    /// A v38 projection cannot represent the tensor region (v67, PKG-U13a): a
+    /// `Ty::Tensor` anywhere a type is spelled, or an `Inst::TensorContract`.
+    TensorRequiresV67,
+    /// A v38 projection cannot represent a tensor map, reduction or view
+    /// (v68, PKG-U13c).
+    TensorMapReduceViewRequiresV68,
+    /// A v38 projection cannot represent a tensor gather or scatter (v69,
+    /// PKG-U13d).
+    TensorGatherScatterRequiresV69,
+    /// A v38 projection cannot represent a content-addressed weight blob (v70,
+    /// PKG-U13e): a `Constant::TensorBlob` or a blob table row. Heads the
+    /// highest-wins chain.
+    TensorBlobRequiresV70,
     /// NO binary version can represent a module completeness claim
     /// (`Module.completeness`, WS5.3b) yet: its carrier is a member of the
     /// next open wire batch and no number has been reserved for it. Every
@@ -1421,6 +1557,22 @@ impl core::fmt::Display for BinaryProjectionError {
             Self::ClosureOriginRequiresV66 => {
                 f.write_str("closure source identity requires wire v66")
             }
+            Self::TensorBlobRequiresV70 => f.write_str(
+                "a content-addressed weight blob (Constant::TensorBlob or a blob table row) \
+                 requires a v70 binary projection",
+            ),
+            Self::TensorGatherScatterRequiresV69 => f.write_str(
+                "a tensor gather or scatter (Inst::TensorGather, Inst::TensorScatter) requires \
+                 a v69 binary projection",
+            ),
+            Self::TensorMapReduceViewRequiresV68 => f.write_str(
+                "a tensor map, reduction or view (Inst::TensorMap, Inst::TensorReduce, \
+                 Inst::TensorView) requires a v68 binary projection",
+            ),
+            Self::TensorRequiresV67 => f.write_str(
+                "a tensor type (Ty::Tensor) or a tensor contraction (Inst::TensorContract) \
+                 requires a v67 binary projection",
+            ),
             Self::MakeClosureRequiresV63 => {
                 f.write_str("an Inst::MakeClosure requires a v63 binary projection")
             }
@@ -2423,6 +2575,10 @@ fn collect_strings_into<X: WireExt>(
             collect_type_identity_strings(&entry.ty, &mut pool);
         }
     }
+    // v70: a module with a blob table row writes the trailing section.
+    if !module.blobs.is_empty() {
+        pool.raise_to(TENSOR_BLOB_FORMAT_VERSION);
+    }
     // The v30 universe / predicate tables carry constants too (scalar-only
     // when well-formed). Walk them like every other constant carrier, so a
     // gated constant tag (v49 `Uninit`, v50 `Splat`) can never be written under a header
@@ -2997,6 +3153,8 @@ fn collect_constant_strings<X: WireExt>(c: &ConstantG<X>, pool: &mut StringPoolB
         ConstantG::Uninit => {
             pool.raise_to(UNINIT_LANE_FORMAT_VERSION);
         }
+        // v70: the reader gates Constant tag 18 likewise.
+        ConstantG::TensorBlob { .. } => pool.raise_to(TENSOR_BLOB_FORMAT_VERSION),
         _ => {}
     }
 }
@@ -3017,6 +3175,9 @@ fn collect_type_identity_strings<X: WireExt>(ty: &TyG<X>, pool: &mut StringPoolB
         // v43: same discipline — raise the header for the feature the reader
         // gates, or the writer emits tag 38 under a header that refuses it.
         TyG::Storage(_) => pool.raise_to(STORAGE_LAYOUT_FORMAT_VERSION),
+        // v67: type tag 41 is read-gated, so any tensor occurrence raises the
+        // header; its element is an inline child `visit_types` reaches next.
+        TyG::Tensor(..) => pool.raise_to(TENSOR_FORMAT_VERSION),
         TyG::Handle(ty) => {
             pool.raise_to(HANDLE_TYPE_FORMAT_VERSION);
             pool.intern(&ty.name);
@@ -3055,6 +3216,25 @@ fn carries_inst_wire_batch_member<X: WireExt>(inst: &InstG<X>) -> bool {
 fn collect_inst_strings<X: WireExt>(inst: &InstG<X>, pool: &mut StringPoolBuilder) {
     if matches!(inst, InstG::MakeClosure { .. }) {
         pool.raise_to(MAKE_CLOSURE_FORMAT_VERSION);
+    }
+    // v67: Inst tag 71 is read-gated, so a contraction raises the header even
+    // before its (tensor) result type does below.
+    if matches!(inst, InstG::TensorContract { .. }) {
+        pool.raise_to(TENSOR_FORMAT_VERSION);
+    }
+    // v68: Inst tags 72..=74 are read-gated likewise.
+    if matches!(
+        inst,
+        InstG::TensorMap { .. } | InstG::TensorReduce { .. } | InstG::TensorView { .. }
+    ) {
+        pool.raise_to(TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION);
+    }
+    // v69: Inst tags 75 and 76 are read-gated likewise.
+    if matches!(
+        inst,
+        InstG::TensorGather { .. } | InstG::TensorScatter { .. }
+    ) {
+        pool.raise_to(TENSOR_GATHER_SCATTER_FORMAT_VERSION);
     }
     if matches!(
         inst,
@@ -3586,6 +3766,15 @@ fn write_ty<X: WireExt>(buf: &mut impl BinarySink, pool: &SealedStringPool, ty: 
             write_str(buf, pool, &ty.name);
             write_str(buf, pool, &ty.runtime);
         }
+        // v67 (tensor region): the rank, then the element, as `Vector` spells
+        // its lanes and element. Encoded exactly as claimed: an element the
+        // validator refuses (`InvalidTensorType`) still has one spelling, so
+        // identity hashing never becomes a refusal boundary for it.
+        TyG::Tensor(elem, rank) => {
+            write_u8(buf, 41);
+            write_v32(buf, *rank);
+            write_ty(buf, pool, elem);
+        }
         TyG::Ext(e) => {
             write_u8(buf, TY_EXT_TAG);
             X::write_ext(buf, e);
@@ -3888,6 +4077,16 @@ fn read_ty_inner<X: WireExt>(r: &mut Reader<'_>) -> Result<TyG<X>, BinaryError> 
             }
             Ok(TyG::Storage(layout))
         }
+        // v67 (tensor region). Read-gated: a v66-or-older header carrying tag
+        // 41 is refused with `InvalidTag(41)`
+        // (`refuse/blob_tensor_below_its_version`). The element is read
+        // through `read_ty`, so its nesting is bounded; whether it is an
+        // integer is the validator's decision, never the codec's.
+        41 if r.version >= TENSOR_FORMAT_VERSION => {
+            let rank = r.read_v32()?;
+            let elem = read_ty(r)?;
+            Ok(TyG::Tensor(Box::new(elem), rank))
+        }
         // Amendment S: the extension tag. A level-R reader (`NoExt`) refuses
         // it at EVERY version, forged module magic included
         // (`refuse/ty_ext_tag_under_module_magic`); a template reader reads
@@ -4001,6 +4200,16 @@ fn write_constant<X: WireExt>(
             write_u8(buf, 16);
             write_constant(buf, pool, elem);
             write_u64(buf, *len);
+        }
+        // v70: the 32 digest bytes, then the counted extents as fixed-width
+        // `u64`s; the bytes are the module's blob table section.
+        ConstantG::TensorBlob { digest, dims } => {
+            write_u8(buf, CONSTANT_TENSOR_BLOB_TAG);
+            buf.extend_from_slice(&digest.0);
+            write_count(buf, "Constant::TensorBlob dims", dims.len());
+            for dim in dims {
+                write_u64(buf, *dim);
+            }
         }
         ConstantG::Ext(e) => {
             write_u8(buf, CONSTANT_EXT_TAG);
@@ -4132,6 +4341,23 @@ fn read_constant_inner<X: WireExt>(r: &mut Reader<'_>) -> Result<ConstantG<X>, B
             Ok(ConstantG::Splat {
                 elem: Box::new(elem),
                 len,
+            })
+        }
+        // v70 TensorBlob: read-gated (an older header carrying tag 18 is
+        // `InvalidTag(18)`, `refuse/blob_tensor_blob_below_its_version`). The
+        // codec checks no rank, row or length rule: those are the validator's
+        // (`InvalidTensorBlob`, `MissingBlob`).
+        CONSTANT_TENSOR_BLOB_TAG if r.version >= TENSOR_BLOB_FORMAT_VERSION => {
+            let mut digest = [0u8; 32];
+            digest.copy_from_slice(&r.read_exact(32)?);
+            let n = r.read_checked_len()?;
+            let mut dims = Vec::with_capacity(n);
+            for _ in 0..n {
+                dims.push(r.read_u64()?);
+            }
+            Ok(ConstantG::TensorBlob {
+                digest: crate::blob::BlobDigest(digest),
+                dims,
             })
         }
         // Amendment S: the extension tag, refused by the level-R reader at
@@ -4685,6 +4911,241 @@ fn read_vec_value_id(r: &mut Reader<'_>) -> Result<Vec<ValueId>, BinaryError> {
         v.push(r.read_value_id()?);
     }
     Ok(v)
+}
+
+/// A tensor contraction's axis-pair list (v67): the count, then a `v32` left
+/// axis and a `v32` right axis per pair, in list order. `what` names the
+/// counted field in a count refusal.
+fn write_axis_pairs(buf: &mut impl BinarySink, what: &'static str, pairs: &[(u32, u32)]) {
+    write_count(buf, what, pairs.len());
+    for &(lhs, rhs) in pairs {
+        write_v32(buf, lhs);
+        write_v32(buf, rhs);
+    }
+}
+
+fn read_axis_pairs(r: &mut Reader<'_>) -> Result<Vec<(u32, u32)>, BinaryError> {
+    let n = r.read_checked_len()?;
+    let mut pairs = Vec::with_capacity(n);
+    for _ in 0..n {
+        let lhs = r.read_v32()?;
+        let rhs = r.read_v32()?;
+        pairs.push((lhs, rhs));
+    }
+    Ok(pairs)
+}
+
+/// A v32 list (v68: a tensor reduction's axes, a tensor view's shape and
+/// index node lists): the count, then each item. `what` names the counted
+/// field in a count refusal.
+fn write_v32_list(buf: &mut impl BinarySink, what: &'static str, items: &[u32]) {
+    write_count(buf, what, items.len());
+    for &item in items {
+        write_v32(buf, item);
+    }
+}
+
+fn read_v32_list(r: &mut Reader<'_>) -> Result<Vec<u32>, BinaryError> {
+    let n = r.read_checked_len()?;
+    let mut items = Vec::with_capacity(n);
+    for _ in 0..n {
+        items.push(r.read_v32()?);
+    }
+    Ok(items)
+}
+
+/// One tensor map node (v68): its `TensorMapNode` tag byte, then the scalar
+/// instruction's fields in that instruction's order, the operator by its
+/// scalar wire tag and each lane a v32.
+fn write_tensor_map_node<X: WireExt>(
+    buf: &mut impl BinarySink,
+    pool: &SealedStringPool,
+    node: &crate::TensorMapNode<X>,
+) {
+    match node {
+        crate::TensorMapNode::BinOp { op, ty, lhs, rhs } => {
+            write_u8(buf, 0);
+            write_binop(buf, op);
+            write_ty(buf, pool, ty);
+            write_v32(buf, *lhs);
+            write_v32(buf, *rhs);
+        }
+        crate::TensorMapNode::UnOp { op, ty, operand } => {
+            write_u8(buf, 1);
+            write_unop(buf, op);
+            write_ty(buf, pool, ty);
+            write_v32(buf, *operand);
+        }
+        crate::TensorMapNode::ICmp { op, ty, lhs, rhs } => {
+            write_u8(buf, 2);
+            write_icmp_op(buf, op);
+            write_ty(buf, pool, ty);
+            write_v32(buf, *lhs);
+            write_v32(buf, *rhs);
+        }
+        crate::TensorMapNode::Select {
+            ty,
+            cond,
+            then_lane,
+            else_lane,
+        } => {
+            write_u8(buf, 3);
+            write_ty(buf, pool, ty);
+            write_v32(buf, *cond);
+            write_v32(buf, *then_lane);
+            write_v32(buf, *else_lane);
+        }
+        crate::TensorMapNode::Cast {
+            op,
+            src_ty,
+            dst_ty,
+            operand,
+        } => {
+            write_u8(buf, 4);
+            write_cast_op(buf, op);
+            write_ty(buf, pool, src_ty);
+            write_ty(buf, pool, dst_ty);
+            write_v32(buf, *operand);
+        }
+    }
+}
+
+fn read_tensor_map_node<X: WireExt>(
+    r: &mut Reader<'_>,
+) -> Result<crate::TensorMapNode<X>, BinaryError> {
+    let tag = r.read_u8()?;
+    Ok(match tag {
+        0 => crate::TensorMapNode::BinOp {
+            op: read_binop(r)?,
+            ty: read_ty(r)?,
+            lhs: r.read_v32()?,
+            rhs: r.read_v32()?,
+        },
+        1 => crate::TensorMapNode::UnOp {
+            op: read_unop(r)?,
+            ty: read_ty(r)?,
+            operand: r.read_v32()?,
+        },
+        2 => crate::TensorMapNode::ICmp {
+            op: read_icmp_op(r)?,
+            ty: read_ty(r)?,
+            lhs: r.read_v32()?,
+            rhs: r.read_v32()?,
+        },
+        3 => crate::TensorMapNode::Select {
+            ty: read_ty(r)?,
+            cond: r.read_v32()?,
+            then_lane: r.read_v32()?,
+            else_lane: r.read_v32()?,
+        },
+        4 => crate::TensorMapNode::Cast {
+            op: read_cast_op(r)?,
+            src_ty: read_ty(r)?,
+            dst_ty: read_ty(r)?,
+            operand: r.read_v32()?,
+        },
+        t => return Err(BinaryError::InvalidTag(t)),
+    })
+}
+
+/// A `TensorReduceOp` (v68) by its tag, in declaration order.
+fn tensor_reduce_op_tag(op: crate::TensorReduceOp) -> u8 {
+    match op {
+        crate::TensorReduceOp::Add => 0,
+        crate::TensorReduceOp::Mul => 1,
+        crate::TensorReduceOp::And => 2,
+        crate::TensorReduceOp::Or => 3,
+        crate::TensorReduceOp::Xor => 4,
+        crate::TensorReduceOp::SMin => 5,
+        crate::TensorReduceOp::SMax => 6,
+        crate::TensorReduceOp::UMin => 7,
+        crate::TensorReduceOp::UMax => 8,
+    }
+}
+
+fn read_tensor_reduce_op(r: &mut Reader<'_>) -> Result<crate::TensorReduceOp, BinaryError> {
+    Ok(match r.read_u8()? {
+        0 => crate::TensorReduceOp::Add,
+        1 => crate::TensorReduceOp::Mul,
+        2 => crate::TensorReduceOp::And,
+        3 => crate::TensorReduceOp::Or,
+        4 => crate::TensorReduceOp::Xor,
+        5 => crate::TensorReduceOp::SMin,
+        6 => crate::TensorReduceOp::SMax,
+        7 => crate::TensorReduceOp::UMin,
+        8 => crate::TensorReduceOp::UMax,
+        t => return Err(BinaryError::InvalidTag(t)),
+    })
+}
+
+fn read_tensor_reduce_order(r: &mut Reader<'_>) -> Result<crate::TensorReduceOrder, BinaryError> {
+    match r.read_u8()? {
+        0 => Ok(crate::TensorReduceOrder::RowMajor),
+        t => Err(BinaryError::InvalidTag(t)),
+    }
+}
+
+/// One tensor view node (v68): its `TensorIndexExpr` tag byte, then a v64
+/// literal, a v32 index, or two v32 node ids.
+fn write_tensor_index_expr(buf: &mut impl BinarySink, expr: &crate::TensorIndexExpr) {
+    write_u8(buf, tensor_index_expr_tag(expr));
+    match *expr {
+        crate::TensorIndexExpr::Lit(n) => write_v64(buf, n),
+        crate::TensorIndexExpr::Param(k)
+        | crate::TensorIndexExpr::SrcExtent(k)
+        | crate::TensorIndexExpr::Coord(k) => write_v32(buf, k),
+        crate::TensorIndexExpr::Add(a, b)
+        | crate::TensorIndexExpr::Sub(a, b)
+        | crate::TensorIndexExpr::Mul(a, b)
+        | crate::TensorIndexExpr::Div(a, b)
+        | crate::TensorIndexExpr::Rem(a, b)
+        | crate::TensorIndexExpr::Min(a, b)
+        | crate::TensorIndexExpr::Max(a, b) => {
+            write_v32(buf, a);
+            write_v32(buf, b);
+        }
+    }
+}
+
+/// A `TensorIndexExpr`'s tag (v68), in declaration order.
+fn tensor_index_expr_tag(expr: &crate::TensorIndexExpr) -> u8 {
+    match expr {
+        crate::TensorIndexExpr::Lit(_) => 0,
+        crate::TensorIndexExpr::Param(_) => 1,
+        crate::TensorIndexExpr::SrcExtent(_) => 2,
+        crate::TensorIndexExpr::Coord(_) => 3,
+        crate::TensorIndexExpr::Add(..) => 4,
+        crate::TensorIndexExpr::Sub(..) => 5,
+        crate::TensorIndexExpr::Mul(..) => 6,
+        crate::TensorIndexExpr::Div(..) => 7,
+        crate::TensorIndexExpr::Rem(..) => 8,
+        crate::TensorIndexExpr::Min(..) => 9,
+        crate::TensorIndexExpr::Max(..) => 10,
+    }
+}
+
+fn read_tensor_index_expr(r: &mut Reader<'_>) -> Result<crate::TensorIndexExpr, BinaryError> {
+    let tag = r.read_u8()?;
+    Ok(match tag {
+        0 => crate::TensorIndexExpr::Lit(r.read_v64()?),
+        1 => crate::TensorIndexExpr::Param(r.read_v32()?),
+        2 => crate::TensorIndexExpr::SrcExtent(r.read_v32()?),
+        3 => crate::TensorIndexExpr::Coord(r.read_v32()?),
+        4..=10 => {
+            let a = r.read_v32()?;
+            let b = r.read_v32()?;
+            match tag {
+                4 => crate::TensorIndexExpr::Add(a, b),
+                5 => crate::TensorIndexExpr::Sub(a, b),
+                6 => crate::TensorIndexExpr::Mul(a, b),
+                7 => crate::TensorIndexExpr::Div(a, b),
+                8 => crate::TensorIndexExpr::Rem(a, b),
+                9 => crate::TensorIndexExpr::Min(a, b),
+                _ => crate::TensorIndexExpr::Max(a, b),
+            }
+        }
+        t => return Err(BinaryError::InvalidTag(t)),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -5276,6 +5737,95 @@ fn write_inst<X: WireExt>(
             write_closure_ty_id(buf, *ty);
             write_func_id(buf, *func);
             write_vec_value_id(buf, canonical, captures);
+        }
+        // v67 (tensor region): the result type, the operands in field order,
+        // then the batch and the contracted axis-pair lists.
+        InstG::TensorContract {
+            ty,
+            lhs,
+            rhs,
+            batch,
+            contract,
+        } => {
+            write_u8(buf, 71);
+            write_ty(buf, pool, ty);
+            write_projected_value_id(buf, canonical, *lhs);
+            write_projected_value_id(buf, canonical, *rhs);
+            write_axis_pairs(buf, "TensorContract batch pairs", batch);
+            write_axis_pairs(buf, "TensorContract contract pairs", contract);
+        }
+        // v68 (tensor map, reduce and view): every field in declaration order.
+        InstG::TensorMap { ty, args, body } => {
+            write_u8(buf, 72);
+            write_ty(buf, pool, ty);
+            write_vec_value_id(buf, canonical, args);
+            write_count(buf, "TensorMap body", body.len());
+            for node in body {
+                write_tensor_map_node(buf, pool, node);
+            }
+        }
+        InstG::TensorReduce {
+            ty,
+            src,
+            op,
+            axes,
+            order,
+        } => {
+            write_u8(buf, 73);
+            write_ty(buf, pool, ty);
+            write_projected_value_id(buf, canonical, *src);
+            write_u8(buf, tensor_reduce_op_tag(*op));
+            write_v32_list(buf, "TensorReduce axes", axes);
+            match order {
+                crate::TensorReduceOrder::RowMajor => write_u8(buf, 0),
+            }
+        }
+        InstG::TensorView {
+            ty,
+            src,
+            params,
+            exprs,
+            shape,
+            index,
+            fill,
+        } => {
+            write_u8(buf, 74);
+            write_ty(buf, pool, ty);
+            write_projected_value_id(buf, canonical, *src);
+            write_vec_value_id(buf, canonical, params);
+            write_count(buf, "TensorView exprs", exprs.len());
+            for expr in exprs {
+                write_tensor_index_expr(buf, expr);
+            }
+            write_v32_list(buf, "TensorView shape", shape);
+            write_v32_list(buf, "TensorView index", index);
+            match fill {
+                None => write_u8(buf, 0),
+                Some(fill) => {
+                    write_u8(buf, 1);
+                    write_projected_value_id(buf, canonical, *fill);
+                }
+            }
+        }
+        // v69 (tensor gather and scatter): every field in declaration order,
+        // `coords` a counted value-id list.
+        InstG::TensorGather { ty, data, coords } => {
+            write_u8(buf, 75);
+            write_ty(buf, pool, ty);
+            write_projected_value_id(buf, canonical, *data);
+            write_vec_value_id(buf, canonical, coords);
+        }
+        InstG::TensorScatter {
+            ty,
+            init,
+            src,
+            coords,
+        } => {
+            write_u8(buf, 76);
+            write_ty(buf, pool, ty);
+            write_projected_value_id(buf, canonical, *init);
+            write_projected_value_id(buf, canonical, *src);
+            write_vec_value_id(buf, canonical, coords);
         }
         InstG::DialectOp(op) => {
             write_u8(buf, 44);
@@ -5898,6 +6448,75 @@ fn read_inst<X: WireExt>(r: &mut Reader<'_>) -> Result<InstG<X>, BinaryError> {
             ty: r.read_closure_ty_id()?,
             func: r.read_func_id()?,
             captures: read_vec_value_id(r)?,
+        }),
+        // v67 (tensor region): read-gated, so an older header carrying tag 71
+        // is `InvalidTag(71)` (`refuse/blob_tensor_below_its_version`).
+        71 if r.version >= TENSOR_FORMAT_VERSION => Ok(InstG::TensorContract {
+            ty: read_ty(r)?,
+            lhs: r.read_value_id()?,
+            rhs: r.read_value_id()?,
+            batch: read_axis_pairs(r)?,
+            contract: read_axis_pairs(r)?,
+        }),
+        // v68 (tensor map, reduce and view): read-gated, so an older header
+        // carrying tag 72, 73 or 74 is `InvalidTag`
+        // (`refuse/blob_tensor_map_reduce_view_below_its_version`).
+        72 if r.version >= TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION => {
+            let ty = read_ty(r)?;
+            let args = read_vec_value_id(r)?;
+            let n = r.read_checked_len()?;
+            let mut body = Vec::with_capacity(n);
+            for _ in 0..n {
+                body.push(read_tensor_map_node(r)?);
+            }
+            Ok(InstG::TensorMap { ty, args, body })
+        }
+        73 if r.version >= TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION => Ok(InstG::TensorReduce {
+            ty: read_ty(r)?,
+            src: r.read_value_id()?,
+            op: read_tensor_reduce_op(r)?,
+            axes: read_v32_list(r)?,
+            order: read_tensor_reduce_order(r)?,
+        }),
+        74 if r.version >= TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION => {
+            let ty = read_ty(r)?;
+            let src = r.read_value_id()?;
+            let params = read_vec_value_id(r)?;
+            let n = r.read_checked_len()?;
+            let mut exprs = Vec::with_capacity(n);
+            for _ in 0..n {
+                exprs.push(read_tensor_index_expr(r)?);
+            }
+            let shape = read_v32_list(r)?;
+            let index = read_v32_list(r)?;
+            let fill = match r.read_u8()? {
+                0 => None,
+                1 => Some(r.read_value_id()?),
+                t => return Err(BinaryError::InvalidTag(t)),
+            };
+            Ok(InstG::TensorView {
+                ty,
+                src,
+                params,
+                exprs,
+                shape,
+                index,
+                fill,
+            })
+        }
+        // v69 (tensor gather and scatter): read-gated, so an older header
+        // carrying tag 75 or 76 is `InvalidTag`
+        // (`refuse/blob_tensor_gather_scatter_below_its_version`).
+        75 if r.version >= TENSOR_GATHER_SCATTER_FORMAT_VERSION => Ok(InstG::TensorGather {
+            ty: read_ty(r)?,
+            data: r.read_value_id()?,
+            coords: read_vec_value_id(r)?,
+        }),
+        76 if r.version >= TENSOR_GATHER_SCATTER_FORMAT_VERSION => Ok(InstG::TensorScatter {
+            ty: read_ty(r)?,
+            init: r.read_value_id()?,
+            src: r.read_value_id()?,
+            coords: read_vec_value_id(r)?,
         }),
         44 => Ok(InstG::DialectOp(Box::new(read_dialect_inst(r)?))),
         45 => Ok(InstG::PtrData {
@@ -9920,6 +10539,16 @@ fn write_module_sections<X: WireExt>(
             }
         }
     }
+    // v70: the blob table, after the v58 closure layouts, rows in the
+    // canonical (strictly ascending digest) order the module holds them in.
+    if pool.minimum_version() >= TENSOR_BLOB_FORMAT_VERSION {
+        write_count(&mut buf, "Module.blobs", module.blobs.len());
+        for blob in &module.blobs {
+            buf.extend_from_slice(&blob.digest.0);
+            write_count(&mut buf, "Blob.data", blob.data.len());
+            buf.extend_from_slice(&blob.data);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -10146,7 +10775,15 @@ impl<'m> ProjectedModuleBinaryPlan<'m> {
             // Every version the writer can select above the projected v38 must
             // map to a refusal here; the highest requirement wins so the error
             // names the feature that actually forbids the projection.
-            return Err(if pool.minimum_version() >= CLOSURE_ORIGIN_FORMAT_VERSION {
+            return Err(if pool.minimum_version() >= TENSOR_BLOB_FORMAT_VERSION {
+                BinaryProjectionError::TensorBlobRequiresV70
+            } else if pool.minimum_version() >= TENSOR_GATHER_SCATTER_FORMAT_VERSION {
+                BinaryProjectionError::TensorGatherScatterRequiresV69
+            } else if pool.minimum_version() >= TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION {
+                BinaryProjectionError::TensorMapReduceViewRequiresV68
+            } else if pool.minimum_version() >= TENSOR_FORMAT_VERSION {
+                BinaryProjectionError::TensorRequiresV67
+            } else if pool.minimum_version() >= CLOSURE_ORIGIN_FORMAT_VERSION {
                 BinaryProjectionError::ClosureOriginRequiresV66
             } else if pool.minimum_version() >= STORAGE_LAYOUT_FORMAT_VERSION {
                 BinaryProjectionError::StorageRequiresV64
@@ -11240,6 +11877,29 @@ fn read_module_sections<X: WireExt>(
         }
     }
 
+    // v70: the blob table, after the v58 closure layouts. Its ONE order is
+    // checked here, before any validator runs
+    // (`refuse/blob_tensor_blob_table_not_canonical`): digests strictly
+    // ascending, so each is listed once. Whether a row's bytes hash to its
+    // digest is the validator's question (`InvalidBlobTable`).
+    let mut blobs: Vec<crate::blob::Blob> = Vec::new();
+    if version >= TENSOR_BLOB_FORMAT_VERSION {
+        let count = r.read_checked_len()?;
+        for _ in 0..count {
+            let mut digest = [0u8; 32];
+            digest.copy_from_slice(&r.read_exact(32)?);
+            let len = r.read_checked_len()?;
+            let data = r.read_exact(len)?;
+            blobs.push(crate::blob::Blob {
+                digest: crate::blob::BlobDigest(digest),
+                data,
+            });
+        }
+        if let Some(reason) = crate::blob::blob_table_order_refusal(&blobs) {
+            return Err(BinaryError::InvalidData(reason));
+        }
+    }
+
     if r.bytes_remaining() != 0 {
         return Err(BinaryError::InvalidData(
             "trailing bytes after canonical module payload".to_string(),
@@ -11272,6 +11932,7 @@ fn read_module_sections<X: WireExt>(
         completeness: None,
         drop_glue,
         closure_layouts,
+        blobs,
     })
 }
 
@@ -17890,6 +18551,8 @@ mod tests {
                 // v43 nominal opaque runtime handle.
                 Ty::Handle(_) => 38,
                 Ty::Storage(_) => 40,
+                // v67 tensor region.
+                Ty::Tensor(_, _) => 41,
                 Ty::Ext(e) => e.unreachable(),
             }
         }
@@ -17935,6 +18598,7 @@ mod tests {
             Ty::Dialect(Box::new(crate::DialectTy::new("example", "value", 1))),
             Ty::handle("Nat", "trust_bignum::Nat"),
             Ty::Storage(crate::StorageLayout::new(80, 8)),
+            Ty::Tensor(Box::new(Ty::I32), 2),
         ];
 
         for ty in &samples {
@@ -17972,6 +18636,9 @@ mod tests {
                 Constant::Uninit => 15,
                 // v50: the constant-size uniform array.
                 Constant::Splat { .. } => 16,
+                // v70 (PKG-U13e): a tensor named by its blob digest. 17 is
+                // the extension tag (`CONSTANT_EXT_TAG`).
+                Constant::TensorBlob { .. } => 18,
                 Constant::Ext(e) => e.unreachable(),
             }
         }
@@ -18005,6 +18672,10 @@ mod tests {
             Constant::Splat {
                 elem: Box::new(Constant::Int(0)),
                 len: 1 << 40,
+            },
+            Constant::TensorBlob {
+                digest: crate::blob::BlobDigest::of(&[1, 2, 3, 4]),
+                dims: vec![2, 2],
             },
         ];
 
@@ -18944,6 +19615,16 @@ mod wire_version_ledger {
                     "SINGLE_INHABITED_ENUM_FORMAT_VERSION",
                     SINGLE_INHABITED_ENUM_FORMAT_VERSION,
                 ),
+                ("TENSOR_FORMAT_VERSION", TENSOR_FORMAT_VERSION),
+                (
+                    "TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION",
+                    TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION,
+                ),
+                (
+                    "TENSOR_GATHER_SCATTER_FORMAT_VERSION",
+                    TENSOR_GATHER_SCATTER_FORMAT_VERSION,
+                ),
+                ("TENSOR_BLOB_FORMAT_VERSION", TENSOR_BLOB_FORMAT_VERSION),
             ],
             aliases: vec![
                 // Compile-time asserted equal to BASE_FORMAT_VERSION.
@@ -19565,6 +20246,10 @@ mod wire_version_ledger {
             "CLOSURE_ORIGIN_FORMAT_VERSION",
             "STORAGE_LAYOUT_FORMAT_VERSION",
             "SINGLE_INHABITED_ENUM_FORMAT_VERSION",
+            "TENSOR_FORMAT_VERSION",
+            "TENSOR_MAP_REDUCE_VIEW_FORMAT_VERSION",
+            "TENSOR_GATHER_SCATTER_FORMAT_VERSION",
+            "TENSOR_BLOB_FORMAT_VERSION",
             "PROJECTED_MODULE_BINARY_VERSION",
             "AMBIGUOUS_LINEAGE_VERSIONS",
             "NATIVE_BUNDLE_VERSION",
